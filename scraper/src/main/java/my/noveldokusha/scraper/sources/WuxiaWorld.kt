@@ -16,4 +16,5 @@ class WuxiaWorld(
     override val language = LanguageCode.ENGLISH
     
     override val catalogOrderBy = "alphabet"
+    override val selectCatalogItemTitle: String = ".post-title h3 a"
 }
