@@ -16,6 +16,8 @@ import my.noveldokusha.scraper.sources.Novelku
 import my.noveldokusha.scraper.sources.ReadNovelFull
 import my.noveldokusha.scraper.sources.Reddit
 import my.noveldokusha.scraper.sources.RoyalRoad
+import my.noveldokusha.scraper.sources.RanobeHub
+import my.noveldokusha.scraper.sources.RanobeLib
 import my.noveldokusha.scraper.sources.Saikai
 import my.noveldokusha.scraper.sources.SakuraNovel
 import my.noveldokusha.scraper.sources.Sousetsuka
@@ -92,6 +94,8 @@ class Scraper @Inject constructor(
         LNMTL(networkClient),
         WtrLab(networkClient),
         Jaomix(networkClient),
+        RanobeLib(networkClient),
+        RanobeHub(networkClient),
     )
 
     val sourcesCatalogsList = sourcesList.filterIsInstance<SourceInterface.Catalog>()
