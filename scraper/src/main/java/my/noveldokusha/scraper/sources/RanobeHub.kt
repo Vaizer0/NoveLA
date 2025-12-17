@@ -48,7 +48,41 @@ class RanobeHub(
                 Regex("<img data-media-id=\"(.*?)\".*?>"),
                 "<img src=\"/api/media/\$1\">"
             )
-            Jsoup.parse(processedHtml).body()?.let { TextExtractor.get(it) } ?: processedHtml
+
+            // Try to extract content more precisely
+            val parsed = Jsoup.parse(processedHtml)
+            val body = parsed.body()
+
+            if (body != null) {
+                // Remove unwanted elements
+                body.select("script, .ads, .advertisement, .title-wrapper").remove()
+
+                // Look for actual content
+                val contentSelectors = listOf(
+                    ".text",
+                    ".content",
+                    ".chapter-content",
+                    ".reader-text",
+                    "[class*='text']",
+                    "[class*='content']"
+                )
+
+                for (selector in contentSelectors) {
+                    val contentElement = body.selectFirst(selector)
+                    if (contentElement != null && contentElement.text().trim().isNotEmpty()) {
+                        return@withContext TextExtractor.get(contentElement)
+                    }
+                }
+
+                // Fallback to the whole body
+                val text = TextExtractor.get(body)
+                if (text.trim().isNotEmpty()) {
+                    return@withContext text
+                }
+            }
+
+            // Final fallback
+            return@withContext Jsoup.parse(processedHtml).body()?.let { TextExtractor.get(it) } ?: processedHtml
         } else {
             ""
         }
@@ -82,7 +116,7 @@ class RanobeHub(
                     .asJsonObject
                     .getAsJsonObject("data")
 
-                data?.get("description")?.asString?.trim()
+                data?.get("description")?.asString?.trim()?.replace(Regex("<[^>]*>"), "")
             }
         }
 

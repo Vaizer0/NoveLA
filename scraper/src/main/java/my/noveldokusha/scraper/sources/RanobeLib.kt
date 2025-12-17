@@ -204,7 +204,7 @@ class RanobeLib(
                     ChapterItem(
                         chapterResult = ChapterResult(
                             title = title,
-                            url = "$baseUrl$slug/$volume/$number/$branchId"
+                            url = "${baseUrl}ru/$slug/read/v$volume/c$number?bid=$branchId"
                         ),
                         index = index
                     )
@@ -280,7 +280,23 @@ class RanobeLib(
     }
 
     private fun parseChapterPath(url: String): ChapterPath? {
+        // Handle new URL format: /ru/slug/read/v1/c1?bid=123
         val clean = url.removePrefix(baseUrl).trim('/').split("/")
+        if (clean.size >= 5 && clean[0] == "ru" && clean[2] == "read") {
+            val slug = clean[1]
+            val volumePart = clean[3] // v1
+            val chapterPart = clean[4].split("?")[0] // c1
+            val volume = volumePart.removePrefix("v")
+            val number = chapterPart.removePrefix("c")
+
+            // Extract bid from query parameters
+            val queryParams = url.substringAfter("?", "").split("&")
+            val branchId = queryParams.find { it.startsWith("bid=") }?.substringAfter("bid=")
+
+            return ChapterPath(slug, volume, number, branchId)
+        }
+
+        // Fallback to old format for compatibility
         if (clean.size < 3) return null
         val slug = clean[0]
         val volume = clean[1]

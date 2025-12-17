@@ -36,25 +36,36 @@ class FreeWebNovel(
 
     override suspend fun getChapterText(doc: Document): String =
         withContext(Dispatchers.Default) {
-            doc.selectFirst(".txt")?.let { element ->
-                element.select("script").remove()
-                element.select(".ads").remove()
-                element.select("h4").remove()
-                element.select("sub").remove()
-                TextExtractor.get(element)
-            } ?: ""
+            // Try multiple selectors for chapter content
+            val contentSelectors = listOf(
+                ".txt",
+                ".chapter-content",
+                ".content",
+                "#chapter-content",
+                ".reader-content",
+                ".text"
+            )
+
+            for (selector in contentSelectors) {
+                val element = doc.selectFirst(selector)
+                if (element != null) {
+                    element.select("script, .ads, .advertisement, h4, sub").remove()
+                    return@withContext TextExtractor.get(element)
+                }
+            }
+
+            // Fallback
+            ""
         }
 
     override suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
         withContext(Dispatchers.Default) {
             tryConnect {
-                networkClient.get(bookUrl)
+                val src = networkClient.get(bookUrl)
                     .toDocument()
                     .selectFirst(".pic img")?.attr("src")
-                    ?.let {baseUrl + it}
+                if (src != null) baseUrl + src else null
             }
-
-
         }
 
     override suspend fun getBookDescription(bookUrl: String): Response<String?> =
