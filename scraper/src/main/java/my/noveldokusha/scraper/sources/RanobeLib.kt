@@ -204,7 +204,7 @@ class RanobeLib(
                     ChapterItem(
                         chapterResult = ChapterResult(
                             title = title,
-                            url = "$baseUrl$slug/$volume/$number/$branchId".replace("//", "/")
+                            url = "$baseUrl$slug/$volume/$number/$branchId"
                         ),
                         index = index
                     )
@@ -267,7 +267,7 @@ class RanobeLib(
 
             BookResult(
                 title = title,
-                url = "$baseUrl$slug".replace("//", "/"),
+                url = "$baseUrl$slug",
                 coverImageUrl = proxiedImageUrl(cover)
             )
         }
