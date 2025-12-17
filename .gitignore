@@ -17,3 +17,4 @@
 *.keystore
 keychain
 key.properties
+/build-logic
