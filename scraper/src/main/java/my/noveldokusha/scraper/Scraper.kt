@@ -5,6 +5,8 @@ import my.noveldokusha.scraper.databases.BakaUpdates
 import my.noveldokusha.scraper.databases.NovelUpdates
 import my.noveldokusha.scraper.sources.AT
 import my.noveldokusha.scraper.sources.BacaLightnovel
+import my.noveldokusha.scraper.sources.Ifreedom
+import my.noveldokusha.scraper.sources.Bookhamster
 import my.noveldokusha.scraper.sources.BoxNovel
 import my.noveldokusha.scraper.sources.IndoWebnovel
 import my.noveldokusha.scraper.sources.LocalSource
@@ -96,6 +98,8 @@ class Scraper @Inject constructor(
         Jaomix(networkClient),
         RanobeLib(networkClient),
         RanobeHub(networkClient),
+        Ifreedom(networkClient),
+        Bookhamster(networkClient),
     )
 
     val sourcesCatalogsList = sourcesList.filterIsInstance<SourceInterface.Catalog>()

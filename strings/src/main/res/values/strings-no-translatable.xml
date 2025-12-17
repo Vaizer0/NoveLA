@@ -40,5 +40,7 @@
     <string translatable="false" name="source_name_jaomix">Jaomix</string>
     <string translatable="false" name="source_name_ranobelib">RanobeLib</string>
     <string translatable="false" name="source_name_ranobehub">RanobeHub</string>
+    <string translatable="false" name="source_name_ifreedom">Свободный Мир Ранобэ</string>
+    <string translatable="false" name="source_name_bookhamster">Bookhamster</string>
 
 </resources>
