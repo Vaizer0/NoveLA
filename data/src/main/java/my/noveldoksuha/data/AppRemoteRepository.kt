@@ -18,8 +18,7 @@ class AppRemoteRepository @Inject constructor(
 ) {
 
     private val lastReleaseUrl =
-        "https://api.github.com/repos/nanihadesuka/NovelDokusha/releases/latest"
-
+        "https://api.github.com/repos/HnDK0/NovelDokushaTT/releases/latest"
     suspend fun getLastAppVersion(
     ): Response<RemoteAppVersion> = withContext(Dispatchers.Default) {
         return@withContext my.noveldokusha.network.tryConnect {
