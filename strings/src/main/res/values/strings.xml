@@ -14,6 +14,7 @@
     <string name="database_size">Database size:</string>
     <string name="backup">Backup</string>
     <string name="theme">Theme</string>
+    <string name="language">Language</string>
     <string name="data">Data</string>
     <string name="clean_database">Clean database</string>
     <string name="preserve_only_library_books_data">Preserve only library books data</string>
@@ -175,8 +176,6 @@
     <string name="language_indonesian">Indonesian</string>
     <string name="language_chinese">Chinese</string>
     <string name="language_russian">Russian</string>
-    <string name="source_name_local">Local</string>
-    <string name="source_name_ttkan">Ttkan</string>
     <string name="updating_library">Updating library (%1$d/%2$d)</string>
     <string name="notification_channel_name_reader_narrator">Reader narrator</string>
     <string name="notification_channel_name_library_update">Library update</string>
@@ -207,4 +206,6 @@
     <string name="cloudfare_firewall_failed_bypass">Cloudfare firewall failed bypass</string>
     <string name="tried_but_failed_to_bypass_cloudfare_firewall">Tried but failed to bypass cloudfare firewall</string>
     <string name="features_reader_full_screen">Full screen</string>
+    <string name="source_name_local">Local</string>
+    <string name="source_name_ttkan">Ttkan</string>
 </resources>

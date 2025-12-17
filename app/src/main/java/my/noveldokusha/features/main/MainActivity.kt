@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.Bundle
+import my.noveldokusha.core.LocaleManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,7 +63,16 @@ open class MainActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Apply saved language preference
+        val language = appPreferences.APP_LANGUAGE.value
+        LocaleManager.applyLocale(this, language)
+
         requestPushNotificationPermission()
+
+        // Check if language was changed and recreate if needed
+        if (savedInstanceState == null) { // Only on first creation
+            // This is handled by the system
+        }
 
         setContent {
             var activePageIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -78,7 +88,7 @@ open class MainActivity : BaseActivity() {
                             when (it) {
                                 0 -> LibraryScreen()
                                 1 -> CatalogExplorerScreen()
-                                2 -> SettingsScreen()
+                                2 -> SettingsScreen(onRestartApp = { recreate() })
                             }
                         }
                     }

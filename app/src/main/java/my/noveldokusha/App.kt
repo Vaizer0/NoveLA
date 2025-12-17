@@ -7,6 +7,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import dagger.hilt.EntryPoints
 import dagger.hilt.android.HiltAndroidApp
+import my.noveldokusha.core.LocaleManager
 import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
@@ -26,6 +27,12 @@ class App : Application(), ImageLoaderFactory, Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Apply saved language preference
+        val appPreferences = EntryPoints.get(this, HiltAppEntryPoint::class.java).appPreferences()
+        val language = appPreferences.APP_LANGUAGE.value
+        LocaleManager.applyLocale(this, language)
+
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }

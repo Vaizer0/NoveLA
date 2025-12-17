@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +53,7 @@ fun BookImageButtonView(
     bookTitlePosition: BookTitlePosition = BookTitlePosition.Inside,
     indication: Indication = LocalIndication.current,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    sourceIcon: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit = { },
 ) {
@@ -77,6 +79,23 @@ fun BookImageButtonView(
                 modifier = Modifier.fillMaxSize(),
                 error = R.drawable.default_book_cover,
             )
+
+            // Source icon in top-right corner
+            sourceIcon?.let {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(24.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    it()
+                }
+            }
             if (bookTitlePosition == BookTitlePosition.Inside) {
                 Text(
                     text = title,

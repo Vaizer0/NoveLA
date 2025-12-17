@@ -35,6 +35,7 @@ fun LibraryScreen(
     navigationRouteViewModel: NavigationRouteViewModel = viewModel()
 ) {
     val libraryModel: LibraryViewModel = viewModel()
+    val viewModel: LibraryPageViewModel = viewModel()
 
     val context by rememberUpdatedState(LocalContext.current)
     var showDropDown by remember { mutableStateOf(false) }
@@ -86,6 +87,7 @@ fun LibraryScreen(
         content = { innerPadding ->
             LibraryScreenBody(
                 tabs = listOf("Default", "Completed"),
+                tabCounts = listOf(viewModel.readingCount, viewModel.completedCount),
                 innerPadding = innerPadding,
                 topAppBarState = scrollBehavior.state,
                 onBookClick = { book ->

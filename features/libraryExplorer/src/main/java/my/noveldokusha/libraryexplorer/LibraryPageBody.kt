@@ -8,21 +8,29 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldoksuha.coreui.R
 import my.noveldoksuha.coreui.components.BookImageButtonView
+import my.noveldoksuha.coreui.components.ImageView
+import my.noveldoksuha.coreui.getPainter
 import my.noveldoksuha.coreui.modifiers.bounceOnPressed
 import my.noveldoksuha.coreui.theme.ColorAccent
 import my.noveldoksuha.coreui.theme.ImageBorderShape
+import my.noveldokusha.core.SourceType
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.rememberResolvedBookImagePath
 import my.noveldokusha.feature.local_database.BookWithContext
@@ -42,6 +50,7 @@ internal fun LibraryPageBody(
             key = { it.book.url }
         ) {
             val interactionSource = remember { MutableInteractionSource() }
+            val sourceType = remember(it.book.url) { SourceType.fromUrl(it.book.url) }
             Box {
                 BookImageButtonView(
                     title = it.book.title,
@@ -52,6 +61,15 @@ internal fun LibraryPageBody(
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
                     interactionSource = interactionSource,
+                    sourceIcon = sourceType.getPainter()?.let { imageModel ->
+                        {
+                            ImageView(
+                                imageModel = imageModel,
+                                contentDescription = sourceType.displayName,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    },
                     modifier = Modifier.bounceOnPressed(interactionSource)
                 )
                 val notReadCount = it.chaptersCount - it.chaptersReadCount

@@ -26,11 +26,13 @@ import androidx.compose.ui.unit.dp
 import my.noveldoksuha.coreui.theme.InternalTheme
 import my.noveldoksuha.coreui.theme.PreviewThemes
 import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
 import my.noveldokusha.settings.sections.SettingsBackup
 import my.noveldokusha.settings.sections.SettingsData
 import my.noveldokusha.settings.sections.SettingsGeminiTranslation
+import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsTheme
 import my.noveldokusha.settings.sections.SettingsTranslationModels
 
@@ -50,10 +52,16 @@ internal fun SettingsScreenBody(
     onGeminiApiKeyChange: (String) -> Unit,
     onGeminiModelChange: (String) -> Unit,
     onPreferOnlineChange: (Boolean) -> Unit,
+    onLanguageChange: (AppLanguage) -> Unit,
 ) {
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
     ) {
+        SettingsLanguage(
+            currentLanguage = state.currentLanguage.value,
+            onLanguageChange = onLanguageChange
+        )
+        HorizontalDivider()
         SettingsTheme(
             currentFollowSystem = state.followsSystemTheme.value,
             currentTheme = state.currentTheme.value,
@@ -123,6 +131,7 @@ private fun Preview() {
                 state = SettingsScreenState(
                     followsSystemTheme = remember { derivedStateOf { true } },
                     currentTheme = theme,
+                    currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
                     databaseSize = remember { mutableStateOf("1 MB") },
                     imageFolderSize = remember { mutableStateOf("10 MB") },
                     isTranslationSettingsVisible = remember { mutableStateOf(true) },
@@ -157,6 +166,7 @@ private fun Preview() {
                 onGeminiApiKeyChange = { },
                 onGeminiModelChange = { },
                 onPreferOnlineChange = { },
+                onLanguageChange = { },
             )
         }
     }

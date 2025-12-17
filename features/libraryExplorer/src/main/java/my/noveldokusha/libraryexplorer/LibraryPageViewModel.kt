@@ -32,6 +32,9 @@ internal class LibraryPageViewModel @Inject constructor(
     val listReading by createPageList(isShowCompleted = false)
     val listCompleted by createPageList(isShowCompleted = true)
 
+    val readingCount = createCountFlow(isShowCompleted = false)
+    val completedCount = createCountFlow(isShowCompleted = true)
+
     private fun createPageList(isShowCompleted: Boolean) = appRepository.libraryBooks
         .getBooksInLibraryWithContextFlow
         .map { it.filter { book -> book.book.completed == isShowCompleted } }
@@ -56,6 +59,18 @@ internal class LibraryPageViewModel @Inject constructor(
             }
         }
         .toState(viewModelScope, listOf())
+
+    private fun createCountFlow(isShowCompleted: Boolean) = appRepository.libraryBooks
+        .getBooksInLibraryWithContextFlow
+        .map { it.filter { book -> book.book.completed == isShowCompleted } }
+        .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
+            when (filterRead) {
+                TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
+                TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
+                TernaryState.Inactive -> list
+            }
+        }.map { it.size }
+        .toState(viewModelScope, 0)
 
 
     private fun showLoadingSpinner() {

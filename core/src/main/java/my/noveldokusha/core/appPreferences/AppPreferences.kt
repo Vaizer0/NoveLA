@@ -22,6 +22,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import my.noveldokusha.core.LanguageCode
 import my.noveldokusha.core.SharedPreference_Boolean
+import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.SharedPreference_Enum
 import my.noveldokusha.core.SharedPreference_Float
 import my.noveldokusha.core.SharedPreference_Int
@@ -38,6 +39,12 @@ class AppPreferences @Inject constructor(
     private val preferences = PreferenceManager.getDefaultSharedPreferences(context)
     private val preferencesChangeListeners =
         mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+
+    val APP_LANGUAGE = object : Preference<AppLanguage>("APP_LANGUAGE") {
+        override var value by SharedPreference_Enum(name, preferences, AppLanguage.DEFAULT) {
+            enumValueOf(it)
+        }
+    }
 
     val THEME_ID = object : Preference<PreferenceThemes>("THEME_ID") {
         override var value by SharedPreference_Enum(name, preferences, PreferenceThemes.Light) {

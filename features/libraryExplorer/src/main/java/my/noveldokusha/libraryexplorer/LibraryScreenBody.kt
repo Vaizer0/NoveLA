@@ -22,6 +22,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import my.noveldokusha.feature.local_database.BookWithContext
 @Composable
 internal fun LibraryScreenBody(
     tabs: List<String>,
+    tabCounts: List<State<Int>>,
     innerPadding: PaddingValues,
     topAppBarState: TopAppBarState,
     onBookClick: (BookWithContext) -> Unit,
@@ -95,7 +97,8 @@ internal fun LibraryScreenBody(
                 tabs = {
                     tabs.forEachIndexed { index, text ->
                         val selected by remember { derivedStateOf { pagerState.currentPage == index } }
-                        val title by remember { derivedStateOf { text } }
+                        val count = tabCounts.getOrNull(index)?.value ?: 0
+                        val title by remember { derivedStateOf { "$text ($count)" } }
                         Tab(
                             selected = selected,
                             text = { Text(title, color = MaterialTheme.colorScheme.onPrimary) },

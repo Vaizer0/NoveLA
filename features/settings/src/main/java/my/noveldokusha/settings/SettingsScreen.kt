@@ -20,8 +20,11 @@ import my.noveldokusha.tooling.backup_restore.onBackupRestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onRestartApp: (() -> Unit)? = null
+) {
     val viewModel: SettingsViewModel = viewModel()
+    viewModel.onRestartApp = onRestartApp
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         snapAnimationSpec = null,
@@ -63,6 +66,7 @@ fun SettingsScreen() {
                 onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
                 onGeminiModelChange = viewModel::onGeminiModelChange,
                 onPreferOnlineChange = viewModel::onPreferOnlineTranslationChange,
+                onLanguageChange = viewModel::onLanguageChange,
                 modifier = Modifier.padding(innerPadding),
             )
         }

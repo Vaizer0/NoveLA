@@ -17,6 +17,7 @@ import my.noveldoksuha.coreui.BaseViewModel
 import my.noveldoksuha.coreui.mappers.toPreferenceTheme
 import my.noveldoksuha.coreui.mappers.toTheme
 import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldoksuha.data.AppRemoteRepository
 import my.noveldoksuha.data.AppRepository
 import my.noveldokusha.core.AppCoroutineScope
@@ -41,6 +42,8 @@ internal class SettingsViewModel @Inject constructor(
     private val toasty: Toasty,
 ) : BaseViewModel() {
 
+    var onRestartApp: (() -> Unit)? = null
+
     private val themeId by appPreferences.THEME_ID.state(viewModelScope)
 
     val state = SettingsScreenState(
@@ -48,6 +51,7 @@ internal class SettingsViewModel @Inject constructor(
         imageFolderSize = stateHandle.asMutableStateOf("imageFolderSize") { "" },
         followsSystemTheme = appPreferences.THEME_FOLLOW_SYSTEM.state(viewModelScope),
         currentTheme = derivedStateOf { themeId.toTheme },
+        currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
         isTranslationSettingsVisible = mutableStateOf(translationManager.available),
         translationModelsStates = translationManager.models,
         updateAppSetting = SettingsScreenState.UpdateApp(
@@ -117,6 +121,13 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onThemeChange(themes: Themes) {
         appPreferences.THEME_ID.value = themes.toPreferenceTheme
+    }
+
+    fun onLanguageChange(language: AppLanguage) {
+        appPreferences.APP_LANGUAGE.value = language
+        toasty.show("Language changed to ${language.displayName}")
+        // Restart the app to apply language changes
+        onRestartApp?.invoke()
     }
 
     fun onGeminiApiKeyChange(apiKey: String) {
