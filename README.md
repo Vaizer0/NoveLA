@@ -19,7 +19,7 @@ Copyright © 2023, [nani](https://github.com/nanihadesuka), Released under [GPL-
       - 顶点小说 (ddxss.cc)
       - 乐阅读 (27k.net)
       - Twkan (twkan.com)
-  - **Russian Sources**
+    - **Russian Sources**
       - Jaomix (jaomix.ru)
       - RanobeLib (ranobelib.me)
       - RanobeHub (ranobehub.org)
