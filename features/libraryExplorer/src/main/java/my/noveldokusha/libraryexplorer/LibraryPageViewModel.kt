@@ -13,6 +13,9 @@ import my.noveldoksuha.coreui.BaseViewModel
 import my.noveldoksuha.data.AppRepository
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.LibrarySortOption
+import my.noveldokusha.core.appPreferences.SortConfig
+import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.utils.toState
@@ -38,11 +41,18 @@ internal class LibraryPageViewModel @Inject constructor(
                 TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
                 TernaryState.Inactive -> list
             }
-        }.combine(preferences.LIBRARY_SORT_LAST_READ.flow()) { list, sortRead ->
-            when (sortRead) {
-                TernaryState.Active -> list.sortedByDescending { it.book.lastReadEpochTimeMilli }
-                TernaryState.Inverse -> list.sortedBy { it.book.lastReadEpochTimeMilli }
-                TernaryState.Inactive -> list
+        }.combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
+            val sortedList = when (sortConfig.option) {
+                LibrarySortOption.TITLE -> list.sortedBy { it.book.title.lowercase() }
+                LibrarySortOption.UNREAD_CHAPTERS -> list.sortedBy { it.chaptersCount - it.chaptersReadCount }
+                LibrarySortOption.LAST_READ -> list.sortedBy { it.book.lastReadEpochTimeMilli }
+                LibrarySortOption.LAST_UPDATE -> list.sortedBy { it.book.lastUpdateEpochTimeMilli }
+                LibrarySortOption.ADDED -> list.sortedBy { it.book.addedToLibraryEpochTimeMilli }
+            }
+
+            when (sortConfig.direction) {
+                SortDirection.ASC -> sortedList
+                SortDirection.DESC -> sortedList.reversed()
             }
         }
         .toState(viewModelScope, listOf())

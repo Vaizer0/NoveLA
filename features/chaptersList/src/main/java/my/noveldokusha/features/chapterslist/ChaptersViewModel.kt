@@ -175,6 +175,7 @@ internal class ChaptersViewModel @Inject constructor(
                     if (it.isEmpty())
                         toasty.show(R.string.no_chapters_found)
                     appRepository.bookChapters.merge(newChapters = it, bookUrl = url)
+                    appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = url)
                 }.onError {
                     state.error.value = it.message
                 }

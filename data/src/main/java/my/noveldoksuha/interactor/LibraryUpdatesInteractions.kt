@@ -82,8 +82,10 @@ class LibraryUpdatesInteractions @Inject constructor(
             oldChaptersList.join()
             appRepository.bookChapters.merge(chapters, book.url)
             val newChapters = chapters.filter { it.url !in oldChaptersList.await() }
-            if (newChapters.isEmpty()) return@onSuccess
-            newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+            if (newChapters.isNotEmpty()) {
+                appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = book.url)
+                newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+            }
 
         }.onError {
             failedUpdates.update { it + book }

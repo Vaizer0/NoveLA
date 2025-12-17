@@ -11,6 +11,7 @@ import my.noveldoksuha.coreui.BaseViewModel
 import my.noveldoksuha.coreui.components.BookSettingsDialogState
 import my.noveldoksuha.data.AppRepository
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.SortConfig
 import my.noveldokusha.core.utils.asMutableStateOf
 import javax.inject.Inject
 
@@ -27,14 +28,18 @@ internal class LibraryViewModel @Inject constructor(
     var showBottomSheet by stateHandle.asMutableStateOf("showBottomSheet") { false }
 
     var readFilter by appPreferences.LIBRARY_FILTER_READ.state(viewModelScope)
-    var readSort by appPreferences.LIBRARY_SORT_LAST_READ.state(viewModelScope)
+    var sortConfig by appPreferences.LIBRARY_SORT_CONFIG.state(viewModelScope)
 
     fun readFilterToggle() {
         readFilter = readFilter.next()
     }
 
-    fun readSortToggle() {
-        readSort = readSort.next()
+    fun sortConfigToggleDirection() {
+        sortConfig = sortConfig.toggleDirection()
+    }
+
+    fun sortConfigNextOption() {
+        sortConfig = sortConfig.nextOption()
     }
 
     fun bookCompletedToggle(bookUrl: String) {

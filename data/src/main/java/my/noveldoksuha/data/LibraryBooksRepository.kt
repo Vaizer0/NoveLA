@@ -40,6 +40,9 @@ class LibraryBooksRepository @Inject constructor(
     suspend fun updateLastReadEpochTimeMilli(bookUrl: String, lastReadEpochTimeMilli: Long) =
         libraryDao.updateLastReadEpochTimeMilli(bookUrl, lastReadEpochTimeMilli)
 
+    suspend fun updateLastUpdateEpochTimeMilli(bookUrl: String, lastUpdateEpochTimeMilli: Long = System.currentTimeMillis()) =
+        libraryDao.updateLastUpdateEpochTimeMilli(bookUrl, lastUpdateEpochTimeMilli)
+
     suspend fun updateCover(bookUrl: String, coverUrl: String) =
         libraryDao.updateCover(bookUrl, coverUrl)
 
@@ -61,14 +64,26 @@ class LibraryBooksRepository @Inject constructor(
         bookUrl: String,
         bookTitle: String
     ): Boolean = appDatabase.transaction {
+        val currentTime = System.currentTimeMillis()
         when (val book = get(bookUrl)) {
             null -> {
-                insert(Book(title = bookTitle, url = bookUrl, inLibrary = true))
+                insert(Book(
+                    title = bookTitle,
+                    url = bookUrl,
+                    inLibrary = true,
+                    addedToLibraryEpochTimeMilli = currentTime,
+                    lastUpdateEpochTimeMilli = currentTime
+                ))
                 true
             }
             else -> {
-                update(book.copy(inLibrary = !book.inLibrary))
-                !book.inLibrary
+                val newInLibrary = !book.inLibrary
+                update(book.copy(
+                    inLibrary = newInLibrary,
+                    addedToLibraryEpochTimeMilli = if (newInLibrary && book.addedToLibraryEpochTimeMilli == 0L) currentTime else book.addedToLibraryEpochTimeMilli,
+                    lastUpdateEpochTimeMilli = if (newInLibrary) currentTime else book.lastUpdateEpochTimeMilli
+                ))
+                newInLibrary
             }
         }
     }

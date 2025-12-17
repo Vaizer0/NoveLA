@@ -45,6 +45,9 @@ interface LibraryDao {
     @Query("UPDATE Book SET lastReadEpochTimeMilli = :lastReadEpochTimeMilli WHERE url == :bookUrl")
     suspend fun updateLastReadEpochTimeMilli(bookUrl: String, lastReadEpochTimeMilli: Long)
 
+    @Query("UPDATE Book SET lastUpdateEpochTimeMilli = :lastUpdateEpochTimeMilli WHERE url == :bookUrl")
+    suspend fun updateLastUpdateEpochTimeMilli(bookUrl: String, lastUpdateEpochTimeMilli: Long)
+
     @Query("UPDATE Book SET description = :description WHERE url == :bookUrl")
     suspend fun updateDescription(bookUrl: String, description: String)
 

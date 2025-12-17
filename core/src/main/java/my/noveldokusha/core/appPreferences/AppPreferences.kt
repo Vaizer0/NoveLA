@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import my.noveldokusha.core.LanguageCode
@@ -114,6 +115,17 @@ class AppPreferences @Inject constructor(
             TernaryState.Inactive
         ) { enumValueOf(it) }
     }
+    val LIBRARY_SORT_CONFIG = object : Preference<SortConfig>("LIBRARY_SORT_CONFIG") {
+        override var value by SharedPreference_Serializable(
+            name,
+            preferences,
+            SortConfig.DEFAULT,
+            encode = { Json.encodeToString(it) },
+            decode = { Json.decodeFromString(it) }
+        )
+    }
+
+    @Deprecated("Use LIBRARY_SORT_OPTION instead", ReplaceWith("LIBRARY_SORT_OPTION"))
     val LIBRARY_SORT_LAST_READ = object : Preference<TernaryState>("LIBRARY_SORT_LAST_READ") {
         override var value by SharedPreference_Enum(
             name,

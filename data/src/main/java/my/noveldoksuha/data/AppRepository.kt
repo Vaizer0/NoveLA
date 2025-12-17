@@ -11,6 +11,7 @@ import my.noveldokusha.core.isContentUri
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 

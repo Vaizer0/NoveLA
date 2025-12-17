@@ -105,6 +105,12 @@
     <string name="pin_or_unpin_source">Pin or unpin source</string>
     <string name="allow_text_selection">Text selection</string>
     <string name="last_read">Last read</string>
+    <string name="title">Title</string>
+    <string name="unread_chapters">Unread chapters</string>
+    <string name="last_update">Last update</string>
+    <string name="date_added">Date added</string>
+    <string name="ascending">Ascending</string>
+    <string name="descending">Descending</string>
     <string name="voices">Voices</string>
     <string name="search_voice_by_language">Search voice by language</string>
     <string name="needs_internet">Needs Internet</string>

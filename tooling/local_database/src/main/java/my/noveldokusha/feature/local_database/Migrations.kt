@@ -38,9 +38,13 @@ internal fun databaseMigrations() = arrayOf(
             )
         """)
         it.execSQL("""
-            CREATE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang 
+            CREATE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang
             ON ChapterTranslation (chapterUrl, sourceLang, targetLang)
         """)
+    },
+    migration(9) {
+        it.execSQL("ALTER TABLE Book ADD COLUMN addedToLibraryEpochTimeMilli INTEGER NOT NULL DEFAULT 0")
+        it.execSQL("ALTER TABLE Book ADD COLUMN lastUpdateEpochTimeMilli INTEGER NOT NULL DEFAULT 0")
     },
 )
 

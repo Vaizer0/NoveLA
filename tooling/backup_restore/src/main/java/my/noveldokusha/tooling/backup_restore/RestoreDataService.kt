@@ -23,6 +23,8 @@ import my.noveldoksuha.data.BookChaptersRepository
 import my.noveldoksuha.data.ChapterBodyRepository
 import my.noveldoksuha.data.DownloaderRepository
 import my.noveldoksuha.data.LibraryBooksRepository
+import my.noveldokusha.feature.local_database.tables.Book
+import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.tryAsResponse
@@ -354,6 +356,15 @@ class RestoreDataService : Service() {
                     .also {
                         Timber.d("mergeToDatabase: Found ${it.size} books to restore (marking all as inLibrary=true)")
                     }
+
+                // Filter valid books
+                val validBooks = booksToAdd.filter { book ->
+                    book.url.matches("""^(https?|local)://.*""".toRegex())
+                }
+
+                if (validBooks.size < booksToAdd.size) {
+                    Timber.w("mergeToDatabase: Filtered ${booksToAdd.size - validBooks.size} invalid books, ${validBooks.size} valid books remaining")
+                }
                 
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
@@ -361,8 +372,24 @@ class RestoreDataService : Service() {
                 ) {
                     text = getString(R.string.adding_books)
                 }
-                Timber.d("mergeToDatabase: Inserting ${booksToAdd.size} books")
-                appRepository.libraryBooks.insertReplace(booksToAdd)
+                Timber.d("mergeToDatabase: Inserting ${validBooks.size} books")
+                try {
+                    appRepository.libraryBooks.insertReplace(validBooks)
+                    Timber.d("mergeToDatabase: Successfully inserted ${validBooks.size} books")
+                } catch (e: Exception) {
+                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
+                    // Try to insert books one by one
+                    var successCount = 0
+                    validBooks.forEach { book ->
+                        try {
+                            appRepository.libraryBooks.insertReplace(listOf(book))
+                            successCount++
+                        } catch (bookError: Exception) {
+                            Timber.w(bookError, "Failed to insert book: ${book.title}")
+                        }
+                    }
+                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${validBooks.size} books")
+                }
                 
                 Timber.d("mergeToDatabase: Getting chapters count")
                 val chaptersToAdd = try {
@@ -373,6 +400,15 @@ class RestoreDataService : Service() {
                     Timber.e(e, "mergeToDatabase: Error getting chapters")
                     throw e
                 }
+
+                // Filter valid chapters
+                val validChapters = chaptersToAdd.filter { chapter ->
+                    chapter.url.matches("""^(https?|local)://.*""".toRegex())
+                }
+
+                if (validChapters.size < chaptersToAdd.size) {
+                    Timber.w("mergeToDatabase: Filtered ${chaptersToAdd.size - validChapters.size} invalid chapters, ${validChapters.size} valid chapters remaining")
+                }
                 
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
@@ -380,8 +416,24 @@ class RestoreDataService : Service() {
                 ) {
                     text = getString(R.string.adding_chapters)
                 }
-                Timber.d("mergeToDatabase: Inserting ${chaptersToAdd.size} chapters")
-                appRepository.bookChapters.insert(chaptersToAdd)
+                Timber.d("mergeToDatabase: Inserting ${validChapters.size} chapters")
+                try {
+                    appRepository.bookChapters.insert(validChapters)
+                    Timber.d("mergeToDatabase: Successfully inserted ${validChapters.size} chapters")
+                } catch (e: Exception) {
+                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
+                    // Try to insert chapters one by one
+                    var successCount = 0
+                    validChapters.forEach { chapter ->
+                        try {
+                            appRepository.bookChapters.insert(listOf(chapter))
+                            successCount++
+                        } catch (chapterError: Exception) {
+                            Timber.w(chapterError, "Failed to insert chapter: ${chapter.title}")
+                        }
+                    }
+                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${validChapters.size} chapters")
+                }
                 
                 Timber.d("mergeToDatabase: Getting chapter bodies count")
                 val chapterBodies = try {
@@ -392,7 +444,7 @@ class RestoreDataService : Service() {
                     Timber.e(e, "mergeToDatabase: Error getting chapter bodies")
                     throw e
                 }
-                
+
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
@@ -400,7 +452,23 @@ class RestoreDataService : Service() {
                     text = getString(R.string.adding_chapters_text)
                 }
                 Timber.d("mergeToDatabase: Inserting ${chapterBodies.size} chapter bodies")
-                appRepository.chapterBody.insertReplace(chapterBodies)
+                try {
+                    appRepository.chapterBody.insertReplace(chapterBodies)
+                    Timber.d("mergeToDatabase: Successfully inserted ${chapterBodies.size} chapter bodies")
+                } catch (e: Exception) {
+                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
+                    // Try to insert chapter bodies one by one
+                    var successCount = 0
+                    chapterBodies.forEach { chapterBody ->
+                        try {
+                            appRepository.chapterBody.insertReplace(listOf(chapterBody))
+                            successCount++
+                        } catch (bodyError: Exception) {
+                            Timber.w(bodyError, "Failed to insert chapter body")
+                        }
+                    }
+                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${chapterBodies.size} chapter bodies")
+                }
                 
                 backupDatabase.close()
                 backupDatabase.delete()
