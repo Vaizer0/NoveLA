@@ -11,6 +11,9 @@ internal fun removeCommonTextFromTitles(list: List<ChapterWithContext>): List<Ch
     val suffix =
         list.fold(first) { acc, e -> e.chapter.title.commonSuffixWith(acc, ignoreCase = true) }
 
+    // Only remove prefix/suffix if prefix is meaningful (at least 4 chars and contains separator)
+    if (prefix.length < 4 || (!prefix.contains(" ") && !prefix.contains(":"))) return list
+
     // Kotlin Std Lib doesn't have optional ignoreCase parameter for removeSurrounding
     fun String.removeSurrounding(
         prefix: CharSequence,

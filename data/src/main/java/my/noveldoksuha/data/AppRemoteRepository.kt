@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseSearch
+package my.noveldokusha.databaseexplorer.databaseSearch
 
 import android.os.Parcelable
 import androidx.compose.runtime.derivedStateOf
@@ -15,9 +15,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.coreui.states.PagedListIteratorState
-import my.noveldoksuha.data.storage.PersistentCacheDatabaseSearchGenresProvider
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.states.PagedListIteratorState
+import my.noveldokusha.data.storage.PersistentCacheDatabaseSearchGenresProvider
 import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.map

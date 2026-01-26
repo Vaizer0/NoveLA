@@ -10,8 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.coreui.mappers.toTheme
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.mappers.toTheme
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.StateExtra_Boolean
 import my.noveldokusha.core.utils.StateExtra_String

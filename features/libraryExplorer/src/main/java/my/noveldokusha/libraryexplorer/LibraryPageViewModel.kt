@@ -6,11 +6,13 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.data.AppRepository
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.LibrarySortOption
@@ -29,11 +31,32 @@ internal class LibraryPageViewModel @Inject constructor(
 
 ) : BaseViewModel() {
     var isPullRefreshing by mutableStateOf(false)
+    var searchQuery by mutableStateOf("")
+        private set
+
+    private val _searchQueryFlow = MutableStateFlow("")
+    val searchQueryFlow = _searchQueryFlow.asStateFlow()
+
     val listReading by createPageList(isShowCompleted = false)
     val listCompleted by createPageList(isShowCompleted = true)
 
-    val readingCount = createCountFlow(isShowCompleted = false)
-    val completedCount = createCountFlow(isShowCompleted = true)
+    val countReading by createCountFlow(isShowCompleted = false)
+    val countCompleted by createCountFlow(isShowCompleted = true)
+
+    init {
+        // Sync the mutable state with the flow
+        viewModelScope.launch {
+            _searchQueryFlow.collect { newQuery ->
+                searchQuery = newQuery
+            }
+        }
+    }
+
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        _searchQueryFlow.value = query
+    }
+
 
     private fun createPageList(isShowCompleted: Boolean) = appRepository.libraryBooks
         .getBooksInLibraryWithContextFlow
@@ -57,6 +80,8 @@ internal class LibraryPageViewModel @Inject constructor(
                 SortDirection.ASC -> sortedList
                 SortDirection.DESC -> sortedList.reversed()
             }
+        }.combine(_searchQueryFlow) { list, query ->
+            if (query.isBlank()) list else list.filter { it.book.title.contains(query, ignoreCase = true) }
         }
         .toState(viewModelScope, listOf())
 

@@ -15,8 +15,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.textPadding
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 import my.noveldokusha.settings.views.SettingsTranslationModelsDialog
 import my.noveldokusha.text_translator.domain.TranslationModelState

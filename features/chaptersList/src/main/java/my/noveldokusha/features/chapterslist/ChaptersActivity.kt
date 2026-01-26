@@ -5,14 +5,15 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.composableActions.SetSystemBarTransparent
-import my.noveldoksuha.coreui.composableActions.onDoAskForImage
-import my.noveldoksuha.coreui.theme.Theme
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
+import my.noveldokusha.coreui.composableActions.onDoAskForImage
+import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.navigation.NavigationRoutes
 import my.noveldokusha.feature.local_database.BookMetadata
@@ -42,6 +43,15 @@ class ChaptersActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Обработка нажатия кнопки "назад"
+                finish()
+            }
+        }
+        addOnBackPressedCallback(backPressedCallback)
+
         setContent {
             Theme(themeProvider = themeProvider) {
                 SetSystemBarTransparent()
@@ -50,7 +60,7 @@ class ChaptersActivity : BaseActivity() {
                     onLibraryToggle = viewModel::toggleBookmark,
                     onSearchBookInDatabase = ::searchBookInDatabase,
                     onResumeReading = ::onOpenLastActiveChapter,
-                    onPressBack = ::onBackPressed,
+                    onPressBack = { backPressedCallback.handleOnBackPressed() },
                     onSelectedDeleteDownloads = viewModel::deleteDownloadsSelected,
                     onSelectedDownload = viewModel::downloadSelected,
                     onSelectedSetRead = viewModel::setAsReadSelected,

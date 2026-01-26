@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import my.noveldokusha.core.AppInternalState
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.interceptors.CloudFareVerificationInterceptor
 import my.noveldokusha.network.interceptors.DecodeResponseInterceptor
 import my.noveldokusha.network.interceptors.UserAgentInterceptor
@@ -28,6 +29,7 @@ interface NetworkClient {
 class ScraperNetworkClient @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val appInternalState: AppInternalState,
+    private val appPreferences: AppPreferences
 ) : NetworkClient {
 
     private val cacheDir = File(appContext.cacheDir, "network_cache")
@@ -37,27 +39,24 @@ class ScraperNetworkClient @Inject constructor(
 
     private val okhttpLoggingInterceptor = HttpLoggingInterceptor {
         Timber.v(it)
-    }.apply {
-        level = HttpLoggingInterceptor.Level.HEADERS
-    }
+    }.apply { level = HttpLoggingInterceptor.Level.HEADERS }
 
-    val client = OkHttpClient.Builder()
-        .let {
-            if (appInternalState.isDebugMode) {
-                it.addInterceptor(okhttpLoggingInterceptor)
-            } else it
+    val client: OkHttpClient = OkHttpClient.Builder()
+        .apply {
+            if (appInternalState.isDebugMode) addInterceptor(okhttpLoggingInterceptor)
+            addInterceptor(UserAgentInterceptor(appContext)) // UA из WebView
+            addInterceptor(DecodeResponseInterceptor())
+            if (appPreferences.CLOUDFLARE_BYPASS_ENABLED.value) {
+                addInterceptor(CloudFareVerificationInterceptor(appContext))
+            }
+            cookieJar(cookieJar)
+            cache(Cache(cacheDir, cacheSize))
+            connectTimeout(30, TimeUnit.SECONDS)
+            readTimeout(30, TimeUnit.SECONDS)
         }
-        .addInterceptor(UserAgentInterceptor())
-        .addInterceptor(DecodeResponseInterceptor())
-        .addInterceptor(CloudFareVerificationInterceptor(appContext))
-        .cookieJar(cookieJar)
-        .cache(Cache(cacheDir, cacheSize))
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val clientWithRedirects = client
-        .newBuilder()
+    private val clientWithRedirects: OkHttpClient = client.newBuilder()
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -66,6 +65,10 @@ class ScraperNetworkClient @Inject constructor(
         return if (followRedirects) clientWithRedirects.call(request) else client.call(request)
     }
 
-    override suspend fun get(url: String) = call(getRequest(url))
-    override suspend fun get(url: Uri.Builder) = call(getRequest(url.toString()))
+    override suspend fun get(url: String): Response = call(getRequest(url))
+    override suspend fun get(url: Uri.Builder): Response = call(getRequest(url.toString()))
+
+    private fun getRequest(url: String): Request.Builder {
+        return Request.Builder().url(url).get()
+    }
 }

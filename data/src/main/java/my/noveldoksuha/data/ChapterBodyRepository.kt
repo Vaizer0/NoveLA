@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isLocalUri
@@ -28,8 +28,10 @@ class ChapterBodyRepository @Inject constructor(
 
     private suspend fun insertWithTitle(chapterBody: ChapterBody, title: String?) = appDatabase.transaction {
         insertReplace(chapterBody)
-        if (title != null)
-            bookChaptersRepository.updateTitle(chapterBody.url, title)
+        // Don't update chapter title - keep the original title from chapter list
+        // getChapterTitle() is unreliable and causes title corruption
+        // if (title != null)
+        //     bookChaptersRepository.updateTitle(chapterBody.url, title)
     }
 
     suspend fun fetchBody(urlChapter: String, tryCache: Boolean = true): Response<String> {

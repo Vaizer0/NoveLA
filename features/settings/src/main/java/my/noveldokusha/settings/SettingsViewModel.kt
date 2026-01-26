@@ -13,13 +13,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.coreui.mappers.toPreferenceTheme
-import my.noveldoksuha.coreui.mappers.toTheme
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.mappers.toPreferenceTheme
+import my.noveldokusha.coreui.mappers.toTheme
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
-import my.noveldoksuha.data.AppRemoteRepository
-import my.noveldoksuha.data.AppRepository
+import my.noveldokusha.data.AppRemoteRepository
+import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
@@ -44,11 +44,17 @@ internal class SettingsViewModel @Inject constructor(
 
     var onRestartApp: (() -> Unit)? = null
 
+    var isCleaningDatabase = mutableStateOf(false)
+    var isCleaningImages = mutableStateOf(false)
+
     private val themeId by appPreferences.THEME_ID.state(viewModelScope)
+    private val cloudflareBypassEnabled by appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope)
 
     val state = SettingsScreenState(
         databaseSize = stateHandle.asMutableStateOf("databaseSize") { "" },
         imageFolderSize = stateHandle.asMutableStateOf("imageFolderSize") { "" },
+        isCleaningDatabase = isCleaningDatabase,
+        isCleaningImages = isCleaningImages,
         followsSystemTheme = appPreferences.THEME_FOLLOW_SYSTEM.state(viewModelScope),
         currentTheme = derivedStateOf { themeId.toTheme },
         currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
@@ -70,9 +76,13 @@ internal class SettingsViewModel @Inject constructor(
                 viewModelScope
             )
         ),
+        massAddDelayMs = appPreferences.MASS_ADD_DELAY_MS.state(viewModelScope),
         geminiApiKey = appPreferences.TRANSLATION_GEMINI_API_KEY.state(viewModelScope),
         geminiModel = appPreferences.TRANSLATION_GEMINI_MODEL.state(viewModelScope),
         preferOnlineTranslation = appPreferences.TRANSLATION_PREFER_ONLINE.state(viewModelScope),
+        scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
+        cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
+        cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
     )
 
     init {
@@ -82,6 +92,17 @@ internal class SettingsViewModel @Inject constructor(
             appRepository.eventDataRestored.collect {
                 updateDatabaseSize()
                 updateImagesFolderSize()
+            }
+        }
+
+        // Show notification when Cloudflare bypass setting changes
+        viewModelScope.launch {
+            var previousValue = cloudflareBypassEnabled
+            appPreferences.CLOUDFLARE_BYPASS_ENABLED.flow().collect { newValue ->
+                if (newValue != previousValue) {
+                    toasty.show(R.string.cloudflare_bypass_restart_required)
+                    previousValue = newValue
+                }
             }
         }
     }
@@ -95,24 +116,73 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     fun cleanDatabase() = appScope.launch(Dispatchers.IO) {
-        appRepository.settings.clearNonLibraryData()
-        appRepository.vacuum()
-        updateDatabaseSize()
+        if (isCleaningDatabase.value) return@launch // Prevent multiple simultaneous calls
+
+        try {
+            isCleaningDatabase.value = true
+            toasty.show(R.string.cleaning_database)
+
+            appRepository.settings.clearNonLibraryData()
+            appRepository.vacuum()
+            updateDatabaseSize()
+            kotlinx.coroutines.delay(500) // Give time for UI update
+
+            toasty.show(R.string.database_cleaned_successfully)
+
+        } catch (e: Exception) {
+            toasty.show(R.string.database_clean_failed)
+            e.printStackTrace()
+        } finally {
+            isCleaningDatabase.value = false
+        }
     }
 
     fun cleanImagesFolder() = appScope.launch(Dispatchers.IO) {
-        val libraryFolders = appRepository.libraryBooks.getAllInLibrary()
-            .asSequence()
-            .map { appFileResolver.getLocalBookFolderName(it.url) }
-            .toSet()
+        if (isCleaningImages.value) return@launch // Prevent multiple simultaneous calls
 
-        appRepository.settings.folderBooks.listFiles()
-            ?.asSequence()
-            ?.filter { it.isDirectory && it.exists() }
-            ?.filter { it.name !in libraryFolders }
-            ?.forEach { it.deleteRecursively() }
-        updateImagesFolderSize()
-        Glide.get(context).clearDiskCache()
+        try {
+            isCleaningImages.value = true
+            toasty.show(R.string.cleaning_images_folder)
+
+            val libraryFolders = appRepository.libraryBooks.getAllInLibrary()
+                .asSequence()
+                .map { appFileResolver.getLocalBookFolderName(it.url) }
+                .toSet()
+
+            val booksFolder = appRepository.settings.folderBooks
+            val foldersToDelete = booksFolder.listFiles()
+                ?.asSequence()
+                ?.filter { it.isDirectory && it.exists() }
+                ?.filter { it.name !in libraryFolders }
+                ?.toList() ?: emptyList()
+
+            var deletedCount = 0
+            foldersToDelete.forEach { folder ->
+                try {
+                    folder.deleteRecursively()
+                    deletedCount++
+                } catch (e: Exception) {
+                    // Log error but continue with other folders
+                    e.printStackTrace()
+                }
+            }
+
+            updateImagesFolderSize()
+            Glide.get(context).clearDiskCache()
+            kotlinx.coroutines.delay(500) // Give time for UI update
+
+            if (deletedCount > 0) {
+                toasty.show(context.getString(R.string.images_folder_cleaned, deletedCount))
+            } else {
+                toasty.show(R.string.images_folder_already_clean)
+            }
+
+        } catch (e: Exception) {
+            toasty.show(R.string.images_folder_clean_failed)
+            e.printStackTrace()
+        } finally {
+            isCleaningImages.value = false
+        }
     }
 
     fun onFollowSystemChange(follow: Boolean) {
@@ -169,6 +239,10 @@ internal class SettingsViewModel @Inject constructor(
             state.updateAppSetting.checkingForNewVersion.value = false
         }
     }
+
+    fun onMassAddDelayChange(newDelayMs: Long) {
+        appPreferences.MASS_ADD_DELAY_MS.value = newDelayMs
+    }
 }
 
 private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {
@@ -178,5 +252,3 @@ private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatche
         else -> file.walkBottomUp().sumOf { if (it.isDirectory) 0 else it.length() }
     }
 }
-
-

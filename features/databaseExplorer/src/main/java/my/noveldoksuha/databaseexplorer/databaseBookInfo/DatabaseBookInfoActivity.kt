@@ -1,17 +1,18 @@
-package my.noveldoksuha.databaseexplorer.databaseBookInfo
+package my.noveldokusha.databaseexplorer.databaseBookInfo
 
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import dagger.hilt.android.AndroidEntryPoint
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.composableActions.SetSystemBarTransparent
-import my.noveldoksuha.coreui.theme.Theme
-import my.noveldoksuha.databaseexplorer.databaseSearch.DatabaseSearchActivity
-import my.noveldoksuha.databaseexplorer.databaseSearch.DatabaseSearchExtras
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
+import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.databaseexplorer.databaseSearch.DatabaseSearchActivity
+import my.noveldokusha.databaseexplorer.databaseSearch.DatabaseSearchExtras
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.navigation.NavigationRoutes
 import my.noveldokusha.scraper.SearchGenre
@@ -44,6 +45,15 @@ class DatabaseBookInfoActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Обработка нажатия кнопки "назад"
+                finish()
+            }
+        }
+        addOnBackPressedCallback(backPressedCallback)
+
         setContent {
             Theme(themeProvider = themeProvider) {
                 SetSystemBarTransparent()
@@ -53,7 +63,7 @@ class DatabaseBookInfoActivity : BaseActivity() {
                     onGenresClick = ::openSearchPageByGenres,
                     onBookClick = ::openBookInfo,
                     onOpenInWeb = { navigationRoutes.webView(this, viewModel.bookUrl).let(::startActivity) },
-                    onPressBack = ::onBackPressed
+                    onPressBack = { backPressedCallback.handleOnBackPressed() }
                 )
             }
         }

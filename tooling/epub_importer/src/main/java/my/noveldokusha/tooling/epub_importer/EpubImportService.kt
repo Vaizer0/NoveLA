@@ -13,11 +13,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.states.NotificationsCenter
-import my.noveldoksuha.coreui.states.removeProgressBar
-import my.noveldoksuha.coreui.states.text
-import my.noveldoksuha.coreui.states.title
-import my.noveldoksuha.data.EpubImporterRepository
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.coreui.states.removeProgressBar
+import my.noveldokusha.coreui.states.text
+import my.noveldokusha.coreui.states.title
+import my.noveldokusha.data.EpubImporterRepository
 import my.noveldokusha.core.asSequence
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Uri

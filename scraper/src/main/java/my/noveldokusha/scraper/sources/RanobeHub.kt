@@ -1,7 +1,5 @@
 package my.noveldokusha.scraper.sources
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
@@ -16,26 +14,41 @@ import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.TextExtractor
 import my.noveldokusha.scraper.domain.BookResult
 import my.noveldokusha.scraper.domain.ChapterResult
-import okhttp3.Headers
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-class RanobeHub(
-    private val networkClient: NetworkClient,
-) : SourceInterface.Catalog {
+class RanobeHub(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
     override val id = "ranobehub"
     override val nameStrId = R.string.source_name_ranobehub
     override val baseUrl = "https://ranobehub.org"
     override val catalogUrl = baseUrl
     override val language = LanguageCode.RUSSIAN
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/ranobehub.png"
+    override val iconResId = null
 
     private val apiBase = "https://ranobehub.org/api/"
 
-    override suspend fun getChapterTitle(doc: Document): String? = withContext(Dispatchers.Default) {
-        doc.selectFirst("h1, .chapter-title")?.text()?.takeIf { it.isNotBlank() }
-    }
+    override suspend fun getBookTitle(bookUrl: String): Response<String?> =
+        withContext(Dispatchers.Default) {
+            tryConnect {
+                val id = extractId(bookUrl) ?: return@tryConnect null
+                val url = "${apiBase}ranobe/$id"
+                val data = networkClient
+                    .call(getRequest(url))
+                    .toJson()
+                    .asJsonObject
+                    .getAsJsonObject("data")
+
+                // На сайте бывают названия на русском, английском и оригинале
+                data?.getAsJsonObject("names")?.get("rus")?.asString
+                    ?: data?.getAsJsonObject("names")?.get("eng")?.asString
+                    ?: data?.getAsJsonObject("names")?.get("original")?.asString
+                    ?: data?.get("name")?.asString
+            }
+        }
 
     override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
         val indexA = doc.html().indexOf("<div class=\"title-wrapper\">")
@@ -46,7 +59,7 @@ class RanobeHub(
             // Replace media IDs with proper URLs
             val processedHtml = chapterHtml.replace(
                 Regex("<img data-media-id=\"(.*?)\".*?>"),
-                "<img src=\"/api/media/\$1\">"
+                "<img src=\"/api/media/$1\">"
             )
 
             // Try to extract content more precisely
@@ -64,7 +77,8 @@ class RanobeHub(
                     ".chapter-content",
                     ".reader-text",
                     "[class*='text']",
-                    "[class*='content']"
+                    "[class*='content']",
+                    ".ui.text.container p"
                 )
 
                 for (selector in contentSelectors) {

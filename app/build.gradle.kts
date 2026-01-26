@@ -44,8 +44,8 @@ android {
 
     defaultConfig {
         applicationId = "my.noveldokushaTT"
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         setProperty("archivesBaseName", "WebnovelReader_v$versionName")
     }
 
@@ -103,7 +103,10 @@ dependencies {
     implementation(projects.tooling.epubImporter)
     implementation(projects.tooling.applicationWorkers)
     implementation(projects.tooling.localSource)
+    implementation(projects.tooling.dexLoader)
 
+    implementation(projects.features.extensions)
+    implementation(projects.navigation)
     implementation(projects.features.reader)
     implementation(projects.features.chaptersList)
     implementation(projects.features.globalSourceSearch)
@@ -125,7 +128,8 @@ dependencies {
     // Translation feature (FOSS - Gemini API only)
     implementation(projects.tooling.textTranslator.translatorNop)
 
-    // Kotlin
+    // Kotlin scripting for extension compilation
+    implementation(libs.kotlin.scripting.jvm)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlin.script.runtime)
     implementation(libs.kotlin.stdlib)
@@ -211,4 +215,3 @@ dependencies {
 hilt {
     enableAggregatingTask = true
 }
-

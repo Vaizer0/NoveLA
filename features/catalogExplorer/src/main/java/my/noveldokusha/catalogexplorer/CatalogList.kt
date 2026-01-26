@@ -27,14 +27,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.components.AnimatedTransition
-import my.noveldoksuha.coreui.components.ImageViewGlide
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.data.CatalogItem
+import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.components.ImageViewGlide
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.core.appPreferences.SortOrder
+import my.noveldokusha.data.CatalogItem
 import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.fixtures.fixturesCatalogList
@@ -46,10 +48,33 @@ internal fun CatalogList(
     innerPadding: PaddingValues,
     databasesList: List<DatabaseInterface>,
     sourcesList: List<CatalogItem>,
+    sortOrder: SortOrder?,
     onDatabaseClick: (DatabaseInterface) -> Unit,
     onSourceClick: (SourceInterface.Catalog) -> Unit,
     onSourceSetPinned: (id: String, pinned: Boolean) -> Unit,
 ) {
+    // Сортируем источники с учетом приоритетов, если sortOrder указан:
+    // 1. Local источник всегда первым
+    // 2. Закрепленные источники
+    // 3. Незакрепленные источники (сортируются по алфавиту)
+    val sortedSourcesList = if (sortOrder != null) {
+        sourcesList.sortedWith(
+            compareBy<CatalogItem> { 
+                // Сначала Local источник
+                if (it.catalog.id == "local_source") 0 else 1
+            }.thenBy { 
+                // Затем закрепленные источники
+                if (it.pinned) 0 else 1 
+            }.thenBy { 
+                // Наконец сортировка по имени
+                it.catalog.nameStrId 
+            }.let { comparator ->
+                if (sortOrder == SortOrder.DESCENDING) comparator.reversed() else comparator
+            }
+        )
+    } else {
+        sourcesList
+    }
     LazyColumn(
         contentPadding = PaddingValues(bottom = 300.dp),
         modifier = Modifier.padding(paddingValues = innerPadding)
@@ -103,7 +128,7 @@ internal fun CatalogList(
         }
 
         items(
-            items = sourcesList,
+            items = sortedSourcesList,
             key = { it.catalog.id }
         ) {
             ListItem(
@@ -124,19 +149,28 @@ internal fun CatalogList(
                     )
                 },
                 leadingContent = {
-                    val icon = it.catalog.iconUrl
-                    if (icon is ImageVector) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                        )
-                    } else {
+                    val iconResId = it.catalog.iconResId
+                    if (iconResId != null) {
                         ImageViewGlide(
-                            imageModel = icon,
+                            imageModel = iconResId,
                             modifier = Modifier.size(28.dp),
                             error = R.drawable.default_icon
                         )
+                    } else {
+                        val icon = it.catalog.iconUrl
+                        if (icon is ImageVector) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        } else {
+                            ImageViewGlide(
+                                imageModel = icon,
+                                modifier = Modifier.size(28.dp),
+                                error = R.drawable.default_icon
+                            )
+                        }
                     }
                 },
                 trailingContent = {
@@ -203,6 +237,7 @@ private fun PreviewView() {
             innerPadding = PaddingValues(),
             databasesList = fixturesDatabaseList(),
             sourcesList = catalogItemsList,
+            sortOrder = SortOrder.ASCENDING,
             onDatabaseClick = {},
             onSourceClick = {},
             onSourceSetPinned = { _, _ -> },

@@ -6,9 +6,9 @@ import android.util.Log
 import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
-import my.noveldoksuha.coreui.states.NotificationsCenter
-import my.noveldoksuha.data.AppRemoteRepository
-import my.noveldoksuha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.data.AppRemoteRepository
+import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.tooling.application_workers.LibraryUpdatesWorker
 import my.noveldokusha.tooling.application_workers.UpdatesCheckerWorker
 import my.noveldokusha.tooling.application_workers.notifications.LibraryUpdateNotification

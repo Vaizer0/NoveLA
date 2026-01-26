@@ -85,14 +85,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.components.MyOutlinedTextField
-import my.noveldoksuha.coreui.components.MySlider
-import my.noveldoksuha.coreui.composableActions.debouncedAction
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.ColorNotice
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.colorApp
-import my.noveldoksuha.coreui.theme.rememberMutableStateOf
+import my.noveldokusha.coreui.components.MyOutlinedTextField
+import my.noveldokusha.coreui.components.MySlider
+import my.noveldokusha.coreui.composableActions.debouncedAction
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.colorApp
+import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
 import my.noveldokusha.reader.R
@@ -115,7 +113,7 @@ internal fun VoiceReaderSettingDialog(
             ) {
                 CircularProgressIndicator(
                     strokeWidth = 6.dp,
-                    color = ColorAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.background(
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                         CircleShape
@@ -229,12 +227,12 @@ internal fun VoiceReaderSettingDialog(
                         modifier = Modifier.alpha(alpha),
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.FastRewind,
+                            Icons.Rounded.FastRewind,
                             contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .size(32.dp)
-                                .background(ColorAccent, CircleShape),
-                            tint = Color.White,
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
                     IconButton(
@@ -245,10 +243,10 @@ internal fun VoiceReaderSettingDialog(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.NavigateBefore,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .size(38.dp)
-                                .background(ColorAccent, CircleShape),
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
                     IconButton(onClick = { state.setPlaying(!state.isPlaying.value) }) {
@@ -256,18 +254,18 @@ internal fun VoiceReaderSettingDialog(
                             targetState = state.isPlaying.value,
                             modifier = Modifier
                                 .size(56.dp)
-                                .background(ColorAccent, CircleShape), label = ""
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape), label = ""
                         ) { target ->
                             when (target) {
                                 true -> Icon(
                                     Icons.Rounded.Pause,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                                 false -> Icon(
                                     Icons.Rounded.PlayArrow,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                             }
                         }
@@ -280,10 +278,10 @@ internal fun VoiceReaderSettingDialog(
                         Icon(
                             Icons.AutoMirrored.Rounded.NavigateNext,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .size(38.dp)
-                                .background(ColorAccent, CircleShape),
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
                     IconButton(
@@ -294,10 +292,10 @@ internal fun VoiceReaderSettingDialog(
                         Icon(
                             Icons.Rounded.FastForward,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .size(32.dp)
-                                .background(ColorAccent, CircleShape),
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
                 }
@@ -420,7 +418,7 @@ private fun VoiceSelectorDialog(
                             Icon(
                                 imageVector = if (yay) Icons.Filled.StarRate else Icons.Outlined.StarBorder,
                                 contentDescription = null,
-                                tint = if (yay) ColorNotice else MaterialTheme.colorScheme.onPrimary,
+                                tint = if (yay) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(10.dp)
                             )
                         }

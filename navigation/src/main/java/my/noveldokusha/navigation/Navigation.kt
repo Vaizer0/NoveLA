@@ -35,6 +35,8 @@ interface NavigationRoutes {
 
     fun globalSearch(context: Context, text: String): Intent
     fun sourceCatalog(context: Context, sourceBaseUrl: String): Intent
+
+
 }
 
 @HiltViewModel

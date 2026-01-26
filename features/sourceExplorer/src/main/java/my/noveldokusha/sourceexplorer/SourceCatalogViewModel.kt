@@ -6,11 +6,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.coreui.components.ToolbarMode
-import my.noveldoksuha.coreui.states.PagedListIteratorState
-import my.noveldoksuha.data.AppRepository
-import my.noveldoksuha.mappers.mapToBookMetadata
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.components.ToolbarMode
+import my.noveldokusha.coreui.states.PagedListIteratorState
+import my.noveldokusha.data.AppRepository
+import my.noveldokusha.mappers.mapToBookMetadata
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.StateExtra_String
@@ -44,12 +44,12 @@ internal class SourceCatalogViewModel @Inject constructor(
             source.getCatalogList(it).mapToBookMetadata()
         },
         listLayoutMode = appPreferences.BOOKS_LIST_LAYOUT_MODE.state(viewModelScope),
+        sortOrder = appPreferences.SOURCE_SORT_ORDER.state(viewModelScope),
     )
 
     init {
         onSearchCatalog()
     }
-
     fun onSearchCatalog() {
         state.fetchIterator.setFunction { source.getCatalogList(it).mapToBookMetadata() }
         state.fetchIterator.reset()
@@ -70,4 +70,4 @@ internal class SourceCatalogViewModel @Inject constructor(
             val res = if (isInLibrary) R.string.added_to_library else R.string.removed_from_library
             toasty.show(res)
         }
-}
+} 

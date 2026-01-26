@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseSearch
+package my.noveldokusha.databaseexplorer.databaseSearch
 
 import android.content.Context
 import android.content.Intent
@@ -6,13 +6,14 @@ import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.OnBackPressedCallback
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.parcelize.Parcelize
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.theme.Theme
-import my.noveldoksuha.coreui.theme.colorAttrRes
-import my.noveldoksuha.databaseexplorer.R
-import my.noveldoksuha.databaseexplorer.databaseBookInfo.DatabaseBookInfoActivity
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.colorAttrRes
+import my.noveldokusha.databaseexplorer.R
+import my.noveldokusha.databaseexplorer.databaseBookInfo.DatabaseBookInfoActivity
 import my.noveldokusha.core.utils.Extra_Parcelable
 import my.noveldokusha.feature.local_database.BookMetadata
 
@@ -56,6 +57,15 @@ class DatabaseSearchActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
+
+        val backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Обработка нажатия кнопки "назад"
+                finish()
+            }
+        }
+        addOnBackPressedCallback(backPressedCallback)
+
         setContent {
             Theme(themeProvider = themeProvider) {
                 DatabaseSearchScreen(
@@ -67,7 +77,7 @@ class DatabaseSearchActivity : BaseActivity() {
                     onSearchModeChange = viewModel.state.searchMode::value::set,
                     onBookClicked = ::openBookInfoPage,
                     onBookLongClicked = {},
-                    onPressBack = ::onBackPressed
+                    onPressBack = { backPressedCallback.handleOnBackPressed() }
                 )
             }
         }

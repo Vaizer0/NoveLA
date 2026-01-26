@@ -1,62 +1,92 @@
 package my.noveldokusha.scraper.sources
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
-import my.noveldokusha.scraper.domain.ChapterResult
-import my.noveldokusha.scraper.templates.BaseNovelFullScraper
+import my.noveldokusha.scraper.SourceInterface
+import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.buildUrl
+import my.noveldokusha.scraper.utils.UrlTransformers
 import org.jsoup.nodes.Document
 
-class NovelHall(
-    networkClient: NetworkClient
-) : BaseNovelFullScraper(networkClient) {
+class NovelHall(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    // Методы интерфейса (ОБЯЗАТЕЛЬНО!)
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
+    // Идентификаторы источника
     override val id = "novelhall"
     override val nameStrId = R.string.source_name_novelhall
-    override val baseUrl = "https://www.novelhall.com/"
-    override val catalogUrl = "https://www.novelhall.com/all.html"
+    override val baseUrl = "https://www.novelhall.com"
+    override val catalogUrl = "https://www.novelhall.com/lastupdate.html"
     override val language = LanguageCode.ENGLISH
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/novelhall.png"
+    override val iconResId = null
 
-    // NovelHall-specific selectors
-    override val selectBookCover = ".book-img.hidden-xs img[src]"
-    override val selectBookDescription = "span.js-close-wrap"
-    override val selectChapterList = "#morelist a[href]"
-    override val selectChapterContent = "div#htmlContent"
-    override val selectCatalogItems = "li.btm"
-    override val selectPaginationLastPage = "div.page-nav span:last-child"
-    override val selectSearchItems: String = "td:nth-child(2) a[href]"
-    // NovelHall uses direct chapter list, not ajax
-    override val useAjaxChapterLoading = false
-    
-    override fun buildCatalogUrl(index: Int): String {
-        val page = index + 1
-        return if (page == 1) "$baseUrl/all.html"
-        else "$baseUrl/all-$page.html"
-    }
-    
-    override fun buildSearchUrl(index: Int, input: String): String {
-        return baseUrl + "index.php?s=so&module=book&keyword=$input"
-    }
-    override suspend fun getChapterList(
-        bookUrl: String
-    ): Response<List<ChapterResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            networkClient.get(bookUrl)
-                .toDocument()
-                .select(selectChapterList)
-                .map {
-                    ChapterResult(
-                        title = it.text() ?: "",
-                        url = (baseUrl + it.attr("href"))
-                    )
-                }
-        }
-    }
-    
-    override fun isLastPage(doc: Document) = 
-        doc.selectFirst("div.page-nav")?.children()?.last()?.tagName() == "span"
+    // Declarative selectors configuration
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
+
+        // Declarative selectors
+        catalog = CatalogSelectors(
+            item = elements("table tbody tr"),
+            title = text("td.w70 a[href]").Clean(),
+            url = attr("href", "td.w70 a[href]"),
+            cover = attr("src", ":not(*)") // No cover selector
+        ),
+
+        // Search selectors (different from catalog)
+        search = SearchSelectors(
+            item = elements("td:nth-child(2) a[href]"),
+            title = text("a[href]").Clean(),
+            url = attr("href", "a[href]"),
+            cover = attr("src", ":not(*)") // No cover selector
+        ),
+
+        book = BookSelectors(
+            cover = attr("src", ".book-img.hidden-xs img[src]"),
+            description = text("span.js-close-wrap")
+        ),
+
+        chapters = ChapterSelectors(
+            list = elements("#morelist a[href]"),
+            title = text("a"),
+            content = text("div#htmlContent")
+                .removeElementsDOM("script")
+                .applyStandardContentTransforms(baseUrl)
+        ),
+
+
+        // Chapters without pagination
+        chapterPaginationType = ChapterPaginationType.NONE,
+
+        // POST search disabled
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
+
+        // URL builders
+        buildCatalogUrl = { index ->
+            val page = index + 1
+            if (page == 1) "$baseUrl/completed.html"
+            else "$baseUrl/completed-$page.html"
+        },
+        buildSearchUrl = { index, query ->
+            if (index == 0) "$baseUrl/index.php?s=so&module=book&keyword=$query"
+            else "$baseUrl/index.php?s=so&module=book&keyword=$query&page=${index + 1}"
+        },
+
+        // URL transformers
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl)
+    )
+
+    // Note: URL transformers are now inline in HtmlSelectors config
 }

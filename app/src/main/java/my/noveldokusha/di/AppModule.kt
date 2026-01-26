@@ -10,10 +10,14 @@ import dagger.hilt.components.SingletonComponent
 import my.noveldokusha.App
 import my.noveldokusha.AppNavigationRoutes
 import my.noveldokusha.BuildConfig
+import my.noveldokusha.ExtensionRepository
 import my.noveldokusha.core.AppInternalState
+import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.ToastyToast
+import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.navigation.NavigationRoutes
+import my.noveldokusha.DexExtensionLoader
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -32,6 +36,10 @@ abstract class AppModule {
     @Singleton
     abstract fun bindToasty(toast: ToastyToast): Toasty
 
+    @Binds
+    @Singleton
+    abstract fun bindExtensionManager(extensionRepository: ExtensionRepository): ExtensionManager
+
     companion object {
 
         @Provides
@@ -47,5 +55,13 @@ abstract class AppModule {
             override val versionCode = BuildConfig.VERSION_CODE
             override val versionName = BuildConfig.VERSION_NAME
         }
+
+        @Provides
+        @Singleton
+        fun providesDexExtensionLoader(@ApplicationContext context: Context): DexExtensionLoader {
+            return DexExtensionLoader(context)
+        }
+
+
     }
 }

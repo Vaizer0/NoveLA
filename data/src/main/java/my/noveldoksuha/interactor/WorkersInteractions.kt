@@ -1,4 +1,4 @@
-package my.noveldoksuha.interactor
+package my.noveldokusha.interactor
 
 import my.noveldokusha.core.domain.LibraryCategory
 

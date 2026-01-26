@@ -2,8 +2,9 @@ package my.noveldokusha
 
 import android.content.Context
 import android.content.Intent
-import my.noveldoksuha.databaseexplorer.databaseSearch.DatabaseSearchActivity
-import my.noveldoksuha.databaseexplorer.databaseSearch.DatabaseSearchExtras
+import my.noveldokusha.databaseexplorer.databaseSearch.DatabaseSearchActivity
+import my.noveldokusha.databaseexplorer.databaseSearch.DatabaseSearchExtras
+
 import my.noveldokusha.features.chapterslist.ChaptersActivity
 import my.noveldokusha.features.main.MainActivity
 import my.noveldokusha.features.reader.ReaderActivity
@@ -78,8 +79,13 @@ class AppNavigationRoutes @Inject constructor() : NavigationRoutes {
     }
 
     override fun webView(context: Context, url: String): Intent {
-        return WebViewActivity.IntentData(context, url = url)
+        // Создаем обычный Intent и кладем в него URL
+        return Intent(context, WebViewActivity::class.java).apply {
+            putExtra("url", url)
+        }
     }
+
+
 
 }
 

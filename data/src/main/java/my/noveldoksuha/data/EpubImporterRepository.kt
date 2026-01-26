@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import android.content.Context
 import androidx.core.net.toUri

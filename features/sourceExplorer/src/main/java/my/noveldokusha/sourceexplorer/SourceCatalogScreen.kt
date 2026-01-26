@@ -1,11 +1,15 @@
 package my.noveldokusha.sourceexplorer
 
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -29,13 +34,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import my.noveldoksuha.coreui.components.AnimatedTransition
-import my.noveldoksuha.coreui.components.BooksVerticalView
-import my.noveldoksuha.coreui.components.CollapsibleDivider
-import my.noveldoksuha.coreui.components.ToolbarMode
-import my.noveldoksuha.coreui.components.TopAppBarSearch
+import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.components.BooksVerticalView
+import my.noveldokusha.coreui.components.CollapsibleDivider
+import my.noveldokusha.coreui.components.ToolbarMode
+import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.core.appPreferences.ListLayoutMode
+import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.core.utils.actionCopyToClipboard
+import my.noveldokusha.coreui.states.IteratorState
 import my.noveldokusha.feature.local_database.BookMetadata
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -61,101 +69,110 @@ internal fun SourceCatalogScreen(
         flingAnimationSpec = null
     )
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            Column {
-                AnimatedTransition(targetState = state.toolbarMode.value) { target ->
-                    when (target) {
-                        ToolbarMode.MAIN -> TopAppBar(
-                            scrollBehavior = scrollBehavior,
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = Color.Unspecified,
-                                scrolledContainerColor = Color.Unspecified,
-                            ),
-                            title = {
-                                Column {
-                                    Text(
-                                        text = stringResource(id = state.sourceCatalogNameStrId.value),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.catalog),
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                Column {
+                    AnimatedTransition(targetState = state.toolbarMode.value) { target ->
+                        when (target) {
+                            ToolbarMode.MAIN -> TopAppBar(
+                                scrollBehavior = scrollBehavior,
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = Color.Unspecified,
+                                    scrolledContainerColor = Color.Unspecified,
+                                ),
+                                title = {
+                                    Column {
+                                        Text(
+                                            text = stringResource(id = state.sourceCatalogNameStrId.value),
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.catalog),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                    }
+                                },
+                                navigationIcon = {
+                                    IconButton(
+                                        onClick = onPressBack
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                                    }
+                                },
+                                actions = {
+                                    IconButton(onClick = { onOpenSourceWebPage() }) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_baseline_public_24),
+                                            contentDescription = stringResource(R.string.open_the_web_view)
+                                        )
+                                    }
+                                    IconButton(onClick = { onToolbarModeChange(ToolbarMode.SEARCH) }) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_baseline_search_24),
+                                            contentDescription = stringResource(R.string.search_for_title)
+                                        )
+                                    }
+                                    IconButton(onClick = { optionsExpanded = !optionsExpanded }) {
+                                        Icon(
+                                            Icons.Filled.MoreVert,
+                                            contentDescription = stringResource(R.string.open_for_more_options)
+                                        )
+                                    }
                                 }
-                            },
-                            navigationIcon = {
-                                IconButton(
-                                    onClick = onPressBack
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-                                }
-                            },
-                            actions = {
-                                IconButton(onClick = { onOpenSourceWebPage() }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_baseline_public_24),
-                                        contentDescription = stringResource(R.string.open_the_web_view)
-                                    )
-                                }
-                                IconButton(onClick = { onToolbarModeChange(ToolbarMode.SEARCH) }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_baseline_search_24),
-                                        contentDescription = stringResource(R.string.search_for_title)
-                                    )
-                                }
-                                IconButton(onClick = { optionsExpanded = !optionsExpanded }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = stringResource(R.string.open_for_more_options)
-                                    )
-                                    SourceCatalogDropDown(
-                                        expanded = optionsExpanded,
-                                        onDismiss = { optionsExpanded = !optionsExpanded },
-                                        listLayoutMode = state.listLayoutMode.value,
-                                        onListLayoutModeChange = onListLayoutModeChange
-                                    )
-                                }
-                            }
-                        )
-                        ToolbarMode.SEARCH -> TopAppBarSearch(
-                            scrollBehavior = scrollBehavior,
-                            focusRequester = focusRequester,
-                            searchTextInput = state.searchTextInput.value,
-                            onClose = {
-                                focusManager.clearFocus()
-                                onToolbarModeChange(ToolbarMode.MAIN)
-                                onSearchCatalogSubmit()
-                            },
-                            onTextDone = {
-                                onSearchTextInputChange(it)
-                                onSearchTextInputSubmit(it)
-                            },
-                            placeholderText = stringResource(R.string.search_by_title),
-                            onSearchTextChange = onSearchTextInputChange
-                        )
+                            )
+                            ToolbarMode.SEARCH -> TopAppBarSearch(
+                                scrollBehavior = scrollBehavior,
+                                focusRequester = focusRequester,
+                                searchTextInput = state.searchTextInput.value,
+                                onClose = {
+                                    focusManager.clearFocus()
+                                    onToolbarModeChange(ToolbarMode.MAIN)
+                                    onSearchCatalogSubmit()
+                                },
+                                onTextDone = {
+                                    onSearchTextInputChange(it)
+                                    onSearchTextInputSubmit(it)
+                                },
+                                placeholderText = stringResource(R.string.search_by_title),
+                                onSearchTextChange = onSearchTextInputChange
+                            )
+                        }
                     }
+                    CollapsibleDivider(scrollBehavior.state)
                 }
-                CollapsibleDivider(scrollBehavior.state)
+            },
+            content = { innerPadding ->
+                BooksVerticalView(
+                    layoutMode = state.listLayoutMode.value,
+                    list = state.fetchIterator.list,
+                    state = rememberLazyGridState(),
+                    error = state.fetchIterator.error,
+                    loadState = state.fetchIterator.state,
+                    onLoadNext = state.fetchIterator::fetchNext,
+                    onBookClicked = onBookClicked,
+                    onBookLongClicked = onBookLongClicked,
+                    onReload = state.fetchIterator::reloadFailedLastLoad,
+                    onCopyError = context::actionCopyToClipboard,
+                    onWebViewOpen = onOpenSourceWebPage,
+                    innerPadding = innerPadding
+                )
             }
-        },
-        content = { innerPadding ->
-            BooksVerticalView(
-                layoutMode = state.listLayoutMode.value,
-                list = state.fetchIterator.list,
-                state = rememberLazyGridState(),
-                error = state.fetchIterator.error,
-                loadState = state.fetchIterator.state,
-                onLoadNext = state.fetchIterator::fetchNext,
-                onBookClicked = onBookClicked,
-                onBookLongClicked = onBookLongClicked,
-                onReload = state.fetchIterator::reloadFailedLastLoad,
-                onCopyError = context::actionCopyToClipboard,
-                onWebViewOpen = onOpenSourceWebPage,
-                innerPadding = innerPadding
-            )
+        )
+
+        // Loading indicator overlay for initial load and during loading
+        if (state.fetchIterator.state == IteratorState.LOADING && state.fetchIterator.list.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
-    )
+    }
 }

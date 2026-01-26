@@ -112,6 +112,13 @@ class AppPreferences @Inject constructor(
             setOf(LanguageCode.ENGLISH.iso639_1)
         )
     }
+    val EXTENSIONS_LANGUAGES_FILTER = object : Preference<Set<String>>("EXTENSIONS_LANGUAGES_FILTER") {
+        override var value by SharedPreference_StringSet(
+            name,
+            preferences,
+            setOf() // Empty by default - show all extensions
+        )
+    }
     val FINDER_SOURCES_PINNED = object : Preference<Set<String>>("FINDER_SOURCES_PINNED") {
         override var value by SharedPreference_StringSet(name, preferences, setOf())
     }
@@ -145,6 +152,13 @@ class AppPreferences @Inject constructor(
             name,
             preferences,
             ListLayoutMode.VerticalGrid
+        ) { enumValueOf(it) }
+    }
+    val SOURCE_SORT_ORDER = object : Preference<SortOrder>("SOURCE_SORT_ORDER") {
+        override var value by SharedPreference_Enum(
+            name,
+            preferences,
+            SortOrder.ASCENDING
         ) { enumValueOf(it) }
     }
     val GLOBAL_TRANSLATION_ENABLED = object : Preference<Boolean>("GLOBAL_TRANSLATION_ENABLED") {
@@ -188,6 +202,48 @@ class AppPreferences @Inject constructor(
         object : Preference<Boolean>("TRANSLATION_PREFER_ONLINE") {
             override var value by SharedPreference_Boolean(name, preferences, false)
         }
+
+    val MASS_ADD_DELAY_MS = object : Preference<Long>("MASS_ADD_DELAY_MS") {
+        override var value by SharedPreference_Serializable(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = 2000L,
+            encode = { it.toString() },
+            decode = { it.toLongOrNull() ?: 2000L }
+        )
+    }
+
+    val SCRAPER_USER_AGENT = object : Preference<String>("SCRAPER_USER_AGENT") {
+        override var value by SharedPreference_String(name, preferences, "")
+    }
+
+    val SCRAPER_CUSTOM_HEADERS = object : Preference<Map<String, String>>("SCRAPER_CUSTOM_HEADERS") {
+        override var value by SharedPreference_Serializable<Map<String, String>>(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = emptyMap<String, String>(),
+            encode = { Json.encodeToString(it) },
+            decode = { Json.decodeFromString(it) }
+        )
+    }
+
+    val CLOUDFLARE_BYPASS_ENABLED = object : Preference<Boolean>("CLOUDFLARE_BYPASS_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, true)
+    }
+
+    val CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS = object : Preference<Int>("CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS") {
+        override var value by SharedPreference_Int(name, preferences, 120)
+    }
+
+    val LIBRARY_CUSTOM_CATEGORIES = object : Preference<List<String>>("LIBRARY_CUSTOM_CATEGORIES") {
+        override var value by SharedPreference_Serializable<List<String>>(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = listOf(),
+            encode = { Json.encodeToString(it) },
+            decode = { Json.decodeFromString(it) }
+        )
+    }
 
 
     @Deprecated("Removed", level = DeprecationLevel.HIDDEN)

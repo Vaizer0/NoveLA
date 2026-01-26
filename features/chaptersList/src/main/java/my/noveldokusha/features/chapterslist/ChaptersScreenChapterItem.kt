@@ -22,11 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
-import my.noveldoksuha.coreui.components.AnimatedTransition
-import my.noveldoksuha.coreui.theme.ColorNotice
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.coreui.theme.colorApp
+import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.theme.ColorNotice
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter

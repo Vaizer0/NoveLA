@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "my.noveldoksuha.coreui"
+    namespace = "my.noveldokusha.coreui"
     androidResources {
         resourcePrefix = ""
     }

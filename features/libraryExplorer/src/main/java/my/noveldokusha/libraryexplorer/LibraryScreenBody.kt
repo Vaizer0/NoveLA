@@ -34,8 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.components.CollapsibleDivider
-import my.noveldoksuha.coreui.theme.colorApp
+import my.noveldokusha.coreui.components.CollapsibleDivider
+import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.feature.local_database.BookWithContext
 
@@ -47,11 +47,12 @@ import my.noveldokusha.feature.local_database.BookWithContext
 @Composable
 internal fun LibraryScreenBody(
     tabs: List<String>,
-    tabCounts: List<State<Int>>,
     innerPadding: PaddingValues,
     topAppBarState: TopAppBarState,
     onBookClick: (BookWithContext) -> Unit,
     onBookLongClick: (BookWithContext) -> Unit,
+    selectedBooks: Set<String> = emptySet(),
+    isSelectionMode: Boolean = false,
     viewModel: LibraryPageViewModel = viewModel()
 ) {
     val tabsSizeUpdated = rememberUpdatedState(newValue = tabs.size)
@@ -97,11 +98,18 @@ internal fun LibraryScreenBody(
                 tabs = {
                     tabs.forEachIndexed { index, text ->
                         val selected by remember { derivedStateOf { pagerState.currentPage == index } }
-                        val count = tabCounts.getOrNull(index)?.value ?: 0
-                        val title by remember { derivedStateOf { "$text ($count)" } }
+                        val count = when (index) {
+                            0 -> viewModel.countReading
+                            else -> viewModel.countCompleted
+                        }
                         Tab(
                             selected = selected,
-                            text = { Text(title, color = MaterialTheme.colorScheme.onPrimary) },
+                            text = { 
+                                Text(
+                                    text = "$text ($count)", 
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                ) 
+                            },
                             onClick = { scope.launch { pagerState.animateScrollToPage(index) } }
                         )
                     }
@@ -131,7 +139,9 @@ internal fun LibraryScreenBody(
                 LibraryPageBody(
                     list = list,
                     onClick = onBookClick,
-                    onLongClick = onBookLongClick
+                    onLongClick = onBookLongClick,
+                    selectedBooks = selectedBooks,
+                    isSelectionMode = isSelectionMode
                 )
             }
         }

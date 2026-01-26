@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,7 +23,8 @@ class AppRepository @Inject constructor(
     val bookChapters: BookChaptersRepository,
     val chapterBody: ChapterBodyRepository,
     private val appFileResolver: AppFileResolver,
-    private val epubImporterRepository: EpubImporterRepository
+    private val epubImporterRepository: EpubImporterRepository,
+    val downloaderRepository: DownloaderRepository
 ) {
     val settings = Settings()
     val eventDataRestored = MutableSharedFlow<Unit>()

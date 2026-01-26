@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.features.reader.ui.settingDialogs.MoreSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.StyleSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.TranslatorSettingDialog

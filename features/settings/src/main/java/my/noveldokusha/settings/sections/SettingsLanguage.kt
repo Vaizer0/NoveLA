@@ -15,8 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.textPadding
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.R
 

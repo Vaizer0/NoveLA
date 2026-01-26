@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import android.content.Context
 import android.net.Uri
@@ -46,6 +46,9 @@ class LibraryBooksRepository @Inject constructor(
     suspend fun updateCover(bookUrl: String, coverUrl: String) =
         libraryDao.updateCover(bookUrl, coverUrl)
 
+    suspend fun updateTitle(bookUrl: String, title: String) =
+        libraryDao.updateTitle(bookUrl, title)
+
     suspend fun updateDescription(bookUrl: String, description: String) =
         libraryDao.updateDescription(bookUrl, description)
 
@@ -56,6 +59,9 @@ class LibraryBooksRepository @Inject constructor(
             bookUrl = bookUrl,
             chapterUrl = lastReadChapterUrl
         )
+
+    suspend fun updateCategory(bookUrl: String, category: String) =
+        libraryDao.updateCategory(bookUrl, category)
 
     suspend fun getAll() = libraryDao.getAll()
     suspend fun getAllInLibrary() = libraryDao.getAllInLibrary()

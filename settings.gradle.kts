@@ -12,8 +12,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        //noinspection JcenterRepositoryObsolete
-        jcenter()
         maven { setUrl("https://jitpack.io") }
     }
 }
@@ -31,6 +29,7 @@ include(":data")
 
 include(":tooling:local_database")
 include(":tooling:epub_parser")
+include(":tooling:dex-loader")
 include(":tooling:text_translator:domain")
 include(":tooling:text_translator:translator_nop")
 include(":tooling:text_to_speech")
@@ -38,6 +37,7 @@ include(":tooling:backup_restore")
 include(":tooling:backup_create")
 include(":tooling:epub_importer")
 
+include(":features:extensions")
 include(":features:reader")
 include(":features:chaptersList")
 include(":features:globalSourceSearch")

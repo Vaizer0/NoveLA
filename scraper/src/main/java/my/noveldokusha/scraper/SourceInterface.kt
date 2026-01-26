@@ -22,7 +22,7 @@ sealed interface SourceInterface {
     // Transform current url to preferred url
     suspend fun transformChapterUrl(url: String): String = url
 
-    suspend fun getChapterTitle(doc: Document): String? = null
+
     suspend fun getChapterText(doc: Document): String? = null
 
     interface Base : SourceInterface
@@ -30,11 +30,14 @@ sealed interface SourceInterface {
         val catalogUrl: String
         val language: LanguageCode?
         val iconUrl: Any get() = "$baseUrl/favicon.ico"
+        val iconResId: Int? get() = null
 
         suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
             Response.Success(null)
 
         suspend fun getBookDescription(bookUrl: String): Response<String?> = Response.Success(null)
+
+        suspend fun getBookTitle(bookUrl: String): Response<String?> = Response.Success(null)
 
         /**
          * Chapters list ordered from first one (oldest) to newest one.

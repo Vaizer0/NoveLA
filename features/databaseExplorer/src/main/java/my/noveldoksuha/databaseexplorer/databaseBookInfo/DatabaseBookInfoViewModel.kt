@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseBookInfo
+package my.noveldokusha.databaseexplorer.databaseBookInfo
 
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -6,7 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseViewModel
+import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.Scraper

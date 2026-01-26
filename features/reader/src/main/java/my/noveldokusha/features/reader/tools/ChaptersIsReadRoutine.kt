@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import my.noveldoksuha.data.AppRepository
+import my.noveldokusha.data.AppRepository
 import my.noveldokusha.features.reader.domain.ChapterUrl
 
 internal class ChaptersIsReadRoutine(

@@ -33,8 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.theme.Grey25
-import my.noveldoksuha.coreui.theme.textPadding
+import my.noveldokusha.coreui.theme.Grey25
+import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response

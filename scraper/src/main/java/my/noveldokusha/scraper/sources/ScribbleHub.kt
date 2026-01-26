@@ -1,178 +1,126 @@
 package my.noveldokusha.scraper.sources
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.PagedList
-import my.noveldokusha.core.Response
-import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.add
-import my.noveldokusha.network.addPath
-import my.noveldokusha.network.getRequest      // ← Tambahkan
-import my.noveldokusha.network.postPayload     // ← Tambahkan
-import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.toUrlBuilderSafe
-import my.noveldokusha.network.tryConnect
+import my.noveldokusha.network.*
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.TextExtractor
-import my.noveldokusha.scraper.domain.BookResult
+import my.noveldokusha.scraper.configs.*
 import my.noveldokusha.scraper.domain.ChapterResult
-import okhttp3.Request  // ← Masih perlu untuk .build()
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.POST
+import my.noveldokusha.scraper.utils.buildUrl
+import my.noveldokusha.scraper.utils.UrlTransformers
+import my.noveldokusha.scraper.configs.elements
+import my.noveldokusha.scraper.configs.text
+import my.noveldokusha.scraper.configs.attr
 import org.jsoup.nodes.Document
 
-class ScribbleHub(
-    private val networkClient: NetworkClient
-) : SourceInterface.Catalog {
+class ScribbleHub(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
     override val id = "scribblehub"
     override val nameStrId = R.string.source_name_scribblehub
     override val baseUrl = "https://www.scribblehub.com/"
     override val catalogUrl = "https://www.scribblehub.com/series-ranking/?sort=1&order=2"
-    override val iconUrl = "https://www.scribblehub.com/wp-content/uploads/2020/02/cropped-SchribbleHub-Favicon-32x32.png"
     override val language = LanguageCode.ENGLISH
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/scribblehub.png"
+    override val iconResId = null
 
-    override suspend fun getChapterTitle(doc: Document): String? =
-        withContext(Dispatchers.Default) {
-            doc.selectFirst(".chapter-title")?.text()
-        }
+    // Declarative selectors configuration
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
 
-    override suspend fun getChapterText(doc: Document): String =
-        withContext(Dispatchers.Default) {
-            doc.selectFirst("#chp_raw")?.let { element ->
-                element.select("script").remove()
-                element.select("div.modern_chapter_ad").remove()
-                TextExtractor.get(element)
-            } ?: ""
-        }
+        // Declarative selectors
+        catalog = CatalogSelectors(
+            item = elements(".search_main_box"),
+            title = text(".search_title a").Clean(),
+            url = attr("href", ".search_title a"),
+            cover = attr("src", ".search_img img")
+        ),
 
-    override suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient.get(bookUrl)
-                    .toDocument()
-                    .selectFirst(".fic_image img[src]")
-                    ?.attr("src")
-            }
-        }
+        // Search selectors (same as catalog)
+        search = SearchSelectors(
+            item = elements(".search_main_box"),
+            title = text(".search_title a").Clean(),
+            url = attr("href", ".search_title a"),
+            cover = attr("src", ".search_img img")
+        ),
 
-    override suspend fun getBookDescription(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient.get(bookUrl)
-                    .toDocument()
-                    .selectFirst(".wi_fic_desc")
-                    ?.let { TextExtractor.get(it) }
-            }
-        }
+        book = BookSelectors(
+            cover = attr("src", ".fic_image img[src], .novel-cover img"),
+            description = text(".wi_fic_desc")
+        ),
 
-    override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val seriesId = Regex("series/(\\d+)/").find(bookUrl)?.groupValues?.get(1)
-                    ?: throw Exception("Invalid book URL")
+        chapters = ChapterSelectors(
+            list = elements(".toc_w a[href]"),
+            title = text("a"),
+            content = text("#chp_raw")
+                .removeElementsDOM("script", ".modern_chapter_ad", "div.modern_chapter_ad")
+                .applyStandardContentTransforms(baseUrl)
+        ),
 
-                val ajaxUrl = baseUrl.toUrlBuilderSafe()
-                    .addPath("wp-admin", "admin-ajax.php")
-                    .build()
-                    .toString()
+        // Chapters pagination - AJAX based
+        chapterPaginationType = ChapterPaginationType.AJAX_BASED,
+        ajaxChapterListProvider = { bookUrl, networkClient ->
+            // Extract series ID from URL
+            val seriesId = Regex("series/(\\d+)/").find(bookUrl)?.groupValues?.get(1)
+                ?: throw Exception("Invalid ScribbleHub book URL: $bookUrl")
 
-                // ✅ Versi sederhana menggunakan extension function
-                val request = getRequest(ajaxUrl)
-                    .postPayload {
-                        add("action", "wi_getreleases_pagination")
-                        add("pagenum", "-1")
-                        add("mypostid", seriesId)
-                    }
-                    .header("X-Requested-With", "XMLHttpRequest")
-                    .header("Origin", "https://www.scribblehub.com")
-                    .header("Referer", bookUrl)
-                    .header("Accept", "*/*")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-                    .build()
+            // AJAX URL for chapter list
+            val ajaxUrl = buildUrl(baseUrl, "wp-admin/admin-ajax.php")
 
-                networkClient.call(request = request.newBuilder(), followRedirects = false)
-                    .toDocument()
-                    .select(".toc_w a[href]")
-                    .reversed()
-                    .map { element ->
-                        ChapterResult(
-                            title = element.text(),
-                            url = element.attr("href")
-                        )
-                    }
-            }
-        }
+            // POST request with form data and AJAX headers
+            val doc = POST(
+                url = ajaxUrl,
+                data = mapOf(
+                    "action" to "wi_getreleases_pagination",
+                    "pagenum" to "-1", // Get all chapters
+                    "mypostid" to seriesId
+                ),
+                headers = mapOf(
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Origin" to baseUrl.removeSuffix("/"),
+                    "Referer" to bookUrl,
+                    "Accept" to "*/*",
+                    "Accept-Language" to "en-US,en;q=0.9"
+                ),
+                networkClient = networkClient
+            )
 
-    override suspend fun getCatalogList(index: Int): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val page = index + 1
-                val url = baseUrl.toUrlBuilderSafe()
-                    .addPath("series-ranking")
-                    .add("sort", "1")
-                    .add("order", "2")
-                    .add("pg", page.toString())
-                    .toString()
-
-                val doc = networkClient.get(url).toDocument()
-                val books = doc.select(".search_main_box")
-                    .mapNotNull { element ->
-                        val link = element.selectFirst(".search_title a[href]")
-                            ?: return@mapNotNull null
-                        val coverUrl = element.selectFirst(".search_img img[src]")
-                            ?.attr("src") ?: ""
-
-                        BookResult(
-                            title = link.text(),
-                            url = link.attr("href"),
-                            coverImageUrl = coverUrl
-                        )
-                    }
-
-                PagedList(
-                    list = books,
-                    index = index,
-                    isLastPage = books.isEmpty()
+            // Parse chapters from AJAX response
+            doc.select(".toc_w a[href]").reversed().map { element: org.jsoup.nodes.Element ->
+                ChapterResult(
+                    title = element.text(),
+                    url = element.attr("href")
                 )
             }
-        }
+        },
 
-    override suspend fun getCatalogSearch(
-        index: Int,
-        input: String
-    ): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                if (input.isBlank())
-                    return@tryConnect PagedList.createEmpty(index = index)
+        // POST search disabled
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
 
-                val page = index + 1
-                val url = baseUrl.toUrlBuilderSafe()
-                    .add("s", input)
-                    .add("post_type", "fictionposts")
-                    .add("paged", page.toString())
-                    .toString()
+        // URL builders
+        buildCatalogUrl = { index ->
+            val page = index + 1
+            "$baseUrl/series-ranking/?sort=1&order=2&pg=$page"
+        },
+        buildSearchUrl = { index, query ->
+            val page = index + 1
+            "$baseUrl?s=$query&post_type=fictionposts&paged=$page"
+        },
 
-                val doc = networkClient.get(url).toDocument()
-                val books = doc.select(".search_main_box")
-                    .mapNotNull { element ->
-                        val link = element.selectFirst(".search_title a[href]")
-                            ?: return@mapNotNull null
-                        val coverUrl = element.selectFirst(".search_img img[src]")
-                            ?.attr("src") ?: ""
-
-                        BookResult(
-                            title = link.text(),
-                            url = link.attr("href"),
-                            coverImageUrl = coverUrl
-                        )
-                    }
-
-                PagedList(
-                    list = books,
-                    index = index,
-                    isLastPage = books.isEmpty()
-                )
-            }
-        }
+        // URL transformers
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl),
+        transformCoverUrl = UrlTransformers.standardCoverUrl(baseUrl)
+    )
 }

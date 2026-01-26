@@ -1,197 +1,82 @@
 package my.noveldokusha.scraper.sources
 
-import com.google.gson.JsonParser
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.getRequest
-import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.TextExtractor
-import my.noveldokusha.scraper.domain.BookResult
-import my.noveldokusha.scraper.domain.ChapterResult
-import okhttp3.Headers
-import org.jsoup.Jsoup
+import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.buildUrl
+import my.noveldokusha.scraper.utils.UrlTransformers
 import org.jsoup.nodes.Document
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
-class Ifreedom(
-    private val networkClient: NetworkClient,
-) : SourceInterface.Catalog {
+class Ifreedom(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
     override val id = "ifreedom"
     override val nameStrId = R.string.source_name_ifreedom
     override val baseUrl = "https://ifreedom.su/"
-    override val catalogUrl = baseUrl
+    override val catalogUrl = "$baseUrl"
     override val language = LanguageCode.RUSSIAN
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/ifreedom.png"
+    override val iconResId = null
 
-    override suspend fun getChapterTitle(doc: Document): String? = withContext(Dispatchers.Default) {
-        doc.selectFirst("h1, .chapter-title")?.text()?.takeIf { it.isNotBlank() }
-    }
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
 
-    override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
-        // Try multiple selectors for chapter content
-        val contentSelectors = listOf(
-            "article",
-            ".chapter-content",
-            ".content",
-            ".text",
-            ".chapter-text",
-            "#content",
-            ".post-content"
-        )
+        catalog = CatalogSelectors(
+            item = elements(".booksearch .item-book-slide"),
+            title = text(".block-book-slide-title").Clean(),
+            url = attr("href", "a"),
+            cover = attr("src", "img")
+                .applyStandardContentTransforms(baseUrl)
+                .removeElementsDOM("script", ".ads")
+        ),
 
-        for (selector in contentSelectors) {
-            val element = doc.selectFirst(selector)
-            if (element != null) {
-                // Remove unwanted elements
-                element.select("script, .ads, .advertisement").remove()
+        search = SearchSelectors(
+            item = elements(".booksearch .item-book-slide"),
+            title = text(".block-book-slide-title").Clean(),
+            url = attr("href", "a"),
+            cover = attr("src", "img")
+        ),
 
-                // Handle images with srcset
-                val html = element.html().replace(Regex("srcset=\"([^\"]+)\"")) { match ->
-                    val srcset = match.groupValues[1]
-                    val bestLink = srcset
-                        .split(" ")
-                        .filter { it.startsWith("http") }
-                        .lastOrNull()
-                        ?: match.value
-                    "src=\"$bestLink\""
-                }
+        book = BookSelectors(
+            cover = attr("src", "div.book-img.block-book-slide-img > img"),
+            description = text("[data-name=\"Описание\"]")
+        ),
 
-                val body = Jsoup.parse(html).body()
-                return@withContext if (body != null) TextExtractor.get(body) else html
-            }
-        }
+        chapters = ChapterSelectors(
+            list = elements("div.chapterinfo a"),
+            title = text("a"),
+            content = text(".chapter-content")
+                .removeElementsDOM("script", ".ads", ".pc-adv", ".mob-adv")
+                .applyStandardContentTransforms(baseUrl)
+        ),
 
-        // Fallback: try to extract from the whole document
-        doc.select("script, .ads, .advertisement").remove()
-        val body = doc.body()
-        if (body != null) {
-            TextExtractor.get(body)
-        } else {
-            ""
-        }
-    }
+        chapterPaginationType = ChapterPaginationType.NONE,
 
-    override suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val doc = networkClient.call(getRequest(bookUrl)).toDocument()
-                doc.selectFirst("div.book-img.block-book-slide-img > img")?.attr("src")
-            }
-        }
+        reverseChapters = true,
 
-    override suspend fun getBookDescription(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val doc = networkClient.call(getRequest(bookUrl)).toDocument()
-                doc.selectFirst("meta[name=description]")?.attr("content")?.trim()
-            }
-        }
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
 
-    override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val doc = networkClient.call(getRequest(bookUrl)).toDocument()
-                val chapters = mutableListOf<ChapterResult>()
+        buildCatalogUrl = { index -> "${baseUrl}vse-knigi/?sort=По+рейтингу&bpage=${index + 1}" },
+        buildSearchUrl = { index, query ->
+            if (index == 0) "${baseUrl}vse-knigi/?searchname=$query&bpage=1"
+            else "" // Search only on first page
+        },
 
-                doc.select("div.chapterinfo").forEach { element ->
-                    val link = element.selectFirst("a")
-                    val name = link?.text()?.trim()
-                    val url = link?.attr("href")
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl)
+    )
 
-                    // Skip if it's a paid chapter (has buy-ranobe label)
-                    if (element.selectFirst("label.buy-ranobe") == null && name != null && url != null) {
-                        chapters.add(ChapterResult(
-                            title = name,
-                            url = url
-                        ))
-                    }
-                }
-
-                chapters.reversed()
-            }
-        }
-
-    override suspend fun getCatalogList(index: Int): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val page = index + 1
-                val url = "${baseUrl}vse-knigi/?sort=По+рейтингу&bpage=$page"
-
-                val doc = networkClient.call(getRequest(url)).toDocument()
-                val books = mutableListOf<BookResult>()
-
-                // Use correct selector for book items
-                doc.select(".item-book-slide").forEach { bookElement ->
-                    val linkElement = bookElement.selectFirst("a")
-                    val title = bookElement.selectFirst(".block-book-slide-title")?.text()?.trim()
-                        ?: linkElement?.attr("title")?.trim()
-                        ?: ""
-
-                    val coverUrl = bookElement.selectFirst("img")?.attr("src") ?: ""
-                    val bookUrl = linkElement?.attr("href") ?: ""
-
-                    if (title.isNotEmpty() && bookUrl.isNotEmpty()) {
-                        books.add(BookResult(
-                            title = title,
-                            url = bookUrl,
-                            coverImageUrl = coverUrl
-                        ))
-                    }
-                }
-
-                PagedList(
-                    list = books,
-                    index = index,
-                    isLastPage = books.isEmpty()
-                )
-            }
-        }
-
-    override suspend fun getCatalogSearch(
-        index: Int,
-        input: String,
-    ): Response<PagedList<BookResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            if (input.isBlank() || index > 0)
-                return@tryConnect PagedList.createEmpty(index = index)
-
-            val query = URLEncoder.encode(input, StandardCharsets.UTF_8.name())
-            val url = "${baseUrl}vse-knigi/?searchname=$query&bpage=1"
-
-            val doc = networkClient.call(getRequest(url)).toDocument()
-            val books = mutableListOf<BookResult>()
-
-            // Use correct selector for book items in search
-            doc.select(".item-book-slide").forEach { bookElement ->
-                val linkElement = bookElement.selectFirst("a")
-                val title = bookElement.selectFirst(".block-book-slide-title")?.text()?.trim()
-                    ?: linkElement?.attr("title")?.trim()
-                    ?: ""
-
-                val coverUrl = bookElement.selectFirst("img")?.attr("src") ?: ""
-                val bookUrl = linkElement?.attr("href") ?: ""
-
-                if (title.isNotEmpty() && bookUrl.isNotEmpty()) {
-                    books.add(BookResult(
-                        title = title,
-                        url = bookUrl,
-                        coverImageUrl = coverUrl
-                    ))
-                }
-            }
-
-            PagedList(
-                list = books,
-                index = index,
-                isLastPage = true
-            )
-        }
-    }
 }

@@ -23,7 +23,7 @@
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
         android:maxLines="30"
-        android:textColor="@color/colorError"
+        android:textColor="?attr/colorError"
         android:textSize="14sp"
         tools:text="Error:\nError message\n\nReason:\nReason message\n\nError stack:\nCall stack tree "
         />

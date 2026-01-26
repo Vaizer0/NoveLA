@@ -52,9 +52,6 @@ abstract class BaseScraperTemplate(
     protected open fun transformCoverUrl(url: String): String =
         if (url.startsWith("http")) url else baseUrl + url.removePrefix("/")
 
-    // Template methods with default implementations
-    override suspend fun getChapterTitle(doc: Document): String? = null
-
     override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
         doc.selectFirst(selectChapterContent)?.let { TextExtractor.get(it) } ?: ""
     }

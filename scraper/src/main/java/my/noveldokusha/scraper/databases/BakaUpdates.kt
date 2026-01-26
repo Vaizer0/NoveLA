@@ -16,16 +16,13 @@ import my.noveldokusha.scraper.SearchGenre
 import my.noveldokusha.scraper.TextExtractor
 import my.noveldokusha.scraper.domain.BookResult
 
-/**
- * Novel main page example:
- * https://www.novelupdates.com/series/mushoku-tensei/
- */
 class BakaUpdates(
     private val networkClient: NetworkClient
 ) : DatabaseInterface {
     override val id = "baka_updates"
     override val nameStrId = R.string.database_name_baka_updates
     override val baseUrl = "https://www.mangaupdates.com/"
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/manga-updates.png"
 
     private fun String.removeNovelTag() = this.removeSuffix("(Novel)").trim()
 

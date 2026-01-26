@@ -8,6 +8,7 @@ import me.nanihadesuka.algorithms.delimiterAwareTextSplitter
 import my.noveldokusha.core.BookTextMapper
 import my.noveldokusha.features.reader.domain.ImgEntry
 import my.noveldokusha.features.reader.domain.ReaderItem
+import org.jsoup.Jsoup
 
 internal suspend fun textToItemsConverter(
     chapterUrl: String,
@@ -15,7 +16,10 @@ internal suspend fun textToItemsConverter(
     chapterItemPositionDisplacement: Int,
     text: String
 ): List<ReaderItem> = withContext(Dispatchers.Default) {
-    val paragraphs = text
+    // Clean HTML tags from text for TTS and display
+    val cleanText = Jsoup.parse(text).text()
+
+    val paragraphs = cleanText
         .splitToSequence("\n\n")
         .filter { it.isNotBlank() }
         .flatMap {

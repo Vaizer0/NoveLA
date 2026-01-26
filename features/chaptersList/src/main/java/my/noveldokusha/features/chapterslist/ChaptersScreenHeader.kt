@@ -34,12 +34,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import my.noveldoksuha.coreui.components.BookImageButtonView
-import my.noveldoksuha.coreui.components.BookTitlePosition
-import my.noveldoksuha.coreui.components.ExpandableText
-import my.noveldoksuha.coreui.components.ImageView
-import my.noveldoksuha.coreui.modifiers.bounceOnPressed
-import my.noveldoksuha.coreui.theme.clickableNoIndicator
+import my.noveldokusha.coreui.components.BookImageButtonView
+import my.noveldokusha.coreui.components.BookTitlePosition
+import my.noveldokusha.coreui.components.ExpandableText
+import my.noveldokusha.coreui.components.ImageView
+import my.noveldokusha.coreui.modifiers.bounceOnPressed
+import my.noveldokusha.coreui.theme.clickableNoIndicator
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.rememberResolvedBookImagePath
 

@@ -2,180 +2,142 @@ package my.noveldokusha.scraper.sources
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.PagedList
-import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.getRequest
-import my.noveldokusha.network.toJson
-import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.TextExtractor
-import my.noveldokusha.scraper.domain.BookResult
+import my.noveldokusha.scraper.configs.JsonApiScraperConfig
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.configs.BookData
 import my.noveldokusha.scraper.domain.ChapterResult
-import okhttp3.Headers
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-class RanobeLib(
-    private val networkClient: NetworkClient,
-) : SourceInterface.Catalog {
+class RanobeLib(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    // 1. Методы интерфейса
+    override suspend fun getCatalogList(index: Int) = getCatalogListJson(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearchJson(config, index, input, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCoverJson(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescriptionJson(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterListJson(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document): String {
+        // For JSON API, we need to make an additional API request
+        // Extract chapter URL from document location
+        val chapterUrl = doc.location()
+        val result = getChapterTextJson(config, chapterUrl, networkClient)
+        return when (result) {
+            is my.noveldokusha.core.Response.Success -> result.data ?: ""
+            is my.noveldokusha.core.Response.Error -> ""
+        }
+    }
+
+    // 2. Основные идентификаторы
     override val id = "ranobelib"
     override val nameStrId = R.string.source_name_ranobelib
     override val baseUrl = "https://ranobelib.me/"
     override val catalogUrl = baseUrl
     override val language = LanguageCode.RUSSIAN
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/ranobelib.png"
+    override val iconResId = null
 
-    private val apiBase = "https://api.cdnlibs.org/api/manga/"
-    private val siteId = "3"
+    // 3. Конфигурация - ВСЯ логика API в одном месте
+    private val apiBaseUrl = "https://api.cdnlibs.org/api/manga/"
+    private val config = JsonApiScraperConfig(
+        baseUrl = baseUrl,
+        apiBaseUrl = apiBaseUrl,
+        language = language,
+        siteId = "3",
+        headers = mapOf("Site-Id" to "3"),
 
-    // Cache for cover images: slug -> coverUrl
-    private val coverCache = mutableMapOf<String, String>()
+        // Ключи для парсинга JSON
+        catalogDataKey = "data",
+        catalogTitleKeys = listOf("rus_name", "eng_name", "name"),
+        catalogUrlKey = "slug",
+        catalogCoverKey = "cover.default",
+        catalogHasNextKey = "meta.has_next_page",
 
-    override suspend fun getChapterTitle(doc: Document): String? = withContext(Dispatchers.Default) {
-        val chapterPath = parseChapterPath(doc.location()) ?: return@withContext null
-        val (slug, volume, number, branchId) = chapterPath
+        // Поиск использует те же ключи
+        searchDataKey = "data",
+        searchTitleKeys = listOf("rus_name", "eng_name", "name"),
+        searchUrlKey = "slug_url",
+        searchCoverKey = "cover.default",
+        searchHasNextKey = "meta.has_next_page",
 
-        val apiUrl = buildString {
-            append(apiBase)
-            append(slug)
-            append("/chapter?number=")
-            append(number)
-            append("&volume=")
-            append(volume)
-            branchId?.let {
-                append("&branch_id=")
-                append(it)
-            }
-        }
+        // POST поиск не используется
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
 
-        return@withContext try {
-            val responseJson = networkClient
-                .call(getRequest(apiUrl, headers = withSiteHeader()))
-                .toJson()
-                .asJsonObject
+        // URL билдеры для API
+        buildCatalogUrl = { page ->
+            "$apiBaseUrl?site_id[0]=3&page=$page&sort_by=rating_score&sort_type=desc&chapters[min]=1"
+        },
+        buildSearchUrl = { page, query ->
+            "$apiBaseUrl?site_id[0]=3&page=$page&q=$query"
+        },
+        buildBookUrl = { slug -> "$apiBaseUrl$slug" },
+        buildChapterListUrl = { slug -> "$apiBaseUrl$slug/chapters" },
+        buildChapterUrl = { slug, chapter ->
+            val volume = chapter["volume"] as String
+            val number = chapter["number"] as String
+            val branchId = chapter["branchId"] as? String
+            "$baseUrl/ru/$slug/read/v$volume/c$number${if (branchId != null && branchId != "0") "?bid=$branchId" else ""}"
+        },
 
-            val data = responseJson.getAsJsonObject("data")
-            val name = data?.get("name")?.asString?.takeIf { it.isNotBlank() }
+        // Парсеры данных - вся сложная логика здесь
+        parseBookData = { json ->
+            val data = json.getAsJsonObject("data")
+            val names = data?.getAsJsonObject("names")
+            val title = names?.get("rus")?.asString
+                ?: names?.get("eng")?.asString
+                ?: names?.get("original")?.asString
+                ?: data?.get("rus_name")?.asString
+                ?: data?.get("eng_name")?.asString
+                ?: data?.get("name")?.asString
+                ?: ""
 
-            // Always include volume/chapter info, even if name exists
-            buildString {
-                append("Том ")
-                append(volume)
-                append(" Глава ")
-                append(number)
-                if (!name.isNullOrBlank()) {
-                    append(" ")
-                    append(name.trim())
-                }
-            }
-        } catch (_: Exception) {
-            // Fallback to URL-derived name
-            parseChapterPath(doc.location())?.let { (_, volume, number) ->
-                "Том $volume Глава $number"
-            }
-        }
-    }
+            val cover = data?.getAsJsonObject("cover")?.get("default")?.asString
+            val description = data?.get("summary")?.asString
 
-    override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
-        val chapterPath = parseChapterPath(doc.location()) ?: return@withContext ""
-        val (slug, volume, number, branchId) = chapterPath
+            BookData(title, cover?.let { proxiedImageUrl(it) }, description)
+        },
 
-        val apiUrl = buildString {
-            append(apiBase)
-            append(slug)
-            append("/chapter?number=")
-            append(number)
-            append("&volume=")
-            append(volume)
-            branchId?.let {
-                append("&branch_id=")
-                append(it)
-            }
-        }
+        parseChapterData = { json, slug ->
+            if (slug == null) {
+                emptyList<my.noveldokusha.scraper.domain.ChapterResult>()
+            } else {
+                // Try to parse as volumes structure (like RanobeHub) or data array
+                val chapters = if (json.has("volumes")) {
+                // Parse volumes structure
+                val volumes = json.getAsJsonArray("volumes") ?: com.google.gson.JsonArray()
+                val chapterItems = mutableListOf<ChapterItem>()
 
-        return@withContext try {
-            val responseJson = networkClient
-                .call(getRequest(apiUrl, headers = withSiteHeader()))
-                .toJson()
-                .asJsonObject
+                volumes.forEachIndexed { volumeIndex, volumeElement ->
+                    val volume = volumeElement.asJsonObject
+                    val volumeNum = volume.get("num")?.asInt ?: volumeIndex + 1
 
-            val data = responseJson.getAsJsonObject("data") ?: return@withContext ""
-            val contentElement = data.get("content")
-            val attachments = data.getAsJsonArray("attachments")
+                    volume.getAsJsonArray("chapters")?.forEachIndexed { chapterIndex, chapterElement ->
+                        val chapter = chapterElement.asJsonObject
+                        val chapterNum = chapter.get("num")?.asFloat ?: (chapterIndex + 1).toFloat()
+                        val chapterId = chapterItems.size + 1
 
-            val rawHtml = when {
-                contentElement?.isJsonObject == true &&
-                    contentElement.asJsonObject.get("type")?.asString == "doc" -> {
-                        val body = contentElement.asJsonObject.getAsJsonArray("content")
-                        jsonToHtml(body, attachments)
+                        chapterItems.add(ChapterItem(
+                            chapterResult = ChapterResult(
+                                title = chapter.get("name")?.asString ?: "Chapter $chapterNum",
+                                url = "${baseUrl}ru/$slug/read/v$volumeNum/c$chapterNum"
+                            ),
+                            index = chapterId
+                        ))
                     }
-
-                contentElement?.isJsonPrimitive == true -> contentElement.asString
-                else -> ""
-            }
-
-            // Clean to readable text while preserving paragraphs.
-            val cleanText = Jsoup.parse(rawHtml).body()?.let { TextExtractor.get(it) } ?: rawHtml
-
-            // Ensure we have actual content, not just whitespace
-            cleanText.trim().takeIf { it.isNotEmpty() } ?: ""
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    override suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val slug = extractSlug(bookUrl) ?: return@tryConnect null
-
-                // Return cached cover from catalog search (most reliable)
-                coverCache[slug]
-            }
-        }
-
-    override suspend fun getBookDescription(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val slug = extractSlug(bookUrl) ?: return@tryConnect null
-                val url =
-                    "$apiBase$slug?fields[]=summary&fields[]=genres&fields[]=tags&fields[]=status_id"
-
-                val data = networkClient
-                    .call(getRequest(url).addHeader("Site-Id", siteId))
-                    .toJson()
-                    .asJsonObject
-                    .getAsJsonObject("data") ?: return@tryConnect null
-
-                val summary = data.get("summary")?.asString?.trim().orEmpty()
-                val genres = mergeNames(data.getAsJsonArray("genres"), data.getAsJsonArray("tags"))
-
-                listOf(summary, genres)
-                    .filter { it.isNotBlank() }
-                    .joinToString("\n\n")
-                    .ifBlank { null }
-            }
-        }
-
-    override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val slug = extractSlug(bookUrl) ?: return@tryConnect emptyList()
-                val url = "$apiBase$slug/chapters"
-
-                val json = networkClient
-                    .call(getRequest(url, headers = withSiteHeader()))
-                    .toJson()
-                    .asJsonObject
-                val data = json.getAsJsonArray("data") ?: JsonArray()
-
-                val chapters = data.mapNotNull { element ->
+                }
+                chapterItems
+            } else {
+                // Parse data array structure (original)
+                val data = json.getAsJsonArray("data") ?: com.google.gson.JsonArray()
+                data.mapNotNull { element ->
                     val chapter = element.asJsonObject
                     val volume = chapter.get("volume")?.asString ?: return@mapNotNull null
                     val number = chapter.get("number")?.asString ?: return@mapNotNull null
@@ -201,135 +163,68 @@ class RanobeLib(
                         }
                     }
 
+                    val chapterUrl = buildString {
+                        append(baseUrl)
+                        append("ru/")
+                        append(slug)
+                        append("/read/v")
+                        append(volume)
+                        append("/c")
+                        append(number)
+                        if (branchId != "0") {
+                            append("?bid=")
+                            append(branchId)
+                        }
+                    }
+
                     ChapterItem(
                         chapterResult = ChapterResult(
                             title = title,
-                            url = "${baseUrl}ru/$slug/read/v$volume/c$number?bid=$branchId"
+                            url = chapterUrl
                         ),
                         index = index
                     )
-                }.sortedBy { it.index }
-                    .map { it.chapterResult }
+                }
+            }.sortedBy { it.index }
+                .map { it.chapterResult }
 
-                chapters
+            chapters
+            }
+        },
+
+        parseChapterContent = { json ->
+            val data = json.getAsJsonObject("data")
+            val contentElement = data?.get("content")
+            val attachments = data?.getAsJsonArray("attachments")
+
+            when {
+                contentElement?.isJsonObject == true &&
+                contentElement.asJsonObject.get("type")?.asString == "doc" -> {
+                    val body = contentElement.asJsonObject.getAsJsonArray("content")
+                    jsonToHtml(body, attachments)
+                }
+                contentElement?.isJsonPrimitive == true -> {
+                    // Готовый HTML - нужно проксировать img src
+                    val htmlContent = contentElement.asString
+                    // Заменяем все img src на проксированные URL
+                    htmlContent.replace(Regex("""src="([^"]+)"""")) { match ->
+                        val originalUrl = match.groupValues[1]
+                        val proxiedUrl = proxiedImageUrl(originalUrl)
+                        """src="$proxiedUrl""""
+                    }
+                }
+                else -> ""
             }
         }
+    )
 
-    override suspend fun getCatalogList(index: Int): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                val page = index + 1
-                val url =
-                    "${apiBase}?site_id[0]=$siteId&page=$page&sort_by=rating_score&sort_type=desc&chapters[min]=1"
-                parseCatalogResponse(index, url)
-            }
-        }
-
-    override suspend fun getCatalogSearch(
-        index: Int,
-        input: String,
-    ): Response<PagedList<BookResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            if (input.isBlank())
-                return@tryConnect PagedList.createEmpty(index = index)
-
-            val page = index + 1
-            val url = "${apiBase}?site_id[0]=$siteId&q=$input&page=$page"
-            parseCatalogResponse(index, url)
-        }
-    }
-
-    private suspend fun parseCatalogResponse(index: Int, url: String): PagedList<BookResult> {
-                val json = networkClient
-                    .call(getRequest(url, headers = withSiteHeader()))
-                    .toJson()
-                    .asJsonObject
-
-        val data = json.getAsJsonArray("data") ?: JsonArray()
-        val hasNextPage = json.getAsJsonObject("meta")?.get("has_next_page")?.asBoolean ?: false
-
-        val books = data.mapNotNull { element ->
-            val obj = element.asJsonObject
-            val title = obj.get("rus_name")?.asString
-                ?: obj.get("eng_name")?.asString
-                ?: obj.get("name")?.asString
-            val slug = obj.get("slug_url")?.asString
-                ?: obj.get("slug")?.asString
-                ?: obj.get("id")?.asString
-            val cover = obj.getAsJsonObject("cover")?.get("default")?.asString.orEmpty()
-
-            if (title == null || slug == null) return@mapNotNull null
-
-            // Cache the cover for later use in getBookCoverImageUrl
-            if (!cover.isNullOrBlank()) {
-                coverCache[slug] = proxiedImageUrl(cover)
-            }
-
-            BookResult(
-                title = title,
-                url = "$baseUrl$slug",
-                coverImageUrl = proxiedImageUrl(cover)
-            )
-        }
-
-        return PagedList(
-            list = books,
-            index = index,
-            isLastPage = !hasNextPage
-        )
-    }
-
-    private fun parseChapterPath(url: String): ChapterPath? {
-        // Handle new URL format: /ru/slug/read/v1/c1?bid=123
-        val clean = url.removePrefix(baseUrl).trim('/').split("/")
-        if (clean.size >= 5 && clean[0] == "ru" && clean[2] == "read") {
-            val slug = clean[1]
-            val volumePart = clean[3] // v1
-            val chapterPart = clean[4].split("?")[0] // c1
-            val volume = volumePart.removePrefix("v")
-            val number = chapterPart.removePrefix("c")
-
-            // Extract bid from query parameters
-            val queryParams = url.substringAfter("?", "").split("&")
-            val branchId = queryParams.find { it.startsWith("bid=") }?.substringAfter("bid=")
-
-            return ChapterPath(slug, volume, number, branchId)
-        }
-
-        // Fallback to old format for compatibility
-        if (clean.size < 3) return null
-        val slug = clean[0]
-        val volume = clean[1]
-        val number = clean[2]
-        val branchId = clean.getOrNull(3)
-        return ChapterPath(slug, volume, number, branchId)
-    }
-
-    private fun extractSlug(url: String): String? =
-        url.removePrefix(baseUrl).trim('/').takeIf { it.isNotBlank() }
-
+    // Вспомогательные функции для парсинга (если нужны)
     private fun proxiedImageUrl(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
-        // Use an image proxy to bypass referer restrictions that cause 403 on imglib.
-        // images.weserv.nl expects the URL without the scheme; add https=1 to keep TLS.
         val trimmed = raw.removePrefix("https://").removePrefix("http://")
         val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.name())
         return "https://images.weserv.nl/?url=$encoded&https=1"
     }
-
-    private fun withSiteHeader(): Headers =
-        Headers.Builder()
-            .add("Site-Id", siteId)
-            .build()
-
-    private fun mergeNames(vararg arrays: JsonArray?): String =
-        arrays.asSequence()
-            .filterNotNull()
-            .flatMap { arr ->
-                arr.mapNotNull { it.asJsonObject.get("name")?.asString }
-            }
-            .filter { it.isNotBlank() }
-            .joinToString(", ")
 
     private fun jsonToHtml(elements: JsonArray?, attachments: JsonArray?): String {
         if (elements == null) return ""
@@ -380,7 +275,10 @@ class RanobeLib(
                 val value = image.asJsonObject.get("image")
                 val key = value?.asString ?: value?.toString()
                 val url = key?.let { attachments[it] }
-                if (url != null) builder.append("<img src='$url'>")
+                if (url != null) {
+                    val proxiedUrl = proxiedImageUrl(url)
+                    builder.append("<img src='$proxiedUrl' onerror='this.style.display=\"none\"'>")
+                }
             }
         } else if (attrs != null) {
             val attrList = attrs.entrySet()
@@ -390,23 +288,15 @@ class RanobeLib(
                     "${entry.key}=\"${value.asString}\""
                 }
             if (attrList.isNotEmpty()) {
-                builder.append("<img ${attrList.joinToString(" ")}>")
+                builder.append("<img ${attrList.joinToString(" ")} onerror='this.style.display=\"none\"'>")
             }
         }
 
         return builder.toString()
     }
 
-    private data class ChapterPath(
-        val slug: String,
-        val volume: String,
-        val number: String,
-        val branchId: String?,
-    )
-
     private data class ChapterItem(
         val chapterResult: ChapterResult,
         val index: Int,
     )
 }
-
