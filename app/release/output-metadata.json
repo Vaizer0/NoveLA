@@ -4,16 +4,16 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "my.noveldokushaTT",
+  "applicationId": "my.novela",
   "variantName": "release",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 2,
-      "versionName": "1.0.1",
-      "outputFile": "WebnovelReader_v1.0.1-release.apk"
+      "versionCode": 1,
+      "versionName": "1.0.0",
+      "outputFile": "Novela_v1.0.0-release.apk"
     }
   ],
   "elementType": "File",
@@ -22,14 +22,14 @@
       "minApi": 28,
       "maxApi": 30,
       "baselineProfiles": [
-        "baselineProfiles/1/WebnovelReader_v1.0.1-release.dm"
+        "baselineProfiles/1/Novela_v1.0.0-release.dm"
       ]
     },
     {
       "minApi": 31,
       "maxApi": 2147483647,
       "baselineProfiles": [
-        "baselineProfiles/0/WebnovelReader_v1.0.1-release.dm"
+        "baselineProfiles/0/Novela_v1.0.0-release.dm"
       ]
     }
   ],

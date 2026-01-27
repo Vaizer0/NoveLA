@@ -1,8 +1,8 @@
 
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.dsl.LibraryExtension
-import my.noveldoksuha.convention.plugin.implementation
-import my.noveldoksuha.convention.plugin.libs
+import my.noveldokusha.convention.plugin.implementation
+import my.noveldokusha.convention.plugin.libs
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.dependencies

@@ -104,10 +104,8 @@ internal class LibraryViewModel @Inject constructor(
 
     fun deleteBook(bookUrl: String) {
         viewModelScope.launch {
-            // Remove book from library
-            appRepository.libraryBooks.remove(bookUrl)
-            // Remove all chapters for this book
-            appRepository.bookChapters.removeAllFromBook(bookUrl)
+            // Toggle bookmark to remove from library (changes inLibrary flag to false)
+            appRepository.libraryBooks.toggleBookmark(bookUrl, "")
         }
     }
 

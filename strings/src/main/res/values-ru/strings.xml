@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">NovelDokushaTT</string>
+    <string name="app_name">Novela</string>
     <string name="title_library">Библиотека</string>
     <string name="title_finder">Поиск</string>
     <string name="title_settings">Настройки</string>
@@ -58,7 +58,7 @@
     <string name="epub_added_to_library">EPUB добавлен в библиотеку</string>
     <string name="invalid_chapter">Неверная глава</string>
     <string name="filter">Фильтр</string>
-    <string name="read">Прочитано</string>
+    <string name="read">Читать</string>
     <string name="sort">Сортировка</string>
     <string name="options_panel">Панель опций</string>
     <string name="search_with_filters">Поиск с фильтрами</string>
@@ -211,7 +211,6 @@
     <string name="language_chinese">Китайский</string>
     <string name="language_russian">Русский</string>
     <string name="source_name_local">Локальный</string>
-    <string name="source_name_ttkan">Ttkan</string>
     <string name="updating_library">Обновление библиотеки (%1$d/%2$d)</string>
     <string name="delete_novel">Удалить новеллу</string>
     <string name="mark_all_chapters_read">Отметить все главы как прочитанные</string>

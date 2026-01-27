@@ -1,7 +1,7 @@
 import com.android.build.api.dsl.ApplicationExtension
-import my.noveldoksuha.convention.plugin.appConfig
-import my.noveldoksuha.convention.plugin.applyHilt
-import my.noveldoksuha.convention.plugin.configureAndroid
+import my.noveldokusha.convention.plugin.appConfig
+import my.noveldokusha.convention.plugin.applyHilt
+import my.noveldokusha.convention.plugin.configureAndroid
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure

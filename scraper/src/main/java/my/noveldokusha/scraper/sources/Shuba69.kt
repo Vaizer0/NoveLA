@@ -22,6 +22,7 @@ class Shuba69(private val networkClient: NetworkClient) : SourceInterface.Catalo
     override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
     override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
 
@@ -39,7 +40,7 @@ class Shuba69(private val networkClient: NetworkClient) : SourceInterface.Catalo
     private val config: HtmlSelectors = HtmlSelectors(
         baseUrl = baseUrl,
         language = language,
-        charset = "GBK", // GBK encoding for Chinese content
+        charset = charset, // GBK encoding for Chinese content
 
         // Declarative selectors
         catalog = CatalogSelectors(
@@ -58,6 +59,7 @@ class Shuba69(private val networkClient: NetworkClient) : SourceInterface.Catalo
         ),
 
         book = BookSelectors(
+            title = text("div.booknav2 h1 a").Clean(),
             cover = attr("src", "div.bookimg2 img"),
             description = text("div.navtxt")
         ),

@@ -92,7 +92,6 @@ private fun SourceListView(
             .fillMaxWidth(),
     ) {
         items(list) {
-            val interactionSource = remember { MutableInteractionSource() }
             BookImageButtonView(
                 title = it.title,
                 coverImageModel = rememberResolvedBookImagePath(
@@ -102,10 +101,8 @@ private fun SourceListView(
                 onClick = { onBookClick(it.mapToBookMetadata()) },
                 onLongClick = { },
                 modifier = Modifier
-                    .width(130.dp)
-                    .bounceOnPressed(interactionSource),
-                bookTitlePosition = BookTitlePosition.Outside,
-                interactionSource = interactionSource
+                    .width(130.dp),
+                bookTitlePosition = BookTitlePosition.Outside
             )
         }
 

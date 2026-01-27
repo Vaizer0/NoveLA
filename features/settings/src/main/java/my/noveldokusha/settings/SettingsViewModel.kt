@@ -124,7 +124,8 @@ internal class SettingsViewModel @Inject constructor(
 
             appRepository.settings.clearNonLibraryData()
             appRepository.vacuum()
-            updateDatabaseSize()
+            // Ждем завершения обновления размера базы данных
+            updateDatabaseSizeAndWait()
             kotlinx.coroutines.delay(500) // Give time for UI update
 
             toasty.show(R.string.database_cleaned_successfully)
@@ -137,6 +138,14 @@ internal class SettingsViewModel @Inject constructor(
         }
     }
 
+    private suspend fun updateDatabaseSizeAndWait() {
+        val size = appRepository.getDatabaseSizeBytes()
+        // Переключаемся на Main для обновления состояния UI
+        withContext(Dispatchers.Main) {
+            state.databaseSize.value = Formatter.formatFileSize(appPreferences.context, size)
+        }
+    }
+
     fun cleanImagesFolder() = appScope.launch(Dispatchers.IO) {
         if (isCleaningImages.value) return@launch // Prevent multiple simultaneous calls
 
@@ -144,16 +153,18 @@ internal class SettingsViewModel @Inject constructor(
             isCleaningImages.value = true
             toasty.show(R.string.cleaning_images_folder)
 
-            val libraryFolders = appRepository.libraryBooks.getAllInLibrary()
-                .asSequence()
+            val libraryBooks = appRepository.libraryBooks.getAllInLibrary()
+            val libraryFolderNames = libraryBooks.asSequence()
                 .map { appFileResolver.getLocalBookFolderName(it.url) }
                 .toSet()
 
             val booksFolder = appRepository.settings.folderBooks
+            
+            // Сначала удаляем папки, которые не соответствуют книгам в библиотеке
             val foldersToDelete = booksFolder.listFiles()
                 ?.asSequence()
                 ?.filter { it.isDirectory && it.exists() }
-                ?.filter { it.name !in libraryFolders }
+                ?.filter { it.name !in libraryFolderNames }
                 ?.toList() ?: emptyList()
 
             var deletedCount = 0
@@ -167,7 +178,8 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
 
-            updateImagesFolderSize()
+            // Обновляем размер папки после удаления "мусорных" папок
+            updateImagesFolderSizeAndWait()
             Glide.get(context).clearDiskCache()
             kotlinx.coroutines.delay(500) // Give time for UI update
 
@@ -213,13 +225,19 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     private fun updateDatabaseSize() = viewModelScope.launch {
-        val size = appRepository.getDatabaseSizeBytes()
-        state.databaseSize.value = Formatter.formatFileSize(appPreferences.context, size)
+        updateDatabaseSizeAndWait()
+    }
+
+    private suspend fun updateImagesFolderSizeAndWait() {
+        val size = getFolderSizeBytes(appRepository.settings.folderBooks)
+        // Переключаемся на Main для обновления состояния UI
+        withContext(Dispatchers.Main) {
+            state.imageFolderSize.value = Formatter.formatFileSize(appPreferences.context, size)
+        }
     }
 
     private fun updateImagesFolderSize() = viewModelScope.launch {
-        val size = getFolderSizeBytes(appRepository.settings.folderBooks)
-        state.imageFolderSize.value = Formatter.formatFileSize(appPreferences.context, size)
+        updateImagesFolderSizeAndWait()
     }
 
     fun onCheckForUpdatesManual() {
@@ -243,12 +261,24 @@ internal class SettingsViewModel @Inject constructor(
     fun onMassAddDelayChange(newDelayMs: Long) {
         appPreferences.MASS_ADD_DELAY_MS.value = newDelayMs
     }
-}
-
-private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {
-    when {
-        !file.exists() -> 0
-        file.isFile -> file.length()
-        else -> file.walkBottomUp().sumOf { if (it.isDirectory) 0 else it.length() }
+    
+    private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {
+        when {
+            !file.exists() -> {
+                // Создаем папку, если она не существует
+                file.mkdirs()
+                0
+            }
+            file.isFile -> file.length()
+            else -> {
+                var totalSize = 0L
+                file.walk().forEach { currentFile ->
+                    if (currentFile.isFile) {
+                        totalSize += currentFile.length()
+                    }
+                }
+                totalSize
+            }
+        }
     }
 }

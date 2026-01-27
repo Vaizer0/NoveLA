@@ -8,6 +8,7 @@ import coil.ImageLoaderFactory
 import dagger.hilt.EntryPoints
 import dagger.hilt.android.HiltAndroidApp
 import my.noveldokusha.core.LocaleManager
+import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
@@ -28,9 +29,17 @@ class App : Application(), ImageLoaderFactory, Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Apply saved language preference
+        // Apply saved language preference or system default on first launch
         val appPreferences = EntryPoints.get(this, HiltAppEntryPoint::class.java).appPreferences()
-        val language = appPreferences.APP_LANGUAGE.value
+        var language = appPreferences.APP_LANGUAGE.value
+        
+        // If using default value (English) and this is first launch,
+        // determine system language and set it
+        if (language == AppLanguage.DEFAULT) {
+            language = LocaleManager.getSystemLocale(this)
+            appPreferences.APP_LANGUAGE.value = language
+        }
+        
         LocaleManager.applyLocale(this, language)
 
         if (BuildConfig.DEBUG) {

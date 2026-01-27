@@ -108,16 +108,13 @@ internal fun DatabaseBookInfoScreenBody(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     var showImageFullScreen by rememberSaveable { mutableStateOf(false) }
-                    val interactionSource = remember { MutableInteractionSource() }
                     BookImageButtonView(
                         title = "",
                         coverImageModel = coverImg,
                         onClick = { showImageFullScreen = true },
                         bookTitlePosition = BookTitlePosition.Hidden,
-                        interactionSource = interactionSource,
                         modifier = Modifier
-                            .weight(1f)
-                            .bounceOnPressed(interactionSource),
+                            .weight(1f),
                     )
                     SelectionContainer(
                         modifier = Modifier.weight(1f)

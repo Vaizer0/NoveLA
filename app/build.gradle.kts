@@ -43,10 +43,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "my.noveldokushaTT"
-        versionCode = 2
-        versionName = "1.0.1"
-        setProperty("archivesBaseName", "WebnovelReader_v$versionName")
+        applicationId = "my.novela"
+        versionCode = 1
+        versionName = "1.0.0"
+        setProperty("archivesBaseName", "Novela_v$versionName")
     }
 
     signingConfigs {

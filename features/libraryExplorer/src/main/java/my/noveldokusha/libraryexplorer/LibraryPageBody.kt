@@ -63,7 +63,6 @@ internal fun LibraryPageBody(
             items = list,
             key = { it.book.url }
         ) {
-            val interactionSource = remember { MutableInteractionSource() }
             val isSelected = selectedBooks.contains(it.book.url)
             Box {
                 BookImageButtonView(
@@ -74,9 +73,7 @@ internal fun LibraryPageBody(
                     ),
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
-                    interactionSource = interactionSource,
-                    sourceText = extractDomainFromUrl(it.book.url),
-                    modifier = Modifier.bounceOnPressed(interactionSource)
+                    sourceText = extractDomainFromUrl(it.book.url)
                 )
 
                 // Selection overlay

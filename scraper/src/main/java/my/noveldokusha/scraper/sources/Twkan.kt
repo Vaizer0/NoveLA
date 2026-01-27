@@ -18,6 +18,7 @@ import my.noveldokusha.network.toDocument
 class Twkan(private val networkClient: NetworkClient) : SourceInterface.Catalog {
     override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
     override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
     override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
@@ -52,6 +53,7 @@ class Twkan(private val networkClient: NetworkClient) : SourceInterface.Catalog 
 
         // Book selectors
         book = BookSelectors(
+            title = text("h1 a").Clean(),
             cover = attr("src", ".bookimg2 img"),
             description = text("#tab_info .navtxt p")
         ),

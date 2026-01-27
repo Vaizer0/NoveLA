@@ -18,7 +18,7 @@ dependencyResolutionManagement {
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-rootProject.name = "NovelDokusha"
+rootProject.name = "Novela"
 include(":app")
 include(":scraper")
 include(":strings")

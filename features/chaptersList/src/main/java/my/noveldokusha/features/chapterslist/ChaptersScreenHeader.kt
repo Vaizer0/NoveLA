@@ -93,17 +93,14 @@ internal fun ChaptersScreenHeader(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 var showImageFullScreen by rememberSaveable { mutableStateOf(false) }
-                val interactionSource = remember { MutableInteractionSource() }
                 BookImageButtonView(
                     title = "",
                     coverImageModel = coverImageModel,
                     onClick = { showImageFullScreen = true },
                     onLongClick = onCoverLongClick,
                     bookTitlePosition = BookTitlePosition.Hidden,
-                    interactionSource = interactionSource,
                     modifier = Modifier
                         .weight(1f)
-                        .bounceOnPressed(interactionSource)
                 )
                 if (showImageFullScreen) Dialog(
                     onDismissRequest = { showImageFullScreen = false },
