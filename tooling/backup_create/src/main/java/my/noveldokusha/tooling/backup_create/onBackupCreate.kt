@@ -24,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import my.noveldoksuha.coreui.components.MyButton
+import my.noveldokusha.coreui.components.MyButton
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,7 +88,7 @@ fun onBackupCreate(): () -> Unit {
                             showDialog = false
                             val pattern = "yyyy-MM-dd_HH-mm"
                             val date = SimpleDateFormat(pattern, Locale.getDefault()).format(Date())
-                            val fileName = "noveldokusha_backup_$date.zip"
+                            val fileName = "noveldokushatt_backup_$date.zip"
                             fileExplorer.launch(fileName)
                         },
                         modifier = Modifier

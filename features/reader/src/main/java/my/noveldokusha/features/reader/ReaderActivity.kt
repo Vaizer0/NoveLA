@@ -8,6 +8,7 @@ import android.view.WindowManager
 import android.widget.AbsListView
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,11 +33,11 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.composableActions.SetSystemBarTransparent
-import my.noveldoksuha.coreui.mappers.toPreferenceTheme
-import my.noveldoksuha.coreui.theme.Theme
-import my.noveldoksuha.coreui.theme.colorAttrRes
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
+import my.noveldokusha.coreui.mappers.toPreferenceTheme
+import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.colorAttrRes
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.core.utils.dpToPx
@@ -113,9 +114,11 @@ class ReaderActivity : BaseActivity() {
 
     private val fontsLoader = FontsLoader()
 
-    override fun onBackPressed() {
-        viewModel.onCloseManually()
-        super.onBackPressed()
+    private val backPressedCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            viewModel.onCloseManually()
+            finish()
+        }
     }
 
     override fun onDestroy() {
@@ -126,6 +129,7 @@ class ReaderActivity : BaseActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
         viewBind.listView.adapter = viewAdapter.listView
 
         fadeInTextLiveData.distinctUntilChanged().observe(this) {

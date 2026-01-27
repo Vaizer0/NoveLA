@@ -41,9 +41,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import my.noveldoksuha.coreui.components.MySlider
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.components.MySlider
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.features.reader.tools.FontsLoader
 import my.noveldokusha.features.reader.ui.ReaderScreenState
 import my.noveldokusha.reader.R

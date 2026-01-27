@@ -22,16 +22,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.components.BookImageButtonView
-import my.noveldoksuha.coreui.components.BookTitlePosition
-import my.noveldoksuha.coreui.composableActions.ListLoadWatcher
-import my.noveldoksuha.coreui.modifiers.bounceOnPressed
-import my.noveldoksuha.coreui.states.IteratorState
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.data.CatalogItem
-import my.noveldoksuha.mappers.mapToBookMetadata
+import my.noveldokusha.coreui.components.BookImageButtonView
+import my.noveldokusha.coreui.components.BookTitlePosition
+import my.noveldokusha.coreui.composableActions.ListLoadWatcher
+import my.noveldokusha.coreui.modifiers.bounceOnPressed
+import my.noveldokusha.coreui.states.IteratorState
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.data.CatalogItem
+import my.noveldokusha.mappers.mapToBookMetadata
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.rememberResolvedBookImagePath
 import my.noveldokusha.scraper.domain.BookResult
@@ -92,7 +92,6 @@ private fun SourceListView(
             .fillMaxWidth(),
     ) {
         items(list) {
-            val interactionSource = remember { MutableInteractionSource() }
             BookImageButtonView(
                 title = it.title,
                 coverImageModel = rememberResolvedBookImagePath(
@@ -102,10 +101,8 @@ private fun SourceListView(
                 onClick = { onBookClick(it.mapToBookMetadata()) },
                 onLongClick = { },
                 modifier = Modifier
-                    .width(130.dp)
-                    .bounceOnPressed(interactionSource),
-                bookTitlePosition = BookTitlePosition.Outside,
-                interactionSource = interactionSource
+                    .width(130.dp),
+                bookTitlePosition = BookTitlePosition.Outside
             )
         }
 

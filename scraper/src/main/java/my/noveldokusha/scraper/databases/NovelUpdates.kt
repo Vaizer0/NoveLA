@@ -28,7 +28,7 @@ class NovelUpdates(
     override val id = "novel_updates"
     override val nameStrId = R.string.database_name_novel_updates
     override val baseUrl = "https://www.novelupdates.com/"
-    override val iconUrl = "https://www.novelupdates.com/favicon.ico"
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/novelupdates.png"
 
     override suspend fun getCatalog(index: Int) = withContext(Dispatchers.Default) {
         val page = index + 1

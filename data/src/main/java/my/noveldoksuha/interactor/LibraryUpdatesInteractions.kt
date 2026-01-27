@@ -1,4 +1,4 @@
-package my.noveldoksuha.interactor
+package my.noveldokusha.interactor
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -6,8 +6,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.data.AppRepository
-import my.noveldoksuha.data.DownloaderRepository
+import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter

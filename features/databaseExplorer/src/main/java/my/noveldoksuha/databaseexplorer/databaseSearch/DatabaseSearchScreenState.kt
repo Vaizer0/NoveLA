@@ -1,9 +1,9 @@
-package my.noveldoksuha.databaseexplorer.databaseSearch
+package my.noveldokusha.databaseexplorer.databaseSearch
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import my.noveldoksuha.coreui.states.PagedListIteratorState
+import my.noveldokusha.coreui.states.PagedListIteratorState
 import my.noveldokusha.core.appPreferences.ListLayoutMode
 import my.noveldokusha.feature.local_database.BookMetadata
 

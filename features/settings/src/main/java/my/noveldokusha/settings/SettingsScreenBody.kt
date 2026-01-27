@@ -23,9 +23,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
@@ -33,6 +33,7 @@ import my.noveldokusha.settings.sections.SettingsBackup
 import my.noveldokusha.settings.sections.SettingsData
 import my.noveldokusha.settings.sections.SettingsGeminiTranslation
 import my.noveldokusha.settings.sections.SettingsLanguage
+import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
 import my.noveldokusha.settings.sections.SettingsTranslationModels
 
@@ -44,6 +45,7 @@ internal fun SettingsScreenBody(
     onThemeSelected: (Themes) -> Unit,
     onCleanDatabase: () -> Unit,
     onCleanImageFolder: () -> Unit,
+    onMassAddDelayChange: (Long) -> Unit,
     onBackupData: () -> Unit,
     onRestoreData: () -> Unit,
     onDownloadTranslationModel: (lang: String) -> Unit,
@@ -72,8 +74,18 @@ internal fun SettingsScreenBody(
         SettingsData(
             databaseSize = state.databaseSize.value,
             imagesFolderSize = state.imageFolderSize.value,
+            isCleaningDatabase = state.isCleaningDatabase.value,
+            isCleaningImages = state.isCleaningImages.value,
             onCleanDatabase = onCleanDatabase,
             onCleanImageFolder = onCleanImageFolder
+        )
+        HorizontalDivider()
+        SettingsNetwork(
+            scraperUserAgent = state.scraperUserAgent,
+            cloudflareBypassEnabled = state.cloudflareBypassEnabled,
+            cloudflareChallengeTimeoutSeconds = state.cloudflareChallengeTimeoutSeconds,
+            massAddDelayMs = state.massAddDelayMs,
+            onMassAddDelayChange = onMassAddDelayChange
         )
         HorizontalDivider()
         SettingsBackup(
@@ -134,6 +146,8 @@ private fun Preview() {
                     currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
                     databaseSize = remember { mutableStateOf("1 MB") },
                     imageFolderSize = remember { mutableStateOf("10 MB") },
+                    isCleaningDatabase = remember { mutableStateOf(false) },
+                    isCleaningImages = remember { mutableStateOf(false) },
                     isTranslationSettingsVisible = remember { mutableStateOf(true) },
                     translationModelsStates = remember { mutableStateListOf() },
                     updateAppSetting = SettingsScreenState.UpdateApp(
@@ -150,14 +164,19 @@ private fun Preview() {
                         autoUpdateEnabled = remember { mutableStateOf(true) },
                         autoUpdateIntervalHours = remember { mutableIntStateOf(24) },
                     ),
+                    massAddDelayMs = remember { derivedStateOf { 2000L } },
                     geminiApiKey = remember { derivedStateOf { "" } },
                     geminiModel = remember { derivedStateOf { "" } },
                     preferOnlineTranslation = remember { derivedStateOf { false } },
+                    scraperUserAgent = remember { mutableStateOf("") },
+                    cloudflareBypassEnabled = remember { mutableStateOf(true) },
+                    cloudflareChallengeTimeoutSeconds = remember { mutableStateOf(120) },
                 ),
                 onFollowSystem = { },
                 onThemeSelected = { },
                 onCleanDatabase = { },
                 onCleanImageFolder = { },
+                onMassAddDelayChange = { },
                 onBackupData = { },
                 onRestoreData = { },
                 onDownloadTranslationModel = { },

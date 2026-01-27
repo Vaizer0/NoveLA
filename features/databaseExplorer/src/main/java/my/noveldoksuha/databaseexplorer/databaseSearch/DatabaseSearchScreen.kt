@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseSearch
+package my.noveldokusha.databaseexplorer.databaseSearch
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,15 +33,15 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.components.BooksVerticalView
-import my.noveldoksuha.coreui.components.CollapsibleDivider
-import my.noveldoksuha.coreui.components.TopAppBarSearch
-import my.noveldoksuha.coreui.states.PagedListIteratorState
-import my.noveldoksuha.coreui.theme.ColorNotice
-import my.noveldoksuha.coreui.theme.Grey25
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.databaseexplorer.R
+import my.noveldokusha.coreui.components.BooksVerticalView
+import my.noveldokusha.coreui.components.CollapsibleDivider
+import my.noveldokusha.coreui.components.TopAppBarSearch
+import my.noveldokusha.coreui.states.PagedListIteratorState
+import my.noveldokusha.coreui.theme.ColorNotice
+import my.noveldokusha.coreui.theme.Grey25
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.databaseexplorer.R
 import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.appPreferences.ListLayoutMode

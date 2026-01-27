@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +18,7 @@ data class CatalogItem(val catalog: SourceInterface.Catalog, val pinned: Boolean
 @Singleton
 class ScraperRepository @Inject constructor(
     private val appPreferences: AppPreferences,
-    private val scraper: Scraper,
+    val scraper: Scraper,
 ) {
 
     fun databaseList(): List<my.noveldokusha.scraper.DatabaseInterface> {

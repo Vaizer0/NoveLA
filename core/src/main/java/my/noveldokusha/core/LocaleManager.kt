@@ -1,3 +1,4 @@
+
 package my.noveldokusha.core
 
 import android.content.Context
@@ -26,5 +27,19 @@ object LocaleManager {
 
     fun getCurrentLocale(context: Context): Locale {
         return context.resources.configuration.locale
+    }
+
+    fun getSystemLocale(context: Context): AppLanguage {
+        val systemLocale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale
+        }
+
+        return when (systemLocale.language) {
+            "ru" -> AppLanguage.RUSSIAN
+            else -> AppLanguage.ENGLISH
+        }
     }
 }

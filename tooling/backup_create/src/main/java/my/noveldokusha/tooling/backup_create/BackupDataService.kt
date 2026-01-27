@@ -12,11 +12,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.coreui.states.NotificationsCenter
-import my.noveldoksuha.coreui.states.removeProgressBar
-import my.noveldoksuha.coreui.states.text
-import my.noveldoksuha.coreui.states.title
-import my.noveldoksuha.data.AppRepository
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.coreui.states.removeProgressBar
+import my.noveldokusha.coreui.states.text
+import my.noveldokusha.coreui.states.title
+import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_Uri

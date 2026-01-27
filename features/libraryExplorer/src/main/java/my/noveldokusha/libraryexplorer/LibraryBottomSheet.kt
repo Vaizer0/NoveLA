@@ -19,9 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldoksuha.coreui.components.PosNegCheckbox
-import my.noveldoksuha.coreui.components.SingleChoiceToggle
-import my.noveldoksuha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.components.PosNegCheckbox
+import my.noveldokusha.coreui.components.SingleChoiceToggle
+import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.utils.toToggleableState
@@ -76,10 +76,10 @@ internal fun LibraryBottomSheet(
                 icon = {
                     when (model.sortConfig.option) {
                         LibrarySortOption.TITLE -> Icon(imageVector = Icons.Filled.SortByAlpha, null)
-                        LibrarySortOption.UNREAD_CHAPTERS -> Icon(imageVector = Icons.Filled.Sort, null)
-                        LibrarySortOption.LAST_READ -> Icon(imageVector = Icons.Filled.Sort, null)
+                        LibrarySortOption.UNREAD_CHAPTERS -> Icon(imageVector = Icons.Default.Sort, null)
+                        LibrarySortOption.LAST_READ -> Icon(imageVector = Icons.Default.Sort, null)
                         LibrarySortOption.LAST_UPDATE -> Icon(imageVector = Icons.Filled.Update, null)
-                        LibrarySortOption.ADDED -> Icon(imageVector = Icons.Filled.Sort, null)
+                        LibrarySortOption.ADDED -> Icon(imageVector = Icons.Default.Sort, null)
                     }
                 }
             )

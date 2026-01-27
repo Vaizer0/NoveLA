@@ -8,10 +8,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.coreui.states.PagedListIteratorState
-import my.noveldoksuha.data.CatalogItem
-import my.noveldoksuha.data.ScraperRepository
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.states.PagedListIteratorState
+import my.noveldokusha.data.CatalogItem
+import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.asMutableStateOf
 import javax.inject.Inject

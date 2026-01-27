@@ -11,11 +11,13 @@ android {
 dependencies {
     implementation(projects.strings)
     implementation(projects.core)
+    implementation(projects.coreui)
     implementation(projects.networking)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.jsoup)
     implementation(libs.gson)
     implementation(libs.okhttp)
+    implementation(libs.timber)
     androidTestImplementation(libs.test.androidx.espresso.core)
 }

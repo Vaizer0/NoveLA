@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseBookInfo
+package my.noveldokusha.databaseexplorer.databaseBookInfo
 
 import android.content.res.Configuration
 import androidx.compose.animation.animateColorAsState
@@ -33,9 +33,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.isAtTop
-import my.noveldoksuha.databaseexplorer.R
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.isAtTop
+import my.noveldokusha.databaseexplorer.R
 import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.DatabaseInterface.BookData
 import my.noveldokusha.scraper.SearchGenre

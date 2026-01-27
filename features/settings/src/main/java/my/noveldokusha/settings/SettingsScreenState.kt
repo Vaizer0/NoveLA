@@ -5,12 +5,14 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import my.noveldokusha.core.domain.RemoteAppVersion
 import my.noveldokusha.text_translator.domain.TranslationModelState
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 
 data class SettingsScreenState(
     val databaseSize: MutableState<String>,
     val imageFolderSize: MutableState<String>,
+    val isCleaningDatabase: State<Boolean>,
+    val isCleaningImages: State<Boolean>,
     val followsSystemTheme: State<Boolean>,
     val currentTheme: State<Themes>,
     val currentLanguage: State<AppLanguage>,
@@ -18,9 +20,13 @@ data class SettingsScreenState(
     val translationModelsStates: SnapshotStateList<TranslationModelState>,
     val updateAppSetting: UpdateApp,
     val libraryAutoUpdate: LibraryAutoUpdate,
+    val massAddDelayMs: State<Long>,
     val geminiApiKey: State<String>,
     val geminiModel: State<String>,
     val preferOnlineTranslation: State<Boolean>,
+    val scraperUserAgent: MutableState<String>,
+    val cloudflareBypassEnabled: MutableState<Boolean>,
+    val cloudflareChallengeTimeoutSeconds: MutableState<Int>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

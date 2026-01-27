@@ -2,7 +2,7 @@ package my.noveldokusha.features.reader.ui
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
-import my.noveldoksuha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
 

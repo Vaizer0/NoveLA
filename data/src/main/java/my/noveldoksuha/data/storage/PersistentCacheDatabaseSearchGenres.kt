@@ -1,4 +1,4 @@
-package my.noveldoksuha.data.storage
+package my.noveldokusha.data.storage
 
 import android.content.Context
 import com.squareup.moshi.Types

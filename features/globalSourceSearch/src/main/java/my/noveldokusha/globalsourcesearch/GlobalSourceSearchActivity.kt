@@ -5,9 +5,10 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.OnBackPressedCallback
 import dagger.hilt.android.AndroidEntryPoint
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.theme.Theme
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.navigation.NavigationRoutes
 import javax.inject.Inject
@@ -34,13 +35,21 @@ class GlobalSourceSearchActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Обработка нажатия кнопки "назад"
+                finish()
+            }
+        }
+        addOnBackPressedCallback(backPressedCallback)
+
         setContent {
             Theme(themeProvider = themeProvider) {
                 GlobalSourceSearchScreen(
                     searchInput = viewModel.searchInput.value,
                     listSources = viewModel.sourcesResults,
                     onBookClick = { navigationRoutes.chapters(this, it).let(::startActivity) },
-                    onPressBack = ::onBackPressed,
+                    onPressBack = { backPressedCallback.handleOnBackPressed() },
                     onSearchInputChange = viewModel.searchInput::value::set,
                     onSearchInputSubmit = viewModel::search,
                 )

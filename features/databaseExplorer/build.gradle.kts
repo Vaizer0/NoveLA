@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "my.noveldoksuha.databaseexplorer"
+    namespace = "my.noveldokusha.databaseexplorer"
 }
 
 dependencies {

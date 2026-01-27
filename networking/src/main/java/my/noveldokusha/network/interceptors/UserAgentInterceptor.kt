@@ -1,25 +1,21 @@
 package my.noveldokusha.network.interceptors
 
+import android.content.Context
 import okhttp3.Interceptor
 import okhttp3.Response
 
-
-internal class UserAgentInterceptor : Interceptor {
-
-    companion object {
-        const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 6.3; WOW64)"
-    }
+// Выносим константу ВНЕ класса.
+// Теперь это топовая переменная уровня пакета.
+//const val GLOBAL_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+//const val GLOBAL_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.164 Mobile Safari/537.36"
+const val GLOBAL_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/UQ1A.240205.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.6834.83 Mobile Safari/537.36"
+class UserAgentInterceptor(context: Context) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
-        val hasNoUserAgent = originalRequest.header("User-Agent").isNullOrBlank()
-        val modifiedRequest = if (hasNoUserAgent) {
-            originalRequest
-                .newBuilder()
-                .removeHeader("User-Agent")
-                .addHeader("User-Agent", DEFAULT_USER_AGENT)
+        return chain.proceed(
+            chain.request().newBuilder()
+                .header("User-Agent", GLOBAL_USER_AGENT)
                 .build()
-        } else originalRequest
-        return chain.proceed(modifiedRequest)
+        )
     }
 }

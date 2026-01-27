@@ -1,160 +1,92 @@
 package my.noveldokusha.scraper.sources
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.PagedList
-import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.add
-import my.noveldokusha.network.addPath
-import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.toUrlBuilderSafe
-import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.TextExtractor
-import my.noveldokusha.scraper.domain.BookResult
-import my.noveldokusha.scraper.domain.ChapterResult
+import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.UrlTransformers
+import my.noveldokusha.scraper.configs.elements
+import my.noveldokusha.scraper.configs.text
+import my.noveldokusha.scraper.configs.attr
+import timber.log.Timber
 import org.jsoup.nodes.Document
 
-/**
- * Novel main page (chapter list) example:
- * https://www.nobadnovel.com/series/too-wicked-princess-embracing-her-leads-to-unexpected-delight
- * Chapter url example:
- * https://www.nobadnovel.com/series/too-wicked-princess-embracing-her-leads-to-unexpected-delight/chapter-1-yang-an
- */
-class NoBadNovel(
-    private val networkClient: NetworkClient
-) : SourceInterface.Catalog {
+class NoBadNovel(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
     override val id = "nobadnovel"
     override val nameStrId = R.string.source_name_nobadnovel
     override val baseUrl = "https://www.nobadnovel.com/"
     override val catalogUrl = "https://www.nobadnovel.com/series"
     override val language = LanguageCode.ENGLISH
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/nobadnovel.png"
+    override val iconResId = null
 
-    override suspend fun getChapterTitle(doc: Document): String? =
-        withContext(Dispatchers.Default) {
-            doc.selectFirst("h1")?.text()
-        }
+    // Declarative selectors configuration
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
 
-    override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
-        doc.selectFirst("div.text-base.sm\\:text-lg, div[class*=text-base]")!!.let {
-            // Remove ads and scripts
-            it.select("script").remove()
-            it.select("ins").remove()
-            it.select("a").remove()
-            it.select(".hidden").remove()
-            TextExtractor.get(it)
-        }
-    }
+        // Declarative selectors
+        catalog = CatalogSelectors(
+            item = elements(".grid > div"),
+            title = text("h4 a").Clean(),
+            url = attr("href", "a[href*=/series/]"),
+            cover = attr("src", "img[src]")
+        ),
 
-    override suspend fun getBookCoverImageUrl(
-        bookUrl: String
-    ): Response<String?> = withContext(Dispatchers.Default) {
-        tryConnect {
-            networkClient.get(bookUrl).toDocument()
-                .selectFirst("img[src*=cdn.nobadnovel]")
-                ?.attr("src")
-        }
-    }
+        // Search selectors (same as catalog)
+        search = SearchSelectors(
+            item = elements(".grid > div"),
+            title = text("h4 a").Clean(),
+            url = attr("href", "a[href*=/series/]"),
+            cover = attr("src", "img[src]")
+        ),
 
-    override suspend fun getBookDescription(
-        bookUrl: String
-    ): Response<String?> = withContext(Dispatchers.Default) {
-        tryConnect {
-            networkClient.get(bookUrl).toDocument()
-                .selectFirst("#intro .content")
-                ?.let { TextExtractor.get(it) }
-        }
-    }
+        book = BookSelectors(
+            title = text("h1").Clean(),
+            cover = attr("src", "img[src*=cdn.nobadnovel]"),
+            description = text("#intro .content")
+        ),
 
-    override suspend fun getChapterList(
-        bookUrl: String
-    ): Response<List<ChapterResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            networkClient.get(bookUrl)
-                .toDocument()
-                .select(".chapter-list a[href]")
-                .map {
-                    ChapterResult(
-                        title = it.text().trim(),
-                        url = it.attr("href")
-                    )
-                }
-        }
-    }
+        chapters = ChapterSelectors(
+            list = elements(".chapter-list a[href]"),
+            title = text("a",),
+            content = text("div.text-base.sm\\:text-lg, div[class*=text-base]")
+                .removeElementsDOM("script", ".ads", ".adblock-service")
+                .applyStandardContentTransforms(baseUrl)
+        ),
 
-    override suspend fun getCatalogList(
-        index: Int
-    ): Response<PagedList<BookResult>> = withContext(Dispatchers.Default) {
-        tryConnect("index=$index") {
-            val page = index + 1
-            val url = baseUrl.toUrlBuilderSafe()
-                .addPath("series")
-                .apply {
-                    if (page > 1) {
-                        addPath("page", page.toString())
-                    }
-                }
+        // Chapters pagination - NONE (simple list)
+        chapterPaginationType = ChapterPaginationType.NONE,
 
-            val doc = networkClient.get(url).toDocument()
-            val books = doc.select(".grid > div").mapNotNull {
-                val link = it.selectFirst("a[href*=/series/]") ?: return@mapNotNull null
-                val title = it.selectFirst("h4 a")?.text() ?: link.attr("href").split("/").last()
-                val bookCover = it.selectFirst("img[src]")?.attr("src") ?: ""
-                
-                BookResult(
-                    title = title,
-                    url = link.attr("href"),
-                    coverImageUrl = bookCover
-                )
-            }
+        // POST search disabled
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
 
-            PagedList(
-                list = books,
-                index = index,
-                isLastPage = books.isEmpty() || doc.selectFirst(".pagination a[href*=page/${page + 1}]") == null
-            )
-        }
-    }
+        // URL builders
+        buildCatalogUrl = { index ->
+            if (index == 0) catalogUrl
+            else "$catalogUrl/page/${index + 1}"
+        },
+        buildSearchUrl = { index, query ->
+            if (index == 0) "${baseUrl.removeSuffix("/")}/series?keyword=$query"
+            else "${baseUrl.removeSuffix("/")}/series/page/${index + 1}?keyword=$query"
+        },
 
-    override suspend fun getCatalogSearch(
-        index: Int,
-        input: String
-    ): Response<PagedList<BookResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            if (input.isBlank())
-                return@tryConnect PagedList.createEmpty(index = index)
-
-            val page = index + 1
-            val url = baseUrl.toUrlBuilderSafe()
-                .addPath("series")
-                .apply {
-                    add("keyword", input)
-                    if (page > 1) {
-                        addPath("page", page.toString())
-                    }
-                }
-
-            val doc = networkClient.get(url).toDocument()
-            val books = doc.select(".grid > div").mapNotNull {
-                val link = it.selectFirst("a[href*=/series/]") ?: return@mapNotNull null
-                val title = it.selectFirst("h4 a")?.text() ?: link.attr("href").split("/").last()
-                val bookCover = it.selectFirst("img[src]")?.attr("src") ?: ""
-                
-                BookResult(
-                    title = title,
-                    url = link.attr("href"),
-                    coverImageUrl = bookCover
-                )
-            }
-
-            PagedList(
-                list = books,
-                index = index,
-                isLastPage = books.isEmpty() || doc.selectFirst(".pagination a[href*=page/${page + 1}]") == null
-            )
-        }
-    }
+        // URL transformers
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl),
+        transformCoverUrl = UrlTransformers.standardCoverUrl(baseUrl)
+    )
 }

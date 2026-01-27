@@ -15,9 +15,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import my.noveldoksuha.coreui.components.TopAppBarSearch
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.components.TopAppBarSearch
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.feature.local_database.BookMetadata
 
 

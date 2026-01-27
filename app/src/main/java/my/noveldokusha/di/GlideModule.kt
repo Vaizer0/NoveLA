@@ -9,7 +9,8 @@ import com.bumptech.glide.integration.okhttp3.OkHttpLibraryGlideModule
 import com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.module.AppGlideModule
-import dagger.hilt.android.EntryPointAccessors
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
 import java.io.InputStream
 
 @Excludes(OkHttpLibraryGlideModule::class)
@@ -17,15 +18,16 @@ import java.io.InputStream
 private class GlideModule : AppGlideModule() {
 
     override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
-        val appContext = context.applicationContext
-        val networkClient = EntryPointAccessors.fromApplication<my.noveldokusha.network.NetworkClient>(appContext)
-        if (networkClient !is my.noveldokusha.network.ScraperNetworkClient) {
-            return
-        }
+        // Create a simple OkHttpClient for Glide without Hilt dependencies
+        val glideClient = OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
         registry.replace(
             GlideUrl::class.java,
             InputStream::class.java,
-            OkHttpUrlLoader.Factory(networkClient.client)
+            OkHttpUrlLoader.Factory(glideClient)
         )
     }
 }

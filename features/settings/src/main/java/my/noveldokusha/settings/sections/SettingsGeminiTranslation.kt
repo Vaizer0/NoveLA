@@ -25,8 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.textPadding
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
 @Composable
@@ -43,26 +43,12 @@ internal fun SettingsGeminiTranslation(
     
     Column {
         Text(
-            text = "Translation Services",
+            text = stringResource(R.string.translation_services),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
             color = ColorAccent
         )
-        
-        // Show active service
-        Text(
-            text = if (geminiApiKey.isNotBlank() && preferOnlineTranslation) 
-                "Active: Google Gemini API" 
-            else 
-                "Active: Google Translate (Free)",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.textPadding(),
-            color = if (geminiApiKey.isNotBlank() && preferOnlineTranslation)
-                MaterialTheme.colorScheme.primary
-            else
-                MaterialTheme.colorScheme.secondary
-        )
-        
+
         ListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -77,7 +63,7 @@ internal fun SettingsGeminiTranslation(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Gemini API Key",
+                            text = stringResource(R.string.gemini_api_key),
                             style = MaterialTheme.typography.titleSmall
                         )
                     }
@@ -88,17 +74,22 @@ internal fun SettingsGeminiTranslation(
                             apiKeyText = it
                             onGeminiApiKeyChange(it)
                         },
-                        label = { Text("Enter your Gemini API key(s)") },
-                        placeholder = { Text("AIzaSy...\\nAIzaSy...") },
+                        label = { Text(stringResource(R.string.enter_gemini_api_keys), color = MaterialTheme.colorScheme.onSurface) },
+                        placeholder = { Text(stringResource(R.string.gemini_api_keys_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
-                        maxLines = 5
+                        maxLines = 5,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                            cursorColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Get your free API key at: ai.google.dev\n" +
-                               "Tip: Enter multiple API keys (one per line or separated by semicolon) to avoid rate limits\n\n" +
-                               "Note: If no API key is provided, the app will automatically use Google Translate (Free) instead.",
+                        text = stringResource(R.string.get_free_api_key) + "\n" +
+                               stringResource(R.string.api_key_tip) + "\n\n" +
+                               stringResource(R.string.no_api_key_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -106,13 +97,11 @@ internal fun SettingsGeminiTranslation(
             }
         )
         
-        Spacer(modifier = Modifier.height(8.dp))
-        
         ListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Gemini Model",
+                        text = stringResource(R.string.gemini_model),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -122,37 +111,37 @@ internal fun SettingsGeminiTranslation(
                             modelText = it
                             onGeminiModelChange(it)
                         },
-                        label = { Text("Model name") },
-                        placeholder = { Text("gemini-2.5-flash-lite") },
+                        label = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
+                        placeholder = { Text(stringResource(R.string.gemini_model_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                            cursorColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Default: gemini-2.5-flash-lite\n" +
-                               "Examples: gemini-flash-lite-latest, gemini-2.5-flash-lite\n" +
-                               "Find models at: ai.google.dev/gemini-api/docs/models",
+                        text = stringResource(R.string.default_gemini_model) + "\n" +
+                               stringResource(R.string.model_examples) + "\n" +
+                               stringResource(R.string.find_models_at),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
         ListItem(
             headlineContent = {
-                Text(text = "Use Gemini API")
+                Text(text = stringResource(R.string.use_gemini_api))
             },
             supportingContent = {
                 Text(
                     text = if (apiKeyText.isNotBlank()) {
-                        "When enabled, uses Google Gemini API for higher quality translations. " +
-                        "When disabled or if API key is not set, uses free Google Translate instead."
+                        stringResource(R.string.gemini_api_description_enabled)
                     } else {
-                        "Configure Gemini API key above to enable this option. " +
-                        "Currently using Google Translate (Free) - no API key required."
+                        stringResource(R.string.gemini_api_description_disabled)
                     },
                     style = MaterialTheme.typography.bodySmall
                 )

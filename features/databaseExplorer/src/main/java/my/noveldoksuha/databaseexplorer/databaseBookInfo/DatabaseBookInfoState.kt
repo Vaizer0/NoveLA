@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseBookInfo
+package my.noveldokusha.databaseexplorer.databaseBookInfo
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State

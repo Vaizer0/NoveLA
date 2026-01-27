@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseSearch
+package my.noveldokusha.databaseexplorer.databaseSearch
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,13 +31,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.components.CollapsibleDivider
-import my.noveldoksuha.coreui.components.next
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.PreviewThemes
-import my.noveldoksuha.coreui.theme.colorApp
-import my.noveldoksuha.databaseexplorer.R
+import my.noveldokusha.coreui.components.CollapsibleDivider
+import my.noveldokusha.coreui.components.next
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.PreviewThemes
+import my.noveldokusha.coreui.theme.colorApp
+import my.noveldokusha.databaseexplorer.R
 
 
 @OptIn(ExperimentalLayoutApi::class)

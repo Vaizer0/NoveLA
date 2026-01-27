@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldoksuha.coreui.components.CollapsibleDivider
+import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.tooling.backup_create.onBackupCreate
 import my.noveldokusha.tooling.backup_restore.onBackupRestore
 
@@ -58,6 +58,7 @@ fun SettingsScreen(
                 onThemeSelected = viewModel::onThemeChange,
                 onCleanDatabase = viewModel::cleanDatabase,
                 onCleanImageFolder = viewModel::cleanImagesFolder,
+                onMassAddDelayChange = viewModel::onMassAddDelayChange,
                 onBackupData = onBackupCreate(),
                 onRestoreData = onBackupRestore(),
                 onDownloadTranslationModel = viewModel::downloadTranslationModel,

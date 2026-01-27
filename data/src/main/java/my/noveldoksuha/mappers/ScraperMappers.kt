@@ -1,4 +1,4 @@
-package my.noveldoksuha.mappers
+package my.noveldokusha.mappers
 
 import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response

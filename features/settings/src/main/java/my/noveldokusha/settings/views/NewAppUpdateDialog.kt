@@ -20,8 +20,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import my.noveldoksuha.coreui.components.ImageView
-import my.noveldoksuha.coreui.components.MyButton
+import my.noveldokusha.coreui.components.ImageView
+import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.settings.R
 import my.noveldokusha.settings.SettingsScreenState
 

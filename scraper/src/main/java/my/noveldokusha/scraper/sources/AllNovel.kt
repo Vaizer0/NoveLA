@@ -1,114 +1,106 @@
 package my.noveldokusha.scraper.sources
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.Response
-import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.add
-import my.noveldokusha.network.addPath
-import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.toUrlBuilderSafe
-import my.noveldokusha.network.tryConnect
+import my.noveldokusha.network.*
 import my.noveldokusha.scraper.R
-import my.noveldokusha.scraper.TextExtractor
-import my.noveldokusha.scraper.domain.ChapterResult
-import my.noveldokusha.scraper.templates.BaseNovelFullScraper
+import my.noveldokusha.scraper.SourceInterface
+import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.buildUrl
+import my.noveldokusha.scraper.utils.UrlTransformers
 import org.jsoup.nodes.Document
-import kotlin.text.isBlank
-import kotlin.text.substringAfterLast
 
-class AllNovel(
-    networkClient: NetworkClient
-) : BaseNovelFullScraper(networkClient) {
+class AllNovel(private val networkClient: NetworkClient) : SourceInterface.Catalog {
+
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
     override val id = "allnovel"
     override val nameStrId = R.string.source_name_allnovel
     override val baseUrl = "https://allnovel.org/"
     override val catalogUrl = "https://allnovel.org/latest-release-novel"
-    override val iconUrl = "https://allnovel.org/favicon.ico"
     override val language = LanguageCode.ENGLISH
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/allnovel.png"
+    override val iconResId = null
 
-    override val selectCatalogItems = "#list-page .row"
-    override val selectCatalogItemTitle = "div.col-xs-7 > div > h3 > a"
-    override val selectCatalogItemCover = "div.col-xs-3 > div > img"
+    // Declarative selectors configuration
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
 
-    override val selectSearchItems: String = "#list-page .row"
-    override val selectSearchItemTitle: String = "div.col-xs-7 > div > h3 > a"
-    override val selectSearchItemUrl: String = "a[href]"
-    override val selectSearchItemCover: String = "div.col-xs-3 > div > img"
-    override val selectPaginationLastPage = "ul.pagination li:last-child"
+        // Declarative selectors
+        catalog = CatalogSelectors(
+            item = elements(".col-truyen-main .row"),
+            title = text("div.col-xs-7 > div > h3 > a").Clean(),
+            url = attr("href", "div.col-xs-7 > div > h3 > a"),
+            cover = attr("src", "div.col-xs-3 > div > img")
+        ),
 
-    fun extractLastPageNumber(doc: Document): Int {
-        val lastPageElement = doc.selectFirst("#list-chapter > ul:nth-child(3) > li.last > a")
-        val href = lastPageElement?.attr("href")
-        if (href == null || href.isBlank()) {
-            println("Last page URL not found.")
-            return 1
-        }
-        val pageNumberString = href.substringAfterLast("?page=", "")
-        return pageNumberString.toIntOrNull() ?: 1
-    }
+        // Search selectors (same as catalog)
+        search = SearchSelectors(
+            item = elements(".col-truyen-main .row"),
+            title = text("div.col-xs-7 > div > h3 > a").Clean(),
+            url = attr("href", "div.col-xs-7 > div > h3 > a"),
+            cover = attr("src", "div.col-xs-3 > div > img")
+        ),
 
-    override fun isLastPage(doc: org.jsoup.nodes.Document): Boolean {
-        val lastLi = doc.selectFirst(selectPaginationLastPage)
-        return lastLi == null || lastLi.hasClass("disabled")
-    }
-    override fun buildSearchUrl(index: Int, input: String): String {
-        val page = index + 1
-        val builder = baseUrl.toUrlBuilderSafe().addPath("search")
-        builder.add("keyword", input)
-        if (page > 1) builder.add("page", page)
-        return builder.toString()
-    }
-    override suspend fun getChapterList(
-        bookUrl: String
-    ): Response<List<ChapterResult>> = withContext(Dispatchers.IO) {
-        tryConnect {
-            val firstPageUrl = "$bookUrl?page=1"
-            val firstDoc = networkClient.get(firstPageUrl).toDocument()
-            val totalPages = extractLastPageNumber(firstDoc)
-            if (totalPages <= 0) return@tryConnect emptyList()
-            val urlsToLoad = (1..totalPages).map { pageIndex ->
-                "$bookUrl?page=$pageIndex"
+        book = BookSelectors(
+            title = text("h3.title").Clean(),
+            cover = attr("src", ".book img[src]"),
+            description = text(".desc-text")
+        ),
+
+        chapters = ChapterSelectors(
+            list = elements("ul.list-chapter li a"),
+            title = text(".chapter-text"),
+            content = text("#chapter-content")
+                .removeElementsDOM("script", ".ads", "h3")
+                .applyStandardContentTransforms(baseUrl)
+        ),
+
+        // Chapters pagination - PAGE_BASED
+        chapterPaginationType = ChapterPaginationType.PAGE_BASED,
+        chapterPaginationConfig = ChapterPaginationConfig(
+            maxPageExtractor = { doc ->
+                val lastPageElement = doc.selectFirst("#list-chapter > ul:nth-child(3) > li.last > a")
+                val href = lastPageElement?.attr("href")
+                href?.substringAfter("?page=", "")?.toIntOrNull() ?: 1
+            },
+            pageUrlBuilder = { bookUrl, page -> "$bookUrl?page=$page" },
+            chapterSelector = "ul.list-chapter li a"
+        ),
+
+        // POST search disabled
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
+
+        // URL builders
+        buildCatalogUrl = { index ->
+            val page = index + 1
+            if (page == 1) {
+                buildUrl(baseUrl, "latest-release-novel")
+            } else {
+                buildUrl(baseUrl, "latest-release-novel?page=$page")
             }
-            val deferredDocs = urlsToLoad.map { url ->
-                async {
-                    networkClient.get(url).toDocument()
-                }
-            }
-            val allDocuments = deferredDocs.awaitAll()
-            val allChapters = allDocuments.flatMap { doc ->
-                doc.select("ul.list-chapter li a").map { element ->
-                    ChapterResult(
-                        title = element.text() ?: "",
-                        url = ("https://allnovel.org" + element.attr("href"))
-                    )
-                }
-            }
-            allChapters
-        }
-    }
+        },
+        buildSearchUrl = { index, query ->
+            val page = index + 1
+            val builder = buildUrl(baseUrl, "search").toUrlBuilderSafe()
+            builder.add("keyword", query)
+            if (page > 1) builder.add("page", page.toString())
+            builder.toString()
+        },
 
-    override suspend fun getBookDescription(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient.get(bookUrl).toDocument().selectFirst("div.desc-text")?.text()
-            }
-        }
+        // URL transformers
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl),
+        transformCoverUrl = UrlTransformers.novelBinCoverUrl() // Special NovelBin-style cover transformer
+    )
 
-    override suspend fun getChapterTitle(doc: Document): String =
-        doc.selectFirst("#chapter > div > div > h2 > a > span")?.text() ?: ""
-
-    override suspend fun getChapterText(doc: Document): String =
-        withContext(Dispatchers.Default) {
-            doc.selectFirst("#chapter-content")?.let { element ->
-                element.select("script").remove()
-                element.select(".ads").remove()
-                element.select("div:contains(allnovel.org)").remove()
-                element.select("p:contains(If you find any errors)").remove()
-                TextExtractor.get(element)
-            } ?: ""
-        }
 }

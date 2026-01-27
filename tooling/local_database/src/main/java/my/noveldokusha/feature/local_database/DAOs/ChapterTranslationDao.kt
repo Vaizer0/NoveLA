@@ -46,6 +46,19 @@ interface ChapterTranslationDao {
     suspend fun deleteChapterTranslations(chapterUrl: String)
     
     /**
+     * Delete all translations for chapters of specific books
+     */
+    @Query("""
+        DELETE FROM ChapterTranslation 
+        WHERE chapterUrl IN (
+            SELECT Chapter.url 
+            FROM Chapter 
+            WHERE Chapter.bookUrl IN (:bookUrls)
+        )
+    """)
+    suspend fun deleteTranslationsByBookUrls(bookUrls: List<String>)
+    
+    /**
      * Delete all translations for a specific language pair
      */
     @Query("""

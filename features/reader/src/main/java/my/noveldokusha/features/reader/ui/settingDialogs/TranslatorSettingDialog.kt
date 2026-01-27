@@ -42,8 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import my.noveldoksuha.coreui.theme.clickableWithUnboundedIndicator
-import my.noveldoksuha.coreui.theme.ifCase
+import my.noveldokusha.coreui.theme.clickableWithUnboundedIndicator
+import my.noveldokusha.coreui.theme.ifCase
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
 import my.noveldokusha.reader.R
 

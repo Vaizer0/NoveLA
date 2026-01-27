@@ -1,4 +1,4 @@
-package my.noveldoksuha.data
+package my.noveldokusha.data
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,7 +23,8 @@ class AppRepository @Inject constructor(
     val bookChapters: BookChaptersRepository,
     val chapterBody: ChapterBodyRepository,
     private val appFileResolver: AppFileResolver,
-    private val epubImporterRepository: EpubImporterRepository
+    private val epubImporterRepository: EpubImporterRepository,
+    val downloaderRepository: DownloaderRepository
 ) {
     val settings = Settings()
     val eventDataRestored = MutableSharedFlow<Unit>()
@@ -56,9 +57,22 @@ class AppRepository @Inject constructor(
     inner class Settings {
         suspend fun clearNonLibraryData() = withContext(Dispatchers.IO)
         {
-            db.libraryDao().removeAllNonLibraryRows()
-            db.chapterDao().removeAllNonLibraryRows()
-            db.chapterBodyDao().removeAllNonChapterRows()
+            // Сначала получаем список книг, которые не находятся в библиотеке
+            val nonLibraryBookUrls = db.libraryDao().getNonLibraryBookUrls()
+            
+            if (nonLibraryBookUrls.isNotEmpty()) {
+                // Удаляем переводы глав, связанные с этими книгами
+                db.chapterTranslationDao().deleteTranslationsByBookUrls(nonLibraryBookUrls)
+                
+                // Удаляем тела глав, связанные с этими книгами
+                db.chapterBodyDao().removeChapterBodiesByBookUrls(nonLibraryBookUrls)
+                
+                // Удаляем главы этих книг
+                db.chapterDao().removeAllFromBooks(nonLibraryBookUrls)
+                
+                // Наконец, удаляем сами книги
+                db.libraryDao().removeBooksByUrls(nonLibraryBookUrls)
+            }
         }
 
         /**

@@ -19,14 +19,41 @@
 		<item name="android:background">?attr/colorPrimary</item>
 	</style>
 
+	<!-- Material 3 Button Style -->
+	<style name="myMaterialButtonStyle" parent="Widget.Material3.Button">
+		<item name="backgroundTint">?attr/colorPrimary</item>
+		<item name="android:textColor">?attr/colorOnPrimary</item>
+	</style>
+
+	<!-- Legacy button style for compatibility -->
 	<style name="myButtonStyle" parent="Widget.AppCompat.Button">
 		<item name="android:backgroundTint">?attr/colorPrimary</item>
 	</style>
 
-	<style name="myBottomNavigationStyle" parent="Widget.MaterialComponents.BottomNavigationView">
+	<!-- Material 3 Text Input Style -->
+	<style name="myTextInputStyle" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+		<item name="boxStrokeColor">?attr/colorOutline</item>
+		<item name="hintTextColor">?attr/colorOnSurfaceVariant</item>
+		<item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
+	</style>
+
+	<!-- Text styles -->
+	<style name="myTextStyle.Body" parent="TextAppearance.Material3.BodyLarge">
+		<item name="android:textColor">?attr/colorOnSurface</item>
+	</style>
+
+	<style name="myTextStyle.BodySecondary" parent="TextAppearance.Material3.BodyMedium">
+		<item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+	</style>
+
+	<style name="myTextStyle.Title" parent="TextAppearance.Material3.TitleMedium">
+		<item name="android:textColor">?attr/colorOnSurface</item>
+	</style>
+
+	<style name="myBottomNavigationStyle" parent="Widget.Material3.BottomNavigationView">
 		<item name="itemIconTint">@color/icon_effect</item>
 		<item name="itemTextColor">@color/icon_effect</item>
-		<item name="android:background">?colorPrimary</item>
+		<item name="android:background">?attr/colorSurface</item>
 		<item name="elevation">0dp</item>
 	</style>
 

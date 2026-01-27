@@ -4,9 +4,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import my.noveldoksuha.data.AppRepository
-import my.noveldoksuha.data.BookChaptersRepository
-import my.noveldoksuha.data.LibraryBooksRepository
+import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.BookChaptersRepository
+import my.noveldokusha.data.LibraryBooksRepository
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.features.reader.domain.ChapterState

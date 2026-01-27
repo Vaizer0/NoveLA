@@ -12,34 +12,48 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.R
-import my.noveldoksuha.coreui.components.BookImageButtonView
-import my.noveldoksuha.coreui.components.ImageView
-import my.noveldoksuha.coreui.getPainter
-import my.noveldoksuha.coreui.modifiers.bounceOnPressed
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.ImageBorderShape
-import my.noveldokusha.core.SourceType
+import my.noveldokusha.coreui.R
+import my.noveldokusha.coreui.components.BookImageButtonView
+import my.noveldokusha.coreui.components.ImageView
+import my.noveldokusha.coreui.modifiers.bounceOnPressed
+import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.rememberResolvedBookImagePath
 import my.noveldokusha.feature.local_database.BookWithContext
+
+private fun extractDomainFromUrl(url: String): String {
+    return try {
+        val uri = android.net.Uri.parse(url)
+        val host = uri.host?.removePrefix("www.") ?: ""
+        // Capitalize and clean up the domain name
+        host.replace(".", " ").split(" ")
+            .joinToString(" ") { word ->
+                if (word.length > 1) word.replaceFirstChar { it.uppercase() } else word
+            }
+            .trim()
+    } catch (e: Exception) {
+        "Unknown Source"
+    }
+}
 
 @Composable
 internal fun LibraryPageBody(
     list: List<BookWithContext>,
     onClick: (BookWithContext) -> Unit,
     onLongClick: (BookWithContext) -> Unit,
+    selectedBooks: Set<String> = emptySet(),
+    isSelectionMode: Boolean = false,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(160.dp),
@@ -49,8 +63,7 @@ internal fun LibraryPageBody(
             items = list,
             key = { it.book.url }
         ) {
-            val interactionSource = remember { MutableInteractionSource() }
-            val sourceType = remember(it.book.url) { SourceType.fromUrl(it.book.url) }
+            val isSelected = selectedBooks.contains(it.book.url)
             Box {
                 BookImageButtonView(
                     title = it.book.title,
@@ -60,18 +73,26 @@ internal fun LibraryPageBody(
                     ),
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
-                    interactionSource = interactionSource,
-                    sourceIcon = sourceType.getPainter()?.let { imageModel ->
-                        {
-                            ImageView(
-                                imageModel = imageModel,
-                                contentDescription = sourceType.displayName,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    },
-                    modifier = Modifier.bounceOnPressed(interactionSource)
+                    sourceText = extractDomainFromUrl(it.book.url)
                 )
+
+                // Selection overlay
+                if (isSelectionMode && isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = stringResource(R.string.selected),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(48.dp)
+                        )
+                    }
+                }
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 AnimatedVisibility(
                     visible = notReadCount != 0,
@@ -80,21 +101,21 @@ internal fun LibraryPageBody(
                 ) {
                     Text(
                         text = notReadCount.toString(),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier
                             .padding(8.dp)
-                            .background(ColorAccent, ImageBorderShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer, ImageBorderShape)
                             .padding(4.dp)
                     )
                 }
 
                 if (it.book.url.isLocalUri) Text(
                     text = stringResource(R.string.local),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
-                        .background(ColorAccent, ImageBorderShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer, ImageBorderShape)
                         .padding(4.dp)
                 )
             }

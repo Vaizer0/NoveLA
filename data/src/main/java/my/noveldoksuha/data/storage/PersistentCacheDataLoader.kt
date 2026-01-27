@@ -1,4 +1,4 @@
-package my.noveldoksuha.data.storage
+package my.noveldokusha.data.storage
 
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi

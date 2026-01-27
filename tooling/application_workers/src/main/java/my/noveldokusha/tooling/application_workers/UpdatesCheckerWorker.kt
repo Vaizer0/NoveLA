@@ -15,10 +15,10 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import my.noveldoksuha.coreui.states.NotificationsCenter
-import my.noveldoksuha.coreui.states.text
-import my.noveldoksuha.coreui.states.title
-import my.noveldoksuha.data.AppRemoteRepository
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.coreui.states.text
+import my.noveldokusha.coreui.states.title
+import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.core.Response
 import timber.log.Timber
 import java.util.concurrent.TimeUnit

@@ -2,24 +2,31 @@ package my.noveldokusha.settings.sections
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DataArray
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.textPadding
+import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
 @Composable
 internal fun SettingsData(
     databaseSize: String,
     imagesFolderSize: String,
+    isCleaningDatabase: Boolean,
+    isCleaningImages: Boolean,
     onCleanDatabase: () -> Unit,
     onCleanImageFolder: () -> Unit
 ) {
@@ -40,9 +47,16 @@ internal fun SettingsData(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.DataArray, null, tint = MaterialTheme.colorScheme.onPrimary)
+                if (isCleaningDatabase) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Outlined.DataArray, null, tint = MaterialTheme.colorScheme.onPrimary)
+                }
             },
-            modifier = Modifier.clickable { onCleanDatabase() }
+            modifier = Modifier.clickable(enabled = !isCleaningDatabase) { onCleanDatabase() }
         )
         ListItem(
             headlineContent = {
@@ -55,9 +69,17 @@ internal fun SettingsData(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onPrimary)
+                if (isCleaningImages) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onPrimary)
+                }
             },
-            modifier = Modifier.clickable { onCleanImageFolder() }
+            modifier = Modifier.clickable(enabled = !isCleaningImages) { onCleanImageFolder() }
         )
+
     }
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "my.noveldoksuha.data"
+    namespace = "my.noveldokusha.data"
 }
 
 dependencies {

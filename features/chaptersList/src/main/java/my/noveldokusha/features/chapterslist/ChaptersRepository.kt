@@ -6,8 +6,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import my.noveldoksuha.data.AppRepository
-import my.noveldoksuha.data.DownloaderRepository
+import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.feature.local_database.tables.Book

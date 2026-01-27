@@ -1,4 +1,4 @@
-package my.noveldoksuha.databaseexplorer.databaseBookInfo
+package my.noveldokusha.databaseexplorer.databaseBookInfo
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -44,17 +44,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import my.noveldoksuha.coreui.components.BookImageButtonView
-import my.noveldoksuha.coreui.components.BookTitlePosition
-import my.noveldoksuha.coreui.components.ExpandableText
-import my.noveldoksuha.coreui.components.ImageView
-import my.noveldoksuha.coreui.components.MyButton
-import my.noveldoksuha.coreui.modifiers.bounceOnPressed
-import my.noveldoksuha.coreui.theme.ColorAccent
-import my.noveldoksuha.coreui.theme.clickableNoIndicator
-import my.noveldoksuha.coreui.theme.textPadding
-import my.noveldoksuha.databaseexplorer.R
-import my.noveldoksuha.mappers.mapToBookMetadata
+import my.noveldokusha.coreui.components.BookImageButtonView
+import my.noveldokusha.coreui.components.BookTitlePosition
+import my.noveldokusha.coreui.components.ExpandableText
+import my.noveldokusha.coreui.components.ImageView
+import my.noveldokusha.coreui.components.MyButton
+import my.noveldokusha.coreui.modifiers.bounceOnPressed
+import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.clickableNoIndicator
+import my.noveldokusha.coreui.theme.textPadding
+import my.noveldokusha.databaseexplorer.R
+import my.noveldokusha.mappers.mapToBookMetadata
 import my.noveldokusha.scraper.SearchGenre
 import my.noveldokusha.feature.local_database.BookMetadata
 
@@ -108,16 +108,13 @@ internal fun DatabaseBookInfoScreenBody(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     var showImageFullScreen by rememberSaveable { mutableStateOf(false) }
-                    val interactionSource = remember { MutableInteractionSource() }
                     BookImageButtonView(
                         title = "",
                         coverImageModel = coverImg,
                         onClick = { showImageFullScreen = true },
                         bookTitlePosition = BookTitlePosition.Hidden,
-                        interactionSource = interactionSource,
                         modifier = Modifier
-                            .weight(1f)
-                            .bounceOnPressed(interactionSource),
+                            .weight(1f),
                     )
                     SelectionContainer(
                         modifier = Modifier.weight(1f)

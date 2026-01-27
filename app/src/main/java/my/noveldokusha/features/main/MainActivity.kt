@@ -14,10 +14,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
@@ -31,9 +33,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
-import my.noveldoksuha.coreui.BaseActivity
-import my.noveldoksuha.coreui.components.AnimatedTransition
-import my.noveldoksuha.coreui.theme.Theme
+import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.R
 import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
 import my.noveldokusha.libraryexplorer.LibraryScreen
@@ -83,7 +85,11 @@ open class MainActivity : BaseActivity() {
 
             Theme(themeProvider = themeProvider) {
                 Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f)) {
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
                         AnimatedTransition(targetState = activePageIndex) {
                             when (it) {
                                 0 -> LibraryScreen()
@@ -161,4 +167,3 @@ open class MainActivity : BaseActivity() {
         }
     }
 }
-

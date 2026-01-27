@@ -1,71 +1,87 @@
+# Novela
 
+Android-приложение для чтения веб-новелл. Приложение ориентировано на простоту использования и максимальное погружение в процесс чтения. Поиск по большому каталогу контента, выбор понравившегося и наслаждение чтением.
 
-# NovelDokusha
-Android web novel reader. Reader focused on simplicity, improving reading immersion.
-Search from a large catalog of content, open your pick and just enjoy.
+> **Примечание**: Это любительский форк проекта [NovelDokusha](https://github.com/nanihadesuka/NovelDokusha), который больше не поддерживается активно. Данный форк содержит дополнительные улучшения и исправления. Любые улучшения приветствуются!
 
-> **Note**: My fork is just for myself. Actively maintained fork by [@Nabeelshar](https://github.com/Nabeelshar). The [original repository](https://github.com/nanihadesuka/NovelDokusha) is no longer actively maintained.
+## Лицензия
+Copyright © 2023, [nani](https://github.com/HnDK0), распространяется под лицензией [GPL-3](LICENSE) FOSS
 
-# License
-Copyright © 2023, [nani](https://github.com/nanihadesuka), Released under [GPL-3](LICENSE) FOSS
+## Особенности
 
-## Features
-  - **Gemini Translation Support** - Live translation powered by Google Gemini AI
-  - **Free Google Api Translation** - Live Google translation FREE
-  - **Multiple sources** from where to read -novels:
-    - **Chinese Sources** (with GBK encoding support):
-      - 69书吧 (69shuba.com) - With automatic Cloudflare bypass
-      - UU看书 (uukanshu.net)
-      - 顶点小说 (ddxss.cc)
-      - 乐阅读 (27k.net)
-      - Twkan (twkan.com)
-    - **Russian Sources**
-      - Jaomix (jaomix.ru)
-      - RanobeLib (ranobelib.me)
-      - RanobeHub (ranobehub.org)
-      - Свободный Мир Ранобэ (ifreedom.su)
-      - BookHamster (bookhamster.ru)
-    - Additional English and international sources
-  - **Multiple databases** to search for novels
-  - **Local source** to read local EPUBs
-  - **Easy backup and restore**
-  - **Light and dark themes**
-  - Follows modern **Material 3** guidelines
-  - **Advanced Reader Features**:
-    - Infinite scroll
-    - Custom font, font size
-    - **Live translation** with Gemini AI
-    - **Text to speech**:
-      - Background playback
-      - Adjust voice, pitch, speed
-      - Save your preferred voices
-  - **Automatic Cloudflare bypass** - Seamless access to protected sources
+- **Поддержка перевода Gemini** - Перевод в реальном времени с помощью искусственного интеллекта Google Gemini
+- **Бесплатный перевод через Google API** - Live перевод от Google бесплатно
+- **Несколько источников** для чтения новелл:
+  - **Китайские источники**
+    - 69书吧
+    - Twkan
+    - Ttkan
+  - **Русские источники**
+    - Jaomix
+    - RanobeLib
+    - RanobeHub
+    - Свободный Мир Ранобэ
+    - BookHamster
+  - **Англоязычные источники**
+    - FreeWebNovel
+    - NovelFull
+    - NovelBin
+    - Royal Road
+    - Scribble Hub
+    - AllNovel
+    - BacaLightnovel
+    - NoBadNovel
+    - NovelBuddy
+    - NovelFire
+    - NovelHall
+    - Novelku
+    - NovLove
+    - ReadNovelFull
+    - WuxiaWorld
+  - **Локальный источник** для чтения локальных EPUB-файлов
+- **Несколько баз данных** для поиска новелл
+- **Добавление новел по ссылке** - Возможность добавлять новеллы в библиотеку напрямую по URL-адресу
+- **Простое резервное копирование и восстановление**
+- **Светлая и темная темы**
+- Следует современным рекомендациям **Material 3**
+- **Расширенные возможности чтения**:
+  - Бесконечная прокрутка
+  - Пользовательский шрифт и размер текста
+  - **Live перевод** с помощью Gemini AI или Google API
+  - **Озвучка текста**:
+    - Воспроизведение в фоновом режиме
+    - Настройка голоса, высоты тона, скорости
+    - Сохранение предпочтительных голосов
+- **Автоматический обход Cloudflare** - Беспрепятственный доступ к защищенным источникам
 
-  
-## Screenshots
- 
-|              Library               |                Finder                |
-|:----------------------------------:|:------------------------------------:|
-|    ![](screenshots/library.png)    |     ![](screenshots/finder.png)      |
-|             Book info              |            Book chapters             |
-|   ![](screenshots/book_info.png)   |  ![](screenshots/book_chapers.png)   |
-|               Reader               |           Database search            |
-|    ![](screenshots/reader.png)     | ![](screenshots/database_search.png) |
-|           Global search            |                                      |
-| ![](screenshots/global_search.png) |                                      |
+## Скриншоты
 
-## Tech stack
-  - Kotlin
-  - XML views
-  - Jetpack compose
-  - Material 3
-  - Coroutines
-  - LiveData
-  - Room (SQLite) for storage
-  - Jsoup
-  - Okhttp
-  - Coil, glide
-  - Gson, Moshi
-  - Google MLKit for translation
-  - Android TTS
-  - Android media (TTS playback notification controls)
+| Библиотека | Поиск |
+|:----------:|:-----:|
+| ![](screenshots/Screenshot_Library.png) | ![](screenshots/Screenshot_Finder.png) |
+| Книга | Глава |
+| ![](screenshots/Screenshot_book.png) | ![](screenshots/Screenshot_Chapter.png) |
+| Настройки главы | Перевод главы |
+| ![](screenshots/Screenshot_Chapter_option.png) | ![](screenshots/Screenshot_Chapter_Translate.png) |
+| Озвучка главы | Добавление по URL |
+| ![](screenshots/Screenshot_Chapter_Voice.png) | ![](screenshots/Screenshot_Add_by_URLs.png) |
+| Глобальный поиск | Настройки |
+| ![](screenshots/Screenshot_Global_Search.png) | ![](screenshots/Screenshot_settings.png) |
+| Обход CloudFlare | |
+| ![](screenshots/Screenshot_CF_Turnstile.png) | |
+
+## Технологический стек
+- Kotlin
+- XML views
+- Jetpack Compose
+- Material 3
+- Coroutines
+- LiveData
+- Room (SQLite) для хранения данных
+- Jsoup
+- OkHttp
+- Coil, Glide
+- Gson, Moshi
+- Google MLKit для перевода
+- Android TTS
+- Android media (управление уведомлениями воспроизведения TTS)

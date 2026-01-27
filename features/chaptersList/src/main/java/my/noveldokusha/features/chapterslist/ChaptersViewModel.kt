@@ -12,10 +12,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import my.noveldoksuha.coreui.BaseViewModel
-import my.noveldoksuha.data.AppRepository
-import my.noveldoksuha.data.DownloaderRepository
-import my.noveldoksuha.data.EpubImporterRepository
+import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.DownloaderRepository
+import my.noveldokusha.data.EpubImporterRepository
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver

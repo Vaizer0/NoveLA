@@ -3,118 +3,101 @@ package my.noveldokusha.scraper.sources
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
-import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response
-import my.noveldokusha.scraper.domain.BookResult
-import my.noveldokusha.scraper.domain.ChapterResult
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.network.add
-import my.noveldokusha.network.ifCase
 import my.noveldokusha.network.toDocument
-import my.noveldokusha.network.toUrlBuilderSafe
 import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.TextExtractor
+import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.domain.ChapterResult
+import my.noveldokusha.scraper.helpers.*
+import my.noveldokusha.scraper.utils.buildUrl
+import my.noveldokusha.scraper.utils.UrlTransformers
 import org.jsoup.nodes.Document
 
 class Jaomix(private val networkClient: NetworkClient) : SourceInterface.Catalog {
-    override val id = "Jaomix"
+
+    // Методы интерфейса (ОБЯЗАТЕЛЬНО!)
+    override suspend fun getCatalogList(index: Int) = getCatalogList(config, index, networkClient)
+    override suspend fun getCatalogSearch(index: Int, input: String) = getCatalogSearch(config, index, input, networkClient)
+    override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
+    override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
+    override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
+    override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+
+    // Идентификаторы источника
+    override val id = "jaomix"
     override val nameStrId = R.string.source_name_jaomix
     override val baseUrl = "https://jaomix.ru/"
-    override val catalogUrl = "https://jaomix.ru/"
-    override val iconUrl = "https://jaomix.ru/wp-content/uploads/2019/08/cropped-logo-2-150x150.png"
+    override val catalogUrl = "$baseUrl"
     override val language = LanguageCode.RUSSIAN
+    override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/jaomix.png"
+    override val iconResId = null
 
-    private suspend fun getPagesList(index: Int, url: String) =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient.get(url).toDocument().run {
-                    val isLastPage = select("ul.pagiinput").isEmpty()
-                    val bookResults =
-                        select("div.block-home > div.one").mapNotNull {
-                            val link = it.selectFirst("div.img-home > a") ?: return@mapNotNull null
-                            val bookCover =
-                                it.selectFirst("div.img-home > a > img")?.attr("src") ?: ""
-                            BookResult(
-                                title = link.attr("title"),
-                                url = link.attr("href"),
-                                coverImageUrl = bookCover
-                            )
-                        }
-                    PagedList(list = bookResults, index = index, isLastPage = !isLastPage)
-                }
-            }
-        }
+    // Declarative selectors configuration
+    private val config: HtmlSelectors = HtmlSelectors(
+        baseUrl = baseUrl,
+        language = language,
 
-    override suspend fun getChapterTitle(doc: Document): String =
-        withContext(Dispatchers.Default) { doc.selectFirst(".entry-title")?.text() ?: "" }
+        // Declarative selectors
+        catalog = CatalogSelectors(
+            item = elements("div.block-home > div.one"),
+            title = text("div.title-home").Clean(),
+            url = attr("href", "div.img-home > a"),
+            cover = attr("src", "div.img-home > a > img")
+        ),
 
-    override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
-        doc.selectFirst(".entry-content")!!.let {
-            it.select(".adblock-service").remove()
-            TextExtractor.get(it)
-        }
-    }
+        // Search selectors (same as catalog)
+        search = SearchSelectors(
+            item = elements("div.block-home > div.one"),
+            title = text("div.title-home").Clean(),
+            url = attr("href", "div.img-home > a"),
+            cover = attr("src", "div.img-home > a > img")
+        ),
 
-    override suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient
-                    .get(bookUrl)
-                    .toDocument()
-                    .selectFirst("div.img-book > img")
-                    ?.attr("src")
-            }
-        }
+        book = BookSelectors(
+            title = text("h1").Clean(),
+            cover = attr("src", "div.img-book > img"),
+            description = text("#desc-tab")
+        ),
 
-    override suspend fun getBookDescription(bookUrl: String): Response<String?> =
-        withContext(Dispatchers.Default) {
-            tryConnect {
-                networkClient.get(bookUrl).toDocument().selectFirst("#desc-tab")?.text()
-            }
-        }
+        chapters = ChapterSelectors(
+            list = elements("div.title a"),
+            title = text("h2"),
+            content = text(".entry-content")
+                .removeElementsDOM("script", ".ads", ".adblock-service")
+                .applyStandardContentTransforms(baseUrl)
 
-    override suspend fun getChapterList(
-        bookUrl: String
-    ): Response<List<ChapterResult>> = withContext(Dispatchers.Default) {
-        tryConnect {
-            networkClient.get(bookUrl)
-                .toDocument()
-                .select("div.title")
-                .map {
-                    ChapterResult(
-                        title = it.selectFirst("a")?.attr("title") ?: "",
-                        url = it.selectFirst("a")?.attr("href") ?: ""
-                    )
-                }
-                .reversed()
-        }
-    }
+        ),
 
-    override suspend fun getCatalogList(index: Int): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            val page = index + 1
-            val url =
-                catalogUrl
-                    .toUrlBuilderSafe()
-                    .ifCase(page > 1) { add("gpage", page.toString()) }
-                    .toString()
-            getPagesList(index, url)
-        }
 
-    override suspend fun getCatalogSearch(
-        index: Int,
-        input: String,
-    ): Response<PagedList<BookResult>> =
-        withContext(Dispatchers.Default) {
-            val page = index + 1
-            val url =
-                baseUrl
-                    .toUrlBuilderSafe()
-                    .add("searchrn" to input)
-                    .ifCase(page > 1) { add("gpage", page.toString()) }
-                    .toString()
-            getPagesList(index, url)
-        }
+        // Chapters without pagination
+        chapterPaginationType = ChapterPaginationType.NONE,
+
+        // Chapters order - reverse (newest first)
+        reverseChapters = true,
+        // POST search disabled
+        postSearchEnabled = false,
+        postSearchUrl = null,
+        postSearchDataBuilder = null,
+
+        // URL builders
+        buildCatalogUrl = { index ->
+            if (index == 0) catalogUrl
+            else "$catalogUrl?gpage=${index + 1}"
+        },
+        buildSearchUrl = { index, query ->
+            val baseSearchUrl = "$baseUrl?searchrn=$query"
+            if (index == 0) baseSearchUrl
+            else "$baseSearchUrl&gpage=${index + 1}"
+        },
+
+        // URL transformers
+        transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
+        transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl)
+    )
+
+    // Note: URL transformers are now inline in HtmlSelectors config
 }

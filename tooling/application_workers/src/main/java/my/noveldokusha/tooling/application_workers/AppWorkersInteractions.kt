@@ -2,7 +2,7 @@ package my.noveldokusha.tooling.application_workers
 
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
-import my.noveldoksuha.interactor.WorkersInteractions
+import my.noveldokusha.interactor.WorkersInteractions
 import my.noveldokusha.core.domain.LibraryCategory
 import javax.inject.Inject
 import javax.inject.Singleton

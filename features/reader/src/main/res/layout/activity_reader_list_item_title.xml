@@ -16,6 +16,7 @@
 	android:textSize="22sp"
 	android:textStyle="bold"
 	app:drawableLeftCompat="@drawable/ic_decoration_round"
-	app:drawableTint="#bbb"
+	app:drawableTint="#b4b1b1"
+	android:textColor="#b4b1b1"
 	tools:text="@tools:sample/lorem"
 	/>

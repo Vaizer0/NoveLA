@@ -1,7 +1,8 @@
 package my.noveldokusha.network
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
-import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -44,6 +45,11 @@ fun Response.toDocument(charset: String): Document {
     return Jsoup.parse(html, baseUrl)
 }
 
+private val lenientGson: Gson by lazy {
+    GsonBuilder().setLenient().create()
+}
+
 fun Response.toJson(): JsonElement {
-    return JsonParser.parseString(body.string())
+    val jsonString = body.string()
+    return lenientGson.fromJson(jsonString, JsonElement::class.java)
 }

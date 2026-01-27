@@ -1,81 +1,117 @@
 package my.noveldokusha.webview
 
 import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.*
 import android.os.Bundle
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.util.Log
+import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.*
 import dagger.hilt.android.AndroidEntryPoint
-import my.noveldoksuha.coreui.theme.Theme
-import my.noveldoksuha.coreui.theme.ThemeProvider
+import kotlinx.coroutines.delay
+import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.ThemeProvider
 import my.noveldokusha.core.Toasty
-import my.noveldokusha.core.utils.Extra_String
-import my.noveldokusha.network.toUrl
+import my.noveldokusha.network.interceptors.CloudflareBypassSignal
+import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class WebViewActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var toasty: Toasty
+    @Inject lateinit var toasty: Toasty
+    @Inject lateinit var themeProvider: ThemeProvider
 
-    @Inject
-    lateinit var themeProvider: ThemeProvider
-
-    class IntentData : Intent {
-        var url by Extra_String()
-
-        constructor(intent: Intent) : super(intent)
-        constructor(ctx: Context, url: String) : super(ctx, WebViewActivity::class.java) {
-            this.url = url
-        }
-    }
-
-    private val extras by lazy { IntentData(intent) }
+    private val urlExtra by lazy { intent.getStringExtra("url") ?: "" }
+    private lateinit var webView: WebView
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val webView = WebView(this).also {
-            it.loadUrl(extras.url)
+        webView = WebView(this).apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                userAgentString = GLOBAL_USER_AGENT
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            }
         }
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                val cookies = CookieManager.getInstance().getCookie(url) ?: ""
+                if (cookies.contains("cf_clearance")) {
+                    Log.d("WebViewActivity", "CF Cookie detected!")
+                }
+            }
+        }
+
         setContent {
+            // Флаг прохождения проверки
+            var isReady by remember { mutableStateOf(false) }
+            // Динамический URL для заголовка
+            var currentUrl by remember { mutableStateOf(urlExtra) }
+
+            // Обновляем состояние каждые 500мс
+            LaunchedEffect(Unit) {
+                while (true) {
+                    val cookies = CookieManager.getInstance().getCookie(urlExtra) ?: ""
+                    if (cookies.contains("cf_clearance")) {
+                        isReady = true
+                    }
+                    // Берем актуальный URL из WebView для заголовка
+                    webView.url?.let { currentUrl = it }
+                    delay(500)
+                }
+            }
+
             Theme(themeProvider = themeProvider) {
                 WebViewScreen(
-                    toolbarTitle = extras.url,
+                    // Теперь заголовок показывает реальный адрес сайта
+                    toolbarTitle = currentUrl,
+                    isReady = isReady,
                     webViewFactory = { webView },
-                    onBackClicked = { this@WebViewActivity.onBackPressed() },
-                    onReloadClicked = { webView.reload() }
+                    onBackClicked = { finish() },
+                    onDoneClicked = {
+                        CookieManager.getInstance().flush()
+                        CloudflareBypassSignal.channel.trySend(Unit)
+                        finish()
+                    },
+                    onReloadClicked = { webView.reload() },
+                    onClearCookiesClicked = { hardResetSession() },
+                    onCopyUrlClicked = { copyToClipboard(webView.url ?: currentUrl) }
                 )
             }
         }
 
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_WEBVIEW)) {
-            toasty.show(R.string.web_view_not_available)
-            finish()
-            return
-        }
+        webView.loadUrl(urlExtra)
+    }
 
-        extras.url.toUrl()?.authority ?: run {
-            toasty.show(R.string.invalid_URL)
-            finish()
-            return
+    private fun hardResetSession() {
+        CookieManager.getInstance().removeAllCookies {
+            webView.clearCache(true)
+            WebStorage.getInstance().deleteAllData()
+            webView.loadUrl(urlExtra)
+            toasty.show("Session cleared")
         }
+    }
 
-        webView.settings.javaScriptEnabled = true
-        webView.webViewClient = object : WebViewClient() {
+    private fun copyToClipboard(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("URL", text)
+        clipboard.setPrimaryClip(clip)
+        toasty.show("Link copied")
+    }
 
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                if (view != null && url != null) {
-                    toasty.show(R.string.cookies_saved)
-                }
-            }
+    override fun onDestroy() {
+        if (::webView.isInitialized) {
+            webView.stopLoading()
+            webView.destroy()
         }
+        super.onDestroy()
     }
 }

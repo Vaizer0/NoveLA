@@ -42,6 +42,9 @@ interface LibraryDao {
     @Query("UPDATE Book SET coverImageUrl = :coverUrl WHERE url == :bookUrl")
     suspend fun updateCover(bookUrl: String, coverUrl: String)
 
+    @Query("UPDATE Book SET title = :title WHERE url == :bookUrl")
+    suspend fun updateTitle(bookUrl: String, title: String)
+
     @Query("UPDATE Book SET lastReadEpochTimeMilli = :lastReadEpochTimeMilli WHERE url == :bookUrl")
     suspend fun updateLastReadEpochTimeMilli(bookUrl: String, lastReadEpochTimeMilli: Long)
 
@@ -53,6 +56,9 @@ interface LibraryDao {
 
     @Query("UPDATE Book SET lastReadChapter = :chapterUrl WHERE url == :bookUrl")
     suspend fun updateLastReadChapter(bookUrl: String, chapterUrl: String)
+
+    @Query("UPDATE Book SET category = :category WHERE url == :bookUrl")
+    suspend fun updateCategory(bookUrl: String, category: String)
 
     @Query("SELECT * FROM Book WHERE url = :url")
     suspend fun get(url: String): Book?
@@ -76,5 +82,11 @@ interface LibraryDao {
 
     @Query("DELETE FROM Book WHERE inLibrary == 0")
     suspend fun removeAllNonLibraryRows()
+
+    @Query("SELECT url FROM Book WHERE inLibrary == 0")
+    suspend fun getNonLibraryBookUrls(): List<String>
+    
+    @Query("DELETE FROM Book WHERE url IN (:urls)")
+    suspend fun removeBooksByUrls(urls: List<String>)
 
 }

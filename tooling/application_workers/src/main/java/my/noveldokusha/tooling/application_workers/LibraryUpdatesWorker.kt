@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldoksuha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.tryAsResponse

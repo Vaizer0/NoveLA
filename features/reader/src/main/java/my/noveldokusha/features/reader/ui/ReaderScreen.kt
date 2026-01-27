@@ -53,10 +53,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import my.noveldoksuha.coreui.theme.InternalTheme
-import my.noveldoksuha.coreui.theme.Themes
-import my.noveldoksuha.coreui.theme.colorApp
-import my.noveldoksuha.coreui.theme.rememberMutableStateOf
+import my.noveldokusha.coreui.theme.InternalTheme
+import my.noveldokusha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.colorApp
+import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
 import my.noveldokusha.features.reader.features.TextSynthesis

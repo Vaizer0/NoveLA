@@ -2,7 +2,7 @@ package my.noveldokusha.features.reader.manager
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import my.noveldoksuha.data.AppRepository
+import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.features.reader.ReaderRepository
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions

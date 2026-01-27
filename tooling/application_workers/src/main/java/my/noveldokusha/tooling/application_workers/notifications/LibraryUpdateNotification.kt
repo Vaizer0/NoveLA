@@ -12,9 +12,9 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import dagger.hilt.android.qualifiers.ApplicationContext
-import my.noveldoksuha.coreui.states.NotificationsCenter
-import my.noveldoksuha.coreui.states.text
-import my.noveldoksuha.coreui.states.title
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.coreui.states.text
+import my.noveldokusha.coreui.states.title
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.navigation.NavigationRoutes
