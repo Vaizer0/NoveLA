@@ -88,7 +88,7 @@ fun onBackupCreate(): () -> Unit {
                             showDialog = false
                             val pattern = "yyyy-MM-dd_HH-mm"
                             val date = SimpleDateFormat(pattern, Locale.getDefault()).format(Date())
-                            val fileName = "noveldokushatt_backup_$date.zip"
+                            val fileName = "novela_backup_$date.zip"
                             fileExplorer.launch(fileName)
                         },
                         modifier = Modifier
