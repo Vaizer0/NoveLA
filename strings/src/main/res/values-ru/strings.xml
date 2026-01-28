@@ -58,7 +58,7 @@
     <string name="epub_added_to_library">EPUB добавлен в библиотеку</string>
     <string name="invalid_chapter">Неверная глава</string>
     <string name="filter">Фильтр</string>
-    <string name="read">Читать</string>
+    <string name="read">Прочитано</string>
     <string name="sort">Сортировка</string>
     <string name="options_panel">Панель опций</string>
     <string name="search_with_filters">Поиск с фильтрами</string>
