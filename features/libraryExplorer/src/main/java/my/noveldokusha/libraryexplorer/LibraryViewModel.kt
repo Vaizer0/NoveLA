@@ -172,11 +172,27 @@ internal class LibraryViewModel @Inject constructor(
                     // Get current book info
                     val book = appRepository.libraryBooks.get(url) ?: return
 
+                    // Try to update title if it's "Unknown Novel" or empty
+                    if (book.title == "Unknown Novel" || book.title.isBlank()) {
+                        val newTitle = getBookTitle(url)
+                        if (newTitle != null && newTitle != "Unknown Novel" && newTitle.isNotBlank()) {
+                            appRepository.libraryBooks.updateTitle(url, newTitle)
+                        }
+                    }
+
                     // Try to update cover if it's empty
                     if (book.coverImageUrl.isBlank()) {
                         val coverUrl = getBookCover(url)
                         if (coverUrl != null) {
                             appRepository.libraryBooks.updateCover(url, coverUrl)
+                        }
+                    }
+
+                    // Try to update description if it's empty
+                    if (book.description.isBlank()) {
+                        val description = getBookDescription(url)
+                        if (description != null) {
+                            appRepository.libraryBooks.updateDescription(url, description)
                         }
                     }
 
@@ -198,9 +214,25 @@ internal class LibraryViewModel @Inject constructor(
         }
     }
 
+    private suspend fun getBookTitle(bookUrl: String): String? {
+        return try {
+            appRepository.downloaderRepository.bookTitle(bookUrl).toSuccessOrNull()?.data
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private suspend fun getBookCover(bookUrl: String): String? {
         return try {
             appRepository.downloaderRepository.bookCoverImageUrl(bookUrl).toSuccessOrNull()?.data
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun getBookDescription(bookUrl: String): String? {
+        return try {
+            appRepository.downloaderRepository.bookDescription(bookUrl).toSuccessOrNull()?.data
         } catch (e: Exception) {
             null
         }

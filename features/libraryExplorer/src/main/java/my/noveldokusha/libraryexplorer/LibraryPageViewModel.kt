@@ -21,6 +21,7 @@ import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.utils.toState
+import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,11 +29,25 @@ internal class LibraryPageViewModel @Inject constructor(
     private val appRepository: AppRepository,
     private val preferences: AppPreferences,
     private val toasty: Toasty,
+    private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
 
-) : BaseViewModel() {
+    ) : BaseViewModel() {
     var isPullRefreshing by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
         private set
+
+    // State flows to track update progress
+    private val _countingUpdating = MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
+    val countingUpdating = _countingUpdating.asStateFlow()
+    
+    private val _currentUpdating = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
+    val currentUpdating = _currentUpdating.asStateFlow()
+    
+    private val _newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(emptySet())
+    val newUpdates = _newUpdates.asStateFlow()
+    
+    private val _failedUpdates = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
+    val failedUpdates = _failedUpdates.asStateFlow()
 
     private val _searchQueryFlow = MutableStateFlow("")
     val searchQueryFlow = _searchQueryFlow.asStateFlow()
@@ -111,5 +126,21 @@ internal class LibraryPageViewModel @Inject constructor(
     fun onLibraryCategoryRefresh(libraryCategory: LibraryCategory) {
         showLoadingSpinner()
         toasty.show(R.string.updating_library_notice)
+        
+        // Launch coroutine to update library books information including titles
+        viewModelScope.launch {
+            try {
+                // Update books based on the selected category
+                libraryUpdatesInteractions.updateLibraryBooks(
+                    completedOnes = libraryCategory == LibraryCategory.COMPLETED,
+                    countingUpdating = _countingUpdating,
+                    currentUpdating = _currentUpdating,
+                    newUpdates = _newUpdates,
+                    failedUpdates = _failedUpdates
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }

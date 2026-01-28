@@ -78,6 +78,34 @@ class LibraryUpdatesInteractions @Inject constructor(
             appRepository.bookChapters.chapters(book.url).map { it.url }.toSet()
         }
 
+        // Update book metadata if needed (title, cover, description)
+        // Only update title if it's "Unknown Novel" or empty
+        if (book.title == "Unknown Novel" || book.title.isBlank()) {
+            downloaderRepository.bookTitle(bookUrl = book.url).onSuccess { newTitle ->
+                if (!newTitle.isNullOrBlank() && newTitle != "Unknown Novel") {
+                    appRepository.libraryBooks.updateTitle(book.url, newTitle)
+                }
+            }
+        }
+
+        // Only update cover if it's empty
+        if (book.coverImageUrl.isBlank()) {
+            downloaderRepository.bookCoverImageUrl(bookUrl = book.url).onSuccess { newCoverUrl ->
+                if (!newCoverUrl.isNullOrBlank()) {
+                    appRepository.libraryBooks.updateCover(book.url, newCoverUrl)
+                }
+            }
+        }
+
+        // Only update description if it's empty
+        if (book.description.isBlank()) {
+            downloaderRepository.bookDescription(bookUrl = book.url).onSuccess { newDescription ->
+                if (!newDescription.isNullOrBlank()) {
+                    appRepository.libraryBooks.updateDescription(book.url, newDescription)
+                }
+            }
+        }
+
         downloaderRepository.bookChaptersList(bookUrl = book.url).onSuccess { chapters ->
             oldChaptersList.join()
             appRepository.bookChapters.merge(chapters, book.url)

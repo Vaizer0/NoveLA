@@ -126,6 +126,7 @@ internal class ChaptersViewModel @Inject constructor(
             importUriContent()
         } else if (!state.isLocalSource.value) {
             updateCover()
+            updateTitle()
             updateDescription()
             updateChaptersList()
         }
@@ -136,6 +137,18 @@ internal class ChaptersViewModel @Inject constructor(
         downloaderRepository.bookCoverImageUrl(bookUrl = bookUrl).onSuccess {
             if (it == null) return@onSuccess
             appRepository.libraryBooks.updateCover(bookUrl, it)
+        }
+    }
+
+    private fun updateTitle() = viewModelScope.launch {
+        if (state.isLocalSource.value) return@launch
+        downloaderRepository.bookTitle(bookUrl = bookUrl).onSuccess {
+            if (it == null) return@onSuccess
+            // Only update if the title is "Unknown Novel" or empty
+            val currentBook = appRepository.libraryBooks.get(bookUrl)
+            if (currentBook?.title == "Unknown Novel" || currentBook?.title.isNullOrBlank()) {
+                appRepository.libraryBooks.updateTitle(bookUrl, it)
+            }
         }
     }
 
