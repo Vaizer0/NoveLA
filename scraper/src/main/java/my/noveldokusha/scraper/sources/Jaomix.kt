@@ -67,7 +67,7 @@ class Jaomix(private val networkClient: NetworkClient) : SourceInterface.Catalog
             list = elements("div.title a"),
             title = text("h2"),
             content = text(".entry-content")
-                .removeElementsDOM("script", ".ads", ".adblock-service")
+                .removeElementsDOM("script", ".ads", ".adblock-service", ".lazyblock", ".clear", "style")
                 .applyStandardContentTransforms(baseUrl)
 
         ),
