@@ -122,19 +122,15 @@ fun SelectorRule.removePatternsTEXT(vararg regexPatterns: String): SelectorRule 
 
 fun SelectorRule.applyStandardContentTransforms(baseUrl: String): SelectorRule =
     this.normalizeUnicode()
-        // 1. Очистка ссылок по домену
         .regexReplace("(?i)${baseUrl.removePrefix("https://").removePrefix("www.").removeSuffix("/")}.*?\\n", "")
 
-        // 2. Очистка донатов и соцсетей
         .regexReplace("(?i)(support|visit|follow|donate)\\s+.*?\\b(patreon|paypal|ko-fi|website|author)\\b.*?\\n", "")
 
-        // 3. РУССКИЙ БЛОК: Строгое начало текста (\A)
-        // Убираем флаг 'm', чтобы ^ не срабатывал на каждой строке, либо используем \A
-        .regexReplace("(?i)\\A\\s*(Глава\\s+\\d+|Переводчик:|Редактор:).*?(\\n|$)", "")
+         // Русские маркеры
+        .regexReplace("(?i)\\A[\\s\\p{Z}\\uFEFF]*(Глава\\s+\\d+|Переводчик:|Редактор:)[^\\n\\r]*", "")
 
-        // 4. АНГЛИЙСКИЙ БЛОК: Строгое начало текста (\A)
-        .regexReplace("(?i)\\A\\s*(Chapter\\s+\\d+|Translator:|Editor:|Read\\s+(at|on|latest)).*?(\\n|$)", "")
-
+         // Английские маркеры
+        .regexReplace("(?i)\\A[\\s\\p{Z}\\uFEFF]*(Chapter\\s+\\d+|Translator:|Editor:|Read\\s+(at|on|latest))[^\\n\\r]*", "")
         .removeAds()
         .removeHiddenContent()
         .trim()

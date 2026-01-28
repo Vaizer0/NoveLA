@@ -64,7 +64,7 @@ class NovelBin(private val networkClient: NetworkClient) : SourceInterface.Catal
             list = elements("ul.list-chapter li a"),
             title = attr("title", "a"),
             content = text("#chr-content")
-                .removeElementsDOM("script", ".ads")
+                .removeElementsDOM("script", ".ads", "h3")
                 .applyStandardContentTransforms(baseUrl)
         ),
 
