@@ -15,17 +15,14 @@ internal suspend fun textToItemsConverter(
     text: String
 ): List<ReaderItem> = withContext(Dispatchers.Default) {
 
-    // 1. Очистка текста.
-    // Удаляем HTML теги, но НЕ нормализуем все пробелы в один,
-    // чтобы не убить \n\n (границы абзацев).
     val cleanText = text
-        .replace(Regex("<(?!(img|/img))[^>]*>"), "") // Удаляем все теги, кроме img
-        .replace(Regex("[\\t\\p{Z}]+"), " ")      // Чистим только горизонтальные пробелы
+        .replace(Regex("<(?!(imgEntry|/imgEntry))[^>]*>"), "")
+        .replace("\r\n", "\n")
+        .replace("\u00A0", " ")
+        .replace(Regex("[ ]+"), " ")
 
-    // 2. Делим текст на логические блоки (абзацы и части длинных абзацев)
     val paragraphs = processTextIntoLogicalBlocks(cleanText)
 
-    // 3. Превращаем блоки в ReaderItem
     paragraphs.mapIndexed { position, paragraph ->
         async {
             generateITEM(
@@ -43,26 +40,26 @@ internal suspend fun textToItemsConverter(
     }.awaitAll()
 }
 
-/**
- * Разбивает текст на абзацы, а затем на части, соблюдая логические границы
- */
 private fun processTextIntoLogicalBlocks(text: String): List<String> {
     val result = mutableListOf<String>()
-    // Делим по двойному переносу (стандарт для абзацев)
-    val paragraphs = text.split(Regex("\\n\\n+")).filter { it.isNotBlank() }
 
-    for (paragraph in paragraphs) {
+    var splitResult = text.split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
+
+    // Если двойных переносов нет (ошибка парсинга), используем одиночные
+    if (splitResult.size <= 1 && text.contains("\n")) {
+        splitResult = text.split("\n").filter { it.isNotBlank() }
+    }
+
+    for (paragraph in splitResult) {
         val trimmedParagraph = paragraph.trim()
         if (trimmedParagraph.isEmpty()) continue
 
-        // Сохраняем отступ (indentation), если он был
         val firstNonSpace = paragraph.indexOfFirst { !it.isWhitespace() }
         val indentation = if (firstNonSpace > 0) paragraph.substring(0, firstNonSpace) else ""
 
         val subBlocks = splitParagraphRespectingLogicalBlocks(trimmedParagraph)
 
         if (subBlocks.isNotEmpty()) {
-            // Добавляем отступ только к первому под-блоку разделившегося абзаца
             result.add(indentation + subBlocks[0])
             if (subBlocks.size > 1) {
                 result.addAll(subBlocks.subList(1, subBlocks.size))
@@ -72,13 +69,8 @@ private fun processTextIntoLogicalBlocks(text: String): List<String> {
     return result
 }
 
-/**
- * Умное разделение длинного абзаца.
- * Гарантирует, что кавычки и скобки не будут разорваны.
- */
 private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<String> {
-    // Если абзац короткий или это техническая запись изображения — не трогаем
-    if (paragraph.length <= 512 || paragraph.contains("imgEntry")) {
+    if (paragraph.length <= 600 || paragraph.contains("imgEntry")) {
         return listOf(paragraph)
     }
 
@@ -96,46 +88,45 @@ private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<Strin
     for (char in paragraph) {
         currentChunk.append(char)
 
-        // Обновляем состояние контекста
         when (char) {
             in openingBrackets -> bracketDepth++
             in closingBrackets -> bracketDepth--
             in quotes -> quoteState = !quoteState
         }
 
-        // Мы в "безопасной зоне", если все скобки закрыты и кавычки парные
         val isSafeZone = bracketDepth <= 0 && !quoteState
 
         if (isSafeZone) {
-            // Приоритет 1: знаки препинания
-            if (char == '.' || char == '!' || char == '?' || char == ';') {
+            if (char == '.' || char == '!' || char == '?' || char == ';' || char == ':') {
                 safeSplitIndexInChunk = currentChunk.length
             }
-            // Приоритет 2: пробел после длинного текста
-            else if (char == ' ' && currentChunk.length >= 350) {
+            else if (char == ' ' && currentChunk.length >= 400) {
                 safeSplitIndexInChunk = currentChunk.length
             }
         }
 
-        // Лимиты: 512 для нормального сплита, 1500 для аварийного (если кавычка не закрылась)
-        val isTooLong = currentChunk.length >= 1500
+        // Если превысили 600 с точкой или жесткий предел 2000
+        if ((currentChunk.length >= 600 && safeSplitIndexInChunk != -1) || currentChunk.length >= 2000) {
 
-        if ((currentChunk.length >= 512 && safeSplitIndexInChunk != -1) || isTooLong) {
-            val splitAt = if (safeSplitIndexInChunk != -1) safeSplitIndexInChunk else currentChunk.length
+            // Если безопасного индекса нет, ищем ближайший пробел с конца, чтобы не рвать слово
+            val splitAt = if (safeSplitIndexInChunk != -1) {
+                safeSplitIndexInChunk
+            } else {
+                val lastSpace = currentChunk.lastIndexOf(' ')
+                if (lastSpace != -1) lastSpace + 1 else currentChunk.length
+            }
 
             val chunkToTake = currentChunk.substring(0, splitAt).trim()
             if (chunkToTake.isNotEmpty()) {
                 result.add(chunkToTake)
             }
 
-            // Создаем новый чанк из остатка
             val remaining = if (splitAt < currentChunk.length) {
                 currentChunk.substring(splitAt).trimStart()
             } else ""
 
             currentChunk = StringBuilder(remaining)
 
-            // Пересчитываем глубину для остатка (важно для корректного продолжения цикла)
             bracketDepth = countUnbalancedBrackets(remaining, openingBrackets, closingBrackets)
             quoteState = countQuotes(remaining, quotes) % 2 != 0
             safeSplitIndexInChunk = -1
@@ -185,5 +176,11 @@ private fun generateITEM(
         )
     }
 } catch (e: Exception) {
-    ReaderItem.Body(chapterUrl, chapterIndex, chapterItemPosition, text, location)
+    ReaderItem.Body(
+        chapterUrl = chapterUrl,
+        chapterIndex = chapterIndex,
+        chapterItemPosition = chapterItemPosition,
+        text = text,
+        location = location
+    )
 }

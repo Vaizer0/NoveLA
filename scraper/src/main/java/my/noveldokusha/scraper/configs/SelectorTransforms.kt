@@ -127,7 +127,7 @@ fun SelectorRule.applyStandardContentTransforms(baseUrl: String): SelectorRule =
     this.normalizeUnicode()
         .regexReplace("(?i)${baseUrl.removePrefix("https://").removePrefix("www.").removeSuffix("/")}.*?\\n", "")
         .regexReplace("(?i)\\A[\\s\\p{Z}\\uFEFF]*((Глава\\s+\\d+|Chapter\\s+\\d+)[^\\n\\r]*[\\n\\r\\s]*)+", "")
-        .regexReplace("(?im)^\\s*(Переводчик|Редактор|Аннотация|Сайт|Источник|Студия|Студия\\s+Нёи-Бо|Nyoi-Bo\\s+Studio)[:\\s][^\\n\\r]{0,70}(\\r?\\n|$)", "")
+        .regexReplace("(?im)^\\s*(Перевод|Переводчик|Редакция|Редактор|Аннотация|Сайт|Источник|Студия|Студия\\\\s+Нёи-Бо|Nyoi-Bo\\\\s+Studio)[:\\s][^\\n\\r]{0,70}(\\r?\\n|$)", "")
         .regexReplace("(?im)^\\s*(Translator|Editor|Proofreader|Read\\s+(at|on|latest))[:\\s][^\\n\\r]{0,70}(\\r?\\n|$)", "")
         .removeHiddenContent()
         .trim()
