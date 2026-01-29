@@ -110,20 +110,29 @@ private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<Strin
 
             // Если безопасного индекса нет, ищем ближайший пробел с конца, чтобы не рвать слово
             val splitAt = if (safeSplitIndexInChunk != -1) {
-                safeSplitIndexInChunk
+                safeSplitIndexInChunk.coerceAtMost(currentChunk.length)
             } else {
                 val lastSpace = currentChunk.lastIndexOf(' ')
-                if (lastSpace != -1) lastSpace + 1 else currentChunk.length
+                if (lastSpace != -1) (lastSpace + 1).coerceAtMost(currentChunk.length) else currentChunk.length
             }
 
-            val chunkToTake = currentChunk.substring(0, splitAt).trim()
+            // Проверяем, что индекс в допустимом диапазоне перед вызовом substring
+            val chunkToTake = if (splitAt > 0 && splitAt <= currentChunk.length) {
+                currentChunk.substring(0, splitAt).trim()
+            } else {
+                currentChunk.toString().trim()
+            }
             if (chunkToTake.isNotEmpty()) {
                 result.add(chunkToTake)
             }
 
-            val remaining = if (splitAt < currentChunk.length) {
+            val remaining = if (splitAt > 0 && splitAt < currentChunk.length) {
                 currentChunk.substring(splitAt).trimStart()
-            } else ""
+            } else if (splitAt >= currentChunk.length) {
+                ""
+            } else {
+                currentChunk.toString().trimStart()
+            }
 
             currentChunk = StringBuilder(remaining)
 

@@ -254,6 +254,20 @@ internal class ReaderTextToSpeech(
     }
 
     @Synchronized
+    fun scrollToCurrentSpeakingItem() {
+        coroutineScope.launch {
+            val currentItemPos = currentTextPlaying.value.itemPos
+            val itemIndex = indexOfReaderItem(
+                list = items,
+                chapterIndex = currentItemPos.chapterIndex,
+                chapterItemPosition = currentItemPos.chapterItemPosition,
+            )
+            val item = items.getOrNull(itemIndex) ?: return@launch
+            scrollToReaderItem.emit(item)
+        }
+    }
+
+    @Synchronized
     private fun playFirstVisibleItem() {
         stop()
         start()

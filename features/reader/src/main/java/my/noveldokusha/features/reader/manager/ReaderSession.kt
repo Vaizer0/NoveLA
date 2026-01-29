@@ -218,18 +218,20 @@ internal class ReaderSession(
                 }
         }
 
+        // Обновляем позицию при воспроизведении для сохранения в базу данных
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
-                .filter { it.playState == Utterance.PlayState.PLAYING }
+                .filter { it.playState == Utterance.PlayState.PLAYING || it.playState == Utterance.PlayState.LOADING }
                 .filter { savePositionMode.value == SavePositionMode.Speaking }
                 .collect { saveLastReadPositionStateSpeaker(it.itemPos) }
         }
 
+        // Отмечаем начало и конец главы при воспроизведении
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
-                .filter { it.playState == Utterance.PlayState.PLAYING }
+                .filter { it.playState == Utterance.PlayState.PLAYING || it.playState == Utterance.PlayState.LOADING }
                 .filter { savePositionMode.value == SavePositionMode.Speaking }
                 .collect {
                     val item = it.itemPos
@@ -239,6 +241,19 @@ internal class ReaderSession(
                         ReaderItem.Location.LAST -> markChapterEndAsSeen(chapterUrl = item.chapterUrl)
                         ReaderItem.Location.MIDDLE -> Unit
                     }
+                }
+        }
+
+        // Автоматически прокручиваем к текущему элементу при воспроизведении для обеспечения слежения за прогрессом TTS
+        scope.launch(Dispatchers.Main.immediate) {
+            readerTextToSpeech
+                .currentReaderItem
+                .filter { it.playState == Utterance.PlayState.PLAYING || it.playState == Utterance.PlayState.LOADING }
+                .filter { savePositionMode.value == SavePositionMode.Speaking }
+                .collect {
+                    // Добавляем задержку, чтобы избежать слишком частых прокруток
+                    kotlinx.coroutines.delay(500) // Полсекунды задержка
+                    readerTextToSpeech.scrollToCurrentSpeakingItem()
                 }
         }
     }
@@ -256,14 +271,22 @@ internal class ReaderSession(
 
     fun close() {
         readerChaptersLoader.coroutineContext.cancelChildren()
-        when (savePositionMode.value) {
-            SavePositionMode.Reading -> readerRepository.saveBookLastReadPositionState(
-                bookUrl,
-                currentChapter
-            )
-            SavePositionMode.Speaking -> saveLastReadPositionStateSpeaker(
+        // Ensure we save the latest TTS position regardless of the savePositionMode
+        // because the speaking state might not be properly reflected at the moment of closing
+        if (readerTextToSpeech.isActive.value) {
+            saveLastReadPositionStateSpeaker(
                 item = readerTextToSpeech.currentTextPlaying.value.itemPos
             )
+        } else {
+            when (savePositionMode.value) {
+                SavePositionMode.Reading -> readerRepository.saveBookLastReadPositionState(
+                    bookUrl,
+                    currentChapter
+                )
+                SavePositionMode.Speaking -> saveLastReadPositionStateSpeaker(
+                    item = readerTextToSpeech.currentTextPlaying.value.itemPos
+                )
+            }
         }
         readerTextToSpeech.onClose()
         scope.coroutineContext.cancelChildren()

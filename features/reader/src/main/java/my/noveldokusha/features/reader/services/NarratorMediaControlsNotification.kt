@@ -278,4 +278,20 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         mediaSession = null
         scope.cancel()
     }
+
+    fun createDefaultNotification(context: Context): Notification {
+        return notificationsCenter.showNotification(
+            channelId = channelId,
+            channelName = channelName,
+            notificationId = notificationId,
+            importance = NotificationManager.IMPORTANCE_LOW
+        ) {
+            title = context.getString(R.string.app_name)
+            text = context.getString(R.string.notification_channel_name_reader_narrator)
+            setOngoing(true)
+            setCategory(NotificationCompat.CATEGORY_SERVICE)
+            priority = NotificationCompat.PRIORITY_LOW
+            setSmallIcon(R.drawable.ic_media_control_play)
+        }.build()
+    }
 }
