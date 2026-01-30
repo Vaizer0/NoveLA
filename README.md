@@ -62,16 +62,14 @@ Copyright © 2023, [nani](https://github.com/HnDK0), распространяе�
 | ![](screenshots/Screenshot_Library.png) | ![](screenshots/Screenshot_Finder.png) |
 | Книга | Глава |
 | ![](screenshots/Screenshot_book.png) | ![](screenshots/Screenshot_Chapter.png) |
-| Настройки главы | Перевод главы |
-| ![](screenshots/Screenshot_Chapter_option.png) | ![](screenshots/Screenshot_Chapter_Translate.png) |
-| Озвучка главы | Добавление по URL |
-| ![](screenshots/Screenshot_Chapter_Voice.png) | ![](screenshots/Screenshot_Add_by_URLs.png) |
-| Глобальный поиск | Настройки |
-| ![](screenshots/Screenshot_Global_Search.png) | ![](screenshots/Screenshot_settings.png) |
-| Обход CloudFlare | Настройки regex |
-| ![](screenshots/Screenshot_CF_Turnstile.png) | ![](screenshots/Screenshot_settings_regex_.png) |
-| Очистка текста regex | |
-| ![](screenshots/Screenshot_regex_Cleanup.png) | |
+| Перевод главы | Озвучка главы |
+| ![](screenshots/Screenshot_Chapter_Translate.png) | ![](screenshots/Screenshot_Chapter_Voice.png) |
+| Добавление по URL | Глобальный поиск |
+| ![](screenshots/Screenshot_Add_by_URLs.png) | ![](screenshots/Screenshot_Global_Search.png) |
+| Настройки | Обход CloudFlare |
+| ![](screenshots/Screenshot_settings.png) | ![](screenshots/Screenshot_CF_Turnstile.png) |
+| Настройки regex | Очистка текста regex |
+| ![](screenshots/Screenshot_settings_regex_.png) | ![](screenshots/Screenshot_regex_Cleanup.png) |
 
 ## Технологический стек
 - Kotlin
