@@ -36,6 +36,7 @@ import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
 import my.noveldokusha.settings.sections.SettingsTranslationModels
+import my.noveldokusha.settings.sections.SettingsRegexCleanup
 
 @Composable
 internal fun SettingsScreenBody(
@@ -55,6 +56,7 @@ internal fun SettingsScreenBody(
     onGeminiModelChange: (String) -> Unit,
     onPreferOnlineChange: (Boolean) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
+    onNavigateToRegexCleanup: () -> Unit,
 ) {
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
@@ -109,6 +111,10 @@ internal fun SettingsScreenBody(
                 onPreferOnlineChange = onPreferOnlineChange
             )
         }
+        HorizontalDivider()
+        SettingsRegexCleanup(
+            onNavigateToRegexCleanup = onNavigateToRegexCleanup
+        )
         HorizontalDivider()
         LibraryAutoUpdate(state = state.libraryAutoUpdate)
         HorizontalDivider()
@@ -186,6 +192,7 @@ private fun Preview() {
                 onGeminiModelChange = { },
                 onPreferOnlineChange = { },
                 onLanguageChange = { },
+                onNavigateToRegexCleanup = { },
             )
         }
     }

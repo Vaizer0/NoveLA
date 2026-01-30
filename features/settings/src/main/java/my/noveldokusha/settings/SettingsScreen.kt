@@ -8,7 +8,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -31,6 +31,8 @@ fun SettingsScreen(
         flingAnimationSpec = null
     )
 
+    var currentScreen by remember { mutableStateOf("main") }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
@@ -52,25 +54,39 @@ fun SettingsScreen(
             }
         },
         content = { innerPadding ->
-            SettingsScreenBody(
-                state = viewModel.state,
-                onFollowSystem = viewModel::onFollowSystemChange,
-                onThemeSelected = viewModel::onThemeChange,
-                onCleanDatabase = viewModel::cleanDatabase,
-                onCleanImageFolder = viewModel::cleanImagesFolder,
-                onMassAddDelayChange = viewModel::onMassAddDelayChange,
-                onBackupData = onBackupCreate(),
-                onRestoreData = onBackupRestore(),
-                onDownloadTranslationModel = viewModel::downloadTranslationModel,
-                onRemoveTranslationModel = viewModel::removeTranslationModel,
-                onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
-                onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
-                onGeminiModelChange = viewModel::onGeminiModelChange,
-                onPreferOnlineChange = viewModel::onPreferOnlineTranslationChange,
-                onLanguageChange = viewModel::onLanguageChange,
-                modifier = Modifier.padding(innerPadding),
-            )
+            when (currentScreen) {
+                "main" -> SettingsScreenBody(
+                    state = viewModel.state,
+                    onFollowSystem = viewModel::onFollowSystemChange,
+                    onThemeSelected = viewModel::onThemeChange,
+                    onCleanDatabase = viewModel::cleanDatabase,
+                    onCleanImageFolder = viewModel::cleanImagesFolder,
+                    onMassAddDelayChange = viewModel::onMassAddDelayChange,
+                    onBackupData = onBackupCreate(),
+                    onRestoreData = onBackupRestore(),
+                    onDownloadTranslationModel = viewModel::downloadTranslationModel,
+                    onRemoveTranslationModel = viewModel::removeTranslationModel,
+                    onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
+                    onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
+                    onGeminiModelChange = viewModel::onGeminiModelChange,
+                    onPreferOnlineChange = viewModel::onPreferOnlineTranslationChange,
+                    onLanguageChange = viewModel::onLanguageChange,
+                    onNavigateToRegexCleanup = {
+                        currentScreen = "regex-cleanup"
+                    },
+                    modifier = Modifier.padding(innerPadding),
+                )
+                "regex-cleanup" -> {
+                    val regexCleanupViewModel: RegexCleanupSettingsViewModel = viewModel()
+                    RegexCleanupSettingsScreen(
+                        viewModel = regexCleanupViewModel,
+                        onNavigateBack = {
+                            currentScreen = "main"
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+            }
         }
     )
 }
-

@@ -259,4 +259,7 @@
     <string name="cloudflare_bypass">Обход Cloudflare</string>
     <string name="cloudflare_bypass_description">Включить автоматическое решение вызовов Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">Настройка обхода Cloudflare будет применена после перезапуска приложения</string>
+    <string name="regex_cleanup">Очистка текста с помощью регулярных выражений</string>
+    <string name="regex_cleanup_manage_rules">Управление правилами регулярных выражений</string>
+    <string name="regex_cleanup_manage_description">Настроить шаблоны регулярных выражений для очистки текста в главах</string>
 </resources>

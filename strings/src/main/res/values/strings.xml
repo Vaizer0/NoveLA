@@ -269,4 +269,23 @@
     <string name="cloudflare_challenge_timeout">Challenge timeout</string>
     <string name="timeout_seconds">Timeout (seconds)</string>
     <string name="seconds_format">%d seconds</string>
+    <string name="regex_cleanup">Regex Text Cleanup</string>
+    <string name="regex_cleanup_manage_rules">Manage regex rules</string>
+    <string name="regex_cleanup_manage_description">Configure regex patterns for cleaning up text in chapters</string>
+    <string name="pattern">Pattern</string>
+    <string name="replacement">Replacement</string>
+    <string name="edit_rule">Edit Rule</string>
+    <string name="move_up">Move up</string>
+    <string name="move_down">Move down</string>
+    <string name="add_new_rule">Add New Rule</string>
+    <string name="enter_regex_pattern">Enter regex pattern</string>
+    <string name="enter_replacement_text">Enter replacement text</string>
+    <string name="invalid_regex_pattern">Invalid regex pattern</string>
+    <string name="save">Save</string>
+    <string name="cancel_editing">Cancel editing</string>
+    <string name="go_back">Go back</string>
+    <string name="manage_regex_rules_description">Manage regex rules for cleaning up text in chapters</string>
+    <string name="no_regex_rules_yet">No regex rules yet. Add your first rule!</string>
+    <string name="delete_rule">Delete Rule</string>
+    <string name="delete_rule_confirmation">Are you sure you want to delete this regex rule?\n\nPattern: %s</string>
 </resources>

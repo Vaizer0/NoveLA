@@ -29,6 +29,7 @@ import my.noveldokusha.core.SharedPreference_Int
 import my.noveldokusha.core.SharedPreference_Serializable
 import my.noveldokusha.core.SharedPreference_String
 import my.noveldokusha.core.SharedPreference_StringSet
+import my.noveldokusha.core.models.RegexRule
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -237,6 +238,18 @@ class AppPreferences @Inject constructor(
 
     val LIBRARY_CUSTOM_CATEGORIES = object : Preference<List<String>>("LIBRARY_CUSTOM_CATEGORIES") {
         override var value by SharedPreference_Serializable<List<String>>(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = listOf(),
+            encode = { Json.encodeToString(it) },
+            decode = { Json.decodeFromString(it) }
+        )
+    }
+
+    val USER_REGEX_CLEANUP_RULES = object : Preference<List<RegexRule>>(
+        "USER_REGEX_CLEANUP_RULES"
+    ) {
+        override var value by SharedPreference_Serializable<List<RegexRule>>(
             name = name,
             sharedPreferences = preferences,
             defaultValue = listOf(),

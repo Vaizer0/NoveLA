@@ -118,6 +118,7 @@ internal class ReaderSession(
         readerState = ReaderState.INITIAL_LOAD,
         readerViewHandlersActions = readerViewHandlersActions,
         chapterTranslationDao = chapterTranslationDao,
+        regexRulesProvider = { appPreferences.USER_REGEX_CLEANUP_RULES.value },
     ).also {
         // Connect the translation refresh callback to clear chapter cache
         readerLiveTranslation.onClearChapterCache = { it.clearTranslationCache() }

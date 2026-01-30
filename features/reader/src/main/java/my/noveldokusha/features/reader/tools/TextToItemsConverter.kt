@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.BookTextMapper
+import my.noveldokusha.core.models.RegexRule
 import my.noveldokusha.features.reader.domain.ImgEntry
 import my.noveldokusha.features.reader.domain.ReaderItem
 
@@ -12,7 +13,8 @@ internal suspend fun textToItemsConverter(
     chapterUrl: String,
     chapterIndex: Int,
     chapterItemPositionDisplacement: Int,
-    text: String
+    text: String,
+    userRegexRules: List<RegexRule> = emptyList()
 ): List<ReaderItem> = withContext(Dispatchers.Default) {
 
     val cleanText = text
@@ -21,7 +23,10 @@ internal suspend fun textToItemsConverter(
         .replace("\u00A0", " ")
         .replace(Regex("[ ]+"), " ")
 
-    val paragraphs = processTextIntoLogicalBlocks(cleanText)
+    // Применение пользовательских regex-правил
+    val processedText = applyUserRegexRules(cleanText, userRegexRules)
+
+    val paragraphs = processTextIntoLogicalBlocks(processedText)
 
     paragraphs.mapIndexed { position, paragraph ->
         async {
@@ -159,6 +164,19 @@ private fun countUnbalancedBrackets(str: String, open: Set<Char>, close: Set<Cha
 }
 
 private fun countQuotes(str: String, quotes: Set<Char>): Int = str.count { it in quotes }
+
+private fun applyUserRegexRules(text: String, rules: List<RegexRule>): String {
+    var result = text
+    rules.forEach { rule ->
+        try {
+            val regex = Regex(rule.pattern)
+            result = result.replace(regex, rule.replacement)
+        } catch (e: Exception) {
+            println("Failed to apply user regex rule: ${e.message}, pattern: ${rule.pattern}")
+        }
+    }
+    return result
+}
 
 private fun generateITEM(
     chapterUrl: String,

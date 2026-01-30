@@ -38,6 +38,7 @@ internal class ReaderChaptersLoader(
     @Volatile var readerState: ReaderState,
     private val readerViewHandlersActions: ReaderViewHandlersActions,
     private val chapterTranslationDao: ChapterTranslationDao,
+    private val regexRulesProvider: () -> List<my.noveldokusha.core.models.RegexRule> = { emptyList() },
 ) : CoroutineScope {
 
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Main.immediate
@@ -196,12 +197,13 @@ internal class ReaderChaptersLoader(
             try {
                 val res = readerRepository.downloadChapter(nextChapter.url)
                 if (res is Response.Success) {
-                    val itemsOriginal = textToItemsConverter(
-                        chapterUrl = nextChapter.url,
-                        chapterIndex = nextIndex,
-                        chapterItemPositionDisplacement = 0,
-                        text = res.data,
-                    )
+                val itemsOriginal = textToItemsConverter(
+                    chapterUrl = nextChapter.url,
+                    chapterIndex = nextIndex,
+                    chapterItemPositionDisplacement = 0,
+                    text = res.data,
+                    userRegexRules = regexRulesProvider(),
+                )
                     
                     val textsToTranslate = itemsOriginal.filterIsInstance<ReaderItem.Body>()
                         .map { it.text }
@@ -540,6 +542,7 @@ internal class ReaderChaptersLoader(
                     chapterIndex = chapterIndex,
                     chapterItemPositionDisplacement = chapterItemPosition,
                     text = res.data,
+                    userRegexRules = regexRulesProvider(),
                 )
                 chapterItemPosition += itemsOriginal.size
 
