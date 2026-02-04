@@ -1,88 +1,55 @@
 # Novela
 
-Android-приложение для чтения веб-новелл. Приложение ориентировано на простоту использования и максимальное погружение в процесс чтения. Поиск по большому каталогу контента, выбор понравившегося и наслаждение чтением.
+Android application for reading web novels. The app focuses on ease of use and maximum immersion. Search through a large catalog of content, pick what you like, and enjoy reading.
 
-> **Примечание**: Это любительский форк проекта [NovelDokusha](https://github.com/nanihadesuka/NovelDokusha), который больше не поддерживается активно. Данный форк содержит дополнительные улучшения и исправления. Любые улучшения приветствуются!
+[🇷🇺 Русская версия](README_RU.md)
 
-## Лицензия
-Copyright © 2023, [nani](https://github.com/HnDK0), распространяется под лицензией [GPL-3](LICENSE) FOSS
+> **Note**: This is an amateur fork of the [NovelDokusha](https://github.com/nanihadesuka/NovelDokusha) project, which is no longer actively maintained. This fork contains additional improvements and fixes. Any improvements are welcome!
 
-## Особенности
+## License
+Copyright © 2023, [nani](https://github.com/HnDK0), distributed under the [GPL-3](LICENSE) FOSS license.
 
-- **Поддержка перевода Gemini** - Перевод в реальном времени с помощью искусственного интеллекта Google Gemini
-- **Бесплатный перевод через Google API** - Live перевод от Google бесплатно
-- **Несколько источников** для чтения новелл:
-  - **Китайские источники**
-    - 69书吧
-    - Twkan
-    - Ttkan
-  - **Русские источники**
-    - Jaomix
-    - RanobeLib
-    - RanobeHub
-    - Свободный Мир Ранобэ
-    - BookHamster
-  - **Англоязычные источники**
-    - FreeWebNovel
-    - NovelFull
-    - NovelBin
-    - Royal Road
-    - Scribble Hub
-    - AllNovel
-    - BacaLightnovel
-    - NoBadNovel
-    - NovelBuddy
-    - NovelFire
-    - NovelHall
-    - Novelku
-    - NovLove
-    - ReadNovelFull
-    - WuxiaWorld
-  - **Локальный источник** для чтения локальных EPUB-файлов
-- **Несколько баз данных** для поиска новелл
-- **Добавление новел по ссылке** - Возможность добавлять новеллы в библиотеку напрямую по URL-адресу
-- **Простое резервное копирование и восстановление**
-- **Светлая и темная темы**
-- Следует современным рекомендациям **Material 3**
-- **Расширенные возможности чтения**:
-  - Бесконечная прокрутка
-  - Пользовательский шрифт и размер текста
-  - **Live перевод** с помощью Gemini AI или Google API
-  - **Озвучка текста**:
-    - Воспроизведение в фоновом режиме
-    - Настройка голоса, высоты тона, скорости
-    - Сохранение предпочтительных голосов
-- **Автоматический обход Cloudflare** - Беспрепятственный доступ к защищенным источникам
-- **Очистка текста с помощью регулярных выражений** - Возможность создания и применения пользовательских регулярных выражений для очистки и форматирования текста глав перед чтением
+## Features
 
-## Скриншоты
+- **Gemini Translation Support** - Real-time translation with Google Gemini AI
+- **Free translation via Google API** - Live translation from Google for free
+- **Multiple sources**:
+  - **Chinese sources**: 69书吧, Twkan, Ttkan
+  - **Russian sources**: Jaomix, RanobeLib, RanobeHub, Свободный Мир Ранобэ, BookHamster
+  - **English sources**: FreeWebNovel, NovelFull, NovelBin, Royal Road, Scribble Hub, AllNovel, NoBadNovel, NovelBuddy, NovelFire, NovelHall, NovLove, ReadNovelFull, WuxiaWorld
+  - **Indonesian sources**: BacaLightnovel, Novelku
+  - **Local source** for reading local EPUB files
+- **Multiple databases** for novel search
+- **Add novels by link** - Ability to add novels directly by URL
+- **Simple backup and restore**
+- **Light and dark themes** (Material 3)
+- **Advanced reading features**:
+  - Infinite scrolling
+  - Custom font and text size
+  - **Live translation** using Gemini AI or Google API
+  - **Text-to-speech**: Background playback, voice/pitch/speed adjustments
+- **Automatic Cloudflare bypass**
+- **Text cleanup using regular expressions**
 
-| Библиотека | Источники |
+## Screenshots
+
+| Library | Sources |
 |:----------:|:-----:|
 | ![](screenshots/Screenshot_Library.png) | ![](screenshots/Screenshot_Finder.png) |
-| Книга | Глава |
+| Book | Chapter |
 | ![](screenshots/Screenshot_book.png) | ![](screenshots/Screenshot_Chapter.png) |
-| Перевод главы | Озвучка главы |
+| Translation | Voice |
 | ![](screenshots/Screenshot_Chapter_Translate.png) | ![](screenshots/Screenshot_Chapter_Voice.png) |
-| Добавление по URL | Глобальный поиск |
+| Add by URL | Global Search |
 | ![](screenshots/Screenshot_Add_by_URLs.png) | ![](screenshots/Screenshot_Global_Search.png) |
-| Настройки | Обход CloudFlare |
+| Settings | CloudFlare Bypass |
 | ![](screenshots/Screenshot_settings.png) | ![](screenshots/Screenshot_CF_Turnstile.png) |
-| Настройки regex | Очистка текста regex |
+| Regex settings | Regex cleanup |
 | ![](screenshots/Screenshot_settings_regex_.png) | ![](screenshots/Screenshot_regex_Cleanup.png) |
 
-## Технологический стек
-- Kotlin
-- XML views
-- Jetpack Compose
-- Material 3
-- Coroutines
-- LiveData
-- Room (SQLite) для хранения данных
-- Jsoup
-- OkHttp
-- Coil, Glide
-- Gson, Moshi
-- Google MLKit для перевода
-- Android TTS
-- Android media (управление уведомлениями воспроизведения TTS)
+## Tech Stack
+- Kotlin, XML views, Jetpack Compose
+- Material 3, Coroutines, LiveData
+- Room (SQLite), Jsoup, OkHttp
+- Coil, Glide, Gson, Moshi
+- Google MLKit, Android TTS, Android media
