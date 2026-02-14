@@ -194,7 +194,7 @@ suspend fun getCatalogSearch(
 
         Timber.d("ScraperHelpers: Final search items count: ${books.size}")
 
-        val isLastPage = books.isEmpty()
+        val isLastPage = books.isEmpty() || config.searchNoPagination
         val pagedList = PagedList(list = books, index = index, isLastPage = isLastPage)
 
         // Convert relative URLs to absolute URLs

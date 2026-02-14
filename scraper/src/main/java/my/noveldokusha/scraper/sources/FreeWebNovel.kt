@@ -63,6 +63,9 @@ class FreeWebNovel(private val networkClient: NetworkClient) : SourceInterface.C
         chapterPaginationType = ChapterPaginationType.NONE,
         chapterPaginationConfig = null,
 
+        // No pagination for search - all results returned in single page
+        searchNoPagination = true,
+
         postSearchEnabled = true,
         postSearchUrl = "$baseUrl/search",
         postSearchDataBuilder = { query -> mapOf("searchkey" to query) },

@@ -40,6 +40,9 @@ data class HtmlSelectors(
     // Cloudflare bypass
     val cloudflareConfig: CloudflareConfig? = null,
 
+    // Search pagination - true if search returns all results in single page (no pagination)
+    val searchNoPagination: Boolean = false,
+
     // URL builders (unchanged)
     val buildCatalogUrl: (Int) -> String,
     val buildSearchUrl: (Int, String) -> String,
