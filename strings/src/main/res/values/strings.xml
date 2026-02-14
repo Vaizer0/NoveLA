@@ -288,4 +288,5 @@
     <string name="no_regex_rules_yet">No regex rules yet. Add your first rule!</string>
     <string name="delete_rule">Delete Rule</string>
     <string name="delete_rule_confirmation">Are you sure you want to delete this regex rule?\n\nPattern: %s</string>
+    <string name="regex_cleanup_quick_access">Regex Text Cleanup</string>
 </resources>

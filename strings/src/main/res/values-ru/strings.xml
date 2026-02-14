@@ -278,4 +278,5 @@
     <string name="no_regex_rules_yet">Правила регулярных выражений еще не добавлены. Добавьте первое правило!</string>
     <string name="delete_rule">Удалить правило</string>
     <string name="delete_rule_confirmation">Вы уверены, что хотите удалить это правило регулярного выражения?\n\nШаблон: %s</string>
+    <string name="regex_cleanup_quick_access">Очистка текста (Regex)</string>
 </resources>
