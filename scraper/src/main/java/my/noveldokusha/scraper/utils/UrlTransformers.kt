@@ -111,6 +111,18 @@ object UrlTransformers {
     }
 
     /**
+     * Jaomix cover transformer
+     * Removes -150x150 suffix from cover URLs to get full size images
+     */
+    fun jaomixCoverUrl(): (String, String) -> String = { coverUrl, _ ->
+        when {
+            coverUrl.isBlank() -> ""
+            coverUrl.contains("-150x150") -> coverUrl.replace("-150x150", "")
+            else -> coverUrl
+        }
+    }
+
+    /**
      * Image proxy transformer using weserv.nl
      * Useful for sources that need image proxying
      */
