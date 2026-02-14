@@ -5,13 +5,11 @@ import my.noveldokusha.network.*
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.configs.*
-import my.noveldokusha.scraper.domain.ChapterResult
 import my.noveldokusha.scraper.helpers.*
 import my.noveldokusha.scraper.utils.UrlTransformers
 import my.noveldokusha.scraper.configs.elements
 import my.noveldokusha.scraper.configs.text
 import my.noveldokusha.scraper.configs.attr
-import timber.log.Timber
 import org.jsoup.nodes.Document
 
 class NovelFire(
@@ -61,60 +59,29 @@ class NovelFire(
         chapters = ChapterSelectors(
             list = elements("a[href*='/chapter-']"),
             title = text("a"),
-            content = text("#content, .chapter-content")
-                .removeElementsDOM("script", "nav", ".ads", ".advertisement", ".disqus", ".comments")
+            content = text("#content, .chapter-content, div.entry-content")
+                .removeElementsDOM("script", "nav", ".ads", ".advertisement", ".disqus", ".comments", ".c-message", ".nav-next", ".nav-previous")
                 .applyStandardContentTransforms(baseUrl)
         ),
 
-        chapterPaginationType = ChapterPaginationType.AJAX_BASED,
-ajaxChapterListProvider = { bookUrl, networkClient ->
-    try {
-        // Get the book page to extract post_id
-        val bookDoc = networkClient.get(bookUrl).toDocument()
-
-        // Find the element with report-post_id attribute
-        val reportElement = bookDoc.selectFirst("#novel-report")
-        val postId = reportElement?.attr("report-post_id")
-
-        if (postId.isNullOrEmpty()) {
-            emptyList()
-        } else {
-            // Make AJAX request to get chapters
-            val ajaxUrl = "$baseUrl/listChapterDataAjax?post_id=$postId"
-
-            val response = networkClient.get(ajaxUrl)
-            val jsonResponse = response.body.string()
-
-            // Parse JSON response manually
-            val chapters = mutableListOf<ChapterResult>()
-
-            // Simple regex to extract chapter data from JSON
-            val chapterRegex = Regex("\"n_sort\":(\\d+),\"slug\":\"([^\"]+)\",\"title\":\"([^\"]+)\"")
-            chapterRegex.findAll(jsonResponse).forEach { match ->
-                val chapterNumber = match.groups[1]?.value ?: return@forEach
-                val slug = match.groups[2]?.value ?: return@forEach
-                val title = match.groups[3]?.value?.replace("\\\"", "\"") ?: return@forEach
-
-                chapters.add(
-                    ChapterResult(
-                        title = title,
-                        url = "$baseUrl/book/${bookUrl.substringAfterLast("/")}/chapter-$chapterNumber"
-                    )
-                )
-            }
-
-            // Сортируем главы по номеру главы (от 1 до N)
-            chapters.sortedBy { chapterResult ->
-                // Извлекаем номер главы из URL для сортировки
-                val chapterNum = Regex("chapter-(\\d+)").find(chapterResult.url)?.groupValues?.get(1)?.toIntOrNull()
-                chapterNum ?: Int.MAX_VALUE // Если не удалось извлечь номер, ставим в конец
-            }
-        }
-    } catch (e: Exception) {
-        Timber.w("Failed to get chapters for NovelFire URL $bookUrl: ${e.message}")
-        emptyList()
-    }
-},
+        chapterPaginationType = ChapterPaginationType.PAGE_BASED,
+        chapterPaginationConfig = ChapterPaginationConfig(
+            maxPageExtractor = { doc ->
+                // Extract max page from pagination links like ".../chapters?page=48"
+                // Use .pagination class (ul.pagination) not nav.pagination
+                val lastPageLink = doc.select(".pagination a[href*='?page=']")
+                    .mapNotNull { 
+                        Regex("page=(\\d+)").find(it.attr("href"))?.groupValues?.get(1)?.toIntOrNull() 
+                    }
+                    .maxOrNull()
+                lastPageLink ?: 1
+            },
+            pageUrlBuilder = { bookUrl, page ->
+                val bookSlug = bookUrl.substringAfterLast("/")
+                "$baseUrl/book/$bookSlug/chapters?page=$page"
+            },
+            chapterSelector = "a[href*='/chapter-']"
+        ),
 
 
 
