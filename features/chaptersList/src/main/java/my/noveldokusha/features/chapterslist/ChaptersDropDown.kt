@@ -3,7 +3,6 @@ package my.noveldokusha.features.chapterslist
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenuItem
@@ -20,7 +19,6 @@ internal fun ChaptersDropDown(
     onSearchBookInDatabase: () -> Unit,
     onResumeReading: () -> Unit,
     onChangeCover: () -> Unit,
-    onOpenRegexSettings: () -> Unit,
 ) {
     if (!isLocalSource) DropdownMenuItem(
         onClick = openInBrowser,
@@ -64,18 +62,6 @@ internal fun ChaptersDropDown(
             Icon(
                 Icons.Filled.Image,
                 stringResource(R.string.change_cover),
-            )
-        }
-    )
-    DropdownMenuItem(
-        onClick = onOpenRegexSettings,
-        text = {
-            Text(text = stringResource(R.string.regex_cleanup_quick_access))
-        },
-        leadingIcon = {
-            Icon(
-                Icons.Outlined.CleaningServices,
-                stringResource(R.string.regex_cleanup_quick_access),
             )
         }
     )
