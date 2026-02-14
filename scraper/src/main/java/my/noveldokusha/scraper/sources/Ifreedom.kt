@@ -73,8 +73,7 @@ class Ifreedom(private val networkClient: NetworkClient) : SourceInterface.Catal
 
         buildCatalogUrl = { index -> "${baseUrl}vse-knigi/?sort=По+рейтингу&bpage=${index + 1}" },
         buildSearchUrl = { index, query ->
-            if (index == 0) "${baseUrl}vse-knigi/?searchname=$query&bpage=1"
-            else "" // Search only on first page
+            "${baseUrl}vse-knigi/?searchname=$query&bpage=${index + 1}"
         },
 
         transformBookUrl = UrlTransformers.standardBookUrl(baseUrl),
