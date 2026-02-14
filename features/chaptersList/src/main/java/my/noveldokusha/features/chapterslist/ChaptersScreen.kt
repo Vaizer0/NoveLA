@@ -343,7 +343,7 @@ internal fun ChaptersScreen(
                     )
                     AnimatedVisibility(visible = lazyListState.isAtTop(threshold = 100.dp).value) {
                         Text(
-                            text = stringResource(id = R.string.read),
+                            text = stringResource(id = R.string.resume_reading),
                             modifier = Modifier.padding(end = 8.dp)
                         )
                     }
