@@ -1,6 +1,7 @@
 package my.noveldokusha.scraper.utils
 
 import java.net.URI
+import java.net.URLEncoder
 
 /**
  * URL processing helper functions for scraper operations
@@ -148,11 +149,35 @@ fun extractSeriesId(url: String): String? {
 }
 
 /**
- * Normalize URL by fixing double slashes and other common URL issues
+ * Normalize URL by fixing double slashes and other common URL issues.
+ * This function also encodes query parameter values to handle special characters.
  */
 fun normalizeUrl(url: String): String {
     return try {
-        val uri = URI(url)
+        // Encode query string parameters if present to handle special characters
+        val queryStart = url.indexOf('?')
+        val encodedUrl = if (queryStart >= 0) {
+            val basePart = url.substring(0, queryStart)
+            val queryPart = url.substring(queryStart + 1)
+
+            // Split query into parameters and encode values
+            val encodedQuery = queryPart.split("&").joinToString("&") { param ->
+                val equalsIndex = param.indexOf('=')
+                if (equalsIndex >= 0) {
+                    val key = param.substring(0, equalsIndex)
+                    val value = param.substring(equalsIndex + 1)
+                    "$key=${URLEncoder.encode(value, "UTF-8")}"
+                } else {
+                    // No value, just key (rare but possible)
+                    param
+                }
+            }
+            "$basePart?$encodedQuery"
+        } else {
+            url
+        }
+
+        val uri = URI(encodedUrl)
 
         // Build normalized URL
         buildString {

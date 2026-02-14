@@ -29,6 +29,9 @@ class PagedListIteratorState<T>(
     private var index = 0
     private var job: Job? = null
 
+    // Храним хэш последней загруженной страницы для проверки дублирования
+    private var lastPageHash: Int? = null
+
     var state by mutableStateOf(IteratorState.IDLE)
     var error by mutableStateOf<Response.Error?>(null)
 
@@ -38,6 +41,7 @@ class PagedListIteratorState<T>(
         index = 0
         state = IteratorState.IDLE
         error = null
+        lastPageHash = null
     }
 
     fun reloadFailedLastLoad() {
@@ -65,8 +69,25 @@ class PagedListIteratorState<T>(
             if (!isActive) return@launch
             state = when (res) {
                 is Response.Success -> {
-                    list.addAll(res.data.list)
-                    if (res.data.hasNoNextPage) IteratorState.CONSUMED else IteratorState.IDLE
+                    val newItems = res.data.list
+
+                    // Защита от зацикливания:
+                    // 1. Если список пустой - завершаем пагинацию
+                    // 2. Если хэш совпадает с предыдущей страницей (дублирование) - завершаем
+                    when {
+                        newItems.isEmpty() -> {
+                            IteratorState.CONSUMED
+                        }
+                        lastPageHash != null && newItems.hashCode() == lastPageHash -> {
+                            // Обнаружено дублирование - не добавляем элементы, завершаем
+                            IteratorState.CONSUMED
+                        }
+                        else -> {
+                            lastPageHash = newItems.hashCode()
+                            list.addAll(newItems)
+                            if (res.data.hasNoNextPage) IteratorState.CONSUMED else IteratorState.IDLE
+                        }
+                    }
                 }
 
                 is Response.Error -> {
