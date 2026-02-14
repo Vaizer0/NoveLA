@@ -262,4 +262,20 @@
     <string name="regex_cleanup">Очистка текста с помощью регулярных выражений</string>
     <string name="regex_cleanup_manage_rules">Управление правилами регулярных выражений</string>
     <string name="regex_cleanup_manage_description">Настроить шаблоны регулярных выражений для очистки текста в главах</string>
+    <string name="pattern">Шаблон</string>
+    <string name="replacement">Замена</string>
+    <string name="edit_rule">Редактировать правило</string>
+    <string name="move_up">Переместить вверх</string>
+    <string name="move_down">Переместить вниз</string>
+    <string name="add_new_rule">Добавить новое правило</string>
+    <string name="enter_regex_pattern">Введите шаблон регулярного выражения</string>
+    <string name="enter_replacement_text">Введите текст замены</string>
+    <string name="invalid_regex_pattern">Неверный шаблон регулярного выражения</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel_editing">Отменить редактирование</string>
+    <string name="go_back">Назад</string>
+    <string name="manage_regex_rules_description">Управление правилами регулярных выражений для очистки текста в главах</string>
+    <string name="no_regex_rules_yet">Правила регулярных выражений еще не добавлены. Добавьте первое правило!</string>
+    <string name="delete_rule">Удалить правило</string>
+    <string name="delete_rule_confirmation">Вы уверены, что хотите удалить это правило регулярного выражения?\n\nШаблон: %s</string>
 </resources>
