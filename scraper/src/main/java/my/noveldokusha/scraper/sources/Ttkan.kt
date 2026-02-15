@@ -22,6 +22,7 @@ class Ttkan(private val networkClient: NetworkClient) : SourceInterface.Catalog 
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "ttkan"
     override val nameStrId = R.string.source_name_ttkan
@@ -56,7 +57,8 @@ class Ttkan(private val networkClient: NetworkClient) : SourceInterface.Catalog 
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("src", ".novel_info amp-img, .novel_info img"),
-            description = text(".description")
+            description = text(".description"),
+            latestChapterHash = text("button.btn_show_all_chapters").Clean()
         ),
 
         // Chapters selectors - will be overridden by AJAX

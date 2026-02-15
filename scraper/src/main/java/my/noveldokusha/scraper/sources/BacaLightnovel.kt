@@ -23,6 +23,7 @@ class BacaLightnovel(private val networkClient: NetworkClient) : SourceInterface
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "baca_lightnovel"
     override val nameStrId = R.string.source_name_baca_lightnovel
@@ -56,7 +57,8 @@ class BacaLightnovel(private val networkClient: NetworkClient) : SourceInterface
         book = BookSelectors(
             title = text("h1.entry-title").Clean(),
             cover = attr("src", ".sertothumb img"),
-            description = text(".entry-content")
+            description = text(".entry-content"),
+            latestChapterHash = text(".epcurlast").Clean()
         ),
 
         chapters = ChapterSelectors(

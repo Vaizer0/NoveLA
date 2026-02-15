@@ -133,6 +133,22 @@ class RanobeHub(private val networkClient: NetworkClient) : SourceInterface.Cata
                 data?.get("description")?.asString?.trim()?.replace(Regex("<[^>]*>"), "")
             }
         }
+    override suspend fun getChapterListHash(bookUrl: String): Response<String?> =
+        withContext(Dispatchers.Default) {
+            tryConnect {
+                val id = extractId(bookUrl) ?: return@tryConnect null
+                val url = "${apiBase}ranobe/$id/contents"
+                val volumes = networkClient.call(getRequest(url)).toJson()
+                    .asJsonObject.getAsJsonArray("volumes")
+
+                // Берём последний том
+                val lastVolume = volumes?.lastOrNull()?.asJsonObject
+                // Берём последнюю главу
+                val lastChapter = lastVolume?.getAsJsonArray("chapters")?.lastOrNull()?.asJsonObject
+                // Берём номер главы
+                lastChapter?.get("num")?.asString
+            }
+        }
 
     override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> =
         withContext(Dispatchers.Default) {

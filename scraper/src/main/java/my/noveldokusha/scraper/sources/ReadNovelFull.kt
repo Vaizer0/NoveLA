@@ -23,6 +23,7 @@ class ReadNovelFull(private val networkClient: NetworkClient) : SourceInterface.
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "read_novel_full"
     override val nameStrId = R.string.source_name_read_novel_full
@@ -56,7 +57,8 @@ class ReadNovelFull(private val networkClient: NetworkClient) : SourceInterface.
         book = BookSelectors(
             title = text("h3.title").Clean(),
             cover = attr("src", ".book img[src]"),
-            description = text("#tab-description")
+            description = text("#tab-description"),
+            latestChapterHash = attr("href", ".l-chapter a.chapter-title")
         ),
 
         chapters = ChapterSelectors(

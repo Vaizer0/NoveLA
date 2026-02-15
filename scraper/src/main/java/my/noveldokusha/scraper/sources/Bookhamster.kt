@@ -26,6 +26,7 @@ class Bookhamster(private val networkClient: NetworkClient) : SourceInterface.Ca
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     // Идентификаторы источника
     override val id = "bookhamster"
@@ -60,7 +61,8 @@ class Bookhamster(private val networkClient: NetworkClient) : SourceInterface.Ca
         book = BookSelectors(
             title = text("h1.entry-title").Clean(),
             cover = attr("src", "div.img-ranobe > img"),
-            description = attr("content", "meta[name=description]")
+            description = attr("content", "meta[name=description]"),
+            latestChapterHash = text(".data-value").Clean()
         ),
 
         chapters = ChapterSelectors(

@@ -22,6 +22,7 @@ class NovelFire(
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "novelfire"
     override val nameStrId = R.string.source_name_novelfire
@@ -53,7 +54,8 @@ class NovelFire(
             title = text("h1.novel-title").Clean(),
             cover = attr("src", "img[src*='server-1'], .cover img"),
             description = text(".summary .content, .summary")
-                .removeElementsDOM("h4.lined")
+                .removeElementsDOM("h4.lined"),
+            latestChapterHash = text(".body p.latest").Clean()
         ),
 
         chapters = ChapterSelectors(

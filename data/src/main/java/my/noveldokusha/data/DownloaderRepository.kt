@@ -204,6 +204,33 @@ class DownloaderRepository @Inject constructor(
                 }
             }
     }
+
+    /**
+     * Get chapter list hash for quick change detection.
+     * This makes a single request to the book page and extracts a hash
+     * from the latest chapter indicator (if configured for the source).
+     * Returns null if the source doesn't support this feature.
+     */
+    suspend fun bookChaptersListHash(
+        bookUrl: String,
+    ): Response<String?> = withContext(Dispatchers.Default) {
+        val error by lazy {
+            """
+			Incompatible source.
+
+			Can't find compatible source for:
+			$bookUrl
+		""".trimIndent()
+        }
+
+        // Return if can't find compatible source for url
+        val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
+            ?: return@withContext Response.Error(error, Exception())
+
+        my.noveldokusha.network.tryFlatConnect {
+            scrap.getChapterListHash(bookUrl)
+        }
+    }
 }
 
 

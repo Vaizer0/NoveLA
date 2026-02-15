@@ -20,6 +20,7 @@ class NovelHall(private val networkClient: NetworkClient) : SourceInterface.Cata
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     // Идентификаторы источника
     override val id = "novelhall"
@@ -54,7 +55,8 @@ class NovelHall(private val networkClient: NetworkClient) : SourceInterface.Cata
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("src", ".book-img.hidden-xs img[src]"),
-            description = text("span.js-close-wrap")
+            description = text("span.js-close-wrap"),
+            latestChapterHash = attr("href", ".book-catalog li:first-child a")
         ),
 
         chapters = ChapterSelectors(

@@ -45,6 +45,14 @@ sealed interface SourceInterface {
         suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>>
         suspend fun getCatalogList(index: Int): Response<PagedList<BookResult>>
         suspend fun getCatalogSearch(index: Int, input: String): Response<PagedList<BookResult>>
+
+        /**
+         * Get a hash representing the current chapter list state for quick change detection.
+         * This makes a single request to the book page and extracts a hash from
+         * the latest chapter indicator (if configured for the source).
+         * Returns null if the source doesn't support this feature.
+         */
+        suspend fun getChapterListHash(bookUrl: String): Response<String?> = Response.Success(null)
     }
 
     interface Configurable {

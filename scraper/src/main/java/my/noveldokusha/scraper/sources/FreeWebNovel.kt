@@ -18,6 +18,7 @@ class FreeWebNovel(private val networkClient: NetworkClient) : SourceInterface.C
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "freewebnovel"
     override val nameStrId = R.string.source_name_freewebnovel
@@ -48,7 +49,8 @@ class FreeWebNovel(private val networkClient: NetworkClient) : SourceInterface.C
         book = BookSelectors(
             title = text("h1.tit").Clean(),
             cover = attr("src", ".pic img"),
-            description = text(".m-desc .txt")
+            description = text(".m-desc .txt"),
+            latestChapterHash = attr("href", ".m-newest1 ul.ul-list5 li:first-child a")
         ),
 
         chapters = ChapterSelectors(

@@ -20,6 +20,7 @@ class Ifreedom(private val networkClient: NetworkClient) : SourceInterface.Catal
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "ifreedom"
     override val nameStrId = R.string.source_name_ifreedom
@@ -52,7 +53,8 @@ class Ifreedom(private val networkClient: NetworkClient) : SourceInterface.Catal
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("src", "div.book-img.block-book-slide-img > img"),
-            description = text("[data-name=\"Описание\"]")
+            description = text("[data-name=\"Описание\"]"),
+            latestChapterHash = text("div.book-info-list:has(svg.icon-tabler-list-check) div").Clean()
         ),
 
         chapters = ChapterSelectors(

@@ -25,6 +25,7 @@ class Novelku(private val networkClient: NetworkClient) : SourceInterface.Catalo
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "novelku"
     override val nameStrId = R.string.source_name_novelku
@@ -58,7 +59,8 @@ class Novelku(private val networkClient: NetworkClient) : SourceInterface.Catalo
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("data-src", ".summary_image img"),
-            description = text(".summary__content")
+            description = text(".summary__content"),
+            latestChapterHash = text("ul.main li:first-child a").Clean()
         ),
 
         chapters = ChapterSelectors(

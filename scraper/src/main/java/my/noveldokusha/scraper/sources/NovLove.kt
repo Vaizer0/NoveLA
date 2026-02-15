@@ -27,6 +27,7 @@ class NovLove(private val networkClient: NetworkClient) : SourceInterface.Catalo
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "NovLove"
     override val nameStrId = R.string.source_name_novlove
@@ -61,7 +62,8 @@ class NovLove(private val networkClient: NetworkClient) : SourceInterface.Catalo
         book = BookSelectors(
             title = text("h3.title").Clean(),
             cover = attr("content", "meta[itemprop=image]"),
-            description = text(".desc-text")
+            description = text(".desc-text"),
+            latestChapterHash = attr("href", ".l-chapter a.chapter-title")
         ),
 
         // Chapters selectors

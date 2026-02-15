@@ -19,4 +19,5 @@ data class Book(
     val addedToLibraryEpochTimeMilli: Long = 0,
     val lastUpdateEpochTimeMilli: Long = 0,
     val category: String = "",
+    val chaptersListHash: String? = null,
 ) : Parcelable

@@ -410,6 +410,42 @@ suspend fun getBookDescription(
 }
 
 /**
+ * Get chapter list hash for quick change detection.
+ * Returns hash of the value extracted by book.latestChapter selector (e.g., last chapter number, total count, etc.)
+ * Returns null if selector is not configured or value cannot be extracted.
+ */
+suspend fun getChapterListHash(
+    config: HtmlSelectors,
+    bookUrl: String,
+    networkClient: NetworkClient
+): Response<String?> = withContext(Dispatchers.Default) {
+    tryConnect {
+        val latestChapterRule = config.book.latestChapterHash
+        if (latestChapterRule == null) {
+            return@tryConnect null
+        }
+        
+        val doc = GET(bookUrl, networkClient = networkClient, charset = config.charset ?: "UTF-8")
+        
+        // Extract value using SelectorRule
+        val value = doc.extractValue(latestChapterRule)
+        
+        if (value == null || value.isBlank()) {
+            Timber.w("Chapter list hash: No value found for $bookUrl")
+            return@tryConnect null
+        }
+        
+        // Compute hash
+        val hash = java.security.MessageDigest.getInstance("MD5")
+            .digest(value.trim().toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        
+        Timber.d("Chapter list hash for $bookUrl: $hash (from: $value)")
+        hash
+    }
+}
+
+/**
  * Legacy version using HtmlScraperConfig
  */
 suspend fun getBookDescription(

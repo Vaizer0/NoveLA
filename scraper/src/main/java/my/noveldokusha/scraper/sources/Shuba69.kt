@@ -25,6 +25,7 @@ class Shuba69(private val networkClient: NetworkClient) : SourceInterface.Catalo
     override suspend fun getBookTitle(bookUrl: String) = getBookTitle(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     // Идентификаторы источника
     override val id = "shuba69"
@@ -61,7 +62,8 @@ class Shuba69(private val networkClient: NetworkClient) : SourceInterface.Catalo
         book = BookSelectors(
             title = text("div.booknav2 h1 a").Clean(),
             cover = attr("src", "div.bookimg2 img"),
-            description = text("div.navtxt")
+            description = text("div.navtxt"),
+            latestChapterHash = text(".infolist li:nth-child(2)").Clean()
         ),
 
         chapters = ChapterSelectors(

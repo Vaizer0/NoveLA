@@ -116,6 +116,61 @@ class RoyalRoad(private val networkClient: NetworkClient) : SourceInterface.Cata
 - Нет AJAX-взаимодействий
 - Статические селекторы работают надежно
 
+### Quick Update Check - Быстрая проверка обновлений
+
+Для ускорения обновления библиотеки можно добавить `latestChapterHash` в `book` конфигурацию источника. Это позволяет быстро проверить, изменился ли список глав, без загрузки всех глав.
+
+```kotlin
+private val config: HtmlSelectors = HtmlSelectors(
+    // ... остальная конфигурация ...
+    
+    book = BookSelectors(
+        title = text("h1").Clean(),
+        cover = attr("src", "div.img-book > img"),
+        description = text("#desc-tab"),
+        // Быстрая проверка обновлений - использует заголовок последней главы как хеш
+        latestChapterHash = text("div.title:last-child a h2")
+    ),
+    
+    // ... остальная конфигурация ...
+)
+```
+
+**Примеры:**
+
+```kotlin
+// Последняя глава по заголовку
+book = BookSelectors(
+    // ...
+    latestChapterHash = text("div.chapters-list .chapter-item:last-child .chapter-title")
+)
+
+// Общее количество глав (через attr если в атрибуте)
+book = BookSelectors(
+    // ...
+    latestChapterHash = attr("data-count", ".chapter-count")
+)
+
+// Дата последнего обновления
+book = BookSelectors(
+    // ...
+    latestChapterHash = attr("datetime", ".last-update")
+)
+```
+
+**Также нужно добавить метод в класс источника:**
+```kotlin
+override suspend fun getChapterListHash(bookUrl: String) = 
+    getChapterListHash(config, bookUrl, networkClient)
+```
+
+**Когда использовать:**
+- Источник медленно загружает список глав (AJAX, пагинация)
+- Большая библиотека с частыми обновлениями
+- Хотите избежать бана от частых запросов
+
+**Примечание:** Если `latestChapterHash` не настроен, источник будет всегда загружать полный список глав при обновлении библиотеки.
+
 ### 2. HTML + POST Search - FreeWebNovel.kt
 
 **Тип:** HTML + POST Search
@@ -512,7 +567,7 @@ private val config = JsonApiScraperConfig(
                 htmlContent.replace(Regex("""src="([^"]+)"""")) { match ->
                     val originalUrl = match.groupValues[1]
                     val proxiedUrl = proxiedImageUrl(originalUrl)
-                    """src="$proxiedUrl""""
+                    """src="$proxiedUrl"""
                 }
             else -> ""
         }

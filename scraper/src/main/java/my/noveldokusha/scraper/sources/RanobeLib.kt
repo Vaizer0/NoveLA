@@ -2,8 +2,13 @@ package my.noveldokusha.scraper.sources
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
+import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
+import my.noveldokusha.network.toJson
+import my.noveldokusha.network.tryConnect
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.TextExtractor
@@ -177,6 +182,18 @@ class RanobeLib(private val networkClient: NetworkClient) : SourceInterface.Cata
         }
         return builder.toString()
     }
+
+    override suspend fun getChapterListHash(bookUrl: String): Response<String?> =
+        withContext(Dispatchers.Default) {
+            tryConnect {
+                val slug = bookUrl.removePrefix(baseUrl).trim('/').split("/").getOrNull(0) ?: return@tryConnect null
+                val url = "${apiBaseUrl}${slug}/chapters"
+                val json = networkClient.call(my.noveldokusha.network.getRequest(url)).toJson().asJsonObject
+                val chapters = json.getAsJsonArray("data")
+                val lastChapter = chapters?.lastOrNull()?.asJsonObject
+                lastChapter?.get("item_number")?.asString
+            }
+        }
 
     private fun renderImage(element: JsonObject, attachments: Map<String, String>): String {
         val attrs = element.getAsJsonObject("attrs") ?: return ""

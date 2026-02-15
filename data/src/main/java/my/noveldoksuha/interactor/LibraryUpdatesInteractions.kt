@@ -74,6 +74,27 @@ class LibraryUpdatesInteractions @Inject constructor(
         failedUpdates: MutableStateFlow<Set<Book>>,
     ): Unit = withContext(Dispatchers.Default) {
         currentUpdating.update { it + book }
+        
+        // Quick check: compare chapters list hash to detect changes
+        // If hash matches stored value, skip the full update
+        val shouldSkipUpdate = if (book.chaptersListHash != null) {
+            downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
+                if (result is my.noveldokusha.core.Response.Success) {
+                    result.data == book.chaptersListHash
+                } else false
+            }
+        } else {
+            // No stored hash, need to do full update
+            false
+        }
+        
+        if (shouldSkipUpdate) {
+            // No changes detected, skip update
+            currentUpdating.update { it - book }
+            countingUpdating.update { it?.copy(updated = it.updated + 1) }
+            return@withContext
+        }
+        
         val oldChaptersList = async(Dispatchers.IO) {
             appRepository.bookChapters.chapters(book.url).map { it.url }.toSet()
         }
@@ -113,6 +134,13 @@ class LibraryUpdatesInteractions @Inject constructor(
             if (newChapters.isNotEmpty()) {
                 appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = book.url)
                 newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+            }
+            
+            // Update the chapters list hash for future change detection
+            downloaderRepository.bookChaptersListHash(bookUrl = book.url).onSuccess { hash ->
+                if (hash != null) {
+                    appRepository.libraryBooks.updateChaptersListHash(book.url, hash)
+                }
             }
 
         }.onError {

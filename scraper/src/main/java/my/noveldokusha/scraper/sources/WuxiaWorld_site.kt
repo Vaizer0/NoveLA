@@ -23,6 +23,7 @@ class WuxiaWorld_site(private val networkClient: NetworkClient) : SourceInterfac
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "wuxia_world_site"
     override val nameStrId = R.string.source_name_wuxia_world_site
@@ -57,7 +58,9 @@ class WuxiaWorld_site(private val networkClient: NetworkClient) : SourceInterfac
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("data-src", ".summary_image img"),
-            description = text(".summary__content")
+            description = text(".summary__content"),
+            latestChapterHash = attr("href", "#btn-read-first")
+
         ),
 
         // Chapters selectors

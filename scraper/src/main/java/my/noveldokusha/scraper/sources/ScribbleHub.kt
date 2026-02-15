@@ -24,6 +24,7 @@ class ScribbleHub(private val networkClient: NetworkClient) : SourceInterface.Ca
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "scribblehub"
     override val nameStrId = R.string.source_name_scribblehub
@@ -57,7 +58,8 @@ class ScribbleHub(private val networkClient: NetworkClient) : SourceInterface.Ca
         book = BookSelectors(
             title = text("div.fic_title").Clean(),
             cover = attr("src", ".fic_image img[src], .novel-cover img"),
-            description = text(".wi_fic_desc")
+            description = text(".wi_fic_desc"),
+            latestChapterHash = text(".fic_stats span.st_item:has(.fa-list-alt)")
         ),
 
         chapters = ChapterSelectors(

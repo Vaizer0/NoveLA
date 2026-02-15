@@ -21,7 +21,7 @@ class RoyalRoad(
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: org.jsoup.nodes.Document) = getChapterText(config, doc)
-
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "royal_road"
     override val nameStrId = R.string.source_name_royal_road
@@ -55,7 +55,8 @@ class RoyalRoad(
         book = BookSelectors(
             title = text("h1.font-white").Clean(),
             cover = attr("src", ".cover-art-container img[src]"),
-            description = text(".description")
+            description = text(".description"),
+            latestChapterHash = text(".portlet-title .actions .label").Clean()
         ),
 
         chapters = ChapterSelectors(

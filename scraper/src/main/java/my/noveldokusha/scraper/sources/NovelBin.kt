@@ -25,6 +25,7 @@ class NovelBin(private val networkClient: NetworkClient) : SourceInterface.Catal
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "NovelBin"
     override val nameStrId = R.string.source_name_novelbin
@@ -57,7 +58,8 @@ class NovelBin(private val networkClient: NetworkClient) : SourceInterface.Catal
         book = BookSelectors(
             title = text("h3.title").Clean(),
             cover = attr("content", "meta[property='og:image']"),
-            description = text("div.desc-text")
+            description = text("div.desc-text"),
+            latestChapterHash = attr("href", ".l-chapter a.chapter-title")
         ),
 
         chapters = ChapterSelectors(

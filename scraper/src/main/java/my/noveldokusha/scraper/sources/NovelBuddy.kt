@@ -24,6 +24,7 @@ class NovelBuddy(private val networkClient: NetworkClient) : SourceInterface.Cat
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "novelbuddy"
     override val nameStrId = R.string.source_name_novelbuddy
@@ -55,7 +56,8 @@ class NovelBuddy(private val networkClient: NetworkClient) : SourceInterface.Cat
             title = text("h1").Clean(),
             cover = attr("data-src", ".img-cover img"),
             description = text(".section-body.summary .content")
-                .removeElementsDOM("h3")
+                .removeElementsDOM("h3"),
+            latestChapterHash = text(".meta p:has(strong:contains(Chapters)) span").Clean()
         ),
 
         chapters = ChapterSelectors(

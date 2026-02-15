@@ -23,6 +23,8 @@ class Twkan(private val networkClient: NetworkClient) : SourceInterface.Catalog 
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
+
     override val id = "twkan"
     override val nameStrId = R.string.source_name_twkan
     override val baseUrl = "https://twkan.com/"
@@ -55,7 +57,8 @@ class Twkan(private val networkClient: NetworkClient) : SourceInterface.Catalog 
         book = BookSelectors(
             title = text("h1 a").Clean(),
             cover = attr("src", ".bookimg2 img"),
-            description = text("#tab_info .navtxt p")
+            description = text("#tab_info .navtxt p"),
+            latestChapterHash = text(".infolist li:nth-child(2)").Clean()
         ),
 
         // Chapters selectors - will be overridden by AJAX

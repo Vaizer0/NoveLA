@@ -22,6 +22,7 @@ class NoBadNovel(private val networkClient: NetworkClient) : SourceInterface.Cat
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document) = getChapterText(config, doc)
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
 
     override val id = "nobadnovel"
     override val nameStrId = R.string.source_name_nobadnovel
@@ -55,7 +56,9 @@ class NoBadNovel(private val networkClient: NetworkClient) : SourceInterface.Cat
         book = BookSelectors(
             title = text("h1").Clean(),
             cover = attr("src", "img[src*=cdn.nobadnovel]"),
-            description = text("#intro .content")
+            description = text("#intro .content"),
+            latestChapterHash = attr("href", ".chapter-list li:last-child a")
+
         ),
 
         chapters = ChapterSelectors(
