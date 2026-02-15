@@ -113,6 +113,9 @@ internal fun databaseMigrations() = arrayOf(
         """)
         it.execSQL("DROP TABLE Extension_old")
     },
+    migration(13) {
+        it.addColumnIfNotExists("Book", "chaptersListHash", "TEXT")
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =
