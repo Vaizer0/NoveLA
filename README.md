@@ -16,7 +16,7 @@ Copyright © 2023, [nani](https://github.com/HnDK0), distributed under the [GPL-
 - **Multiple sources**:
   - **Chinese sources**: 69书吧, Twkan, Ttkan
   - **Russian sources**: Jaomix, RanobeLib, RanobeHub, Свободный Мир Ранобэ, BookHamster
-  - **English sources**: FreeWebNovel, NovelFull, NovelBin, Royal Road, Scribble Hub, AllNovel, NoBadNovel, NovelBuddy, NovelFire, NovelHall, NovLove, ReadNovelFull, WuxiaWorld
+  - **English sources**: FreeWebNovel, NovelFull, NovelBin, Royal Road, Scribble Hub, AllNovel, NoBadNovel, NovelBuddy, NovelFire, NovelHall, NovLove, ReadNovelFull, WuxiaWorld, WTR-LAB
   - **Indonesian sources**: BacaLightnovel, Novelku
   - **Local source** for reading local EPUB files
 - **Multiple databases** for novel search
