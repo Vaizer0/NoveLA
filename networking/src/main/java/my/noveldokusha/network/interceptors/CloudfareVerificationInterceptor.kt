@@ -108,6 +108,8 @@ internal class CloudFareVerificationInterceptor(
                 body.contains("Security Check Required", true) ||
                 body.contains("__cf_chl_", true) ||
                 body.contains("Ray ID", true)
+                body.contains("but-captcha", true)
+
         val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
         val isCfServer = response.header("Server")?.contains("cloudflare", true) == true
         return !(isError && (isCfServer || hasMarkers))

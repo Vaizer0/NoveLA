@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.Response
+import my.noveldokusha.core.isValidChapterContent
 import my.noveldokusha.features.reader.ReaderRepository
 import my.noveldokusha.features.reader.domain.ChapterLoaded
 import my.noveldokusha.features.reader.domain.ChapterState
@@ -221,6 +222,13 @@ internal class ReaderChaptersLoader(
             try {
                 val res = readerRepository.downloadChapter(nextChapter.url)
                 if (res is Response.Success) {
+                    // Check if content is valid before processing
+                    if (!isValidChapterContent(res.data)) {
+                        android.util.Log.w("ReaderChaptersLoader", "Pre-translation: Invalid content detected, skipping")
+                        hasLoadingError = true
+                        return@launch
+                    }
+                    
                 val itemsOriginal = textToItemsConverter(
                     chapterUrl = nextChapter.url,
                     chapterIndex = nextIndex,
@@ -560,6 +568,20 @@ internal class ReaderChaptersLoader(
 
         when (val res = readerRepository.downloadChapter(chapter.url)) {
             is Response.Success -> {
+                // Check if content is valid before processing
+                if (!isValidChapterContent(res.data)) {
+                    withContext(Dispatchers.Main.immediate) {
+                        hasLoadingError = true
+                        android.util.Log.w("ReaderChaptersLoader", "Chapter content is invalid (Cloudflare or too short), stopping further auto-loading")
+                    }
+                    maintainPosition {
+                        remove(itemProgressBar)
+                        insert(ReaderItem.Error(chapterIndex = chapterIndex, text = "Invalid content - Cloudflare protection or empty chapter"))
+                        readerViewHandlersActions.doForceUpdateListViewState()
+                    }
+                    return@withContext
+                }
+                
                 // Split chapter text into items
                 val itemsOriginal = textToItemsConverter(
                     chapterUrl = chapter.url,
