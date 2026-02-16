@@ -104,6 +104,8 @@ internal class CloudFareVerificationInterceptor(
     private fun isNotCloudflare(response: Response, body: String): Boolean {
         val hasMarkers = body.contains("cf-challenge", true) ||
                 body.contains("turnstile", true) ||
+                body.contains("requireTurnstile", true) ||
+                body.contains("Security Check Required", true) ||
                 body.contains("__cf_chl_", true) ||
                 body.contains("Ray ID", true)
         val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
