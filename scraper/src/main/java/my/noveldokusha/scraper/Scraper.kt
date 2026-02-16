@@ -42,6 +42,7 @@ class Scraper @Inject constructor(
         WuxiaWorld_site(networkClient),
         NovelFire(networkClient),
         NovelBuddy(networkClient),
+        WtrLabEn(networkClient),
     )
 
     // For now, only return built-in sources
