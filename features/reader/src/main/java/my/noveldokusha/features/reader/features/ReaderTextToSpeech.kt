@@ -73,6 +73,8 @@ internal class ReaderTextToSpeech(
     private val setPreferredVoicePitch: (voiceId: Float) -> Unit,
     private val getPreferredVoiceSpeed: () -> Float,
     private val setPreferredVoiceSpeed: (voiceId: Float) -> Unit,
+    // Callback for pre-loading next chapter when buffer is low
+    private val onBufferLow: (() -> Unit)? = null,
 ) {
     private val halfBuffer = 2
     private var updateJob: Job? = null
@@ -160,6 +162,8 @@ internal class ReaderTextToSpeech(
                                     chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
                                     quantity = halfBuffer
                                 )
+                                // Trigger pre-loading of next chapter when buffer is low
+                                onBufferLow?.invoke()
                             }
                             0 -> {
                                 launch {

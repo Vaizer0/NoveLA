@@ -71,6 +71,9 @@ internal class ReaderChaptersLoader(
     private val items: MutableList<ReaderItem> = ArrayList()
     private val loaderQueue = mutableSetOf<LoadChapter.Type>()
     private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>()
+    
+    // Flag to stop loading after an error - reset on manual reload
+    @Volatile var hasLoadingError = false
 
     init {
         startChapterLoaderWatcher()
@@ -148,9 +151,23 @@ internal class ReaderChaptersLoader(
 
     @Synchronized
     fun tryLoadNext() {
+        // Stop auto-loading if there was an error
+        if (hasLoadingError) {
+            android.util.Log.d("ReaderChaptersLoader", "tryLoadNext: blocked due to previous loading error")
+            return
+        }
         if (LoadChapter.Type.Next in loaderQueue) return
         loaderQueue.add(LoadChapter.Type.Next)
         launch { chapterLoaderFlow.emit(LoadChapter.Next) }
+    }
+    
+    /**
+     * Clear error flag after successful manual load. 
+     * Call this when user manually triggers a chapter load.
+     */
+    fun clearErrorAndLoadNext() {
+        hasLoadingError = false
+        tryLoadNext()
     }
 
     fun reload() {
@@ -162,6 +179,7 @@ internal class ReaderChaptersLoader(
             loadedChapters.clear()
             preTranslatedChapters.clear()
             preTranslatingChapters.clear()
+            hasLoadingError = false
             readerState = ReaderState.INITIAL_LOAD
             startChapterLoaderWatcher()
         }
@@ -171,6 +189,12 @@ internal class ReaderChaptersLoader(
      * Pre-translate the next chapter in background to improve UX
      */
     fun preTranslateNextChapter(currentChapterIndex: Int) {
+        // Don't pre-translate if there was a loading error
+        if (hasLoadingError) {
+            android.util.Log.d("ReaderChaptersLoader", "preTranslateNextChapter: skipped due to loading error")
+            return
+        }
+        
         val batchTranslator = translatorBatchTranslateOrNull()
         if (!translatorIsActive() || batchTranslator == null) return
         
@@ -684,15 +708,16 @@ internal class ReaderChaptersLoader(
                         itemsCount = 1,
                         orderedChaptersIndex = chapterIndex
                     )
+                    // Set error flag to stop subsequent chapter loading
+                    hasLoadingError = true
+                    android.util.Log.w("ReaderChaptersLoader", "Chapter load error: ${res.message}, stopping further auto-loading")
                 }
                 maintainPosition {
                     remove(itemProgressBar)
                     insert(ReaderItem.Error(chapterIndex = chapterIndex, text = res.message))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
-                withContext(Dispatchers.Main.immediate) {
-                    loadedChapters.add(chapter.url)
-                }
+                // Do NOT add to loadedChapters - chapter was not loaded successfully
             }
         }
     }

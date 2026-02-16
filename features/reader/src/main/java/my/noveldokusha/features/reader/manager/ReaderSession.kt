@@ -126,6 +126,9 @@ internal class ReaderSession(
 
     val items = readerChaptersLoader.getItems()
 
+    // Track current TTS chapter index for pre-loading
+    private var ttsCurrentChapterIndex: Int = -1
+
     val readerTextToSpeech = ReaderTextToSpeech(
         coroutineScope = scope,
         context = context,
@@ -147,6 +150,26 @@ internal class ReaderSession(
         setPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value = it },
         getPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value },
         setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
+        // Pre-load next chapter when TTS buffer is low
+        onBufferLow = {
+            val currentChapterIndex = ttsCurrentChapterIndex
+            if (currentChapterIndex < 0) return@ReaderTextToSpeech
+            if (!readerChaptersLoader.isLastChapter(currentChapterIndex)) {
+                val nextChapterIndex = currentChapterIndex + 1
+                // Pre-load next chapter if not already loaded
+                if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
+                    readerChaptersLoader.tryLoadNext()
+                }
+                // Pre-translate next chapter if translation is active
+                if (readerLiveTranslation.translatorState != null && 
+                    currentChapterIndex != lastPreTranslatedChapterIndex) {
+                    lastPreTranslatedChapterIndex = currentChapterIndex
+                    scope.launch {
+                        readerChaptersLoader.preTranslateNextChapter(currentChapterIndex)
+                    }
+                }
+            }
+        },
     )
 
     fun init() {
@@ -186,6 +209,15 @@ internal class ReaderSession(
     }
 
     private fun initReaderTTSObservers() {
+        // Track TTS chapter changes for pre-loading
+        scope.launch {
+            readerTextToSpeech
+                .currentReaderItem
+                .collect { item ->
+                    ttsCurrentChapterIndex = item.itemPos.chapterIndex
+                }
+        }
+
         scope.launch {
             readerTextToSpeech.reachedChapterEndFlowChapterIndex.collect { chapterIndex ->
                 withContext(Dispatchers.Main.immediate) {
