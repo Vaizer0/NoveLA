@@ -36,12 +36,8 @@ private fun extractDomainFromUrl(url: String): String {
     return try {
         val uri = android.net.Uri.parse(url)
         val host = uri.host?.removePrefix("www.") ?: ""
-        // Capitalize and clean up the domain name
-        host.replace(".", " ").split(" ")
-            .joinToString(" ") { word ->
-                if (word.length > 1) word.replaceFirstChar { it.uppercase() } else word
-            }
-            .trim()
+        // Return domain in lowercase without replacing dots
+        host.lowercase()
     } catch (e: Exception) {
         "Unknown Source"
     }
