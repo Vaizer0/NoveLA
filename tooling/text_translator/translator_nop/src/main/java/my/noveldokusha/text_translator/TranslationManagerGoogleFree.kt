@@ -243,8 +243,8 @@ class TranslationManagerGoogleFree(
     }
 
     /**
-     * Translate all paragraphs as one large chunk for maximum context
-     * Combines all text up to 12k characters in single request
+     * Translate all paragraphs using numbered paragraph format for reliable parsing.
+     * Each paragraph is prefixed with a number to ensure Google Translate preserves the order.
      */
     override suspend fun translateBatch(
         texts: List<String>,
@@ -253,33 +253,35 @@ class TranslationManagerGoogleFree(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
-        Log.d(TAG, "translateBatch: translating ${texts.size} texts as large chunk")
+        Log.d(TAG, "translateBatch: translating ${texts.size} texts with numbered format")
 
         val translations = mutableMapOf<String, String>()
 
-        // Combine ALL texts into one large string with newline separators
-        // Using double newline to preserve paragraph boundaries
-        val combinedText = texts.joinToString("\n\n")
-        val totalChars = combinedText.length
+        // Create numbered list for translation - this ensures Google preserves order
+        val numberedTexts = texts.mapIndexed { index, text ->
+            "${index + 1}. $text"
+        }.joinToString("\n\n")
 
-        Log.d(TAG, "translateBatch: combined ${texts.size} paragraphs into $totalChars characters")
+        val totalChars = numberedTexts.length
+        Log.d(TAG, "translateBatch: numbered format length = $totalChars characters")
 
         if (totalChars > 12000) {
             Log.w(TAG, "translateBatch: text too long ($totalChars chars), splitting into chunks")
             // Split into reasonable chunks
             val maxCharsPerChunk = 10000
-            val chunks = mutableListOf<List<String>>()
-            var currentChunk = mutableListOf<String>()
+            val chunks = mutableListOf<List<Pair<Int, String>>>() // index -> text
+            var currentChunk = mutableListOf<Pair<Int, String>>()
             var currentLength = 0
 
-            texts.forEach { text ->
-                if (currentLength + text.length + 1 > maxCharsPerChunk && currentChunk.isNotEmpty()) {
+            texts.forEachIndexed { index, text ->
+                val numberedText = "${index + 1}. $text"
+                if (currentLength + numberedText.length + 1 > maxCharsPerChunk && currentChunk.isNotEmpty()) {
                     chunks.add(currentChunk.toList())
                     currentChunk = mutableListOf()
                     currentLength = 0
                 }
-                currentChunk.add(text)
-                currentLength += text.length + 1
+                currentChunk.add(Pair(index, text))
+                currentLength += numberedText.length + 1
             }
             if (currentChunk.isNotEmpty()) {
                 chunks.add(currentChunk)
@@ -289,53 +291,42 @@ class TranslationManagerGoogleFree(
             val results = coroutineScope {
                 chunks.map { chunk ->
                     async(Dispatchers.IO) {
-                        val chunkText = chunk.joinToString("\n\n")
+                        val chunkText = chunk.map { "${it.first + 1}. ${it.second}" }.joinToString("\n\n")
                         try {
                             val translatedChunk = translateWithGoogleFree(chunkText, sourceLanguage, targetLanguage)
-                            Pair(chunk, translatedChunk)
+                            Pair(chunk.map { it.second }, translatedChunk)
                         } catch (e: Exception) {
                             Log.e(TAG, "translateBatch: chunk failed - ${e.message}")
-                            Pair(chunk, null)
+                            Pair(chunk.map { it.second }, null)
                         }
                     }
                 }.awaitAll()
             }
 
-            results.forEach { (originalChunkTexts, translatedText) ->
+            results.forEach { (originalTexts, translatedText) ->
                 if (translatedText != null) {
-                    val translatedParagraphs = translatedText.split("\n\n")
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() }
-
-                    originalChunkTexts.forEachIndexed { index, originalText ->
-                        translations[originalText] = translatedParagraphs.getOrNull(index) ?: translatedText
+                    val parsed = parseNumberedTranslations(translatedText, originalTexts.size)
+                    originalTexts.forEachIndexed { index, originalText ->
+                        translations[originalText] = parsed[index] ?: originalText
                     }
                 } else {
-                    originalChunkTexts.forEach { originalText ->
+                    originalTexts.forEach { originalText ->
                         translations[originalText] = originalText
                     }
                 }
             }
         } else {
             try {
-                val translated = translateWithGoogleFree(combinedText, sourceLanguage, targetLanguage)
+                val translated = translateWithGoogleFree(numberedTexts, sourceLanguage, targetLanguage)
                 Log.d(TAG, "translateBatch: translation successful, result length=${translated.length}")
 
-                val translatedParagraphs = translated.split("\n\n")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
+                // Parse numbered translations back into map
+                val parsedTranslations = parseNumberedTranslations(translated, texts.size)
+                
+                Log.d(TAG, "translateBatch: parsed ${parsedTranslations.size} translations (expected ${texts.size})")
 
-                Log.d(TAG, "translateBatch: split result into ${translatedParagraphs.size} paragraphs (expected ${texts.size})")
-
-                if (translatedParagraphs.size == texts.size) {
-                    texts.forEachIndexed { index, originalText ->
-                        translations[originalText] = translatedParagraphs[index]
-                    }
-                } else {
-                    Log.w(TAG, "translateBatch: paragraph count mismatch, using fallback mapping")
-                    texts.forEachIndexed { index, originalText ->
-                        translations[originalText] = translatedParagraphs.getOrNull(index) ?: translated
-                    }
+                texts.forEachIndexed { index, originalText ->
+                    translations[originalText] = parsedTranslations.getOrNull(index) ?: originalText
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "translateBatch: failed - ${e.message}", e)
@@ -347,6 +338,61 @@ class TranslationManagerGoogleFree(
 
         Log.d(TAG, "translateBatch: completed, ${translations.size}/${texts.size} entries")
         return@withContext translations
+    }
+
+    /**
+     * Parse numbered translations back into a list.
+     * Google Translate preserves the numbering format "1. text", "2. text", etc.
+     * Uses regex to find each numbered paragraph and extract the text after it.
+     */
+    private fun parseNumberedTranslations(translated: String, expectedCount: Int): List<String?> {
+        val result = mutableListOf<String?>()
+        
+        // Use MULTILINE mode so ^ matches start of each line
+        val multilineRegex = Regex("^(\\d+)[.)]\\s*(.+)$", RegexOption.MULTILINE)
+        
+        // Find all matches
+        val matches = multilineRegex.findAll(translated).toList()
+        
+        Log.d(TAG, "parseNumberedTranslations: found ${matches.size} numbered paragraphs, expected $expectedCount")
+        
+        // Extract translations in order
+        for (i in 0 until expectedCount) {
+            val expectedNumber = i + 1
+            // Find the match with this number
+            val match = matches.find { match ->
+                match.groupValues[1].toIntOrNull() == expectedNumber
+            }
+            
+            if (match != null) {
+                // Get the text after the number
+                val text = match.groupValues[2].trim()
+                result.add(text)
+                Log.d(TAG, "parseNumberedTranslations: found paragraph $expectedNumber: ${text.take(50)}...")
+            } else {
+                // Try to find by position - maybe numbers are missing but we can use sequence
+                if (i < matches.size) {
+                    val fallbackMatch = matches[i]
+                    val text = fallbackMatch.groupValues[2].trim()
+                    result.add(text)
+                    Log.w(TAG, "parseNumberedTranslations: using fallback for $expectedNumber: ${text.take(50)}...")
+                } else {
+                    result.add(null)
+                    Log.w(TAG, "parseNumberedTranslations: no translation found for paragraph $expectedNumber")
+                }
+            }
+        }
+        
+        // If we found more numbered paragraphs than expected, append them
+        if (matches.size > expectedCount) {
+            for (i in expectedCount until matches.size) {
+                val text = matches[i].groupValues[2].trim()
+                result.add(text)
+                Log.d(TAG, "parseNumberedTranslations: extra paragraph ${i + 1}: ${text.take(50)}...")
+            }
+        }
+        
+        return result
     }
 
     override fun downloadModel(language: String) {
