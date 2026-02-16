@@ -61,7 +61,7 @@ suspend fun POST(
 }
 
 /**
- * Fetch JSON with optional headers
+ * Fetch JSON with optional headers (GET request)
  */
 suspend fun fetchJson(
     url: String,
@@ -73,6 +73,30 @@ suspend fun fetchJson(
     }.build()
 
     val requestBuilder = getRequest(url, headers = requestHeaders)
+    return networkClient.call(requestBuilder).toJson()
+}
+
+/**
+ * POST request returning JSON response
+ */
+suspend fun postJson(
+    url: String,
+    data: Map<String, String> = emptyMap(),
+    headers: Map<String, String> = emptyMap(),
+    networkClient: NetworkClient
+): com.google.gson.JsonElement {
+    val requestHeaders = Headers.Builder().apply {
+        headers.forEach { (key, value) -> add(key, value) }
+    }.build()
+
+    val requestBuilder = postRequest(url, headers = requestHeaders).apply {
+        if (data.isNotEmpty()) {
+            postPayload {
+                data.forEach { (key, value) -> add(key, value) }
+            }
+        }
+    }
+
     return networkClient.call(requestBuilder).toJson()
 }
 
