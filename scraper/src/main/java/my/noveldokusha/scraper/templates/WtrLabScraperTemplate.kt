@@ -12,6 +12,7 @@ import my.noveldokusha.network.toJson
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.configs.*
+import my.noveldokusha.scraper.configs.text
 import my.noveldokusha.scraper.domain.ChapterResult
 import my.noveldokusha.scraper.helpers.*
 import my.noveldokusha.scraper.utils.UrlTransformers
@@ -47,7 +48,7 @@ abstract class WtrLabScraperTemplate(
     override suspend fun getBookCoverImageUrl(bookUrl: String) = getBookCover(config, bookUrl, networkClient)
     override suspend fun getBookDescription(bookUrl: String) = getBookDescription(config, bookUrl, networkClient)
     override suspend fun getChapterList(bookUrl: String) = getChapterList(config, bookUrl, networkClient)
-    
+    override suspend fun getChapterListHash(bookUrl: String) = getChapterListHash(config, bookUrl, networkClient)
     override suspend fun getChapterText(doc: Document): String = withContext(Dispatchers.Default) {
         try {
             val chapterUrl = doc.location()
@@ -185,7 +186,9 @@ abstract class WtrLabScraperTemplate(
             book = BookSelectors(
                 title = text("h1.long-title").Clean(),
                 cover = attr("src", ".image-section .image-wrap img"),
-                description = text(".desc-wrap .description")
+                description = text(".desc-wrap .description"),
+                latestChapterHash = text(".detail-line:contains('Chapters')").Clean()
+
             ),
 
             chapters = ChapterSelectors(
