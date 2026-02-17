@@ -418,14 +418,18 @@ class ReaderActivity : BaseActivity() {
     }
 
     private fun scrollToReadingPositionOptional(chapterIndex: Int, chapterItemPosition: Int) {
-        // If user already scrolling ignore
+        // Always update the view to show current TTS item highlighting
+        viewAdapter.listView.notifyDataSetChanged()
+        
+        // If user is scrolling, don't auto-scroll
         if (listIsScrolling) {
-            viewAdapter.listView.notifyDataSetChanged()
             return
         }
-        // Search for the item being read otherwise do nothing
+        
+        // Check if the TTS item is already visible on screen
         val firstIndex = viewBind.listView.firstVisiblePosition
         val lastIndex = viewBind.listView.lastVisiblePosition
+        
         for (index in firstIndex..lastIndex) {
             val item = viewAdapter.listView.getItem(index)
             if (
@@ -437,15 +441,26 @@ class ReaderActivity : BaseActivity() {
                 val currentOffsetPx =
                     viewBind.listView.getChildAt(viewIndex).run { top - paddingTop }
                 val newOffsetPx = 200.dpToPx(this@ReaderActivity)
-                viewAdapter.listView.notifyDataSetChanged()
-                // Scroll if item below new scroll position
+                
+                // Scroll only if item is below the desired visible position
                 if (currentOffsetPx > newOffsetPx) {
-                    viewBind.listView.smoothScrollToPositionFromTop(index, newOffsetPx, 1000)
+                    viewBind.listView.smoothScrollToPositionFromTop(index, newOffsetPx, 800)
                 }
                 return
             }
         }
-        viewAdapter.listView.notifyDataSetChanged()
+        
+        // Item not visible - need to scroll to it
+        val itemIndex = indexOfReaderItem(
+            list = viewModel.items,
+            chapterIndex = chapterIndex,
+            chapterItemPosition = chapterItemPosition
+        )
+        if (itemIndex == -1) return
+        
+        val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
+        val newOffsetPx = 200.dpToPx(this@ReaderActivity)
+        viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 800)
     }
 
     private fun scrollToReadingPositionForced(chapterIndex: Int, chapterItemPosition: Int) {
@@ -536,6 +551,22 @@ class ReaderActivity : BaseActivity() {
         // Explicitly save to database when app pauses
         viewModel.saveCurrentReadingPosition()
         super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        
+        // If TTS is active and we're returning to the Activity, scroll to current TTS position
+        // This ensures the user sees the current reading position after unlocking device
+        if (viewModel.readerSpeaker.isActive.value) {
+            val itemPos = viewModel.readerSpeaker.currentTextPlaying.value.itemPos
+            if (itemPos.chapterIndex >= 0) {
+                scrollToReadingPositionImmediately(
+                    chapterIndex = itemPos.chapterIndex,
+                    chapterItemPosition = itemPos.chapterItemPosition
+                )
+            }
+        }
     }
 
     private fun updateCurrentReadingPosSavingState(firstVisibleItemIndex: Int) {
