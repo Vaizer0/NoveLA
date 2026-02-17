@@ -308,13 +308,13 @@ class TranslationManagerGoogleFree(
                 if (translatedText != null) {
                     val parsed = parseNumberedTranslations(translatedText, originalTexts.size)
                     originalTexts.forEachIndexed { index, originalText ->
-                        translations[originalText] = parsed[index] ?: originalText
-                    }
-                } else {
-                    originalTexts.forEach { originalText ->
-                        translations[originalText] = originalText
+                        // Only save if translation was found, otherwise let fallback handle it
+                        parsed[index]?.let { translated ->
+                            translations[originalText] = translated
+                        }
                     }
                 }
+                // If translatedText is null, don't save anything - fallback will handle it
             }
         } else {
             try {
@@ -327,13 +327,14 @@ class TranslationManagerGoogleFree(
                 Log.d(TAG, "translateBatch: parsed ${parsedTranslations.size} translations (expected ${texts.size})")
 
                 texts.forEachIndexed { index, originalText ->
-                    translations[originalText] = parsedTranslations.getOrNull(index) ?: originalText
+                    // Only save if translation was found, otherwise let fallback handle it
+                    parsedTranslations.getOrNull(index)?.let { translated ->
+                        translations[originalText] = translated
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "translateBatch: failed - ${e.message}", e)
-                texts.forEach { text ->
-                    translations[text] = text
-                }
+                // Don't save anything - fallback will handle it
             }
         }
 
@@ -354,6 +355,14 @@ class TranslationManagerGoogleFree(
                 }.awaitAll()
             }.forEach { (original, translated) ->
                 translations[original] = translated
+            }
+        }
+
+        // FINAL FALLBACK: Ensure no text is lost - use original as last resort
+        texts.forEach { originalText ->
+            if (!translations.containsKey(originalText)) {
+                translations[originalText] = originalText
+                Log.w(TAG, "translateBatch: using original text as fallback for: ${originalText.take(50)}...")
             }
         }
 
