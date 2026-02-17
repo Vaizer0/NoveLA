@@ -10,9 +10,10 @@ import java.util.regex.Pattern
  * Common text transformations for SelectorRule
  */
 
-// Unicode normalization
+// Unicode normalization - uses NFKC to convert compatibility characters
+// (like mathematical bold/italic letters) to their standard equivalents
 fun SelectorRule.normalizeUnicode(): SelectorRule = transform { text ->
-    Normalizer.normalize(text, Normalizer.Form.NFC)
+    Normalizer.normalize(text, Normalizer.Form.NFKC)
 }
 
 // Trim whitespace
