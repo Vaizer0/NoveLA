@@ -442,15 +442,15 @@ class ReaderActivity : BaseActivity() {
                     viewBind.listView.getChildAt(viewIndex).run { top - paddingTop }
                 val newOffsetPx = 200.dpToPx(this@ReaderActivity)
                 
-                // Scroll only if item is below the desired visible position
+                // Scroll only if item is below the desired visible position (fast scroll)
                 if (currentOffsetPx > newOffsetPx) {
-                    viewBind.listView.smoothScrollToPositionFromTop(index, newOffsetPx, 800)
+                    viewBind.listView.smoothScrollToPositionFromTop(index, newOffsetPx, 400)
                 }
                 return
             }
         }
         
-        // Item not visible - need to scroll to it
+        // Item not visible - use hybrid approach based on distance
         val itemIndex = indexOfReaderItem(
             list = viewModel.items,
             chapterIndex = chapterIndex,
@@ -460,7 +460,26 @@ class ReaderActivity : BaseActivity() {
         
         val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
         val newOffsetPx = 200.dpToPx(this@ReaderActivity)
-        viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 800)
+        
+        // Calculate distance from visible area
+        val distanceBelow = itemPosition - lastIndex
+        val distanceAbove = firstIndex - itemPosition
+        val threshold = 5 // Items within this distance get smooth scroll
+        
+        when {
+            distanceBelow in 1..threshold -> {
+                // Close below visible area - smooth scroll
+                viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 400)
+            }
+            distanceAbove in 1..threshold -> {
+                // Close above visible area - smooth scroll
+                viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 400)
+            }
+            else -> {
+                // Far from visible area - instant scroll for better responsiveness
+                viewBind.listView.setSelectionFromTop(itemPosition, newOffsetPx)
+            }
+        }
     }
 
     private fun scrollToReadingPositionForced(chapterIndex: Int, chapterItemPosition: Int) {
