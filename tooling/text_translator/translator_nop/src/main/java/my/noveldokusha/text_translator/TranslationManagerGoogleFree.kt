@@ -241,7 +241,7 @@ class TranslationManagerGoogleFree(
      * Names/titles are short or don't have spaces
      */
     private fun looksLikeSentence(text: String): Boolean {
-        return text.contains(" ") && text.length > 20
+        return text.contains(" ") && text.length > 10
     }
 
     /**
