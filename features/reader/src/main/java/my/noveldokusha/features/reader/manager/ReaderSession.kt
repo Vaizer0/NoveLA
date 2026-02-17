@@ -277,18 +277,23 @@ internal class ReaderSession(
                 }
         }
 
-        // Автоматически прокручиваем к текущему элементу при воспроизведении для обеспечения слежения за прогрессом TTS
+        // Обновляем readingStats при TTS воспроизведении для отображения актуальной информации в UI
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
-                .filter { it.playState == Utterance.PlayState.PLAYING || it.playState == Utterance.PlayState.LOADING }
-                .filter { savePositionMode.value == SavePositionMode.Speaking }
-                .collect {
-                    // Добавляем задержку, чтобы избежать слишком частых прокруток
-                    kotlinx.coroutines.delay(500) // Полсекунды задержка
-                    readerTextToSpeech.scrollToCurrentSpeakingItem()
+                .filter { it.playState == Utterance.PlayState.PLAYING }
+                .collect { item ->
+                    val stats = readerChaptersLoader.getItemContext(
+                        chapterIndex = item.itemPos.chapterIndex,
+                        chapterItemPosition = item.itemPos.chapterItemPosition
+                    )
+                    if (stats != null) {
+                        readingStats.value = stats
+                    }
                 }
         }
+
+        // Прокрутка обрабатывается в ReaderActivity для избежания дублирования
     }
 
     fun startSpeaker(itemIndex: Int) {
