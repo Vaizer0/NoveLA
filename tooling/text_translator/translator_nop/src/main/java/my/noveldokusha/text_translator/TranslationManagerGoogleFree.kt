@@ -245,6 +245,7 @@ class TranslationManagerGoogleFree(
     /**
      * Translate all paragraphs using numbered paragraph format for reliable parsing.
      * Each paragraph is prefixed with a number to ensure Google Translate preserves the order.
+     * Falls back to individual translation for any paragraphs that weren't translated.
      */
     override suspend fun translateBatch(
         texts: List<String>,
@@ -333,6 +334,26 @@ class TranslationManagerGoogleFree(
                 texts.forEach { text ->
                     translations[text] = text
                 }
+            }
+        }
+
+        // FALLBACK: Translate only paragraphs that were LOST during parsing
+        // (not found in the numbered format results)
+        val missingTexts = texts.filter { originalText ->
+            !translations.containsKey(originalText)
+        }
+        
+        if (missingTexts.isNotEmpty()) {
+            Log.d(TAG, "translateBatch: ${missingTexts.size} paragraphs lost, translating individually")
+            coroutineScope {
+                missingTexts.map { originalText ->
+                    async(Dispatchers.IO) {
+                        val individualTranslation = translateWithGoogleFree(originalText, sourceLanguage, targetLanguage)
+                        Pair(originalText, individualTranslation)
+                    }
+                }.awaitAll()
+            }.forEach { (original, translated) ->
+                translations[original] = translated
             }
         }
 
