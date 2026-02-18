@@ -43,6 +43,8 @@ class Scraper @Inject constructor(
         NovelFire(networkClient),
         NovelBuddy(networkClient),
         WtrLabEn(networkClient),
+        Novel543(networkClient),
+        Quanben5(networkClient),
     )
 
     // For now, only return built-in sources
