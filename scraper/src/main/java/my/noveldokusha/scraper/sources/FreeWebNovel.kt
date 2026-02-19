@@ -2,6 +2,7 @@ package my.noveldokusha.scraper.sources
 
 import my.noveldokusha.core.LanguageCode
 import my.noveldokusha.network.*
+import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.configs.*
@@ -72,7 +73,7 @@ class FreeWebNovel(private val networkClient: NetworkClient) : SourceInterface.C
         postSearchUrl = "$baseUrl/search",
         postSearchDataBuilder = { query -> mapOf("searchkey" to query) },
         searchHeaders = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "User-Agent" to GLOBAL_USER_AGENT,
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language" to "en-US,en;q=0.5",
             "Accept-Encoding" to "gzip, deflate",
