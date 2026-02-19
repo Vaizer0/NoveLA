@@ -201,22 +201,6 @@ internal class ReaderLiveTranslation(
 
                 Log.d(TAG, "onRedoTranslation: invalidating cache for source=$source, target=$target")
 
-                // 1. Clear in-memory cache using reflection (for Gemini)
-                val methods = translationManager.javaClass.methods
-                val method = methods.find { it.name == "invalidateCacheFor" }
-
-                if (method != null) {
-                    try {
-                        Log.d(TAG, "onRedoTranslation: found invalidateCacheFor method, invoking...")
-                        // Call with (String, String, String?) - third param null clears all for this pair
-                        method.invoke(translationManager, source, target, null)
-                        Log.d(TAG, "onRedoTranslation: cache invalidation successful")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "onRedoTranslation: reflection call failed", e)
-                    }
-                } else {
-                    Log.w(TAG, "onRedoTranslation: invalidateCacheFor method not found on ${translationManager.javaClass.simpleName}")
-                }
 
                 // 2. Clear ALL database cached translations (not just current language pair)
                 // This ensures translations from previous sessions are also cleared

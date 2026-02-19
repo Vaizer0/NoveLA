@@ -88,7 +88,6 @@ internal fun databaseMigrations() = arrayOf(
         """)
     },
     migration(12) {
-        // Migrate Extension table: change id from INTEGER to TEXT
         it.execSQL("ALTER TABLE Extension RENAME TO Extension_old")
         it.execSQL("""
             CREATE TABLE Extension (
@@ -105,7 +104,6 @@ internal fun databaseMigrations() = arrayOf(
                 settings TEXT NOT NULL
             )
         """)
-        // Copy data: use name field as the new id (contains string IDs like "novelbin")
         it.execSQL("""
             INSERT INTO Extension (id, name, fileName, imageURL, language, version, md5, enabled, installed, chapterType, settings)
             SELECT name, name, fileName, imageURL, language, version, md5, enabled, installed, chapterType, settings
@@ -115,6 +113,36 @@ internal fun databaseMigrations() = arrayOf(
     },
     migration(13) {
         it.addColumnIfNotExists("Book", "chaptersListHash", "TEXT")
+    },
+    migration(14) {
+        // Пересоздаём ChapterTranslation с составным primary key
+        // вместо autoGenerate id. Это устраняет дубли при insertReplace
+        // и гарантирует что на каждый originalText — одна запись.
+        // Старые данные переносим, дубли по (chapterUrl, sourceLang, targetLang, originalText)
+        // удаляем, оставляя самый свежий (MAX timestamp).
+        it.execSQL("""
+            CREATE TABLE IF NOT EXISTS ChapterTranslation_new (
+                chapterUrl TEXT NOT NULL,
+                sourceLang TEXT NOT NULL,
+                targetLang TEXT NOT NULL,
+                originalText TEXT NOT NULL,
+                translatedText TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                PRIMARY KEY (chapterUrl, sourceLang, targetLang, originalText)
+            )
+        """)
+        it.execSQL("""
+            INSERT INTO ChapterTranslation_new (chapterUrl, sourceLang, targetLang, originalText, translatedText, timestamp)
+            SELECT chapterUrl, sourceLang, targetLang, originalText, translatedText, MAX(timestamp)
+            FROM ChapterTranslation
+            GROUP BY chapterUrl, sourceLang, targetLang, originalText
+        """)
+        it.execSQL("DROP TABLE ChapterTranslation")
+        it.execSQL("ALTER TABLE ChapterTranslation_new RENAME TO ChapterTranslation")
+        it.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang
+            ON ChapterTranslation (chapterUrl, sourceLang, targetLang)
+        """)
     },
 )
 
