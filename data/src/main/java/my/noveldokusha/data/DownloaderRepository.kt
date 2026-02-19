@@ -32,7 +32,6 @@ class DownloaderRepository @Inject constructor(
 		""".trimIndent()
         }
 
-        // Return if can't find compatible source for url
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
             ?: return@withContext Response.Error(error, Exception())
 
@@ -53,44 +52,33 @@ class DownloaderRepository @Inject constructor(
 		""".trimIndent()
         }
 
-        // Return if can't find compatible source for url
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
             ?: return@withContext Response.Error(error, Exception())
 
-        // Try to get title from API first
         val apiResponse = my.noveldokusha.network.tryFlatConnect {
             scrap.getBookTitle(bookUrl)
         }
 
-        // If API returned a title, return it
         if (apiResponse is Response.Success && apiResponse.data != null) {
             return@withContext apiResponse
         }
 
-        // Fallback: try to parse title from HTML page
         my.noveldokusha.network.tryFlatConnect {
-            val doc = networkClient.get(bookUrl).toDocument()
+            val doc = networkClient.get(bookUrl).use { it.toDocument() }
 
-            // Try common title selectors
             val titleSelectors = listOf(
-                "h1",
-                ".novel-title",
-                ".book-title",
-                ".title",
-                "title",
-                ".entry-title",
-                ".post-title"
+                "h1", ".novel-title", ".book-title", ".title",
+                "title", ".entry-title", ".post-title"
             )
 
             for (selector in titleSelectors) {
                 val titleElement = doc.selectFirst(selector)
                 val title = titleElement?.text()?.trim()?.takeIf { it.isNotBlank() }
-                if (title != null && title.length > 3) { // Avoid very short titles
+                if (title != null && title.length > 3) {
                     return@tryFlatConnect Response.Success(title)
                 }
             }
 
-            // If no title found, return null (will use URL fallback in LibraryViewModel)
             Response.Success(null)
         }
     }
@@ -107,7 +95,6 @@ class DownloaderRepository @Inject constructor(
 		""".trimIndent()
         }
 
-        // Return if can't find compatible source for url
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
             ?: return@withContext Response.Error(error, Exception())
 
@@ -121,11 +108,10 @@ class DownloaderRepository @Inject constructor(
     ): Response<my.noveldokusha.scraper.ChapterDownload> = withContext(Dispatchers.Default) {
         my.noveldokusha.network.tryFlatConnect {
             val request = my.noveldokusha.network.getRequest(chapterUrl)
+            // FIX: .use{} закрывает response после получения redirect url
             val realUrl = networkClient
                 .call(request, followRedirects = true)
-                .request.url
-                .toString()
-
+                .use { it.request.url.toString() }
 
             val error by lazy {
                 """
@@ -140,21 +126,22 @@ class DownloaderRepository @Inject constructor(
             }
 
             scraper.getCompatibleSource(realUrl)?.also { source ->
+                // FIX: .use{} закрывает response после парсинга документа
                 val doc = if (source.charset != null) {
-                    networkClient.get(source.transformChapterUrl(realUrl)).toDocument(source.charset)
+                    networkClient.get(source.transformChapterUrl(realUrl)).use { it.toDocument(source.charset) }
                 } else {
-                    networkClient.get(source.transformChapterUrl(realUrl)).toDocument()
+                    networkClient.get(source.transformChapterUrl(realUrl)).use { it.toDocument() }
                 }
                 val data = my.noveldokusha.scraper.ChapterDownload(
                     body = source.getChapterText(doc) ?: return@also,
-                    title = null  // getChapterTitle() removed
+                    title = null
                 )
                 return@tryFlatConnect Response.Success(data)
             }
 
-            // If no predefined source is found try extracting text with heuristic extraction
-            val chapter =
-                heuristicChapterExtraction(realUrl, networkClient.get(realUrl).toDocument())
+            // Fallback: heuristic extraction
+            val doc = networkClient.get(realUrl).use { it.toDocument() }
+            val chapter = heuristicChapterExtraction(realUrl, doc)
             when (chapter) {
                 null -> Response.Error(
                     error,
@@ -179,7 +166,6 @@ class DownloaderRepository @Inject constructor(
 		""".trimIndent()
         }
 
-        // Return if can't find compatible source for url
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
         if (scrap == null) {
             println("DownloaderRepository: No compatible source found for $bookUrl")
@@ -205,12 +191,6 @@ class DownloaderRepository @Inject constructor(
             }
     }
 
-    /**
-     * Get chapter list hash for quick change detection.
-     * This makes a single request to the book page and extracts a hash
-     * from the latest chapter indicator (if configured for the source).
-     * Returns null if the source doesn't support this feature.
-     */
     suspend fun bookChaptersListHash(
         bookUrl: String,
     ): Response<String?> = withContext(Dispatchers.Default) {
@@ -223,7 +203,6 @@ class DownloaderRepository @Inject constructor(
 		""".trimIndent()
         }
 
-        // Return if can't find compatible source for url
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
             ?: return@withContext Response.Error(error, Exception())
 
