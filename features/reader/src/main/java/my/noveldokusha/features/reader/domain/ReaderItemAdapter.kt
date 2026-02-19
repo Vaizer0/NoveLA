@@ -329,8 +329,8 @@ internal class ReaderItemAdapter(
         if (selectableText) {
             setTextSelectionAwareClick { onClick() }
         } else {
-            setOnClickListener(null)
-            setOnTouchListener(null)
+            setOnClickListener { onClick() }
+            setOnTouchListener(null)         
         }
     }
 
