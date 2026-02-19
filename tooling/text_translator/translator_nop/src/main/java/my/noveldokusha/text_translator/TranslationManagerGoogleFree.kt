@@ -145,7 +145,7 @@ class TranslationManagerGoogleFree(
         val chunks = mutableListOf<List<Pair<Int, String>>>()
         var currentChunk = mutableListOf<Pair<Int, String>>()
         var currentLen = 0
-        val maxChunkChars = 10000
+        val maxChunkChars = 7500
 
         for (item in textsToTranslate) {
             val estimatedLen = item.second.length + 20
