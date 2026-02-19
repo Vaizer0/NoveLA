@@ -120,13 +120,13 @@ internal class ReaderItemAdapter(
             ).also { it.root.tag = it }
             else -> ActivityReaderListItemTranslateAttributionBinding.bind(convertView)
         }
-        
+
         // Set text based on provider
         bind.attributionText.text = when (item.provider) {
             "gemini" -> "Powered by Gemini"
             else -> "Powered by Google Translate"
         }
-        
+
         return bind.root
     }
 
@@ -328,6 +328,9 @@ internal class ReaderItemAdapter(
         setTextIsSelectable(selectableText)
         if (selectableText) {
             setTextSelectionAwareClick { onClick() }
+        } else {
+            setOnClickListener(null)
+            setOnTouchListener(null)
         }
     }
 
