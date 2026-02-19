@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
 import java.util.concurrent.TimeUnit
 
 class TranslationManagerGoogleFree(
@@ -81,7 +82,7 @@ class TranslationManagerGoogleFree(
                     okhttp3.Request.Builder()
                         .url("https://translate.googleapis.com/translate_a/single")
                         .post(formBody)
-                        .addHeader("User-Agent", "Mozilla/5.0")
+                        .addHeader("User-Agent", GLOBAL_USER_AGENT)
                         .build()
                 } else {
                     val url = "https://translate.googleapis.com/translate_a/single".toHttpUrl().newBuilder()
@@ -91,7 +92,7 @@ class TranslationManagerGoogleFree(
                         .addQueryParameter("dt", "t")
                         .addQueryParameter("q", text)
                         .build()
-                    okhttp3.Request.Builder().url(url).addHeader("User-Agent", "Mozilla/5.0").build()
+                    okhttp3.Request.Builder().url(url).addHeader("User-Agent", GLOBAL_USER_AGENT).build()
                 }
 
                 val startTime = System.currentTimeMillis()
@@ -125,15 +126,16 @@ class TranslationManagerGoogleFree(
         if (texts.isEmpty()) return@withContext emptyMap()
 
         val translations = mutableMapOf<String, String>()
-        
+
         // Split texts into chunks for batch translation
+        // Используем числовые маркеры [N] вместо XML-тегов — Google их не искажает
         val chunks = mutableListOf<List<Pair<Int, String>>>()
         var currentChunk = mutableListOf<Pair<Int, String>>()
         var currentLen = 0
-        val maxChunkChars = 10000
+        val maxChunkChars = 8000 // Снижено с 10000 для надёжности
 
         for ((index, text) in texts.withIndex()) {
-            val estimatedLen = text.length + 20
+            val estimatedLen = text.length + 10 // маркер [N]\n короче XML-тега
             if (currentLen + estimatedLen > maxChunkChars && currentChunk.isNotEmpty()) {
                 chunks.add(currentChunk)
                 currentChunk = mutableListOf()
@@ -147,21 +149,46 @@ class TranslationManagerGoogleFree(
         coroutineScope {
             chunks.map { chunk ->
                 async {
-                    val wrappedRequest = chunk.joinToString("\n") { (idx, text) -> "<n$idx>$text</n$idx>" }
+                    // Формат: "[0]\nтекст\n\n[1]\nтекст\n\n..."
+                    val wrappedRequest = chunk.joinToString("\n\n") { (idx, text) -> "[$idx]\n$text" }
                     val translatedBody = translateWithGoogleFree(wrappedRequest, sourceLanguage, targetLanguage)
 
+                    // Логируем количество переводов для отладки
+                    Log.d(TAG, "translateBatch: chunk size=${chunk.size}, response length=${translatedBody.length}")
+
                     chunk.forEach { (idx, original) ->
-                        val regex = Regex("<n$idx>(.*?)</n$idx>", RegexOption.DOT_MATCHES_ALL)
+                        // Ищем содержимое между маркером [idx] и следующим маркером или концом строки
+                        val regex = Regex(
+                            """^\[$idx\]\s*\n?(.*?)(?=\n*\[\d+\]|\z)""",
+                            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE)
+                        )
                         val match = regex.find(translatedBody)
                         if (match != null) {
                             val result = match.groupValues[1].trim()
-                            translations[original] = result
+                            if (result.isNotEmpty()) {
+                                translations[original] = result
+                            } else {
+                                // Маркер найден, но содержимое пустое — fallback
+                                Log.w(TAG, "Marker [$idx] found but empty, falling back to single translation")
+                                translations[original] = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
+                            }
+                        } else {
+                            // Маркер не найден (искажён переводчиком) — переводим параграф отдельно
+                            Log.w(TAG, "Marker [$idx] not found in response, falling back to single translation")
+                            translations[original] = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
                         }
+                    }
+
+                    // Логируем если какие-то параграфы не переведены
+                    val missing = chunk.count { (_, original) -> !translations.containsKey(original) }
+                    if (missing > 0) {
+                        Log.w(TAG, "translateBatch: $missing/${chunk.size} paragraphs still missing after fallback")
                     }
                 }
             }.awaitAll()
         }
 
+        Log.d(TAG, "translateBatch: total=${texts.size}, translated=${translations.size}, missing=${texts.size - translations.size}")
         translations
     }
 
