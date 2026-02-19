@@ -17,7 +17,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class TranslationManagerGoogleFree(
@@ -31,8 +30,6 @@ class TranslationManagerGoogleFree(
 
     override val available = true
     override val isUsingOnlineTranslation = true
-
-    private val translationCache: ConcurrentHashMap<String, String> = ConcurrentHashMap()
 
     override val models = mutableStateListOf<TranslationModelState>().apply {
         val supportedLanguages = listOf(
@@ -66,9 +63,6 @@ class TranslationManagerGoogleFree(
         targetLanguage: String,
         retryCount: Int = 2
     ): String = withContext(Dispatchers.IO) {
-        val cacheKey = "$sourceLanguage-$targetLanguage:$text"
-        translationCache[cacheKey]?.let { return@withContext it }
-
         if (text.length > 13000) {
             return@withContext translateLongText(text, sourceLanguage, targetLanguage)
         }
@@ -113,7 +107,6 @@ class TranslationManagerGoogleFree(
                     }.trim()
 
                     if (result.isNotEmpty()) {
-                        translationCache[cacheKey] = result
                         Log.d(TAG, "Translated ${text.length} chars in ${System.currentTimeMillis() - startTime}ms")
                         return@withContext result
                     }
@@ -132,29 +125,21 @@ class TranslationManagerGoogleFree(
         if (texts.isEmpty()) return@withContext emptyMap()
 
         val translations = mutableMapOf<String, String>()
-        val textsToTranslate = mutableListOf<Pair<Int, String>>()
-
-        texts.forEachIndexed { index, text ->
-            val cached = translationCache["$sourceLanguage-$targetLanguage:$text"]
-            if (cached != null) translations[text] = cached
-            else textsToTranslate.add(index to text)
-        }
-
-        if (textsToTranslate.isEmpty()) return@withContext translations
-
+        
+        // Split texts into chunks for batch translation
         val chunks = mutableListOf<List<Pair<Int, String>>>()
         var currentChunk = mutableListOf<Pair<Int, String>>()
         var currentLen = 0
-        val maxChunkChars = 7500
+        val maxChunkChars = 10000
 
-        for (item in textsToTranslate) {
-            val estimatedLen = item.second.length + 20
+        for ((index, text) in texts.withIndex()) {
+            val estimatedLen = text.length + 20
             if (currentLen + estimatedLen > maxChunkChars && currentChunk.isNotEmpty()) {
                 chunks.add(currentChunk)
                 currentChunk = mutableListOf()
                 currentLen = 0
             }
-            currentChunk.add(item)
+            currentChunk.add(index to text)
             currentLen += estimatedLen
         }
         if (currentChunk.isNotEmpty()) chunks.add(currentChunk)
@@ -171,25 +156,10 @@ class TranslationManagerGoogleFree(
                         if (match != null) {
                             val result = match.groupValues[1].trim()
                             translations[original] = result
-                            translationCache["$sourceLanguage-$targetLanguage:$original"] = result
                         }
                     }
                 }
             }.awaitAll()
-        }
-
-        val stillMissing = texts.filter { !translations.containsKey(it) }
-        if (stillMissing.isNotEmpty()) {
-            coroutineScope {
-                stillMissing.map { original ->
-                    async {
-                        val res = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
-                        original to res
-                    }
-                }.awaitAll().forEach { (orig, trans) ->
-                    translations[orig] = if (trans.contains("[Translation error")) orig else trans
-                }
-            }
         }
 
         translations
@@ -216,15 +186,6 @@ class TranslationManagerGoogleFree(
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}
-
-    fun invalidateCacheFor(sourceLanguage: String, targetLanguage: String, text: String? = null) {
-        val prefix = "$sourceLanguage-$targetLanguage:"
-        if (text == null) {
-            translationCache.keys.filter { it.startsWith(prefix) }.forEach { translationCache.remove(it) }
-        } else {
-            translationCache.remove("$prefix$text")
-        }
-    }
 
     companion object { private const val TAG = "TranslationGoogleFree" }
 }

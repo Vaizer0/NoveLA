@@ -310,6 +310,7 @@ class RestoreDataService : Service() {
                     val chapterBody = ChapterBodyRepository(
                         chapterBodyDao = newDatabase.chapterBodyDao(),
                         appDatabase = newDatabase,
+                        chapterTranslationDao = newDatabase.chapterTranslationDao(),
                         bookChaptersRepository = bookChapters,
                         downloaderRepository = downloaderRepository
                     )

@@ -123,14 +123,6 @@ class TranslationManagerComposite(
         // No-op for online translation
     }
 
-    /**
-     * Invalidate cache in both managers
-     */
-    fun invalidateCacheFor(sourceLanguage: String, targetLanguage: String, text: String? = null) {
-        Log.d(TAG, "invalidateCacheFor: delegating to both managers")
-        geminiManager.invalidateCacheFor(sourceLanguage, targetLanguage, text)
-        googleFreeManager.invalidateCacheFor(sourceLanguage, targetLanguage, text)
-    }
 
     /**
      * Get current active translator name for UI display
