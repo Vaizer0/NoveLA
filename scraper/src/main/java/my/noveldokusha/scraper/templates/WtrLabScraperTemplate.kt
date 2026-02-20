@@ -80,7 +80,7 @@ abstract class WtrLabScraperTemplate(
 
     private val translateApiKey = String(
         android.util.Base64.decode(
-            "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldISG1PNTIw",
+            "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldESG1PNTIw",
             android.util.Base64.DEFAULT
         )
     ).trim()
