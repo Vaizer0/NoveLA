@@ -19,5 +19,6 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.timber)
+    implementation(libs.compose.androidx.material.icons.extended)
     androidTestImplementation(libs.test.androidx.espresso.core)
 }
