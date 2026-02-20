@@ -2,6 +2,7 @@ package my.noveldokusha.webview
 
 import android.annotation.SuppressLint
 import android.content.*
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.webkit.*
@@ -41,6 +42,13 @@ class WebViewActivity : ComponentActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                // Все ссылки (включая magic link из почты) открываем внутри этого WebView
+                val url = request?.url?.toString() ?: return false
+                view?.loadUrl(url)
+                return true
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 val cookies = CookieManager.getInstance().getCookie(url) ?: ""
@@ -51,19 +59,15 @@ class WebViewActivity : ComponentActivity() {
         }
 
         setContent {
-            // Флаг прохождения проверки
             var isReady by remember { mutableStateOf(false) }
-            // Динамический URL для заголовка
             var currentUrl by remember { mutableStateOf(urlExtra) }
 
-            // Обновляем состояние каждые 500мс
             LaunchedEffect(Unit) {
                 while (true) {
                     val cookies = CookieManager.getInstance().getCookie(urlExtra) ?: ""
                     if (cookies.contains("cf_clearance")) {
                         isReady = true
                     }
-                    // Берем актуальный URL из WebView для заголовка
                     webView.url?.let { currentUrl = it }
                     delay(500)
                 }
@@ -71,10 +75,10 @@ class WebViewActivity : ComponentActivity() {
 
             Theme(themeProvider = themeProvider) {
                 WebViewScreen(
-                    // Теперь заголовок показывает реальный адрес сайта
                     toolbarTitle = currentUrl,
                     isReady = isReady,
                     webViewFactory = { webView },
+                    onNavigateToUrl = { url -> webView.loadUrl(url) },
                     onBackClicked = { finish() },
                     onDoneClicked = {
                         CookieManager.getInstance().flush()
@@ -89,6 +93,16 @@ class WebViewActivity : ComponentActivity() {
         }
 
         webView.loadUrl(urlExtra)
+    }
+
+    // Когда magic link открывается через Intent — перехватываем и грузим в наш WebView
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val url = intent.data?.toString()
+            ?: intent.getStringExtra("url")
+            ?: return
+        Log.d("WebViewActivity", "onNewIntent: loading $url")
+        webView.loadUrl(url)
     }
 
     private fun hardResetSession() {
