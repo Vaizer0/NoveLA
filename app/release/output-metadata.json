@@ -11,9 +11,9 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 15,
-      "versionName": "1.1.4",
-      "outputFile": "Novela_v1.1.4-release.apk"
+      "versionCode": 16,
+      "versionName": "1.1.5",
+      "outputFile": "Novela_v1.1.5-release.apk"
     }
   ],
   "elementType": "File",
@@ -22,14 +22,14 @@
       "minApi": 28,
       "maxApi": 30,
       "baselineProfiles": [
-        "baselineProfiles/1/Novela_v1.1.4-release.dm"
+        "baselineProfiles/1/Novela_v1.1.5-release.dm"
       ]
     },
     {
       "minApi": 31,
       "maxApi": 2147483647,
       "baselineProfiles": [
-        "baselineProfiles/0/Novela_v1.1.4-release.dm"
+        "baselineProfiles/0/Novela_v1.1.5-release.dm"
       ]
     }
   ],
