@@ -293,4 +293,7 @@
     <string name="delete_rule">Удалить правило</string>
     <string name="delete_rule_confirmation">Вы уверены, что хотите удалить это правило регулярного выражения?\n\nШаблон: %s</string>
     <string name="wtr_lab_no_translation_hint">Перевод отключён — контент будет загружаться на английском (или китайском в RAW-режиме).</string>
+    <string name="scroll_to_last_read_chapter">Последняя читаемая</string>
+    <string name="go_to_chapter">Перейти к главе</string>
+    <string name="search_chapter_hint">Поиск по названию…</string>
 </resources>

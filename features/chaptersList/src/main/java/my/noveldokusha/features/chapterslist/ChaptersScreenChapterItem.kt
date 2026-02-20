@@ -1,12 +1,13 @@
 package my.noveldokusha.features.chapterslist
 
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -18,11 +19,15 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.ColorNotice
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
@@ -37,12 +42,31 @@ internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
     selected: Boolean,
     isLocalSource: Boolean,
+    highlighted: Boolean = false,
     modifier: Modifier = Modifier,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     onDownload: () -> Unit
 ) {
     val chapter = chapterWithContext.chapter
+
+    val targetContainerColor = when {
+        selected -> MaterialTheme.colorApp.tintedSelectedSurface
+        highlighted -> ColorAccent.copy(alpha = 0.18f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    // Плавная подсветка при навигации, статичный цвет при выборе/обычном состоянии
+    val containerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = if (highlighted) 300 else 600),
+        label = "chapterItemBackground"
+    )
+
+    // Стабилизируем лямбды чтобы не триггерить лишние рекомпозиции соседних элементов
+    val stableOnClick = remember(onClick) { onClick }
+    val stableOnLongClick = remember(onLongClick) { onLongClick }
+    val stableOnDownload = remember(onDownload) { onDownload }
+
     ListItem(
         headlineContent = {
             Text(
@@ -51,6 +75,8 @@ internal fun ChaptersScreenChapterItem(
             )
         },
         supportingContent = {
+            // key() предотвращает лишние анимации при скролле —
+            // анимация запустится только при реальном изменении состояния главы
             AnimatedTransition(
                 targetState = chapterWithContext.lastReadChapter to chapter.read,
                 transitionSpec = { fadeIn() togetherWith fadeOut(tween(delayMillis = 150)) }
@@ -71,7 +97,7 @@ internal fun ChaptersScreenChapterItem(
                     targetState = chapterWithContext.downloaded,
                     transitionSpec = { fadeIn() togetherWith fadeOut() }
                 ) { downloaded ->
-                    IconButton(onClick = onDownload) {
+                    IconButton(onClick = stableOnDownload) {
                         Icon(
                             if (downloaded) Icons.Filled.CloudDownload
                             else Icons.Outlined.CloudDownload,
@@ -83,15 +109,13 @@ internal fun ChaptersScreenChapterItem(
         },
         colors = ListItemDefaults.colors(
             supportingColor = MaterialTheme.colorScheme.onTertiary,
-            containerColor =
-            if (selected) MaterialTheme.colorApp.tintedSelectedSurface
-            else MaterialTheme.colorScheme.surface
+            containerColor = containerColor,
         ),
         modifier = modifier
-            .animateContentSize()
+            // animateContentSize() убран — он вызывал лишние измерения при каждом скролле
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
+                onClick = stableOnClick,
+                onLongClick = stableOnLongClick,
             )
     )
 }
@@ -172,12 +196,3 @@ private class PreviewProvider : PreviewParameterProvider<PreviewProviderState> {
         )
     )
 }
-
-
-
-
-
-
-
-
-

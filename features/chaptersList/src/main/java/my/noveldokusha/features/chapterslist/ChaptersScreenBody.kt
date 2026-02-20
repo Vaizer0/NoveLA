@@ -15,6 +15,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.components.ErrorView
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
@@ -56,6 +59,63 @@ internal fun ChaptersScreenBody(
         onRefresh = onPullRefresh,
     )
 
+    val coroutineScope = rememberCoroutineScope()
+
+    // URL главы, которую нужно подсветить после прокрутки
+    var highlightedChapterUrl by remember { mutableStateOf<String?>(null) }
+
+    // Смещение вниз от верха экрана (чтобы глава не скрывалась за toolbar)
+    val scrollOffset = -350
+
+    // Плавная прокрутка к индексу: если элемент далеко — сначала прыгаем рядом, потом анимируем
+    suspend fun smoothScrollToIndex(index: Int) {
+        val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+        val firstVisible = lazyListState.firstVisibleItemIndex
+        val isNearby = index in (firstVisible - 5)..(firstVisible + visibleItems.size + 5)
+        if (!isNearby) {
+            val jumpTo = if (index > firstVisible) index - 3 else index + 3
+            lazyListState.scrollToItem(jumpTo.coerceIn(0, lazyListState.layoutInfo.totalItemsCount - 1))
+        }
+        lazyListState.animateScrollToItem(index, scrollOffset)
+    }
+
+    // Индекс последней читаемой главы (+1 за header)
+    val lastReadChapterIndex = remember(state.book.value.lastReadChapter, state.chapters.size) {
+        val url = state.book.value.lastReadChapter ?: return@remember null
+        val idx = state.chapters.indexOfFirst { it.chapter.url == url }
+        if (idx == -1) null else idx + 1
+    }
+
+    val onScrollToLastRead: (() -> Unit)? = lastReadChapterIndex?.let { index ->
+        {
+            coroutineScope.launch {
+                val url = state.book.value.lastReadChapter
+                smoothScrollToIndex(index)
+                highlightedChapterUrl = url
+                delay(1500)
+                highlightedChapterUrl = null
+            }
+        }
+    }
+
+    // Состояние диалога выбора главы
+    var showGoToChapterDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showGoToChapterDialog) {
+        GoToChapterDialog(
+            chapters = state.chapters,
+            onChapterSelected = { index, url ->
+                coroutineScope.launch {
+                    smoothScrollToIndex(index)
+                    highlightedChapterUrl = url
+                    delay(1500)
+                    highlightedChapterUrl = null
+                }
+            },
+            onDismiss = { showGoToChapterDialog = false }
+        )
+    }
+
     Box(
         Modifier.pullRefresh(state = pullRefreshState)
     ) {
@@ -77,6 +137,8 @@ internal fun ChaptersScreenBody(
                     modifier = Modifier.padding(bottom = 12.dp),
                     onCoverLongClick = onCoverLongClick,
                     onGlobalSearchClick = onGlobalSearchClick,
+                    onScrollToLastRead = onScrollToLastRead,
+                    onScrollToChapter = { showGoToChapterDialog = true },
                 )
             }
 
@@ -89,6 +151,7 @@ internal fun ChaptersScreenBody(
                     chapterWithContext = it,
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
+                    highlighted = it.chapter.url == highlightedChapterUrl,
                     onClick = { onChapterClick(it) },
                     onLongClick = { onChapterLongClick(it) },
                     onDownload = { onChapterDownload(it) }

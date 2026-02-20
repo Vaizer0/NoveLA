@@ -1,7 +1,6 @@
 package my.noveldokusha.features.chapterslist
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,7 +43,7 @@ import my.noveldokusha.coreui.components.BookImageButtonView
 import my.noveldokusha.coreui.components.BookTitlePosition
 import my.noveldokusha.coreui.components.ExpandableText
 import my.noveldokusha.coreui.components.ImageView
-import my.noveldokusha.coreui.modifiers.bounceOnPressed
+import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.clickableNoIndicator
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.rememberResolvedBookImagePath
@@ -52,6 +57,8 @@ internal fun ChaptersScreenHeader(
     modifier: Modifier = Modifier,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
+    onScrollToLastRead: (() -> Unit)?,
+    onScrollToChapter: () -> Unit,
 ) {
     val coverImageModel = bookState.coverImageUrl?.let {
         rememberResolvedBookImagePath(
@@ -99,8 +106,7 @@ internal fun ChaptersScreenHeader(
                     onClick = { showImageFullScreen = true },
                     onLongClick = onCoverLongClick,
                     bookTitlePosition = BookTitlePosition.Hidden,
-                    modifier = Modifier
-                        .weight(1f)
+                    modifier = Modifier.weight(1f)
                 )
                 if (showImageFullScreen) Dialog(
                     onDismissRequest = { showImageFullScreen = false },
@@ -153,6 +159,7 @@ internal fun ChaptersScreenHeader(
                     }
                 }
             }
+
             SelectionContainer {
                 val text by remember(bookState.description) { derivedStateOf { bookState.description.trim() } }
                 ExpandableText(
@@ -160,6 +167,49 @@ internal fun ChaptersScreenHeader(
                     linesForExpand = 4
                 )
             }
+
+            // Кнопки навигации по главам
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Кнопка "К последней читаемой" — только если есть прогресс
+                if (onScrollToLastRead != null) {
+                    Button(
+                        onClick = onScrollToLastRead,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ColorAccent.copy(alpha = 0.15f),
+                            contentColor = ColorAccent,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.BookmarkAdded,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                        Text(text = stringResource(id = R.string.scroll_to_last_read_chapter))
+                    }
+                }
+
+                // Кнопка "Перейти к главе"
+                Button(
+                    onClick = onScrollToChapter,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    modifier = if (onScrollToLastRead != null) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                    Text(text = stringResource(id = R.string.go_to_chapter))
+                }
+            }
+
             HorizontalDivider(
                 Modifier
                     .padding(horizontal = 40.dp)

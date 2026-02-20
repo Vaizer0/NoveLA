@@ -312,5 +312,7 @@
     <string name="delete_rule_confirmation">Are you sure you want to delete this regex rule?\n\nPattern: %s</string>
     <string name="wtr_lab_no_translation_hint">Translation disabled — content will load in English (or Chinese in RAW mode).</string>
     <string name="wtr_lab_lang_none">None</string>
-
+    <string name="scroll_to_last_read_chapter">Last read</string>
+    <string name="go_to_chapter">Go to chapter</string>
+    <string name="search_chapter_hint">Search by title…</string>
 </resources>
