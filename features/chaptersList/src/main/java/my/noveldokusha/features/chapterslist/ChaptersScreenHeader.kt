@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -171,7 +172,9 @@ internal fun ChaptersScreenHeader(
             // Кнопки навигации по главам
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
             ) {
                 // Кнопка "К последней читаемой" — только если есть прогресс
                 if (onScrollToLastRead != null) {
@@ -181,7 +184,9 @@ internal fun ChaptersScreenHeader(
                             containerColor = ColorAccent.copy(alpha = 0.15f),
                             contentColor = ColorAccent,
                         ),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.BookmarkAdded,
@@ -196,10 +201,13 @@ internal fun ChaptersScreenHeader(
                 Button(
                     onClick = onScrollToChapter,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        containerColor = ColorAccent.copy(alpha = 0.15f),
+                        contentColor = ColorAccent,
                     ),
-                    modifier = if (onScrollToLastRead != null) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                    modifier = if (onScrollToLastRead != null)
+                        Modifier.weight(1f).fillMaxHeight()
+                    else
+                        Modifier.fillMaxWidth(),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Search,
