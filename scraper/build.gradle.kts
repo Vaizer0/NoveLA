@@ -13,7 +13,7 @@ dependencies {
     implementation(projects.core)
     implementation(projects.coreui)
     implementation(projects.networking)
-
+    implementation(libs.compose.material3.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.jsoup)
     implementation(libs.gson)
