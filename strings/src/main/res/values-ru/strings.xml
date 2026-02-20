@@ -52,6 +52,20 @@
     <string name="preserve_only_images_from_library_books">Сохранить только изображения из книг библиотеки</string>
     <string name="add_delay">Задержка добавления</string>
     <string name="add_delay_description">Задержка между добавлением книг из одного источника (%1$dс)</string>
+    <string name="wtr_lab_language">Язык перевода WTR-Lab</string>
+    <string name="wtr_lab_language_description">Выберите язык перевода для источника WTR-Lab</string>
+    <string name="language_multilanguage">Мультиязычный</string>
+    <string name="wtr_lab_lang_en">Английский</string>
+    <string name="wtr_lab_lang_es">Испанский</string>
+    <string name="wtr_lab_lang_ru">Русский</string>
+    <string name="wtr_lab_lang_de">Немецкий</string>
+    <string name="wtr_lab_lang_pl">Польский</string>
+    <string name="wtr_lab_lang_it">Итальянский</string>
+    <string name="wtr_lab_lang_fr">Французский</string>
+    <string name="wtr_lab_mode">Режим перевода WTR-Lab</string>
+    <string name="wtr_lab_mode_description">AI: Английский перевод от WTR-Lab. RAW: Китайский оригинальный текст.</string>
+    <string name="wtr_lab_mode_ai">AI (Английский)</string>
+    <string name="wtr_lab_mode_raw">RAW (Китайский)</string>
     <string name="images_total_size">Общий размер изображений:</string>
     <string name="follow_system">Следовать системе</string>
     <string name="sources_languages">Языки источников</string>
@@ -278,4 +292,5 @@
     <string name="no_regex_rules_yet">Правила регулярных выражений еще не добавлены.\nДобавьте первое правило!</string>
     <string name="delete_rule">Удалить правило</string>
     <string name="delete_rule_confirmation">Вы уверены, что хотите удалить это правило регулярного выражения?\n\nШаблон: %s</string>
+    <string name="wtr_lab_no_translation_hint">Перевод отключён — контент будет загружаться на английском (или китайском в RAW-режиме).</string>
 </resources>
