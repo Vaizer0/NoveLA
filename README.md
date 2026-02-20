@@ -18,6 +18,7 @@ Copyright © 2023, [nani](https://github.com/HnDK0), distributed under the [GPL-
   - **Russian sources**: Jaomix, RanobeLib, RanobeHub, Свободный Мир Ранобэ, BookHamster
   - **English sources**: FreeWebNovel, NovelFull, NovelBin, Royal Road, Scribble Hub, AllNovel, NoBadNovel, NovelBuddy, NovelFire, NovelHall, NovLove, ReadNovelFull, WuxiaWorld, WTR-LAB
   - **Indonesian sources**: BacaLightnovel, Novelku
+  - **Multilanguage**: WTR-LAB  
   - **Local source** for reading local EPUB files
 - **Multiple databases** for novel search
 - **Add novels by link** - Ability to add novels directly by URL
@@ -46,6 +47,8 @@ Copyright © 2023, [nani](https://github.com/HnDK0), distributed under the [GPL-
 | ![](screenshots/Screenshot_settings.png) | ![](screenshots/Screenshot_CF_Turnstile.png) |
 | Regex settings | Regex cleanup |
 | ![](screenshots/Screenshot_settings_regex_.png) | ![](screenshots/Screenshot_regex_Cleanup.png) |
+| WTR-LAB language | WTR-LAB settings |
+| ![](screenshots/wtrlab_set_language.png) | ![](screenshots/wrtlab_setting.png) |
 
 ## Tech Stack
 - Kotlin, XML views, Jetpack Compose
