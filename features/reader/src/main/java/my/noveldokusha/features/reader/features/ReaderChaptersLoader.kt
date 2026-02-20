@@ -44,8 +44,6 @@ internal class ReaderChaptersLoader(
 
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Main.immediate
 
-    // Главы, которые сейчас переводятся в фоне (pre-translate)
-    // Используется как мьютекс чтобы не запускать дублирующий перевод
     private val preTranslatingChapters = mutableSetOf<String>()
 
     fun clearTranslationCache() {
@@ -164,11 +162,6 @@ internal class ReaderChaptersLoader(
         }
     }
 
-    /**
-     * Pre-translate следующей главы в фоне.
-     * Сохраняет ВСЕ параграфы в БД (включая fallback на оригинал).
-     * Если перевод уже идёт или уже есть в БД — пропускает.
-     */
     fun preTranslateNextChapter(currentChapterIndex: Int) {
         if (hasLoadingError) return
 
@@ -180,7 +173,6 @@ internal class ReaderChaptersLoader(
 
         val nextChapter = orderedChapters[nextIndex]
 
-        // Уже переводится — пропускаем (мьютекс)
         if (!preTranslatingChapters.add(nextChapter.url)) {
             android.util.Log.d(TAG, "Pre-translation: Chapter ${nextChapter.title} already in progress, skipping")
             return
@@ -190,10 +182,10 @@ internal class ReaderChaptersLoader(
 
         launch(Dispatchers.IO) {
             try {
-                val sourceLang = translatorSourceLanguageOrNull() ?: "en"
-                val targetLang = translatorTargetLanguageOrNull() ?: "zh"
+                kotlinx.coroutines.delay(3_000L)
+                val sourceLang = translatorSourceLanguageOrNull() ?: return@launch
+                val targetLang = translatorTargetLanguageOrNull() ?: return@launch
 
-                // Проверяем БД — если переводы уже есть, не переводим повторно
                 val existing = chapterTranslationDao.getTranslations(
                     chapterUrl = nextChapter.url,
                     sourceLang = sourceLang,
@@ -227,8 +219,6 @@ internal class ReaderChaptersLoader(
                 android.util.Log.d(TAG, "Pre-translation: Translating ${textsToTranslate.size} paragraphs for ${nextChapter.title}")
                 val translations = batchTranslator.invoke(textsToTranslate)
 
-                // Сохраняем ВСЕ параграфы — если перевод не пришёл, пишем оригинал
-                // Это гарантирует что при загрузке главы кэш будет полным
                 val entities = textsToTranslate.map { original ->
                     ChapterTranslation(
                         chapterUrl = nextChapter.url,
@@ -514,7 +504,6 @@ internal class ReaderChaptersLoader(
                         val batchTranslator = translatorBatchTranslateOrNull()
 
                         if (batchTranslator != null) {
-                            // Проверяем БД
                             val dbTranslations = withContext(Dispatchers.IO) {
                                 chapterTranslationDao.getTranslations(
                                     chapterUrl = chapter.url,
@@ -530,12 +519,10 @@ internal class ReaderChaptersLoader(
                                 val missingFromDb = textsToTranslate.filter { !dbTranslations.containsKey(it) }
 
                                 if (missingFromDb.isNotEmpty()) {
-                                    // В кэше дыры (старый неполный кэш) — доперевводим недостающее
                                     android.util.Log.d(TAG, "DB cache partial: ${dbTranslations.size}/${textsToTranslate.size}, translating ${missingFromDb.size} missing")
                                     val extraTranslations = withContext(Dispatchers.IO) {
                                         batchTranslator.invoke(missingFromDb)
                                     }
-                                    // Сохраняем недостающие в БД
                                     withContext(Dispatchers.IO) {
                                         val entities = missingFromDb.map { original ->
                                             ChapterTranslation(
@@ -563,14 +550,12 @@ internal class ReaderChaptersLoader(
                             } else {
                                 // Кэша нет — ждём если pre-translate сейчас идёт, иначе переводим сами
                                 if (preTranslatingChapters.contains(chapter.url)) {
-                                    // Pre-translate уже работает — ждём его завершения
                                     android.util.Log.d(TAG, "Pre-translation in progress for ${chapter.title}, waiting...")
                                     var waited = 0
                                     while (preTranslatingChapters.contains(chapter.url) && waited < 10_000) {
                                         kotlinx.coroutines.delay(200)
                                         waited += 200
                                     }
-                                    // Перечитываем БД после ожидания
                                     val freshTranslations = withContext(Dispatchers.IO) {
                                         chapterTranslationDao.getTranslations(
                                             chapterUrl = chapter.url,
@@ -580,9 +565,38 @@ internal class ReaderChaptersLoader(
                                     }
                                     if (freshTranslations.isNotEmpty()) {
                                         android.util.Log.d(TAG, "Pre-translation finished, using DB cache (${freshTranslations.size} translations)")
-                                        itemsOriginal.map {
-                                            if (it is ReaderItem.Body) it.copy(textTranslated = freshTranslations[it.text] ?: it.text)
-                                            else it
+                                        // Проверяем что всё покрыто — скрейпинг может дать немного другой текст
+                                        val bodyItems = itemsOriginal.filterIsInstance<ReaderItem.Body>()
+                                        val notInCache = bodyItems.filter { !freshTranslations.containsKey(it.text) }
+                                        if (notInCache.isNotEmpty()) {
+                                            android.util.Log.w(TAG, "Cache miss ${notInCache.size} paragraphs after pre-translate, translating missing...")
+                                            val missingTexts = notInCache.map { it.text }
+                                            val extraTranslations = withContext(Dispatchers.IO) {
+                                                batchTranslator.invoke(missingTexts)
+                                            }
+                                            withContext(Dispatchers.IO) {
+                                                val entities = missingTexts.map { original ->
+                                                    ChapterTranslation(
+                                                        chapterUrl = chapter.url,
+                                                        sourceLang = sourceLang,
+                                                        targetLang = targetLang,
+                                                        originalText = original,
+                                                        translatedText = extraTranslations[original] ?: original
+                                                    )
+                                                }
+                                                chapterTranslationDao.insertReplace(entities)
+                                            }
+                                            val fullTranslations = freshTranslations + extraTranslations
+                                            itemsOriginal.map {
+                                                if (it is ReaderItem.Body) it.copy(textTranslated = fullTranslations[it.text] ?: it.text)
+                                                else it
+                                            }
+                                        } else {
+                                            android.util.Log.d(TAG, "All ${bodyItems.size} paragraphs covered (${freshTranslations.size} unique keys)")
+                                            itemsOriginal.map {
+                                                if (it is ReaderItem.Body) it.copy(textTranslated = freshTranslations[it.text] ?: it.text)
+                                                else it
+                                            }
                                         }
                                     } else {
                                         // Pre-translate не успел или упал — переводим сами
@@ -594,7 +608,6 @@ internal class ReaderChaptersLoader(
                                 }
                             }
                         } else {
-                            // Fallback: перевод параграф за параграфом (MLKit)
                             android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (batch not available)")
                             itemsOriginal.map {
                                 if (it is ReaderItem.Body) it.copy(textTranslated = translatorTranslateOrNull(it.text))
@@ -644,9 +657,6 @@ internal class ReaderChaptersLoader(
         }
     }
 
-    /**
-     * Переводит параграфы и сохраняет ВСЕ в БД (включая fallback на оригинал для пропущенных).
-     */
     private suspend fun translateAndCache(
         itemsOriginal: List<ReaderItem>,
         textsToTranslate: List<String>,
@@ -663,7 +673,6 @@ internal class ReaderChaptersLoader(
         val missing = textsToTranslate.size - translations.size
         if (missing > 0) android.util.Log.w(TAG, "translateAndCache: $missing paragraphs missing, saving original as fallback")
 
-        // Сохраняем ВСЕ параграфы — пропущенные сохраняем как оригинал
         withContext(Dispatchers.IO) {
             val entities = textsToTranslate.map { original ->
                 ChapterTranslation(
