@@ -1,5 +1,6 @@
 package my.noveldokusha.scraper
 
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.scraper.databases.BakaUpdates
 import my.noveldokusha.scraper.databases.NovelUpdates
@@ -10,7 +11,8 @@ import javax.inject.Singleton
 @Singleton
 class Scraper @Inject constructor(
     networkClient: NetworkClient,
-    localSource: LocalSource
+    localSource: LocalSource,
+    appPreferences: AppPreferences
 ) {
     val databasesList = setOf(
         NovelUpdates(networkClient),
@@ -42,7 +44,7 @@ class Scraper @Inject constructor(
         WuxiaWorld_site(networkClient),
         NovelFire(networkClient),
         NovelBuddy(networkClient),
-        WtrLabEn(networkClient),
+        WtrLabSource(networkClient, appPreferences),
         Novel543(networkClient),
         Quanben5(networkClient),
     )

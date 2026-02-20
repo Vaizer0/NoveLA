@@ -236,6 +236,15 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_Int(name, preferences, 120)
     }
 
+    val WTR_LAB_LANGUAGE = object : Preference<String>("WTR_LAB_LANGUAGE") {
+        override var value by SharedPreference_String(name, preferences, "en")
+    }
+
+    // WTR-Lab translation mode: "ai" = English translation, "raw" = Chinese original
+    val WTR_LAB_MODE = object : Preference<String>("WTR_LAB_MODE") {
+        override var value by SharedPreference_String(name, preferences, "ai")
+    }
+
     val LIBRARY_CUSTOM_CATEGORIES = object : Preference<List<String>>("LIBRARY_CUSTOM_CATEGORIES") {
         override var value by SharedPreference_Serializable<List<String>>(
             name = name,
