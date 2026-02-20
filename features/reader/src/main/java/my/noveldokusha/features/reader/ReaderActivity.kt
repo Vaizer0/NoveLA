@@ -398,7 +398,6 @@ class ReaderActivity : BaseActivity() {
         }
         window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-
     }
 
     private fun setupSystemBarAppearance() {
@@ -420,16 +419,16 @@ class ReaderActivity : BaseActivity() {
     private fun scrollToReadingPositionOptional(chapterIndex: Int, chapterItemPosition: Int) {
         // Always update the view to show current TTS item highlighting
         viewAdapter.listView.notifyDataSetChanged()
-        
+
         // If user is scrolling, don't auto-scroll
         if (listIsScrolling) {
             return
         }
-        
+
         // Check if the TTS item is already visible on screen
         val firstIndex = viewBind.listView.firstVisiblePosition
         val lastIndex = viewBind.listView.lastVisiblePosition
-        
+
         for (index in firstIndex..lastIndex) {
             val item = viewAdapter.listView.getItem(index)
             if (
@@ -441,7 +440,7 @@ class ReaderActivity : BaseActivity() {
                 val currentOffsetPx =
                     viewBind.listView.getChildAt(viewIndex).run { top - paddingTop }
                 val newOffsetPx = 200.dpToPx(this@ReaderActivity)
-                
+
                 // Scroll only if item is below the desired visible position (fast scroll)
                 if (currentOffsetPx > newOffsetPx) {
                     viewBind.listView.smoothScrollToPositionFromTop(index, newOffsetPx, 400)
@@ -449,7 +448,7 @@ class ReaderActivity : BaseActivity() {
                 return
             }
         }
-        
+
         // Item not visible - use hybrid approach based on distance
         val itemIndex = indexOfReaderItem(
             list = viewModel.items,
@@ -457,15 +456,15 @@ class ReaderActivity : BaseActivity() {
             chapterItemPosition = chapterItemPosition
         )
         if (itemIndex == -1) return
-        
+
         val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
         val newOffsetPx = 200.dpToPx(this@ReaderActivity)
-        
+
         // Calculate distance from visible area
         val distanceBelow = itemPosition - lastIndex
         val distanceAbove = firstIndex - itemPosition
         val threshold = 5 // Items within this distance get smooth scroll
-        
+
         when {
             distanceBelow in 1..threshold -> {
                 // Close below visible area - smooth scroll
@@ -491,7 +490,7 @@ class ReaderActivity : BaseActivity() {
         )
         if (itemIndex == -1) return
         val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
-        val newOffsetPx = 200.dpToPx(this@ReaderActivity)
+        val newOffsetPx = 200.dpToPx(this)
         viewAdapter.listView.notifyDataSetChanged()
         viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 500)
         viewAdapter.listView.notifyDataSetChanged()
@@ -506,10 +505,46 @@ class ReaderActivity : BaseActivity() {
         )
         if (itemIndex == -1) return
         val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
-        val newOffsetPx = 200.dpToPx(this@ReaderActivity)
+        val newOffsetPx = 200.dpToPx(this)
         viewAdapter.listView.notifyDataSetChanged()
         viewBind.listView.setSelectionFromTop(itemPosition, newOffsetPx)
         viewAdapter.listView.notifyDataSetChanged()
+    }
+
+    /**
+     * FIX: Smooth scroll to TTS position after screen unlock.
+     *
+     * Two bugs fixed here vs the old onResume approach:
+     * 1. Delay/ignored scroll — old code called setSelectionFromTop before the ListView
+     *    finished re-layout after onResume. Now called via post{} so it runs after layout.
+     * 2. Jarring jump — replaced setSelectionFromTop with smoothScrollToPositionFromTop
+     *    for nearby items (<=8 positions away), giving a smooth 350ms animation.
+     *    Items already on screen are skipped entirely (no movement at all).
+     *    Items far away still use instant scroll to avoid a long animation.
+     */
+    private fun scrollToReadingPositionSmooth(chapterIndex: Int, chapterItemPosition: Int) {
+        val itemIndex = indexOfReaderItem(
+            list = viewModel.items,
+            chapterIndex = chapterIndex,
+            chapterItemPosition = chapterItemPosition
+        )
+        if (itemIndex == -1) return
+        val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
+        val newOffsetPx = 200.dpToPx(this)
+        viewAdapter.listView.notifyDataSetChanged()
+
+        // If item is already visible on screen — no scroll needed, avoids any jarring movement
+        val first = viewBind.listView.firstVisiblePosition
+        val last = viewBind.listView.lastVisiblePosition
+        if (itemPosition in first..last) return
+
+        // Smooth scroll for nearby items, instant jump for distant ones
+        val distance = kotlin.math.abs(itemPosition - first)
+        if (distance <= 8) {
+            viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 350)
+        } else {
+            viewBind.listView.setSelectionFromTop(itemPosition, newOffsetPx)
+        }
     }
 
     private fun updateReadingState() {
@@ -574,16 +609,20 @@ class ReaderActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        
-        // If TTS is active and we're returning to the Activity, scroll to current TTS position
-        // This ensures the user sees the current reading position after unlocking device
+
+        // FIX: If TTS is active after screen unlock, scroll to current reading position.
+        // viewBind.listView.post{} defers execution until after ListView finishes re-layout,
+        // which prevents the scroll from being ignored or delayed unpredictably.
+        // scrollToReadingPositionSmooth() then handles the animation gracefully.
         if (viewModel.readerSpeaker.isActive.value) {
             val itemPos = viewModel.readerSpeaker.currentTextPlaying.value.itemPos
             if (itemPos.chapterIndex >= 0) {
-                scrollToReadingPositionImmediately(
-                    chapterIndex = itemPos.chapterIndex,
-                    chapterItemPosition = itemPos.chapterItemPosition
-                )
+                viewBind.listView.post {
+                    scrollToReadingPositionSmooth(
+                        chapterIndex = itemPos.chapterIndex,
+                        chapterItemPosition = itemPos.chapterItemPosition
+                    )
+                }
             }
         }
     }
