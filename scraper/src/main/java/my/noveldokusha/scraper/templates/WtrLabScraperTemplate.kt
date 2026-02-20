@@ -78,10 +78,12 @@ abstract class WtrLabScraperTemplate(
 
     // ── Google Translate ──────────────────────────────────────────────────────
 
-    private fun getTranslateApiKey(): String {
-        val encoded = "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldISG1PNTIw"
-        return String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)).trim()
-    }
+    private val translateApiKey = String(
+        android.util.Base64.decode(
+            "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldISG1PNTIw",
+            android.util.Base64.DEFAULT
+        )
+    ).trim()
     private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
 
     // "none" = без Google Translate, иначе код языка для GT
@@ -103,7 +105,7 @@ abstract class WtrLabScraperTemplate(
 
             val requestBuilder = Request.Builder()
                 .url(translateUrl)
-                .addHeader("X-Goog-Api-Key", getTranslateApiKey())
+                .addHeader("X-Goog-Api-Key", translateApiKey)
                 .addHeader("Origin", baseUrl.trimEnd('/'))
                 .post(requestBody)
 
