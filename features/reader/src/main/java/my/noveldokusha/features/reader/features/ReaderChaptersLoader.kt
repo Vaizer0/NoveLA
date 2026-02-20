@@ -464,7 +464,16 @@ internal class ReaderChaptersLoader(
                     }
                     maintainPosition {
                         remove(itemProgressBar)
-                        insert(ReaderItem.Error(chapterIndex = chapterIndex, text = "Invalid content - Cloudflare protection or empty chapter"))
+                        insert(
+                            ReaderItem.Error(
+                                chapterIndex = chapterIndex,
+                                text = if (java.util.Locale.getDefault().language == "ru") {
+                                    "Ошибка контента: защита Cloudflare, пустая глава или требуется вход. Попробуйте вернуться назад и открыть страницу в браузере (три точки в углу), чтобы пройти проверку."
+                                } else {
+                                    "Invalid content: Cloudflare protection, empty chapter, or login required. Try going back and opening the page in your browser (three-dot menu) to pass the check."
+                                }
+                            )
+                        )
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
                     return@withContext
