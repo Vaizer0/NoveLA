@@ -42,11 +42,27 @@ class AppRepository @Inject constructor(
         }
     }
 
+    /**
+     * Completely removes a book and all its data (chapters, bodies, translations).
+     * Use this instead of toggleBookmark when the intent is to delete.
+     */
+    suspend fun deleteBookCompletely(bookUrl: String) {
+        libraryBooks.deleteBookCompletely(bookUrl)
+    }
+
+    /**
+     * Completely removes multiple books and all their data.
+     */
+    suspend fun deleteBooksCompletely(bookUrls: List<String>) {
+        libraryBooks.deleteBooksCompletely(bookUrls)
+    }
+
     suspend fun getDatabaseSizeBytes() = withContext(Dispatchers.IO) {
         context.getDatabasePath(db.name).length()
     }
 
     fun close() = db.closeDatabase()
+
     @Suppress("unused")
     fun delete() = context.deleteDatabase(db.name)
     suspend fun vacuum() = db.vacuum()
@@ -55,24 +71,29 @@ class AppRepository @Inject constructor(
     suspend fun <T> withTransaction(fn: suspend () -> T) = db.transaction(fn)
 
     inner class Settings {
-        suspend fun clearNonLibraryData() = withContext(Dispatchers.IO)
-        {
-            // Сначала получаем список книг, которые не находятся в библиотеке
+        /**
+         * Removes all data not belonging to library books:
+         * books with inLibrary=false and all their orphan chapters/bodies/translations.
+         * Also removes orphan chapters/bodies that don't have a parent book at all.
+         */
+        suspend fun clearNonLibraryData() = withContext(Dispatchers.IO) {
+            // Get URLs of books not in library
             val nonLibraryBookUrls = db.libraryDao().getNonLibraryBookUrls()
-            
+
             if (nonLibraryBookUrls.isNotEmpty()) {
-                // Удаляем переводы глав, связанные с этими книгами
-                db.chapterTranslationDao().deleteTranslationsByBookUrls(nonLibraryBookUrls)
-                
-                // Удаляем тела глав, связанные с этими книгами
-                db.chapterBodyDao().removeChapterBodiesByBookUrls(nonLibraryBookUrls)
-                
-                // Удаляем главы этих книг
-                db.chapterDao().removeAllFromBooks(nonLibraryBookUrls)
-                
-                // Наконец, удаляем сами книги
+                Timber.d("clearNonLibraryData: Removing ${nonLibraryBookUrls.size} non-library books")
+                nonLibraryBookUrls.chunked(500).forEach { chunk ->
+                    db.chapterTranslationDao().deleteTranslationsByBookUrls(chunk)
+                    db.chapterBodyDao().removeChapterBodiesByBookUrls(chunk)
+                    db.chapterDao().removeAllFromBooks(chunk)
+                }
                 db.libraryDao().removeBooksByUrls(nonLibraryBookUrls)
             }
+
+            // Also clean orphan rows (chapters without books, bodies without chapters)
+            db.chapterDao().removeAllNonLibraryRows()
+            db.chapterBodyDao().removeAllNonChapterRows()
+            db.chapterTranslationDao().removeOrphanedTranslations()
         }
 
         /**
@@ -82,7 +103,6 @@ class AppRepository @Inject constructor(
          */
         val folderBooks = appFileResolver.folderBooks
     }
-
 }
 
 fun isValid(book: Book): Boolean = book.url.matches("""^(https?|local)://.*""".toRegex())

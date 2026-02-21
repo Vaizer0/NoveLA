@@ -80,7 +80,6 @@ internal class BackupDataService : Service() {
             channelName = channelName,
             notificationId = notificationId
         )
-
         startForeground(notificationId, notificationBuilder.build())
     }
 
@@ -99,7 +98,6 @@ internal class BackupDataService : Service() {
             }.onError {
                 Timber.e(it.exception)
             }
-
             stopSelf(startId)
         }
         return START_NOT_STICKY
@@ -107,12 +105,12 @@ internal class BackupDataService : Service() {
 
     /**
      * Backup data function. Backups the library and images data given an uri.
-     * An zip file is created with a root file named "database.sqlite3" and
-     * an optional "books" folder where all the images will be stored (each subfolder
-     * is a book with its own structure).
      *
-     * This function assumes the WRITE_EXTERNAL_STORAGE permission is granted.
-     * This function will also show a status notificaton of the backup progress.
+     * IMPORTANT: Before backing up, we:
+     * 1. Remove all non-library data (books with inLibrary=false and their orphan data)
+     * 2. Run VACUUM to shrink the database file
+     *
+     * This ensures the backup only contains books that are actually in the library.
      */
     private suspend fun backupData(uri: Uri, backupImages: Boolean) = withContext(Dispatchers.IO) {
 
@@ -126,6 +124,24 @@ internal class BackupDataService : Service() {
             setProgress(100, 0, true)
         }
 
+        // Step 1: Clean up non-library data before backup
+        notificationsCenter.modifyNotification(
+            notificationBuilder,
+            notificationId = notificationId
+        ) {
+            text = getString(R.string.cleaning_database)
+        }
+
+        try {
+            Timber.d("BackupDataService: Cleaning non-library data before backup")
+            appRepository.settings.clearNonLibraryData()
+            Timber.d("BackupDataService: Running VACUUM")
+            appRepository.vacuum()
+            Timber.d("BackupDataService: Database ready for backup")
+        } catch (e: Exception) {
+            Timber.e(e, "BackupDataService: Failed to clean database before backup, continuing anyway")
+        }
+
         contentResolver.openOutputStream(uri)?.use { outputStream ->
             val zip = ZipOutputStream(outputStream)
 
@@ -136,7 +152,7 @@ internal class BackupDataService : Service() {
                 text = getString(R.string.copying_database)
             }
 
-            // Save database
+            // Save database — now contains only library books
             run {
                 val entry = ZipEntry("database.sqlite3")
                 val file = this@BackupDataService.getDatabasePath(appDatabase.name)
@@ -145,9 +161,10 @@ internal class BackupDataService : Service() {
                     zip.putNextEntry(entry)
                     it.copyTo(zip)
                 }
+                Timber.d("BackupDataService: Database backed up (${file.length()} bytes)")
             }
 
-            // Save books extra data (like images)
+            // Save books extra data (like images) — only for library books
             if (backupImages) {
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
@@ -155,8 +172,27 @@ internal class BackupDataService : Service() {
                 ) {
                     text = getString(R.string.copying_images)
                 }
+
+                // Get library book folder names to filter images
+                val libraryBooks = appRepository.libraryBooks.getAllInLibrary()
+                val libraryFolderNames = libraryBooks
+                    .map { book ->
+                        // Extract folder name from URL (same logic as AppFileResolver)
+                        book.url.substringAfterLast("/").substringBefore("?")
+                    }
+                    .toSet()
+
                 val basePath = appRepository.settings.folderBooks.toPath().parent
-                appRepository.settings.folderBooks.walkBottomUp().filterNot { it.isDirectory }
+                appRepository.settings.folderBooks.walkBottomUp()
+                    .filterNot { it.isDirectory }
+                    .filter { file ->
+                        // Only include images from library book folders
+                        val relativePath = basePath.relativize(file.toPath()).toString()
+                        val folderName = relativePath.split("/", "\\").firstOrNull() ?: ""
+                        // "books" is the root folder, second segment is the book folder
+                        val bookFolder = relativePath.split("/", "\\").getOrNull(1) ?: ""
+                        bookFolder in libraryFolderNames || libraryFolderNames.isEmpty()
+                    }
                     .forEach { file ->
                         val name = basePath.relativize(file.toPath()).toString()
                         val entry = ZipEntry(name)

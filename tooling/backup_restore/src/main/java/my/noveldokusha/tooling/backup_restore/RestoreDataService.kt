@@ -83,7 +83,6 @@ class RestoreDataService : Service() {
     private val channelId = "Restore backup"
     private val notificationId = channelId.hashCode()
 
-
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private var job: Job? = null
 
@@ -123,7 +122,6 @@ class RestoreDataService : Service() {
                 Timber.d("RestoreDataService: Restore completed successfully")
             }.onError {
                 Timber.e(it.exception, "RestoreDataService: Restore failed with error")
-                // Show error notification
                 notificationsCenter.showNotification(
                     channelName = channelName,
                     channelId = channelId,
@@ -134,7 +132,6 @@ class RestoreDataService : Service() {
                     text = "Error: ${it.exception.message?.take(100) ?: "Unknown error"}"
                 }
             }
-
             stopSelf(startId)
         }
         return START_STICKY
@@ -146,8 +143,8 @@ class RestoreDataService : Service() {
      * "database.sqlite3" and an optional "books" folder where all the images
      * are stored (each subfolder is a book with its own structure).
      *
-     * This function assumes the READ_EXTERNAL_STORAGE permission is granted.
-     * This function will also show a status notificaton of the restoration progress.
+     * IMPORTANT: Only books with inLibrary=true are restored. Books that were
+     * previously deleted (inLibrary=false) are ignored even if they exist in the backup.
      */
     private suspend fun restoreData(uri: Uri) = withContext(Dispatchers.IO) {
 
@@ -161,7 +158,6 @@ class RestoreDataService : Service() {
             setProgress(100, 0, true)
         }
 
-        Timber.d("restoreData: Opening input stream from URI")
         val inputStream = context.contentResolver.openInputStream(uri)
         if (inputStream == null) {
             Timber.e("restoreData: Failed to open input stream from URI: $uri")
@@ -175,29 +171,17 @@ class RestoreDataService : Service() {
             return@withContext
         }
 
-        // Read first few bytes to verify it's a ZIP file and check file size
+        // Read ZIP header to verify file format
         val bufferedStream = inputStream.buffered()
-        bufferedStream.mark(8192) // Mark position to reset after checking
-        
+        bufferedStream.mark(8192)
         val header = ByteArray(4)
-        val bytesRead = try {
-            bufferedStream.read(header)
-        } catch (e: Exception) {
-            Timber.e(e, "restoreData: Failed to read file header")
-            -1
-        }
-        
-        Timber.d("restoreData: Read $bytesRead bytes for header check")
+        val bytesRead = try { bufferedStream.read(header) } catch (e: Exception) { -1 }
+
         if (bytesRead == 4) {
-            val headerHex = header.joinToString("") { "%02x".format(it) }
-            Timber.d("restoreData: File header: $headerHex (ZIP should be 504b0304 or 504b0506)")
-            
-            // Check for ZIP signature (PK\x03\x04 or PK\x05\x06)
-            val isZip = (header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() && 
-                        (header[2] == 0x03.toByte() || header[2] == 0x05.toByte()))
-            
+            val isZip = header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() &&
+                    (header[2] == 0x03.toByte() || header[2] == 0x05.toByte())
             if (!isZip) {
-                Timber.e("restoreData: File is not a valid ZIP file. Header: $headerHex")
+                Timber.e("restoreData: File is not a valid ZIP file")
                 notificationsCenter.showNotification(
                     channelName = channelName,
                     channelId = channelId,
@@ -208,53 +192,24 @@ class RestoreDataService : Service() {
                 }
                 return@withContext
             }
-        } else {
-            Timber.e("restoreData: Failed to read file header, only got $bytesRead bytes")
         }
-        
-        // Reset stream to beginning
-        try {
-            bufferedStream.reset()
-            Timber.d("restoreData: Stream reset to beginning after header check")
-        } catch (e: Exception) {
+
+        try { bufferedStream.reset() } catch (e: Exception) {
             Timber.e(e, "restoreData: Failed to reset stream")
         }
 
-        Timber.d("restoreData: Reading ZIP entries")
+        // Read all ZIP entries into memory
         val zipSequence = try {
             ZipInputStream(bufferedStream).use { zipStream ->
                 val entries = mutableMapOf<ZipEntry, ByteArray>()
-                var entryCount = 0
-                Timber.d("restoreData: Starting to read ZIP entries from stream")
-                
-                generateSequence { 
-                    try {
-                        val entry = zipStream.nextEntry
-                        if (entry != null) {
-                            entryCount++
-                            Timber.d("restoreData: Found ZIP entry #$entryCount: ${entry.name}, size: ${entry.size}, compressed: ${entry.compressedSize}, isDirectory: ${entry.isDirectory}")
-                        } else {
-                            Timber.d("restoreData: nextEntry returned null, end of ZIP stream")
-                        }
-                        entry
-                    } catch (e: Exception) {
-                        Timber.e(e, "restoreData: Error reading ZIP entry")
-                        null
-                    }
+                generateSequence {
+                    try { zipStream.nextEntry } catch (e: Exception) { null }
                 }
                     .filterNotNull()
                     .filterNot { it.isDirectory }
                     .forEach { entry ->
-                        try {
-                            val bytes = zipStream.readBytes()
-                            Timber.d("restoreData: Read ${bytes.size} bytes from ${entry.name}")
-                            entries[entry] = bytes
-                        } catch (e: Exception) {
-                            Timber.e(e, "restoreData: Error reading bytes from ${entry.name}")
-                            throw e
-                        }
+                        entries[entry] = zipStream.readBytes()
                     }
-                Timber.d("restoreData: Finished reading ZIP, found $entryCount total entries, ${entries.size} file entries")
                 entries.toMap()
             }
         } catch (e: Exception) {
@@ -270,43 +225,33 @@ class RestoreDataService : Service() {
             return@withContext
         }
 
-
-        suspend fun mergeToDatabase(inputStream: InputStream) {
+        suspend fun mergeToDatabase(dbInputStream: InputStream) {
             tryAsResponse {
-                Timber.d("mergeToDatabase: Starting database merge")
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.loading_database)
                 }
-                
-                // Write database bytes to a temporary file
+
                 val tempDbFile = File(context.cacheDir, "temp_restore_database.db")
                 try {
-                    tempDbFile.outputStream().use { output ->
-                        inputStream.copyTo(output)
-                    }
-                    Timber.d("mergeToDatabase: Wrote database to temp file: ${tempDbFile.absolutePath}, size: ${tempDbFile.length()}")
+                    tempDbFile.outputStream().use { output -> dbInputStream.copyTo(output) }
+                    Timber.d("mergeToDatabase: Wrote database to temp file, size: ${tempDbFile.length()}")
                 } catch (e: Exception) {
                     Timber.e(e, "mergeToDatabase: Failed to write temp database file")
                     throw e
                 }
-                
+
                 val backupDatabase = object {
                     val newDatabase = try {
-                        Timber.d("mergeToDatabase: Opening Room database from file")
-                        AppDatabase.createRoom(context, tempDbFile.absolutePath).also { db ->
-                            Timber.d("mergeToDatabase: Room database opened successfully, name: ${db.name}")
-                        }
+                        AppDatabase.createRoom(context, tempDbFile.absolutePath)
                     } catch (e: Exception) {
                         Timber.e(e, "mergeToDatabase: Failed to open Room database")
                         tempDbFile.delete()
                         throw e
                     }
-                    val bookChapters = BookChaptersRepository(
-                        chapterDao = newDatabase.chapterDao(),
-                    )
+                    val bookChapters = BookChaptersRepository(chapterDao = newDatabase.chapterDao())
                     val chapterBody = ChapterBodyRepository(
                         chapterBodyDao = newDatabase.chapterBodyDao(),
                         appDatabase = newDatabase,
@@ -316,135 +261,98 @@ class RestoreDataService : Service() {
                     )
                     val libraryBooks = LibraryBooksRepository(
                         libraryDao = newDatabase.libraryDao(),
+                        chapterDao = newDatabase.chapterDao(),
+                        chapterBodyDao = newDatabase.chapterBodyDao(),
+                        chapterTranslationDao = newDatabase.chapterTranslationDao(),
                         appDatabase = newDatabase,
                         context = context,
                         appFileResolver = appFileResolver,
                         appCoroutineScope = appCoroutineScope
                     )
-                    fun close() {
-                        Timber.d("mergeToDatabase: Closing backup database")
-                        newDatabase.closeDatabase()
-                    }
+                    fun close() = newDatabase.closeDatabase()
                     fun delete() {
-                        Timber.d("mergeToDatabase: Deleting backup database and temp file")
                         try {
                             newDatabase.clearDatabase()
                             tempDbFile.delete()
-                            // Also delete associated journal files
                             File(tempDbFile.absolutePath + "-shm").delete()
                             File(tempDbFile.absolutePath + "-wal").delete()
                         } catch (e: Exception) {
-                            Timber.e(e, "mergeToDatabase: Error clearing database")
+                            Timber.e(e, "mergeToDatabase: Error cleaning up temp database")
                         }
                     }
                 }
-                
-                Timber.d("mergeToDatabase: Getting library books count")
-                val allBooksFromBackup = try {
-                    backupDatabase.libraryBooks.getAll().also { books ->
-                        Timber.d("mergeToDatabase: getAll() returned ${books.size} books")
-                        books.take(3).forEach { book ->
-                            Timber.d("mergeToDatabase: Book sample: title='${book.title}', inLibrary=${book.inLibrary}, url=${book.url.take(50)}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Error calling getAll()")
-                    throw e
-                }
-                
-                val booksToAdd = allBooksFromBackup
-                    .map { it.copy(inLibrary = true) } // Force all restored books to be in library
-                    .also {
-                        Timber.d("mergeToDatabase: Found ${it.size} books to restore (marking all as inLibrary=true)")
-                    }
 
-                // Filter valid books
-                val validBooks = booksToAdd.filter { book ->
+                // KEY FIX: Only restore books that are actually IN the library (inLibrary=true).
+                // Books with inLibrary=false were previously deleted and should NOT be restored.
+                val allBooksFromBackup = backupDatabase.libraryBooks.getAll()
+                Timber.d("mergeToDatabase: Backup contains ${allBooksFromBackup.size} total books")
+
+                val libraryBooksToRestore = allBooksFromBackup.filter { it.inLibrary }
+                Timber.d("mergeToDatabase: Restoring ${libraryBooksToRestore.size} library books (skipping ${allBooksFromBackup.size - libraryBooksToRestore.size} non-library books)")
+
+                val validBooks = libraryBooksToRestore.filter { book ->
                     book.url.matches("""^(https?|local)://.*""".toRegex())
                 }
 
-                if (validBooks.size < booksToAdd.size) {
-                    Timber.w("mergeToDatabase: Filtered ${booksToAdd.size - validBooks.size} invalid books, ${validBooks.size} valid books remaining")
+                if (validBooks.size < libraryBooksToRestore.size) {
+                    Timber.w("mergeToDatabase: Filtered ${libraryBooksToRestore.size - validBooks.size} invalid URLs")
                 }
-                
+
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.adding_books)
                 }
-                Timber.d("mergeToDatabase: Inserting ${validBooks.size} books")
+
+                // Insert only valid library books
                 try {
                     appRepository.libraryBooks.insertReplace(validBooks)
-                    Timber.d("mergeToDatabase: Successfully inserted ${validBooks.size} books")
+                    Timber.d("mergeToDatabase: Inserted ${validBooks.size} books")
                 } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
-                    // Try to insert books one by one
-                    var successCount = 0
+                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual")
                     validBooks.forEach { book ->
-                        try {
-                            appRepository.libraryBooks.insertReplace(listOf(book))
-                            successCount++
-                        } catch (bookError: Exception) {
+                        try { appRepository.libraryBooks.insertReplace(listOf(book)) }
+                        catch (bookError: Exception) {
                             Timber.w(bookError, "Failed to insert book: ${book.title}")
                         }
                     }
-                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${validBooks.size} books")
-                }
-                
-                Timber.d("mergeToDatabase: Getting chapters count")
-                val chaptersToAdd = try {
-                    backupDatabase.bookChapters.getAll().also {
-                        Timber.d("mergeToDatabase: Found ${it.size} chapters to restore")
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Error getting chapters")
-                    throw e
                 }
 
-                // Filter valid chapters
-                val validChapters = chaptersToAdd.filter { chapter ->
-                    chapter.url.matches("""^(https?|local)://.*""".toRegex())
-                }
+                // Get URLs of the books we actually restored to filter chapters
+                val restoredBookUrls = validBooks.map { it.url }.toSet()
 
-                if (validChapters.size < chaptersToAdd.size) {
-                    Timber.w("mergeToDatabase: Filtered ${chaptersToAdd.size - validChapters.size} invalid chapters, ${validChapters.size} valid chapters remaining")
+                val allChapters = backupDatabase.bookChapters.getAll()
+                // Only restore chapters for books we actually restored
+                val validChapters = allChapters.filter { chapter ->
+                    chapter.bookUrl in restoredBookUrls &&
+                            chapter.url.matches("""^(https?|local)://.*""".toRegex())
                 }
-                
+                Timber.d("mergeToDatabase: Restoring ${validChapters.size} chapters (of ${allChapters.size} total in backup)")
+
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.adding_chapters)
                 }
-                Timber.d("mergeToDatabase: Inserting ${validChapters.size} chapters")
+
                 try {
                     appRepository.bookChapters.insert(validChapters)
-                    Timber.d("mergeToDatabase: Successfully inserted ${validChapters.size} chapters")
                 } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
-                    // Try to insert chapters one by one
-                    var successCount = 0
                     validChapters.forEach { chapter ->
-                        try {
-                            appRepository.bookChapters.insert(listOf(chapter))
-                            successCount++
-                        } catch (chapterError: Exception) {
+                        try { appRepository.bookChapters.insert(listOf(chapter)) }
+                        catch (chapterError: Exception) {
                             Timber.w(chapterError, "Failed to insert chapter: ${chapter.title}")
                         }
                     }
-                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${validChapters.size} chapters")
                 }
-                
-                Timber.d("mergeToDatabase: Getting chapter bodies count")
-                val chapterBodies = try {
-                    backupDatabase.chapterBody.getAll().also {
-                        Timber.d("mergeToDatabase: Found ${it.size} chapter bodies to restore")
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Error getting chapter bodies")
-                    throw e
-                }
+
+                val restoredChapterUrls = validChapters.map { it.url }.toSet()
+                val allBodies = backupDatabase.chapterBody.getAll()
+                // Only restore bodies for chapters we actually restored
+                val validBodies = allBodies.filter { it.url in restoredChapterUrls }
+                Timber.d("mergeToDatabase: Restoring ${validBodies.size} chapter bodies (of ${allBodies.size} total in backup)")
 
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
@@ -452,28 +360,22 @@ class RestoreDataService : Service() {
                 ) {
                     text = getString(R.string.adding_chapters_text)
                 }
-                Timber.d("mergeToDatabase: Inserting ${chapterBodies.size} chapter bodies")
+
                 try {
-                    appRepository.chapterBody.insertReplace(chapterBodies)
-                    Timber.d("mergeToDatabase: Successfully inserted ${chapterBodies.size} chapter bodies")
+                    appRepository.chapterBody.insertReplace(validBodies)
                 } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual inserts")
-                    // Try to insert chapter bodies one by one
-                    var successCount = 0
-                    chapterBodies.forEach { chapterBody ->
-                        try {
-                            appRepository.chapterBody.insertReplace(listOf(chapterBody))
-                            successCount++
-                        } catch (bodyError: Exception) {
+                    validBodies.forEach { body ->
+                        try { appRepository.chapterBody.insertReplace(listOf(body)) }
+                        catch (bodyError: Exception) {
                             Timber.w(bodyError, "Failed to insert chapter body")
                         }
                     }
-                    Timber.d("mergeToDatabase: Successfully inserted $successCount out of ${chapterBodies.size} chapter bodies")
                 }
-                
+
                 backupDatabase.close()
                 backupDatabase.delete()
                 Timber.d("mergeToDatabase: Database merge completed successfully")
+
             }.onError {
                 Timber.e(it.exception, "mergeToDatabase: Failed to merge database")
                 notificationsCenter.showNotification(
@@ -482,10 +384,10 @@ class RestoreDataService : Service() {
                     notificationId = "Backup restore failure - invalid database".hashCode()
                 ) {
                     removeProgressBar()
-                    text = getString(R.string.failed_to_restore_invalid_backup_database) + ": ${it.exception.message?.take(100)}"
+                    text = getString(R.string.failed_to_restore_invalid_backup_database) +
+                            ": ${it.exception.message?.take(100)}"
                 }
             }.onSuccess {
-                Timber.d("mergeToDatabase: Success notification sent")
                 notificationsCenter.showNotification(
                     channelName = channelName,
                     channelId = channelId,
@@ -496,23 +398,18 @@ class RestoreDataService : Service() {
             }
         }
 
-        fun mergeToBookFolder(entry: ZipEntry, inputStream: InputStream) {
+        fun mergeToBookFolder(entry: ZipEntry, entryInputStream: InputStream) {
             try {
                 val file = File(appRepository.settings.folderBooks.parentFile, entry.name)
-                Timber.d("mergeToBookFolder: Processing ${entry.name} -> ${file.absolutePath}")
-                if (file.isDirectory) {
-                    Timber.d("mergeToBookFolder: Skipping directory entry")
-                    return
-                }
+                if (file.isDirectory) return
                 file.parentFile?.mkdirs()
                 if (file.parentFile?.exists() != true) {
-                    Timber.w("mergeToBookFolder: Parent directory does not exist and could not be created: ${file.parentFile?.absolutePath}")
+                    Timber.w("mergeToBookFolder: Cannot create parent dir for ${entry.name}")
                     return
                 }
                 file.outputStream().use { output ->
-                    inputStream.use { it.copyTo(output) }
+                    entryInputStream.use { it.copyTo(output) }
                 }
-                Timber.d("mergeToBookFolder: Successfully copied file: ${file.absolutePath}")
             } catch (e: Exception) {
                 Timber.e(e, "mergeToBookFolder: Error processing entry: ${entry.name}")
             }
@@ -524,34 +421,20 @@ class RestoreDataService : Service() {
         ) {
             text = getString(R.string.adding_images)
         }
-        
-        Timber.d("restoreData: Processing ${zipSequence.size} ZIP entries")
+
         for ((entry, file) in zipSequence) {
             try {
                 when {
-                    entry.name == "database.sqlite3" -> {
-                        Timber.d("restoreData: Merging database from ${entry.name}, size: ${file.size} bytes")
-                        // Verify SQLite header
-                        val header = file.take(16).map { "%02x".format(it) }.joinToString("")
-                        Timber.d("restoreData: Database file header: $header")
-                        mergeToDatabase(file.inputStream())
-                    }
-                    entry.name.startsWith("books/") -> {
-                        Timber.d("restoreData: Merging book file: ${entry.name}")
-                        mergeToBookFolder(entry, file.inputStream())
-                    }
-                    else -> {
-                        Timber.w("restoreData: Skipping unknown entry: ${entry.name}")
-                    }
+                    entry.name == "database.sqlite3" -> mergeToDatabase(file.inputStream())
+                    entry.name.startsWith("books/") -> mergeToBookFolder(entry, file.inputStream())
+                    else -> Timber.w("restoreData: Skipping unknown entry: ${entry.name}")
                 }
             } catch (e: Exception) {
                 Timber.e(e, "restoreData: Error processing entry ${entry.name}")
-                // Continue with other entries
             }
         }
 
         inputStream.closeQuietly()
-        Timber.d("restoreData: Restore process completed, closed input stream")
         notificationsCenter.modifyNotification(
             notificationBuilder,
             notificationId = notificationId
