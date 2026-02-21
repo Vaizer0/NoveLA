@@ -12,6 +12,132 @@ Focused on immersion, simplicity, and convenient reading of foreign content.
 ## 🌍 Languages
 
 <details open>
+<summary>🇬🇧 English</summary>
+
+## 📖 Description
+
+**Novela** is an open-source Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.
+
+The app is designed for convenient reading of foreign content: find a novel, open a chapter, and translate text instantly inside the reader.
+
+Main focus:
+- comfortable long reading
+- built-in translator
+- large multi-source ecosystem
+- clean and fast UI without clutter
+
+---
+
+## ✨ Features
+
+### 🌐 Built-in Translator
+- Translate chapters directly while reading
+- Free translation via Google API
+- Optional Gemini integration for higher-quality translation
+- Instant language switching without reloading chapters
+
+> Note: Free Gemini API keys are rate-limited (request and speed limits depend on model and Google quota policy and may change over time).
+
+---
+
+### 📚 Multi-Source Support
+
+Complete list of supported sources:
+
+#### 🇨🇳 Chinese sources
+- 69书吧  
+- Twkan  
+- Ttkan  
+- Novel543  
+- Quanben5  
+
+#### 🇷🇺 Russian sources
+- Jaomix  
+- RanobeLib  
+- RanobeHub  
+- Свободный Мир Ранобэ  
+- BookHamster  
+
+#### 🇬🇧 English sources
+- FreeWebNovel  
+- NovelFull  
+- NovelBin  
+- Royal Road  
+- Scribble Hub  
+- AllNovel  
+- NoBadNovel  
+- NovelBuddy  
+- NovelFire  
+- NovelHall  
+- NovLove  
+- ReadNovelFull  
+- WuxiaWorld  
+
+#### 🇮🇩 Indonesian sources
+- BacaLightnovel  
+- Novelku  
+
+#### 🌐 Multilanguage sources
+- WTR-LAB  
+
+#### 📄 Local source
+- Local EPUB files
+
+Additional features:
+- Add novels directly by URL
+- Global multi-database search
+
+---
+
+### 📖 Reader Features
+- Infinite chapter scrolling
+- Custom fonts and text size
+- Light & dark themes (Material 3)
+- Offline chapter caching
+- Clean immersive reading mode
+
+---
+
+### 🔊 Text-to-Speech
+- Background playback
+- Voice, speed, and pitch control
+- Convenient for listening to chapters
+
+---
+
+### 🛠 Advanced Tools
+- Automatic Cloudflare Turnstile bypass
+- Regex-based text cleanup (remove ads and junk text)
+- Local library and reading history
+- Backup and restore support
+
+---
+
+## 🧩 Tech Stack
+- Kotlin, Coroutines, LiveData
+- Jetpack Compose + XML Views
+- Material 3 UI
+- Room (SQLite), Jsoup, OkHttp
+- Coil, Glide
+- Android TTS & Media APIs
+- Google MLKit
+
+---
+
+## 📦 Installation
+```bash
+git clone https://github.com/HnDK0/Novela
+```
+Open the project in Android Studio and run on a device or emulator.
+
+---
+
+## 📜 License
+GPL-3.0
+
+</details>
+
+<details>
 <summary>🇷🇺 Русский</summary>
 
 ## 📖 Описание
@@ -163,132 +289,6 @@ git clone https://github.com/HnDK0/Novela
 ---
 
 ## 📄 Лицензия
-GPL-3.0
-
-</details>
-
-<details>
-<summary>🇬🇧 English</summary>
-
-## 📖 Description
-
-**Novela** is an open-source Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.
-
-The app is designed for convenient reading of foreign content: find a novel, open a chapter, and translate text instantly inside the reader.
-
-Main focus:
-- comfortable long reading
-- built-in translator
-- large multi-source ecosystem
-- clean and fast UI without clutter
-
----
-
-## ✨ Features
-
-### 🌐 Built-in Translator
-- Translate chapters directly while reading
-- Free translation via Google API
-- Optional Gemini integration for higher-quality translation
-- Instant language switching without reloading chapters
-
-> Note: Free Gemini API keys are rate-limited (request and speed limits depend on model and Google quota policy and may change over time).
-
----
-
-### 📚 Multi-Source Support
-
-Complete list of supported sources:
-
-#### 🇨🇳 Chinese sources
-- 69书吧  
-- Twkan  
-- Ttkan  
-- Novel543  
-- Quanben5  
-
-#### 🇷🇺 Russian sources
-- Jaomix  
-- RanobeLib  
-- RanobeHub  
-- Свободный Мир Ранобэ  
-- BookHamster  
-
-#### 🇬🇧 English sources
-- FreeWebNovel  
-- NovelFull  
-- NovelBin  
-- Royal Road  
-- Scribble Hub  
-- AllNovel  
-- NoBadNovel  
-- NovelBuddy  
-- NovelFire  
-- NovelHall  
-- NovLove  
-- ReadNovelFull  
-- WuxiaWorld  
-
-#### 🇮🇩 Indonesian sources
-- BacaLightnovel  
-- Novelku  
-
-#### 🌐 Multilanguage sources
-- WTR-LAB  
-
-#### 📄 Local source
-- Local EPUB files
-
-Additional features:
-- Add novels directly by URL
-- Global multi-database search
-
----
-
-### 📖 Reader Features
-- Infinite chapter scrolling
-- Custom fonts and text size
-- Light & dark themes (Material 3)
-- Offline chapter caching
-- Clean immersive reading mode
-
----
-
-### 🔊 Text-to-Speech
-- Background playback
-- Voice, speed, and pitch control
-- Convenient for listening to chapters
-
----
-
-### 🛠 Advanced Tools
-- Automatic Cloudflare Turnstile bypass
-- Regex-based text cleanup (remove ads and junk text)
-- Local library and reading history
-- Backup and restore support
-
----
-
-## 🧩 Tech Stack
-- Kotlin, Coroutines, LiveData
-- Jetpack Compose + XML Views
-- Material 3 UI
-- Room (SQLite), Jsoup, OkHttp
-- Coil, Glide
-- Android TTS & Media APIs
-- Google MLKit
-
----
-
-## 📦 Installation
-```bash
-git clone https://github.com/HnDK0/Novela
-```
-Open the project in Android Studio and run on a device or emulator.
-
----
-
-## 📜 License
 GPL-3.0
 
 </details>
