@@ -71,7 +71,10 @@ internal sealed interface ReaderItem {
     data class Divider(override val chapterIndex: Int) : ReaderItem
     data class BookEnd(override val chapterIndex: Int) : ReaderItem
     data class BookStart(override val chapterIndex: Int) : ReaderItem
-    data class Error(override val chapterIndex: Int, val text: String) : ReaderItem
+    data class Error(
+        override val chapterIndex: Int,
+        val text: String,
+        val chapterUrl: String = "",  // URL главы для кнопки "открыть в браузере"
+    ) : ReaderItem
     data class Padding(override val chapterIndex: Int) : ReaderItem
 }
-

@@ -43,6 +43,8 @@ internal class ReaderItemAdapter(
     private val onChapterStartVisible: (chapterUrl: String) -> Unit,
     private val onChapterEndVisible: (chapterUrl: String) -> Unit,
     private val onReloadReader: () -> Unit,
+    private val onRetryChapter: (chapterIndex: Int) -> Unit,  // перезагрузить главу с ошибкой
+    private val onOpenChapterInBrowser: (url: String) -> Unit,  // открыть URL в браузере
     private val onClick: () -> Unit,
 ) : ArrayAdapter<ReaderItem>(ctx, 0, list) {
     private val appFileResolver = AppFileResolver(ctx)
@@ -281,8 +283,20 @@ internal class ReaderItemAdapter(
         }
 
         bind.error.updateTextSelectability()
-        bind.reloadButton.setOnClickListener { onReloadReader() }
         bind.error.text = item.text
+
+        // "Перезагрузить главу" — сбрасывает флаг ошибки и пробует загрузить снова,
+        // НЕ очищает уже загруженные главы (в отличие от полного reloadReader)
+        bind.reloadButton.setOnClickListener { onRetryChapter(item.chapterIndex) }
+
+        // Кнопка "Открыть в браузере" — показываем только если есть URL
+        if (item.chapterUrl.isNotBlank()) {
+            bind.openInBrowserButton.visibility = View.VISIBLE
+            bind.openInBrowserButton.setOnClickListener { onOpenChapterInBrowser(item.chapterUrl) }
+        } else {
+            bind.openInBrowserButton.visibility = View.GONE
+        }
+
         return bind.root
     }
 

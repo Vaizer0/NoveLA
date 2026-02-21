@@ -105,6 +105,16 @@ class ReaderActivity : BaseActivity() {
                 onChapterStartVisible = viewModel::markChapterStartAsSeen,
                 onChapterEndVisible = viewModel::markChapterEndAsSeen,
                 onReloadReader = viewModel::reloadReader,
+                onRetryChapter = { chapterIndex ->
+                    // Удаляет все items главы с ошибкой (включая Title/Divider),
+                    // сбрасывает chaptersStats и loadedChapters для этой главы,
+                    // затем перезагружает её заново. Остальные уже загруженные главы не трогает.
+                    viewModel.chaptersLoader.retryChapter(chapterIndex)
+                },
+                onOpenChapterInBrowser = { url ->
+                    navigationRoutes.webView(this@ReaderActivity, url = url)
+                        .let(::startActivity)
+                },
                 onClick = {
                     viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
                 },

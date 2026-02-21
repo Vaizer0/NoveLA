@@ -75,6 +75,9 @@ internal class ReaderRepository @Inject constructor(
         }
     }
 
+    suspend fun deleteChapterBody(chapterUrl: String) {
+        appRepository.chapterBody.removeRows(listOf(chapterUrl))
+    }
     suspend fun downloadChapter(chapterUrl: String) =
         appRepository.chapterBody.fetchBody(chapterUrl)
 }

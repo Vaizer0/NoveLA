@@ -28,7 +28,6 @@ class ChapterBodyRepository @Inject constructor(
     suspend fun removeRows(chaptersUrl: List<String>) {
         chaptersUrl.chunked(500).forEach { chunk ->
             chapterBodyDao.removeChapterRows(chunk)
-            // Also remove translations for these chapters
             chunk.forEach { chapterUrl ->
                 chapterTranslationDao.deleteChapterTranslations(chapterUrl)
             }
@@ -37,15 +36,14 @@ class ChapterBodyRepository @Inject constructor(
 
     private suspend fun insertWithTitle(chapterBody: ChapterBody, title: String?) = appDatabase.transaction {
         insertReplace(chapterBody)
-        // Don't update chapter title - keep the original title from chapter list
-        // getChapterTitle() is unreliable and causes title corruption
-        // if (title != null)
-        //     bookChaptersRepository.updateTitle(chapterBody.url, title)
     }
 
     suspend fun fetchBody(urlChapter: String, tryCache: Boolean = true): Response<String> {
         if (tryCache) chapterBodyDao.get(urlChapter)?.let {
-            return@fetchBody Response.Success(it.body)
+            // Не возвращать пустое тело из кэша — оно могло быть сохранено при ошибке
+            if (it.body.isNotBlank()) return@fetchBody Response.Success(it.body)
+            // Удаляем невалидную запись чтобы не мешала следующим попыткам
+            chapterBodyDao.removeChapterRows(listOf(urlChapter))
         }
 
         if (urlChapter.isLocalUri) {
@@ -61,10 +59,13 @@ class ChapterBodyRepository @Inject constructor(
 
         return downloaderRepository.bookChapter(urlChapter)
             .map {
-                insertWithTitle(
-                    chapterBody = ChapterBody(url = urlChapter, body = it.body),
-                    title = it.title
-                )
+                // Сохраняем в БД только непустое тело
+                if (it.body.isNotBlank()) {
+                    insertWithTitle(
+                        chapterBody = ChapterBody(url = urlChapter, body = it.body),
+                        title = it.title
+                    )
+                }
                 it.body
             }
     }

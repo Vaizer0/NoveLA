@@ -148,6 +148,53 @@ internal class ReaderChaptersLoader(
         tryLoadNext()
     }
 
+    /**
+     * Удаляет все items главы с ошибкой, чистит кэш тела в БД и перезагружает её заново.
+     * Без удаления из БД fetchBody вернёт кэшированную пустую строку и до сети не дойдёт.
+     */
+    fun retryChapter(chapterIndex: Int) {
+        launch(Dispatchers.Main.immediate) {
+            val chapterUrl = orderedChapters.getOrNull(chapterIndex)?.url
+
+            // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
+            items.removeAll { it.chapterIndex == chapterIndex }
+            readerViewHandlersActions.doForceUpdateListViewState()
+
+            // Сбрасываем состояние — включая кэш тела в БД
+            hasLoadingError = false
+            if (chapterUrl != null) {
+                chaptersStats.remove(chapterUrl)
+                loadedChapters.remove(chapterUrl)
+                withContext(Dispatchers.IO) {
+                    readerRepository.deleteChapterBody(chapterUrl)
+                }
+            }
+
+            // Перезагружаем главу
+            readerState = ReaderState.LOADING
+            val insert: suspend (ReaderItem) -> Unit = {
+                withContext(Dispatchers.Main.immediate) {
+                    items.add(it)
+                    readerViewHandlersActions.doForceUpdateListViewState()
+                }
+            }
+            val insertAll: suspend (Collection<ReaderItem>) -> Unit = {
+                withContext(Dispatchers.Main.immediate) {
+                    items.addAll(it)
+                    readerViewHandlersActions.doForceUpdateListViewState()
+                }
+            }
+            val remove: suspend (ReaderItem) -> Unit = {
+                withContext(Dispatchers.Main.immediate) {
+                    items.remove(it)
+                    readerViewHandlersActions.doForceUpdateListViewState()
+                }
+            }
+            addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove)
+            readerState = ReaderState.IDLE
+        }
+    }
+
     fun reload() {
         coroutineContext.cancelChildren()
         loaderQueue.clear()
@@ -345,7 +392,11 @@ internal class ReaderChaptersLoader(
     private suspend fun loadPreviousChapter() = withContext(Dispatchers.Main.immediate) {
         readerState = ReaderState.LOADING
 
-        val firstItem = items.firstOrNull()!!
+        val firstItem = items.firstOrNull()
+        if (firstItem == null) {
+            readerState = ReaderState.IDLE
+            return@withContext
+        }
         if (firstItem is ReaderItem.BookStart) {
             readerState = ReaderState.IDLE
             return@withContext
@@ -391,7 +442,11 @@ internal class ReaderChaptersLoader(
     private suspend fun loadNextChapter() = withContext(Dispatchers.Main.immediate) {
         readerState = ReaderState.LOADING
 
-        val lastItem = items.lastOrNull()!!
+        val lastItem = items.lastOrNull()
+        if (lastItem == null) {
+            readerState = ReaderState.IDLE
+            return@withContext
+        }
         if (lastItem is ReaderItem.BookEnd) {
             readerState = ReaderState.IDLE
             return@withContext
@@ -450,20 +505,16 @@ internal class ReaderChaptersLoader(
                 if (!isValidChapterContent(res.data)) {
                     withContext(Dispatchers.Main.immediate) {
                         hasLoadingError = true
-                        android.util.Log.w(TAG, "Chapter content invalid, stopping auto-loading")
+                        android.util.Log.w(TAG, "Chapter content invalid, stopping auto-loading. Preview: ${res.data.take(200)}")
                     }
                     maintainPosition {
                         remove(itemProgressBar)
-                        insert(
-                            ReaderItem.Error(
-                                chapterIndex = chapterIndex,
-                                text = if (java.util.Locale.getDefault().language == "ru") {
-                                    "Ошибка контента: защита Cloudflare, пустая глава или требуется вход. Попробуйте вернуться назад и открыть страницу в браузере (три точки в углу), чтобы пройти проверку."
-                                } else {
-                                    "Invalid content: Cloudflare protection, empty chapter, or login required. Try going back and opening the page in your browser (three-dot menu) to pass the check."
-                                }
-                            )
-                        )
+                        val preview = res.data.take(300).ifBlank { "<null>" }
+                        val userMessage = if (java.util.Locale.getDefault().language == "ru")
+                            "Ошибка контента: защита Cloudflare, пустая глава или требуется авторизация. Попробуйте открыть в браузере, чтобы пройти проверку.\n\nПолучено: $preview"
+                        else
+                            "Invalid content: Cloudflare protection, empty chapter, or login required. Try opening in browser to pass the check.\n\nReceived: $preview"
+                        insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
                     return@withContext
@@ -650,7 +701,12 @@ internal class ReaderChaptersLoader(
                 }
                 maintainPosition {
                     remove(itemProgressBar)
-                    insert(ReaderItem.Error(chapterIndex = chapterIndex, text = res.message))
+                    val detail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
+                    val userMessage = if (java.util.Locale.getDefault().language == "ru")
+                        "Ошибка загрузки: $detail\n\nВозможные причины: защита Cloudflare, требуется авторизация или проблема с источником. Попробуйте открыть в браузере."
+                    else
+                        "Load error: $detail\n\nPossible causes: Cloudflare protection, login required, or source issue. Try opening in browser."
+                    insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
             }
