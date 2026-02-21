@@ -62,6 +62,7 @@ class WtrLabSource(
 
     private val languages = listOf(
         "none" to R.string.wtr_lab_lang_none,
+        "en"   to R.string.wtr_lab_lang_en,
         "es"   to R.string.wtr_lab_lang_es,
         "ru"   to R.string.wtr_lab_lang_ru,
         "de"   to R.string.wtr_lab_lang_de,

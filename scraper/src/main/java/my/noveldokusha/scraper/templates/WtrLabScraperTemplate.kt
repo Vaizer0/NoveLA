@@ -88,8 +88,10 @@ abstract class WtrLabScraperTemplate(
 
     // "none" = без Google Translate, иначе код языка для GT
     private fun getTargetLangCode(lang: String): String = when (lang) {
+        "en" -> "en"
         "es" -> "es"; "ru" -> "ru"; "de" -> "de"
         "pl" -> "pl"; "it" -> "it"; "fr" -> "fr"
+        "id" -> "id"; "tr" -> "tr"
         else -> "none"
     }
 
@@ -98,7 +100,6 @@ abstract class WtrLabScraperTemplate(
             val sourceLang = sourceLanguageForGT()
             Timber.d("WtrLab: Translate $sourceLang → $targetLang (${text.length} chars)")
 
-            // API требует application/json+protobuf — именно этот Content-Type принимает эндпоинт
             val payload = listOf(listOf(text, sourceLang, targetLang), "wt_lib")
             val jsonBody = Gson().toJson(payload)
             val requestBody = jsonBody.toRequestBody("application/json+protobuf".toMediaType())
@@ -110,6 +111,15 @@ abstract class WtrLabScraperTemplate(
                 .post(requestBody)
 
             val response = networkClient.call(requestBuilder)
+
+            // Проверяем HTTP статус до парсинга — при 429/400 тело будет HTML, не JSON
+            if (!response.isSuccessful) {
+                val code = response.code
+                response.body?.close()
+                Timber.e("WtrLab: Translate HTTP $code — returning original text")
+                return@withContext text
+            }
+
             val responseBody = response.body?.string() ?: return@withContext text
             Timber.d("WtrLab: Translate response: ${responseBody.take(200)}")
 
@@ -118,10 +128,76 @@ abstract class WtrLabScraperTemplate(
                 val arr = JsonParser.parseString(responseBody).asJsonArray
                 arr.get(0).asJsonArray.get(0).asString
             } catch (e: Exception) {
-                Timber.e(e, "WtrLab: Failed to parse translate response: $responseBody")
+                Timber.e(e, "WtrLab: Failed to parse translate response")
                 text
             }
         }
+
+    /**
+     * Разбивает параграфы на чанки ≤ MAX_CHUNK_CHARS символов HTML,
+     * переводит каждый чанк отдельно, возвращает полный список переведённых параграфов.
+     * При ошибке чанка — оставляет оригинал для тех параграфов.
+     */
+    private suspend fun translateParagraphsInChunks(
+        paragraphs: List<String>,
+        targetLang: String
+    ): List<String> {
+        val maxChunkChars = 8_000
+        val result = paragraphs.toMutableList()
+
+        // Группируем параграфы в чанки по символьному лимиту
+        data class Chunk(val indices: List<Int>, val html: String)
+        val chunks = mutableListOf<Chunk>()
+        val currentIndices = mutableListOf<Int>()
+        val currentHtml = StringBuilder()
+
+        for ((i, para) in paragraphs.withIndex()) {
+            val paraHtml = "<p>$para</p>"
+            if (currentHtml.isNotEmpty() && currentHtml.length + paraHtml.length > maxChunkChars) {
+                chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
+                currentIndices.clear()
+                currentHtml.clear()
+            }
+            currentIndices.add(i)
+            currentHtml.append(paraHtml)
+        }
+        if (currentHtml.isNotEmpty()) {
+            chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
+        }
+
+        Timber.d("WtrLab: Translating ${paragraphs.size} paragraphs in ${chunks.size} chunks → $targetLang")
+
+        for ((idx, chunk) in chunks.withIndex()) {
+            if (idx > 0) delay(500L)
+            Timber.d("WtrLab: Chunk ${idx+1}/${chunks.size}: ${chunk.html.length} chars, ${chunk.indices.size} paragraphs")
+
+            val translated = try {
+                translateToTarget(chunk.html, targetLang)
+            } catch (e: Exception) {
+                Timber.e(e, "WtrLab: Chunk ${idx+1} failed, keeping original")
+                continue
+            }
+            if (translated == chunk.html) continue // вернулся оригинал при ошибке HTTP
+
+            val unescaped = android.text.Html.fromHtml(translated, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+            val translatedParas = Regex("<p>(.*?)</p>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(unescaped)
+                .map { it.groupValues[1].trim() }
+                .filter { it.isNotBlank() }
+                .toList()
+                .ifEmpty { unescaped.split("\n").filter { it.isNotBlank() } }
+
+            val minSize = minOf(translatedParas.size, chunk.indices.size)
+            for (pos in 0 until minSize) {
+                result[chunk.indices[pos]] = translatedParas[pos]
+            }
+            if (translatedParas.size != chunk.indices.size) {
+                Timber.w("WtrLab: Chunk ${idx+1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}")
+            }
+        }
+
+        return result
+    }
 
     // ── Chapter fetching ──────────────────────────────────────────────────────
 
@@ -186,8 +262,11 @@ abstract class WtrLabScraperTemplate(
             }
 
             if (json.get("success")?.asBoolean == false) {
-                Timber.e("WtrLab: API error: ${json.get("error")?.asString}")
-                return@withContext ""
+                val errorMsg = json.get("error")?.asString ?: "Unknown API error"
+                val errorCode = json.get("code")?.asInt
+                Timber.e("WtrLab: API error [$errorCode]: $errorMsg")
+                // Бросаем исключение с реальным сообщением — оно попадёт в ReaderItem.Error.text
+                throw Exception("[$errorCode] $errorMsg")
             }
 
             // Структура: { data: { data: { body, glossary_data, patch } } }
@@ -294,21 +373,7 @@ abstract class WtrLabScraperTemplate(
             val targetLang = getTargetLangCode(lang)
             val finalParagraphs = if (targetLang != "none") {
                 try {
-                    // Оборачиваем в <p> теги перед отправкой в GT —
-                    // так GT сохраняет структуру абзацев и не склеивает их
-                    val htmlToTranslate = paragraphs.joinToString("") { "<p>$it</p>" }
-                    val translated = translateToTarget(htmlToTranslate, targetLang)
-                    // GT возвращает HTML-энтити (&quot; &amp; и т.д.) — декодируем
-                    val unescaped = android.text.Html.fromHtml(translated, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
-                    // Извлекаем обратно текст из <p> тегов
-                    Regex("<p>(.*?)</p>", RegexOption.DOT_MATCHES_ALL)
-                        .findAll(unescaped)
-                        .map { it.groupValues[1].trim() }
-                        .filter { it.isNotBlank() }
-                        .toList()
-                        .ifEmpty {
-                            unescaped.split("\n").filter { it.isNotBlank() }
-                        }
+                    translateParagraphsInChunks(paragraphs, targetLang)
                 } catch (e: Exception) {
                     Timber.e(e, "WtrLab: GT failed, using original")
                     paragraphs
@@ -319,7 +384,7 @@ abstract class WtrLabScraperTemplate(
 
         } catch (e: Exception) {
             Timber.e(e, "WtrLab: Unexpected error")
-            ""
+            throw e
         }
     }
 
