@@ -84,8 +84,8 @@ class PiaoTia(private val networkClient: NetworkClient) : SourceInterface.Catalo
         book = BookSelectors(
             title = text("div#content h1").Clean(),
             cover = attr("src", "div#content img"),
-            description = text("span.hottext + br + *").Clean(),
-            latestChapterHash = attr("href", "span.hottext + a")
+            description = text("div[style*='float:left']").Clean(),
+            latestChapterHash = attr("href", "table.grid a[href*='html']:first-of-type")
         ),
 
         // Главы
