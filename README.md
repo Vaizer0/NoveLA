@@ -1,4 +1,4 @@
-# 📚 Novela
+# 📚 NoveLA
 
 Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.  
 Focused on immersion, simplicity, and convenient reading of foreign content.
@@ -49,7 +49,8 @@ Complete list of supported sources:
 - Twkan  
 - Ttkan  
 - Novel543  
-- Quanben5  
+- Quanben5
+- Piaotia
 
 #### 🇷🇺 Russian sources
 - Jaomix  
@@ -175,7 +176,8 @@ GPL-3.0
 - Twkan  
 - Ttkan  
 - Novel543  
-- Quanben5  
+- Quanben5
+- Piaotia
 
 #### 🇷🇺 Русские источники
 - Jaomix  
