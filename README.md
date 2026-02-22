@@ -1,4 +1,4 @@
-# 📚 NoveLA
+# <img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.png" width="40" height="40" valign="middle"> NoveLA
 
 Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.  
 Focused on immersion, simplicity, and convenient reading of foreign content.
