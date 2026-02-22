@@ -46,7 +46,7 @@ android {
         applicationId = "my.novela"
         versionCode = 17
         versionName = "1.1.6"
-        setProperty("archivesBaseName", "Novela_v$versionName")
+        setProperty("archivesBaseName", "NoveLA_v$versionName")
     }
 
     signingConfigs {
