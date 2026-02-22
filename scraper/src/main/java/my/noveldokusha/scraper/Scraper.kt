@@ -47,6 +47,7 @@ class Scraper @Inject constructor(
         WtrLabSource(networkClient, appPreferences),
         Novel543(networkClient),
         Quanben5(networkClient),
+        PiaoTia(networkClient),
     )
 
     // For now, only return built-in sources

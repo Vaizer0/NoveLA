@@ -4,5 +4,6 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">wuxia.blog</domain>
         <domain includeSubdomains="true">1stkissnovel.org</domain>
+        <domain includeSubdomains="true">piaotia.com</domain>
     </domain-config>
 </network-security-config>
