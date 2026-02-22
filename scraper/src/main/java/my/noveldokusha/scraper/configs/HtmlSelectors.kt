@@ -36,6 +36,7 @@ data class HtmlSelectors(
     val postSearchUrl: String? = null,
     val postSearchDataBuilder: ((String) -> Map<String, String>)? = null,
     val searchHeaders: Map<String, String> = emptyMap(),
+    val postSearchUseRawBody: Boolean = false,  // Use Jsoup to preserve pre-encoded values (for GBK etc.)
 
     // Cloudflare bypass
     val cloudflareConfig: CloudflareConfig? = null,

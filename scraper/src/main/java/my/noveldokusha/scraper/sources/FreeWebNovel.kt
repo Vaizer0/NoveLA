@@ -82,6 +82,7 @@ class FreeWebNovel(private val networkClient: NetworkClient) : SourceInterface.C
             "Cache-Control" to "max-age=0",
             "Referer" to "https://freewebnovel.com/"
         ),
+        postSearchUseRawBody = true,  // Use Jsoup to avoid double encoding
 
         buildCatalogUrl = { index ->
             val page = index + 1

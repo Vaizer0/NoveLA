@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.PagedList
 import my.noveldokusha.core.Response
 import my.noveldokusha.network.NetworkClient
+import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
 import my.noveldokusha.network.postPayload
 import my.noveldokusha.network.postRequest
 import my.noveldokusha.network.toDocument
@@ -143,14 +144,40 @@ suspend fun getCatalogSearch(
         // Handle POST search if enabled
         val doc = if (config.postSearchEnabled && config.postSearchUrl != null && config.postSearchDataBuilder != null) {
             Timber.d("ScraperHelpers: Using POST search for '$input'")
-            // Special handling for FreeWebNovel POST search using Jsoup
-            if (config.postSearchUrl.contains("freewebnovel.com")) {
+            Timber.d("ScraperHelpers: POST URL: ${config.postSearchUrl}")
+            // Use Jsoup for raw body POST with proper charset encoding
+            if (config.postSearchUseRawBody) {
                 val data = config.postSearchDataBuilder.invoke(input)
-                org.jsoup.Jsoup.connect(config.postSearchUrl)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-                    .data(data)
+                val charset = config.charset ?: "UTF-8"
+                
+                Timber.d("ScraperHelpers: POST data: $data")
+                Timber.d("ScraperHelpers: Charset: $charset")
+                
+                // Build form data with proper charset encoding
+                val formData = data.entries.joinToString("&") { (key, value) ->
+                    val encodedKey = java.net.URLEncoder.encode(key, charset)
+                    val encodedValue = java.net.URLEncoder.encode(value, charset)
+                    "$encodedKey=$encodedValue"
+                }
+                
+                Timber.d("ScraperHelpers: Encoded form data: $formData")
+                Timber.d("ScraperHelpers: Search headers: ${config.searchHeaders}")
+                
+                val conn = org.jsoup.Jsoup.connect(config.postSearchUrl)
+                    .userAgent(GLOBAL_USER_AGENT)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .requestBody(formData)
                     .timeout(10000)
-                    .post()
+                
+                // Add search headers
+                config.searchHeaders.forEach { (key, value) -> conn.header(key, value) }
+                
+                Timber.d("ScraperHelpers: Executing POST request...")
+                val resultDoc = conn.post()
+                Timber.d("ScraperHelpers: POST response URL: ${resultDoc.location()}")
+                Timber.d("ScraperHelpers: POST response title: ${resultDoc.title()}")
+                Timber.d("ScraperHelpers: POST response body preview: ${resultDoc.body()?.text()?.take(500)}")
+                resultDoc
             } else {
                 // Standard POST request
                 val data = config.postSearchDataBuilder.invoke(input)
