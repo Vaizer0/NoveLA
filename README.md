@@ -114,7 +114,7 @@ Additional features:
 
 ---
 ## 🖼 Screenshots
-<details opne>
+<details open>
 <summary>Show screenshots</summary>
 <table>
   <tr>
