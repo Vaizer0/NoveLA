@@ -113,6 +113,39 @@ Additional features:
 - Backup and restore support
 
 ---
+## 🖼 Screenshots
+<details opne>
+<summary>Show screenshots</summary>
+<table>
+  <tr>
+    <td align="center"><b>Library</b><br><img src="screenshots/Screenshot_Library.png"/></td>
+    <td align="center"><b>Sources</b><br><img src="screenshots/Screenshot_Finder.png"/></td>
+    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Chapter</b><br><img src="screenshots/Screenshot_Chapter.png"/></td>
+    <td align="center"><b>Translation</b><br><img src="screenshots/Screenshot_Chapter_Translate.png"/></td>
+    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Add by URL</b><br><img src="screenshots/Screenshot_Add_by_URLs.png"/></td>
+    <td align="center"><b>Global Search</b><br><img src="screenshots/Screenshot_Global_Search.png"/></td>
+    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Cloudflare Bypass</b><br><img src="screenshots/Screenshot_CF_Turnstile.png"/></td>
+    <td align="center"><b>Regex settings</b><br><img src="screenshots/Screenshot_settings_regex_.png"/></td>
+    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>WTR-LAB language</b><br><img src="screenshots/wtrlab_set_language.png"/></td>
+    <td align="center"><b>WTR-LAB settings</b><br><img src="screenshots/wrtlab_setting.png"/></td>
+    <td></td>
+  </tr>
+</table>
+</details>
+
+---
 
 ## 🧩 Tech Stack
 - Kotlin, Coroutines, LiveData
@@ -244,23 +277,33 @@ GPL-3.0
 ## 🖼 Скриншоты
 <details>
 <summary>Показать скриншоты</summary>
-
-| Library | Sources |
-|:--:|:--:|
-| ![](screenshots/Screenshot_Library.png) | ![](screenshots/Screenshot_Finder.png) |
-| Book | Chapter |
-| ![](screenshots/Screenshot_book.png) | ![](screenshots/Screenshot_Chapter.png) |
-| Translation | Voice |
-| ![](screenshots/Screenshot_Chapter_Translate.png) | ![](screenshots/Screenshot_Chapter_Voice.png) |
-| Add by URL | Global Search |
-| ![](screenshots/Screenshot_Add_by_URLs.png) | ![](screenshots/Screenshot_Global_Search.png) |
-| Settings | Cloudflare Bypass |
-| ![](screenshots/Screenshot_settings.png) | ![](screenshots/Screenshot_CF_Turnstile.png) |
-| Regex settings | Regex cleanup |
-| ![](screenshots/Screenshot_settings_regex_.png) | ![](screenshots/Screenshot_regex_Cleanup.png) |
-| WTR-LAB language | WTR-LAB settings |
-| ![](screenshots/wtrlab_set_language.png) | ![](screenshots/wrtlab_setting.png) |
-
+<table>
+  <tr>
+    <td align="center"><b>Library</b><br><img src="screenshots/Screenshot_Library.png"/></td>
+    <td align="center"><b>Sources</b><br><img src="screenshots/Screenshot_Finder.png"/></td>
+    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Chapter</b><br><img src="screenshots/Screenshot_Chapter.png"/></td>
+    <td align="center"><b>Translation</b><br><img src="screenshots/Screenshot_Chapter_Translate.png"/></td>
+    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Add by URL</b><br><img src="screenshots/Screenshot_Add_by_URLs.png"/></td>
+    <td align="center"><b>Global Search</b><br><img src="screenshots/Screenshot_Global_Search.png"/></td>
+    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Cloudflare Bypass</b><br><img src="screenshots/Screenshot_CF_Turnstile.png"/></td>
+    <td align="center"><b>Regex settings</b><br><img src="screenshots/Screenshot_settings_regex_.png"/></td>
+    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>WTR-LAB language</b><br><img src="screenshots/wtrlab_set_language.png"/></td>
+    <td align="center"><b>WTR-LAB settings</b><br><img src="screenshots/wrtlab_setting.png"/></td>
+    <td></td>
+  </tr>
+</table>
 </details>
 
 ---
