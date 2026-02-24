@@ -620,18 +620,38 @@ class ReaderActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
 
-        // FIX: If TTS is active after screen unlock, scroll to current reading position.
-        // viewBind.listView.post{} defers execution until after ListView finishes re-layout,
-        // which prevents the scroll from being ignored or delayed unpredictably.
-        // scrollToReadingPositionSmooth() then handles the animation gracefully.
+        // FIX: If TTS is active after screen unlock, scroll to TTS position ONLY if
+        // the reader is behind TTS. If the user has read ahead, don't jump them back.
         if (viewModel.readerSpeaker.isActive.value) {
             val itemPos = viewModel.readerSpeaker.currentTextPlaying.value.itemPos
             if (itemPos.chapterIndex >= 0) {
                 viewBind.listView.post {
-                    scrollToReadingPositionSmooth(
-                        chapterIndex = itemPos.chapterIndex,
-                        chapterItemPosition = itemPos.chapterItemPosition
-                    )
+                    // Get current reader position (first visible item on screen)
+                    val firstVisiblePosition = viewBind.listView.firstVisiblePosition
+                    val firstVisibleItemIndex = viewAdapter.listView.fromPositionToIndex(firstVisiblePosition)
+                    val firstVisibleItem = viewModel.items.getOrNull(firstVisibleItemIndex)
+
+                    // Compare reader position vs TTS position
+                    val readerIsAhead = if (firstVisibleItem is ReaderItem.Position) {
+                        when {
+                            // Reader is in a later chapter → don't scroll back
+                            firstVisibleItem.chapterIndex > itemPos.chapterIndex -> true
+                            // Same chapter: reader is at same or later item → don't scroll back
+                            firstVisibleItem.chapterIndex == itemPos.chapterIndex ->
+                                firstVisibleItem.chapterItemPosition >= itemPos.chapterItemPosition
+                            // Reader is behind TTS (earlier chapter) → scroll to TTS
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+
+                    if (!readerIsAhead) {
+                        scrollToReadingPositionSmooth(
+                            chapterIndex = itemPos.chapterIndex,
+                            chapterItemPosition = itemPos.chapterItemPosition
+                        )
+                    }
                 }
             }
         }
