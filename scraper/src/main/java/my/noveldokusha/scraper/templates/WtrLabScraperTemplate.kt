@@ -12,26 +12,9 @@ import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.toJson
 import my.noveldokusha.scraper.R
 import my.noveldokusha.scraper.SourceInterface
-import my.noveldokusha.scraper.configs.BookSelectors
-import my.noveldokusha.scraper.configs.CatalogSelectors
-import my.noveldokusha.scraper.configs.ChapterPaginationType
-import my.noveldokusha.scraper.configs.ChapterSelectors
-import my.noveldokusha.scraper.configs.Clean
-import my.noveldokusha.scraper.configs.HtmlSelectors
-import my.noveldokusha.scraper.configs.SearchSelectors
-import my.noveldokusha.scraper.configs.applyStandardContentTransforms
-import my.noveldokusha.scraper.configs.attr
-import my.noveldokusha.scraper.configs.elements
-import my.noveldokusha.scraper.configs.removeElementsDOM
-import my.noveldokusha.scraper.configs.text
+import my.noveldokusha.scraper.configs.*
 import my.noveldokusha.scraper.domain.ChapterResult
-import my.noveldokusha.scraper.helpers.getBookCover
-import my.noveldokusha.scraper.helpers.getBookDescription
-import my.noveldokusha.scraper.helpers.getBookTitle
-import my.noveldokusha.scraper.helpers.getCatalogList
-import my.noveldokusha.scraper.helpers.getCatalogSearch
-import my.noveldokusha.scraper.helpers.getChapterList
-import my.noveldokusha.scraper.helpers.getChapterListHash
+import my.noveldokusha.scraper.helpers.*
 import my.noveldokusha.scraper.utils.UrlTransformers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -50,154 +33,31 @@ abstract class WtrLabScraperTemplate(
     override val language = LanguageCode.MULTILANGUAGE
     override val iconUrl = "https://raw.githubusercontent.com/HnDK0/external-sources/main/icons/wtr-lab.png"
     override val iconResId = null
-
     override val baseUrl = "https://wtr-lab.com/"
+    override val catalogUrl: String get() = "${baseUrl}novel-list"
 
-    override val catalogUrl: String
-        get() = "${baseUrl}novel-list"
+    private val translationMode: String get() = appPreferences.WTR_LAB_MODE.value
+    private val translationLanguage: String get() = appPreferences.WTR_LAB_LANGUAGE.value
 
-    // Пользовательские режимы → параметр translate в API:
-    //   "ai"  (UI) → "ai"  (API) = AI-перевод сайта, получаем английский текст
-    //   "raw" (UI) → "web" (API) = сырой контент, после расшифровки получаем китайский
-    private val translationMode: String
-        get() = appPreferences.WTR_LAB_MODE.value
+    private fun apiTranslateParam(): String = if (translationMode == "raw") "web" else "ai"
+    private fun sourceLanguageForGT(): String = if (translationMode == "raw") "zh-CN" else "en"
 
-    private fun apiTranslateParam(): String = when (translationMode) {
-        "raw" -> "web"  // "raw" в UI = "web" в API = китайский оригинал
-        else  -> "ai"   // "ai"  в UI = "ai"  в API = английский перевод
-    }
-
-    // Исходный язык для Google Translate (поверх контента)
-    private fun sourceLanguageForGT(): String = when (translationMode) {
-        "raw" -> "zh-CN"  // оригинал китайский
-        else  -> "en"     // AI-перевод английский
-    }
-
-    private val translationLanguage: String
-        get() = appPreferences.WTR_LAB_LANGUAGE.value
-
-    // ── Google Translate ──────────────────────────────────────────────────────
-
-    private val translateApiKey = String(
-        android.util.Base64.decode(
-            "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldESG1PNTIw",
-            android.util.Base64.DEFAULT
-        )
-    ).trim()
-    private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
-
-    // "none" = без Google Translate, иначе код языка для GT
     private fun getTargetLangCode(lang: String): String = when (lang) {
-        "en" -> "en"
-        "es" -> "es"; "ru" -> "ru"; "de" -> "de"
+        "en" -> "en"; "es" -> "es"; "ru" -> "ru"; "de" -> "de"
         "pl" -> "pl"; "it" -> "it"; "fr" -> "fr"
         "id" -> "id"; "tr" -> "tr"
         else -> "none"
     }
 
-    private suspend fun translateToTarget(text: String, targetLang: String): String =
-        withContext(Dispatchers.IO) {
-            val sourceLang = sourceLanguageForGT()
-            Timber.d("WtrLab: Translate $sourceLang → $targetLang (${text.length} chars)")
-
-            val payload = listOf(listOf(text, sourceLang, targetLang), "wt_lib")
-            val jsonBody = Gson().toJson(payload)
-            val requestBody = jsonBody.toRequestBody("application/json+protobuf".toMediaType())
-
-            val requestBuilder = Request.Builder()
-                .url(translateUrl)
-                .addHeader("X-Goog-Api-Key", translateApiKey)
-                .addHeader("Origin", baseUrl.trimEnd('/'))
-                .post(requestBody)
-
-            val response = networkClient.call(requestBuilder)
-
-            // Проверяем HTTP статус до парсинга — при 429/400 тело будет HTML, не JSON
-            if (!response.isSuccessful) {
-                val code = response.code
-                response.body?.close()
-                Timber.e("WtrLab: Translate HTTP $code — returning original text")
-                return@withContext text
-            }
-
-            val responseBody = response.body?.string() ?: return@withContext text
-            Timber.d("WtrLab: Translate response: ${responseBody.take(200)}")
-
-            try {
-                // Ответ: [["переведённый текст"]]
-                val arr = JsonParser.parseString(responseBody).asJsonArray
-                arr.get(0).asJsonArray.get(0).asString
-            } catch (e: Exception) {
-                Timber.e(e, "WtrLab: Failed to parse translate response")
-                text
-            }
-        }
-
-    /**
-     * Разбивает параграфы на чанки ≤ MAX_CHUNK_CHARS символов HTML,
-     * переводит каждый чанк отдельно, возвращает полный список переведённых параграфов.
-     * При ошибке чанка — оставляет оригинал для тех параграфов.
-     */
-    private suspend fun translateParagraphsInChunks(
-        paragraphs: List<String>,
-        targetLang: String
-    ): List<String> {
-        val maxChunkChars = 8_000
-        val result = paragraphs.toMutableList()
-
-        // Группируем параграфы в чанки по символьному лимиту
-        data class Chunk(val indices: List<Int>, val html: String)
-        val chunks = mutableListOf<Chunk>()
-        val currentIndices = mutableListOf<Int>()
-        val currentHtml = StringBuilder()
-
-        for ((i, para) in paragraphs.withIndex()) {
-            val paraHtml = "<p>$para</p>"
-            if (currentHtml.isNotEmpty() && currentHtml.length + paraHtml.length > maxChunkChars) {
-                chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
-                currentIndices.clear()
-                currentHtml.clear()
-            }
-            currentIndices.add(i)
-            currentHtml.append(paraHtml)
-        }
-        if (currentHtml.isNotEmpty()) {
-            chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
-        }
-
-        Timber.d("WtrLab: Translating ${paragraphs.size} paragraphs in ${chunks.size} chunks → $targetLang")
-
-        for ((idx, chunk) in chunks.withIndex()) {
-            if (idx > 0) delay(500L)
-            Timber.d("WtrLab: Chunk ${idx+1}/${chunks.size}: ${chunk.html.length} chars, ${chunk.indices.size} paragraphs")
-
-            val translated = try {
-                translateToTarget(chunk.html, targetLang)
-            } catch (e: Exception) {
-                Timber.e(e, "WtrLab: Chunk ${idx+1} failed, keeping original")
-                continue
-            }
-            if (translated == chunk.html) continue // вернулся оригинал при ошибке HTTP
-
-            val unescaped = android.text.Html.fromHtml(translated, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
-            val translatedParas = Regex("<p>(.*?)</p>", RegexOption.DOT_MATCHES_ALL)
-                .findAll(unescaped)
-                .map { it.groupValues[1].trim() }
-                .filter { it.isNotBlank() }
-                .toList()
-                .ifEmpty { unescaped.split("\n").filter { it.isNotBlank() } }
-
-            val minSize = minOf(translatedParas.size, chunk.indices.size)
-            for (pos in 0 until minSize) {
-                result[chunk.indices[pos]] = translatedParas[pos]
-            }
-            if (translatedParas.size != chunk.indices.size) {
-                Timber.w("WtrLab: Chunk ${idx+1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}")
-            }
-        }
-
-        return result
+    private val translator by lazy {
+        WtrLabTranslator(networkClient, ::sourceLanguageForGT, baseUrl)
     }
+
+    private fun cleanApiParagraph(text: String): String =
+        java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC)
+            .replace(Regex("(?i)\\A[\\s\\p{Z}\\uFEFF]*((Глава\\s+\\d+|Chapter\\s+\\d+)[^\\n\\r]*[\\n\\r\\s]*)+"), "")
+            .replace(Regex("(?im)^\\s*(Translator|Editor|Proofreader|Read\\s+(at|on|latest))[:\\s][^\\n\\r]{0,70}(\\r?\\n|\$)"), "")
+            .trim()
 
     // ── Chapter fetching ──────────────────────────────────────────────────────
 
@@ -219,161 +79,23 @@ abstract class WtrLabScraperTemplate(
             val chapterPart = parts.lastOrNull { it.startsWith("chapter-") } ?: parts.last()
             val chapterNo = chapterPart.removePrefix("chapter-").toIntOrNull() ?: 1
 
-            val apiParam = apiTranslateParam()
             val lang = translationLanguage
-            Timber.d("WtrLab: novelId=$novelId, chapterNo=$chapterNo, translate=$apiParam, lang=$lang")
+            Timber.d("WtrLab: novelId=$novelId, chapterNo=$chapterNo, translate=${apiTranslateParam()}, lang=$lang")
 
-            val jsonBody = Gson().toJson(
-                mapOf(
-                    "translate"   to apiParam,  // "ai" или "web"
-                    "language"    to lang,
-                    "raw_id"      to novelId,
-                    "chapter_no"  to chapterNo,
-                    "retry"       to false,
-                    "force_retry" to false,
-                )
-            )
-            val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+            val apiResponse = fetchChapterFromApi(chapterUrl, novelId, chapterNo, lang)
+                ?: return@withContext ""
 
-            val requestBuilder = Request.Builder()
-                .url("${baseUrl}api/reader/get")
-                .addHeader("Referer", chapterUrl)
-                .addHeader("Origin", baseUrl.trimEnd('/'))
-                .addHeader("Content-Type", "application/json")
-                .post(requestBody)
-
-            val response = networkClient.call(requestBuilder)
-            val responseStr = response.body?.string() ?: run {
-                Timber.e("WtrLab: Empty response body")
-                return@withContext ""
-            }
-            Timber.d("WtrLab: API response (first 300): ${responseStr.take(300)}")
-
-            val json = try {
-                JsonParser.parseString(responseStr).asJsonObject
-            } catch (e: Exception) {
-                Timber.e(e, "WtrLab: Response is not JSON")
-                return@withContext ""
-            }
-
-            if (json.has("requireTurnstile") || json.has("turnstile")) {
-                Timber.w("WtrLab: Turnstile required — returning URL for WebView")
-                return@withContext chapterUrl
-            }
-
-            if (json.get("success")?.asBoolean == false) {
-                val errorMsg = json.get("error")?.asString ?: "Unknown API error"
-                val errorCode = json.get("code")?.asInt
-                Timber.e("WtrLab: API error [$errorCode]: $errorMsg")
-                // Бросаем исключение с реальным сообщением — оно попадёт в ReaderItem.Error.text
-                throw Exception("[$errorCode] $errorMsg")
-            }
-
-            // Структура: { data: { data: { body, glossary_data, patch } } }
-            val outerData = json.getAsJsonObject("data")
-            val data: JsonObject? = outerData?.getAsJsonObject("data") ?: outerData
-            if (data == null) {
-                Timber.e("WtrLab: No 'data' in response")
-                return@withContext ""
-            }
-
-            val bodyElement = data.get("body")
-            val rawBody = when {
-                bodyElement == null         -> null
-                bodyElement.isJsonArray     -> bodyElement.asJsonArray.toString()
-                bodyElement.isJsonPrimitive -> bodyElement.asString
-                else                        -> null
-            }
-
-            if (rawBody.isNullOrBlank()) {
-                Timber.e("WtrLab: Body is empty")
-                return@withContext ""
-            }
-
-            // Расшифровка через прокси если body зашифрован (формат "arr:BASE64:BASE64")
-            val resolvedBody: String = if (rawBody.startsWith("arr:")) {
-                Timber.d("WtrLab: Body encrypted, sending to proxy")
-                try {
-                    val proxyRequestBody = Gson().toJson(mapOf("payload" to rawBody))
-                    val proxyRequest = Request.Builder()
-                        .url("https://wtr-lab-proxy.fly.dev/chapter")
-                        .addHeader("Content-Type", "application/json")
-                        .post(proxyRequestBody.toRequestBody("application/json".toMediaType()))
-                    val proxyResponse = networkClient.call(proxyRequest)
-                    val proxyStr = proxyResponse.body?.string() ?: ""
-                    Timber.d("WtrLab: Proxy response (first 100): ${proxyStr.take(100)}")
-                    // Прокси возвращает JSON-массив напрямую: ["paragraph1", "paragraph2", ...]
-                    // НЕ объект {"body": [...]}
-                    val proxyElement = JsonParser.parseString(proxyStr)
-                    when {
-                        proxyElement.isJsonArray  -> proxyElement.asJsonArray.toString()
-                        proxyElement.isJsonObject -> proxyElement.asJsonObject.get("body")
-                            ?.asJsonArray?.toString() ?: rawBody
-                        else -> rawBody
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "WtrLab: Proxy decryption failed")
-                    rawBody
-                }
-            } else {
-                rawBody
-            }
-
-            val bodyArray = try {
-                if (resolvedBody.startsWith("[")) JsonParser.parseString(resolvedBody).asJsonArray
-                else null
-            } catch (e: Exception) { null }
-
-            // Глоссарий: index → term
-            val glossaryTerms = mutableMapOf<Int, String>()
-            data.getAsJsonObject("glossary_data")
-                ?.getAsJsonArray("terms")
-                ?.forEachIndexed { i, el ->
-                    runCatching {
-                        el.asJsonArray.get(0)?.asString?.takeIf { it.isNotEmpty() }
-                            ?.let { glossaryTerms[i] = it }
-                    }
-                }
-
-            // Патч zh→en
-            val patchMap = mutableMapOf<String, String>()
-            data.getAsJsonArray("patch")?.forEach { el ->
-                runCatching {
-                    val obj = el.asJsonObject
-                    val zh = obj.get("zh")?.asString
-                    val en = obj.get("en")?.asString
-                    if (!zh.isNullOrEmpty() && !en.isNullOrEmpty()) patchMap[zh] = en
-                }
-            }
-
-            // Сборка параграфов
-            val paragraphs = mutableListOf<String>()
-            if (bodyArray != null) {
-                for (i in 0 until bodyArray.size()) {
-                    val el = bodyArray.get(i)
-                    if (!el.isJsonPrimitive) continue
-                    var text = el.asString
-                    if (text == "[image]" || text.isBlank()) continue
-                    for ((idx, term) in glossaryTerms) {
-                        text = text.replace("※$idx⛬", term).replace("※$idx〓", term)
-                    }
-                    for ((zh, en) in patchMap) text = text.replace(zh, en)
-                    if (text.isNotBlank()) paragraphs.add(text)
-                }
-            } else {
-                resolvedBody.split("\n").filter { it.isNotBlank() }.forEach { paragraphs.add(it) }
-            }
+            val paragraphs = buildParagraphs(apiResponse)
 
             if (paragraphs.isEmpty()) {
                 Timber.w("WtrLab: 0 paragraphs parsed")
                 return@withContext ""
             }
 
-            // Google Translate поверх если язык выбран
             val targetLang = getTargetLangCode(lang)
             val finalParagraphs = if (targetLang != "none") {
                 try {
-                    translateParagraphsInChunks(paragraphs, targetLang)
+                    translator.translateChunks(paragraphs, targetLang)
                 } catch (e: Exception) {
                     Timber.e(e, "WtrLab: GT failed, using original")
                     paragraphs
@@ -386,6 +108,160 @@ abstract class WtrLabScraperTemplate(
             Timber.e(e, "WtrLab: Unexpected error")
             throw e
         }
+    }
+
+    private data class ChapterApiData(
+        val bodyArray: com.google.gson.JsonArray?,
+        val resolvedBody: String,
+        val glossaryTerms: Map<Int, String>,
+        val patchMap: Map<String, String>
+    )
+
+    private suspend fun fetchChapterFromApi(
+        chapterUrl: String,
+        novelId: String,
+        chapterNo: Int,
+        lang: String
+    ): ChapterApiData? {
+        val jsonBody = Gson().toJson(
+            mapOf(
+                "translate"   to apiTranslateParam(),
+                "language"    to lang,
+                "raw_id"      to novelId,
+                "chapter_no"  to chapterNo,
+                "retry"       to false,
+                "force_retry" to false,
+            )
+        )
+        val request = Request.Builder()
+            .url("${baseUrl}api/reader/get")
+            .addHeader("Referer", chapterUrl)
+            .addHeader("Origin", baseUrl.trimEnd('/'))
+            .addHeader("Content-Type", "application/json")
+            .post(jsonBody.toRequestBody("application/json".toMediaType()))
+
+        val responseStr = networkClient.call(request).body?.string() ?: run {
+            Timber.e("WtrLab: Empty response body")
+            return null
+        }
+        Timber.d("WtrLab: API response (first 300): ${responseStr.take(300)}")
+
+        val json = try {
+            JsonParser.parseString(responseStr).asJsonObject
+        } catch (e: Exception) {
+            Timber.e(e, "WtrLab: Response is not JSON")
+            return null
+        }
+
+        if (json.has("requireTurnstile") || json.has("turnstile")) {
+            Timber.w("WtrLab: Turnstile required — returning URL for WebView")
+            throw Exception(chapterUrl)
+        }
+
+        if (json.get("success")?.asBoolean == false) {
+            val errorCode = json.get("code")?.asInt
+            val errorMsg = json.get("error")?.asString ?: "Unknown API error"
+            Timber.e("WtrLab: API error [$errorCode]: $errorMsg")
+            throw Exception("[$errorCode] $errorMsg")
+        }
+
+        val outerData = json.getAsJsonObject("data")
+        val data: JsonObject = outerData?.getAsJsonObject("data") ?: outerData ?: run {
+            Timber.e("WtrLab: No 'data' in response")
+            return null
+        }
+
+        val bodyElement = data.get("body")
+        val rawBody = when {
+            bodyElement == null         -> null
+            bodyElement.isJsonArray     -> bodyElement.asJsonArray.toString()
+            bodyElement.isJsonPrimitive -> bodyElement.asString
+            else                        -> null
+        } ?: run {
+            Timber.e("WtrLab: Body is empty")
+            return null
+        }
+
+        val resolvedBody = decryptBodyIfNeeded(rawBody)
+
+        val bodyArray = try {
+            if (resolvedBody.startsWith("[")) JsonParser.parseString(resolvedBody).asJsonArray
+            else null
+        } catch (e: Exception) { null }
+
+        val glossaryTerms = buildMap<Int, String> {
+            data.getAsJsonObject("glossary_data")
+                ?.getAsJsonArray("terms")
+                ?.forEachIndexed { i, el ->
+                    runCatching {
+                        el.asJsonArray.get(0)?.asString?.takeIf { it.isNotEmpty() }
+                            ?.let { put(i, it) }
+                    }
+                }
+        }
+
+        val patchMap = buildMap<String, String> {
+            data.getAsJsonArray("patch")?.forEach { el ->
+                runCatching {
+                    val obj = el.asJsonObject
+                    val zh = obj.get("zh")?.asString
+                    val en = obj.get("en")?.asString
+                    if (!zh.isNullOrEmpty() && !en.isNullOrEmpty()) put(zh, en)
+                }
+            }
+        }
+
+        return ChapterApiData(bodyArray, resolvedBody, glossaryTerms, patchMap)
+    }
+
+    private suspend fun decryptBodyIfNeeded(rawBody: String): String {
+        if (!rawBody.startsWith("arr:")) return rawBody
+
+        Timber.d("WtrLab: Body encrypted, sending to proxy")
+        return try {
+            val proxyRequest = Request.Builder()
+                .url("https://wtr-lab-proxy.fly.dev/chapter")
+                .addHeader("Content-Type", "application/json")
+                .post(
+                    Gson().toJson(mapOf("payload" to rawBody))
+                        .toRequestBody("application/json".toMediaType())
+                )
+            val proxyStr = networkClient.call(proxyRequest).body?.string() ?: ""
+            Timber.d("WtrLab: Proxy response (first 100): ${proxyStr.take(100)}")
+
+            val proxyElement = JsonParser.parseString(proxyStr)
+            when {
+                proxyElement.isJsonArray  -> proxyElement.asJsonArray.toString()
+                proxyElement.isJsonObject -> proxyElement.asJsonObject.get("body")
+                    ?.asJsonArray?.toString() ?: rawBody
+                else -> rawBody
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "WtrLab: Proxy decryption failed")
+            rawBody
+        }
+    }
+
+    private fun buildParagraphs(data: ChapterApiData): List<String> {
+        val paragraphs = mutableListOf<String>()
+        if (data.bodyArray != null) {
+            for (i in 0 until data.bodyArray.size()) {
+                val el = data.bodyArray.get(i)
+                if (!el.isJsonPrimitive) continue
+                var text = cleanApiParagraph(el.asString)
+                if (text == "[image]" || text.isBlank()) continue
+                for ((idx, term) in data.glossaryTerms) {
+                    text = text.replace("※$idx⛬", term).replace("※$idx〓", term)
+                }
+                for ((zh, en) in data.patchMap) text = text.replace(zh, en)
+                if (text.isNotBlank()) paragraphs.add(text)
+            }
+        } else {
+            data.resolvedBody.split("\n")
+                .filter { it.isNotBlank() }
+                .forEach { paragraphs.add(it) }
+        }
+        return paragraphs
     }
 
     // ── Catalog / Book delegates ──────────────────────────────────────────────
@@ -427,11 +303,9 @@ abstract class WtrLabScraperTemplate(
             ),
 
             chapters = ChapterSelectors(
-                list    = elements("a[href*='/chapter-']"),
-                title   = text("a"),
+                list  = elements("a[href*='/chapter-']"),
+                title = text("a"),
                 content = text("article, .content, main")
-                    .removeElementsDOM("script", "nav", "footer", ".ads", ".advertisement", ".comments")
-                    .applyStandardContentTransforms(baseUrl)
             ),
 
             chapterPaginationType = ChapterPaginationType.AJAX_BASED,
@@ -444,38 +318,32 @@ abstract class WtrLabScraperTemplate(
                         ?: return@runCatching emptyList()
                     val slug = Regex("/novel/\\d+/([^/]+)").find(bookUrl)?.groupValues?.get(1) ?: ""
 
-                    val requestBuilder = Request.Builder()
-                        .url("${baseUrl}api/chapters/$novelId")
-                        .addHeader("Referer", bookUrl)
-                        .get()
-
-                    val chaptersJson = networkClient.call(requestBuilder).toJson() as? JsonObject
-                        ?: return@runCatching emptyList()
+                    val chaptersJson = networkClient.call(
+                        Request.Builder()
+                            .url("${baseUrl}api/chapters/$novelId")
+                            .addHeader("Referer", bookUrl)
+                            .get()
+                    ).toJson() as? JsonObject ?: return@runCatching emptyList()
 
                     val chaptersArray = chaptersJson.getAsJsonArray("chapters")
                         ?: return@runCatching emptyList()
 
-                    val result = mutableListOf<ChapterResult>()
-                    for (i in 0 until chaptersArray.size()) {
+                    (0 until chaptersArray.size()).mapNotNull { i ->
                         val chapter = chaptersArray.get(i).asJsonObject
-                        val order = chapter.get("order")?.asInt ?: continue
+                        val order = chapter.get("order")?.asInt ?: return@mapNotNull null
                         val title = chapter.get("title")?.asString ?: "Chapter $order"
-                        result.add(ChapterResult(
+                        ChapterResult(
                             title = "$order: $title",
                             url   = "${baseUrl}novel/$novelId/$slug/chapter-$order"
-                        ))
+                        )
                     }
-                    result
                 }.onFailure { e ->
                     Timber.e(e, "WtrLab: Failed to load chapters for $bookUrl")
                 }.getOrNull() ?: emptyList()
             },
 
             buildCatalogUrl = { index -> "$catalogUrl?page=${index + 1}" },
-
-            buildSearchUrl = { index, query ->
-                "${baseUrl}novel-finder?text=$query&page=${index + 1}"
-            },
+            buildSearchUrl  = { index, query -> "${baseUrl}novel-finder?text=$query&page=${index + 1}" },
 
             transformBookUrl    = UrlTransformers.standardBookUrl(baseUrl),
             transformChapterUrl = UrlTransformers.standardChapterUrl(baseUrl),
