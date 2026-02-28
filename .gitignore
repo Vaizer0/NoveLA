@@ -47,3 +47,4 @@ scripts/
 *.keystore
 keychain/
 key.properties
+/.history

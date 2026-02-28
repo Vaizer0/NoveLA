@@ -16,7 +16,6 @@ dependencies {
     implementation(projects.navigation)
     implementation(projects.networking)
     implementation(projects.tooling.localDatabase)
-    implementation(projects.tooling.dexLoader)
     implementation(projects.features.extensions)
 
     implementation(libs.compose.androidx.activity)

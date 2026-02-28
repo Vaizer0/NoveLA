@@ -13,7 +13,6 @@ import kotlinx.serialization.json.Json
 import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.DexExtensionLoader
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -21,7 +20,6 @@ import javax.inject.Inject
 class ExtensionsManagerViewModel @Inject constructor(
     private val extensionManager: ExtensionManager,
     private val httpClient: NetworkClient,
-    private val dexExtensionLoader: DexExtensionLoader,
     private val appPreferences: AppPreferences
 ) : ViewModel() {
 
@@ -291,9 +289,7 @@ class ExtensionsManagerViewModel @Inject constructor(
 
     private suspend fun installExtensionFromUrl(extensionInfo: ExtensionInfo) {
         try {
-            // For now, just create extension entry without downloading JAR
-            // TODO: Implement full JAR download and loading logic
-
+            // Create extension entry in database
             extensionManager.installExtensionFromInfo(
                 id = extensionInfo.id,
                 name = extensionInfo.name,

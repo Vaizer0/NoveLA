@@ -16,7 +16,6 @@ dependencies {
     implementation(projects.scraper)
     implementation(projects.strings)
     implementation(projects.tooling.localDatabase)
-    implementation(projects.tooling.dexLoader)
     implementation(libs.kotlinx.serialization.json)
 
     // Compose

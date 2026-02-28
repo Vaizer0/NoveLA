@@ -17,7 +17,6 @@ import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.ToastyToast
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.navigation.NavigationRoutes
-import my.noveldokusha.DexExtensionLoader
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -56,11 +55,6 @@ abstract class AppModule {
             override val versionName = BuildConfig.VERSION_NAME
         }
 
-        @Provides
-        @Singleton
-        fun providesDexExtensionLoader(@ApplicationContext context: Context): DexExtensionLoader {
-            return DexExtensionLoader(context)
-        }
 
 
     }

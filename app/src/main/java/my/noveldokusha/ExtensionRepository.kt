@@ -13,8 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class ExtensionRepository @Inject constructor(
-    private val database: AppDatabase,
-    private val dexExtensionLoader: DexExtensionLoader
+    private val database: AppDatabase
 ) : ExtensionManager {
 
     private val extensionDao = database.extensionDao()

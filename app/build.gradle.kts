@@ -103,8 +103,7 @@ dependencies {
     implementation(projects.tooling.epubImporter)
     implementation(projects.tooling.applicationWorkers)
     implementation(projects.tooling.localSource)
-    implementation(projects.tooling.dexLoader)
-
+    
     implementation(projects.features.extensions)
     implementation(projects.navigation)
     implementation(projects.features.reader)
