@@ -20,5 +20,10 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.timber)
     implementation(libs.compose.androidx.material.icons.extended)
+    
+    // Lua and YAML support
+    implementation(libs.luajvm)
+    implementation(libs.snakeyaml)
+    
     androidTestImplementation(libs.test.androidx.espresso.core)
 }

@@ -120,6 +120,13 @@ class AppPreferences @Inject constructor(
             setOf() // Empty by default - show all extensions
         )
     }
+    val EXTENSIONS_REPOSITORY_URL = object : Preference<String>("EXTENSIONS_REPOSITORY_URL") {
+        override var value by SharedPreference_String(
+            name,
+            preferences,
+            "https://raw.githubusercontent.com/HnDK0/external-sources/main/index.yaml" // Default URL
+        )
+    }
     val FINDER_SOURCES_PINNED = object : Preference<Set<String>>("FINDER_SOURCES_PINNED") {
         override var value by SharedPreference_StringSet(name, preferences, setOf())
     }

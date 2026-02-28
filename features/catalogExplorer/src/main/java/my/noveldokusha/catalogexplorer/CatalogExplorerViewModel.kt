@@ -26,6 +26,14 @@ internal class CatalogExplorerViewModel @Inject constructor(
     private val appScope: AppCoroutineScope,
     val scraperRepository: ScraperRepository,
 ) : BaseViewModel() {
+    
+    var selectedTabIndex by mutableStateOf(0)
+        private set
+    
+    fun setTabIndex(index: Int) {
+        selectedTabIndex = index
+    }
+    
     val databaseList = scraperRepository.databaseList()
     val sourcesList by scraperRepository.sourcesCatalogListFlow()
         .toState(viewModelScope, listOf())

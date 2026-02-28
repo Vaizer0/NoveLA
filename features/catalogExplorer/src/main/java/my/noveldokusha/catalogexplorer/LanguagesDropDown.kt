@@ -47,10 +47,10 @@ internal fun LanguagesDropDown(
                 .widthIn(min = 128.dp)
         ) {
             // Sort section
-            Text(text = stringResource(R.string.sort_by_name))
+            Text(text = "Sort Order")
             OutlinedCard {
                 MyButton(
-                    text = stringResource(R.string.sort_ascending),
+                    text = "Name (A-Z)",
                     onClick = { onSortOrderChange(SortOrder.ASCENDING) },
                     selected = sortOrder == SortOrder.ASCENDING,
                     selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -64,7 +64,7 @@ internal fun LanguagesDropDown(
                     ),
                 )
                 MyButton(
-                    text = stringResource(R.string.sort_descending),
+                    text = "Name (Z-A)",
                     onClick = { onSortOrderChange(SortOrder.DESCENDING) },
                     selected = sortOrder == SortOrder.DESCENDING,
                     selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -80,7 +80,7 @@ internal fun LanguagesDropDown(
             }
 
             // Languages section
-            Text(text = stringResource(R.string.sources_languages))
+            Text(text = "Language Filter")
             OutlinedCard {
                 languageItemList.forEach { lang ->
                     MyButton(
@@ -99,8 +99,6 @@ internal fun LanguagesDropDown(
                     )
                 }
             }
-
-
         }
     }
 }

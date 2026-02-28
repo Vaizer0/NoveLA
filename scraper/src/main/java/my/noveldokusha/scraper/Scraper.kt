@@ -5,6 +5,10 @@ import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.scraper.databases.BakaUpdates
 import my.noveldokusha.scraper.databases.NovelUpdates
 import my.noveldokusha.scraper.sources.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,47 +16,58 @@ import javax.inject.Singleton
 class Scraper @Inject constructor(
     networkClient: NetworkClient,
     localSource: LocalSource,
-    appPreferences: AppPreferences
+    appPreferences: AppPreferences,
+    private val luaSourceLoader: LuaSourceLoader
 ) {
     val databasesList = setOf(
         NovelUpdates(networkClient),
         BakaUpdates(networkClient)
     )
 
-    val builtInSourcesList = setOf(
-        localSource,
-        ReadNovelFull(networkClient),
-        RoyalRoad(networkClient),
-        NovelHall(networkClient),
-        Shuba69(networkClient),
-        NovelBin(networkClient),
-        ScribbleHub(networkClient),
-        FreeWebNovel(networkClient),
-        NovelFull(networkClient),
-        AllNovel(networkClient),
-        Jaomix(networkClient),
-        RanobeLib(networkClient),
-        RanobeHub(networkClient),
-        Ifreedom(networkClient),
-        Bookhamster(networkClient),
-        BacaLightnovel(networkClient),
-        Novelku(networkClient),
-        NoBadNovel(networkClient),
-        Ttkan(networkClient),
-        Twkan(networkClient),
-        NovLove(networkClient),
-        WuxiaWorld_site(networkClient),
-        NovelFire(networkClient),
-        NovelBuddy(networkClient),
-        WtrLabSource(networkClient, appPreferences),
-        Novel543(networkClient),
-        Quanben5(networkClient),
-        PiaoTia(networkClient),
-    )
-
-    // For now, only return built-in sources
-    // TODO: Add external sources support when DI issues are resolved
-    val sourcesList = builtInSourcesList
+    // LocalSource сохраняется для EPUB, остальные источники загружаются динамически
+    val localSourcesList = setOf(localSource)
+    
+    // State для динамических источников
+    private val _luaSources = MutableStateFlow<Set<SourceInterface>>(emptySet())
+    val luaSources: StateFlow<Set<SourceInterface>> = _luaSources
+    
+    // Инициализация загрузки Lua источников
+    init {
+        loadLuaSources()
+    }
+    
+    /**
+     * Перезагрузка Lua источников (вызывать после установки/удаления)
+     */
+    fun reloadLuaSources() {
+        kotlinx.coroutines.GlobalScope.launch {
+            loadLuaSources()
+        }
+    }
+    
+    /**
+     * Загрузка Lua источников из репозитория
+     */
+    private fun loadLuaSources() {
+        kotlinx.coroutines.GlobalScope.launch {
+            try {
+                val result = luaSourceLoader.loadAllSources()
+                result.onSuccess { sources ->
+                    _luaSources.value = sources.toSet()
+                    Timber.d("Loaded ${sources.size} Lua sources")
+                }
+                result.onFailure { error ->
+                    Timber.e(error, "Failed to load Lua sources")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Exception while loading Lua sources")
+            }
+        }
+    }
+    
+    // Общий список источников (локальные + динамические)
+    val sourcesList: Set<SourceInterface>
+        get() = localSourcesList + _luaSources.value
 
     val sourcesCatalogsList = sourcesList.filterIsInstance<SourceInterface.Catalog>()
     val sourcesCatalogsLanguagesList = sourcesCatalogsList.mapNotNull { it.language }.toSet()
@@ -64,11 +79,11 @@ class Scraper @Inject constructor(
     }
 
     fun getCompatibleSource(url: String): SourceInterface? {
-        return builtInSourcesList.find { url.isCompatibleWithBaseUrl(it.baseUrl) }
+        return sourcesList.find { url.isCompatibleWithBaseUrl(it.baseUrl) }
     }
 
     fun getCompatibleSourceCatalog(url: String): SourceInterface.Catalog? {
-        return builtInSourcesList.filterIsInstance<SourceInterface.Catalog>()
+        return sourcesList.filterIsInstance<SourceInterface.Catalog>()
             .find { url.isCompatibleWithBaseUrl(it.baseUrl) }
     }
 

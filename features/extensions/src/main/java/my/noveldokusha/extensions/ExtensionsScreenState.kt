@@ -3,6 +3,7 @@ package my.noveldokusha.extensions
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import my.noveldokusha.core.Extension
+import my.noveldokusha.core.appPreferences.SortOrder
 
 @Immutable
 data class ExtensionsScreenState(
@@ -11,7 +12,10 @@ data class ExtensionsScreenState(
     val availableLanguages: List<ExtensionLanguage> = emptyList(), // Dynamic list of available languages
     val selectedLanguages: Set<String> = emptySet(), // empty = show all, specific language codes = filter by languages
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val showRepositoryDialog: Boolean = false,
+    val repositoryUrl: String = "https://raw.githubusercontent.com/HnDK0/external-sources/main/index.yaml",
+    val sortOrder: SortOrder = SortOrder.ASCENDING
 )
 
 @Immutable
@@ -43,6 +47,9 @@ sealed interface ExtensionsScreenEvent {
     data class OnExtensionUninstall(val extensionId: String) : ExtensionsScreenEvent
     data class OnExtensionConfigure(val extensionId: String) : ExtensionsScreenEvent
     data object OnRefresh : ExtensionsScreenEvent
+    data object OnShowRepositoryDialog : ExtensionsScreenEvent
+    data object OnHideRepositoryDialog : ExtensionsScreenEvent
+    data class OnUpdateRepositoryUrl(val url: String) : ExtensionsScreenEvent
 
     // Filter and navigation events
     data class OnLanguageFilterToggle(val languageCode: String) : ExtensionsScreenEvent // toggle language in filter
@@ -50,4 +57,5 @@ sealed interface ExtensionsScreenEvent {
     data object OnBackPressed : ExtensionsScreenEvent // New event for back navigation
     data class OnExtensionInstall(val extensionId: String) : ExtensionsScreenEvent
     data class OnExtensionUninstallById(val extensionId: String) : ExtensionsScreenEvent
+    data class OnSortOrderChange(val sortOrder: SortOrder) : ExtensionsScreenEvent
 }

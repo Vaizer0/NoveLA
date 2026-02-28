@@ -66,6 +66,10 @@ moshi = "1.15.0"
 room = "2.6.1"
 junit = "4.13.2"
 
+# Lua and YAML dependencies
+luajvm = "3.0.1"
+snakeyaml = "2.2"
+
 okhttp = "5.0.0-alpha.11"
 okhttp-interceptor-logging = "5.0.0-alpha.11"
 okhttp-glideIntegration = "4.15.1"
@@ -126,6 +130,10 @@ jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 moshi = { module = "com.squareup.moshi:moshi", version.ref = "moshi" }
 moshi-kotlin = { module = "com.squareup.moshi:moshi-kotlin", version.ref = "moshi" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+
+# Lua and YAML dependencies
+luajvm = { module = "org.luaj:luaj-jse", version.ref = "luajvm" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 
 # Text extractors
 readability4j = { module = "net.dankito.readability4j:readability4j", version.ref = "readability4j" }

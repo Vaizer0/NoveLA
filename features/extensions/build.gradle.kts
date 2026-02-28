@@ -14,9 +14,11 @@ dependencies {
     implementation(projects.coreui)
     implementation(projects.networking)
     implementation(projects.scraper)
+    implementation(projects.data)
     implementation(projects.strings)
     implementation(projects.tooling.localDatabase)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.snakeyaml)
 
     // Compose
     implementation(libs.compose.androidx.activity)

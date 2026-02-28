@@ -18,9 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,10 +35,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.colorAccent
 import androidx.compose.runtime.Composable
@@ -58,6 +63,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.skydoves.landscapist.glide.GlideImage
 import my.noveldokusha.core.Extension
+import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.coreui.R
 
@@ -66,7 +72,8 @@ fun ExtensionsScreen(
     innerPadding: PaddingValues,
     onBackPressed: (() -> Unit)? = null,
     showExtensionsLanguageFilter: Boolean = false,
-    onExtensionsLanguageFilterDismiss: () -> Unit = {}
+    onExtensionsLanguageFilterDismiss: () -> Unit = {},
+    onRefresh: (() -> Unit)? = null
 ) {
     val viewModel = hiltViewModel<ExtensionsManagerViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -77,7 +84,8 @@ fun ExtensionsScreen(
         viewModel = viewModel,
         onBackPressed = onBackPressed,
         showExtensionsLanguageFilter = showExtensionsLanguageFilter,
-        onExtensionsLanguageFilterDismiss = onExtensionsLanguageFilterDismiss
+        onExtensionsLanguageFilterDismiss = onExtensionsLanguageFilterDismiss,
+        onRefresh = onRefresh
     )
 }
 
@@ -88,11 +96,17 @@ private fun UnifiedExtensionsScreen(
     viewModel: ExtensionsManagerViewModel,
     onBackPressed: (() -> Unit)?,
     showExtensionsLanguageFilter: Boolean = false,
-    onExtensionsLanguageFilterDismiss: () -> Unit = {}
+    onExtensionsLanguageFilterDismiss: () -> Unit = {},
+    onRefresh: (() -> Unit)? = null
 ) {
-    // Extensions content for tab - uses available space, no fillMaxSize()
-    Column(modifier = Modifier.fillMaxWidth()) {
-
+    var languageFilterExpanded by remember { mutableStateOf(false) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = innerPadding.calculateTopPadding())
+    ) {
+        // Content area
         when {
             state.isLoading -> {
                 Box(
@@ -125,16 +139,20 @@ private fun UnifiedExtensionsScreen(
                 }
             }
             else -> {
-                // Filter extensions based on selected languages
                 val filteredExtensions = if (state.selectedLanguages.isEmpty()) {
-                    emptyList<ExtensionInfo>() // Show nothing if no languages selected
+                    state.availableExtensions
                 } else {
                     state.availableExtensions.filter { it.language in state.selectedLanguages }
                 }
 
-                // Split extensions into installed and available sections
-                val installedExtensions = filteredExtensions.filter { it.isInstalled }
-                val availableExtensions = filteredExtensions.filter { !it.isInstalled }
+                // Sort extensions based on sort order
+                val sortedExtensions = when (state.sortOrder) {
+                    SortOrder.ASCENDING -> filteredExtensions.sortedBy { it.name.lowercase() }
+                    SortOrder.DESCENDING -> filteredExtensions.sortedByDescending { it.name.lowercase() }
+                }
+
+                val installedExtensions = sortedExtensions.filter { it.isInstalled }
+                val availableExtensions = sortedExtensions.filter { !it.isInstalled }
 
                 if (filteredExtensions.isEmpty()) {
                     Box(
@@ -150,7 +168,10 @@ private fun UnifiedExtensionsScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                                 textAlign = TextAlign.Center
                             )
-                            Button(onClick = { viewModel.onEvent(ExtensionsScreenEvent.OnRefresh) }) {
+                            FilledTonalButton(
+                                onClick = { viewModel.onEvent(ExtensionsScreenEvent.OnRefresh) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text("Refresh")
                             }
                         }
@@ -158,18 +179,16 @@ private fun UnifiedExtensionsScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(paddingValues = innerPadding),
+                            .fillMaxWidth(),
                         contentPadding = PaddingValues(bottom = 300.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Installed extensions section
                         if (installedExtensions.isNotEmpty()) {
                             item {
                                 Text(
                                     text = "Installed",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = ColorAccent,
+                                    color = colorAccent(),
                                     modifier = Modifier
                                         .padding(horizontal = 16.dp)
                                         .padding(top = 8.dp),
@@ -184,13 +203,12 @@ private fun UnifiedExtensionsScreen(
                             }
                         }
 
-                        // Available extensions section
                         if (availableExtensions.isNotEmpty()) {
                             item {
                                 Text(
                                     text = "Available",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = ColorAccent,
+                                    color = colorAccent(),
                                     modifier = Modifier
                                         .padding(horizontal = 16.dp)
                                         .padding(top = 8.dp),
@@ -209,6 +227,62 @@ private fun UnifiedExtensionsScreen(
             }
         }
     }
+
+    // Repository URL dialog
+    if (state.showRepositoryDialog) {
+        RepositoryUrlDialog(
+            state = state,
+            viewModel = viewModel
+        )
+    }
+}
+
+@Composable
+private fun RepositoryUrlDialog(
+    state: ExtensionsScreenState,
+    viewModel: ExtensionsManagerViewModel
+) {
+    var tempUrl by remember { mutableStateOf(state.repositoryUrl) }
+
+    AlertDialog(
+        onDismissRequest = {
+            viewModel.onEvent(ExtensionsScreenEvent.OnHideRepositoryDialog)
+        },
+        title = {
+            Text("Repository URL")
+        },
+        text = {
+            OutlinedTextField(
+                value = tempUrl,
+                onValueChange = { tempUrl = it },
+                label = { Text("Extensions Repository URL") },
+                placeholder = { Text("https://raw.githubusercontent.com/.../index.json") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MyButton(
+                    text = "Cancel",
+                    onClick = {
+                        viewModel.onEvent(ExtensionsScreenEvent.OnHideRepositoryDialog)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                MyButton(
+                    text = "Save",
+                    onClick = {
+                        viewModel.onEvent(ExtensionsScreenEvent.OnUpdateRepositoryUrl(tempUrl))
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    )
 }
 
 @Composable
@@ -230,7 +304,7 @@ private fun ExtensionListItem(
                 Row {
                     if (extension.isUpdateAvailable) {
                         Text(
-                            text = " ⬆",
+                            text = " ",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.padding(start = 4.dp)
@@ -238,7 +312,7 @@ private fun ExtensionListItem(
                     }
                     if (extension.isInstalled) {
                         Text(
-                            text = " ✓",
+                            text = " ",
                             style = MaterialTheme.typography.titleSmall,
                             color = if (extension.isUpdateAvailable)
                                 MaterialTheme.colorScheme.tertiary
@@ -251,7 +325,6 @@ private fun ExtensionListItem(
             }
         },
         supportingContent = {
-            // Show language instead of author
             Text(
                 text = "Language: ${extension.language}",
                 style = MaterialTheme.typography.bodySmall,
@@ -307,16 +380,16 @@ private fun ExtensionListItem(
             }
         },
         trailingContent = {
-            // Action button with improved visibility
             when {
                 extension.isInstalling -> {
-                    OutlinedButton(
+                    MyButton(
+                        text = "Installing...",
                         onClick = {},
                         enabled = false,
-                        modifier = Modifier.height(40.dp)
-                    ) {
-                        Text("Installing...")
-                    }
+                        modifier = Modifier.height(40.dp),
+                        backgroundColor = MaterialTheme.colorScheme.surface,
+                        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                    )
                 }
                 extension.isUpdateAvailable -> {
                     FilledTonalButton(
@@ -339,11 +412,7 @@ private fun ExtensionListItem(
                         onClick = {
                             viewModel.onEvent(ExtensionsScreenEvent.OnExtensionUninstallById(extension.id))
                         },
-                        modifier = Modifier.height(40.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                        modifier = Modifier.height(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
@@ -399,7 +468,6 @@ fun ExtensionsLanguageFilterDropDown(
         ) {
             Text(text = "Select Languages")
 
-            // Refresh button
             FilledTonalButton(
                 onClick = {
                     onRefresh()
@@ -435,7 +503,6 @@ fun ExtensionsLanguageFilterDropDown(
                 }
             }
 
-            // Clear selection button
             if (selectedLanguages.isNotEmpty()) {
                 TextButton(
                     onClick = onClearAll,
