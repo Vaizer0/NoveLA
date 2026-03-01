@@ -24,6 +24,12 @@ import kotlin.time.Duration.Companion.seconds
 private val ERROR_CODES = listOf(HttpsURLConnection.HTTP_FORBIDDEN, HttpsURLConnection.HTTP_UNAVAILABLE)
 private const val TAG = "CloudflareInterceptor"
 
+// Белый список доменов, которые не нужно проверять на Cloudflare
+private val CLOUDFLARE_WHITELIST = listOf(
+    "github.com",
+    "raw.githubusercontent.com"
+)
+
 // Объект сигнала вынесен за пределы класса для доступа из Activity
 object CloudflareBypassSignal {
     val channel = Channel<Unit>(Channel.CONFLATED)
@@ -102,12 +108,19 @@ internal class CloudFareVerificationInterceptor(
     }
 
     private fun isNotCloudflare(response: Response, body: String): Boolean {
+        // Проверяем домен в белом списке
+        val url = response.request.url.toString()
+        val host = url.substringAfter("://").substringBefore("/")
+        if (CLOUDFLARE_WHITELIST.any { host.contains(it) }) {
+            return true
+        }
+        
         val hasMarkers = body.contains("cf-challenge", true) ||
                 body.contains("turnstile", true) ||
                 body.contains("requireTurnstile", true) ||
                 body.contains("Security Check Required", true) ||
                 body.contains("__cf_chl_", true) ||
-                body.contains("Ray ID", true)
+                body.contains("Ray ID", true) ||
                 body.contains("but-captcha", true)
 
         val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
