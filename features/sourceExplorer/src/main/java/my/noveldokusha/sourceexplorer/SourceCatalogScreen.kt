@@ -84,8 +84,11 @@ internal fun SourceCatalogScreen(
                                 ),
                                 title = {
                                     Column {
+                                        val title = state.sourceCatalogName.value
+                                            ?: if (state.sourceCatalogNameStrId.value != 0) stringResource(id = state.sourceCatalogNameStrId.value)
+                                            else ""
                                         Text(
-                                            text = stringResource(id = state.sourceCatalogNameStrId.value),
+                                            text = title,
                                             style = MaterialTheme.typography.headlineSmall,
                                             maxLines = 1
                                         )

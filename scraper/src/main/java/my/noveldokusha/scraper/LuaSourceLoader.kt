@@ -14,8 +14,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.luaj.vm2.*
 import org.luaj.vm2.lib.OneArgFunction
+import org.luaj.vm2.lib.ThreeArgFunction
 import org.luaj.vm2.lib.TwoArgFunction
 import org.luaj.vm2.lib.ZeroArgFunction
 import org.luaj.vm2.lib.jse.JsePlatform
@@ -33,6 +36,7 @@ import javax.inject.Singleton
 
 @Singleton
 class LuaEngine @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val networkClient: NetworkClient
 ) {
     // gson нужен ТОЛЬКО для json_parse/json_stringify внутри Lua-скриптов,
@@ -45,44 +49,210 @@ class LuaEngine @Inject constructor(
         globals.load(luaCode).call()
     }
 
+    suspend fun loadFromScript(scriptContent: String, iconUrl: String? = null): SourceInterface.Catalog {
+        val globals = JsePlatform.standardGlobals()
+        registerApi(globals)
+        val chunk = globals.load(scriptContent)
+        val result = chunk.call()
+        return LuaSourceAdapter(context, result, this, iconUrl)
+    }
+
     private fun registerApi(g: Globals) {
-        g.set("http_get",          HttpGetFunction())
-        g.set("http_post",         HttpPostFunction())
-        g.set("html_parse",        HtmlParseFunction())
-        g.set("html_select",       HtmlSelectFunction())
-        g.set("url_encode",        UrlEncodeFunction())
-        g.set("regex_match",       RegexMatchFunction())
-        g.set("log_info",          LogInfoFunction())
-        g.set("log_error",         LogErrorFunction())
-        g.set("json_parse",        JsonParseFunction())
-        g.set("json_stringify",    JsonStringifyFunction())
-        g.set("detect_pagination", DetectPaginationFunction())
+        g.set("http_get",          HttpGetFunction() as LuaValue)
+        g.set("http_post",         HttpPostFunction() as LuaValue)
+        g.set("get_cookies",       GetCookiesFunction() as LuaValue)
+        g.set("set_cookies",       SetCookiesFunction() as LuaValue)
+        g.set("get_preference",    GetPreferenceFunction() as LuaValue)
+        g.set("set_preference",    SetPreferenceFunction() as LuaValue)
+        g.set("aes_decrypt",       AesDecryptFunction() as LuaValue)
+        g.set("html_parse",        HtmlParseFunction() as LuaValue)
+        g.set("html_select",       HtmlSelectFunction() as LuaValue)
+        g.set("html_text",         HtmlTextFunction() as LuaValue)
+        g.set("url_encode",        UrlEncodeFunction() as LuaValue)
+        g.set("url_resolve",       UrlResolveFunction() as LuaValue)
+        g.set("unescape_unicode",  UnescapeUnicodeFunction() as LuaValue)
+        g.set("regex_match",       RegexMatchFunction() as LuaValue)
+        g.set("regex_replace",     RegexReplaceFunction() as LuaValue)
+        g.set("string_normalize",  StringNormalizeFunction() as LuaValue)
+        g.set("base64_decode",     Base64DecodeFunction() as LuaValue)
+        g.set("log_info",          LogInfoFunction() as LuaValue)
+        g.set("log_error",         LogErrorFunction() as LuaValue)
+        g.set("json_parse",        JsonParseFunction() as LuaValue)
+        g.set("json_stringify",    JsonStringifyFunction() as LuaValue)
+        g.set("detect_pagination", DetectPaginationFunction() as LuaValue)
+        g.set("google_translate",  GoogleTranslateFunction() as LuaValue)
     }
 
-    // ── HTTP ──────────────────────────────────────────────────────────────────
+    private inner class GoogleTranslateFunction : ThreeArgFunction() {
+        override fun call(text: LuaValue, sourceLang: LuaValue, targetLang: LuaValue): LuaValue {
+            val t = text.tojstring()
+            val sl = sourceLang.tojstring()
+            val tl = targetLang.tojstring()
+            
+            val apiKey = String(android.util.Base64.decode("QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldESG1PNTIw", android.util.Base64.DEFAULT)).trim()
+            val url = "https://translate-pa.googleapis.com/v1/translateHtml"
+            
+            val payload = listOf(listOf(t, sl, tl), "wt_lib")
+            val requestBody = gson.toJson(payload).toRequestBody("application/json+protobuf".toMediaType())
+            
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("X-Goog-Api-Key", apiKey)
+                .post(requestBody)
+                .build()
 
-    private inner class HttpGetFunction : OneArgFunction() {
-        override fun call(arg: LuaValue): LuaValue = runBlocking {
-            safeHttp { networkClient.get(arg.checkjstring()) }
-        }
-    }
-
-    private inner class HttpPostFunction : TwoArgFunction() {
-        override fun call(a1: LuaValue, a2: LuaValue): LuaValue = runBlocking {
-            safeHttp {
-                val body = a2.checkjstring().toRequestBody("application/x-www-form-urlencoded".toMediaType())
-                networkClient.call(postRequest(a1.checkjstring(), body = body))
+            return try {
+                networkClient.okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use LuaValue.valueOf(t)
+                    val body = response.body?.string() ?: return@use LuaValue.valueOf(t)
+                    val arr = JsonParser.parseString(body).asJsonArray
+                    LuaValue.valueOf(arr.get(0).asJsonArray.get(0).asString)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "LuaEngine: Google Translate failed")
+                LuaValue.valueOf(t)
             }
         }
     }
 
+    // ── HTTP ──────────────────────────────────────────────────────────────────
+
+    private inner class HttpGetFunction : ThreeArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = runBlocking {
+            val url = a1.checkjstring()
+            val config = if (a2.istable()) a2.checktable() else LuaTable()
+            
+            val headersMap = convertHeaders(config.get("headers").opttable(LuaTable()))
+            val charset = config.get("charset").optjstring(if (a3.isstring()) a3.tojstring() else "UTF-8")
+            
+            try {
+                networkClient.getWithHeaders(url, headersMap).use { r ->
+                    val bytes = r.body?.bytes() ?: byteArrayOf()
+                    val s = String(bytes, java.nio.charset.Charset.forName(charset))
+                    LuaTable().also { t ->
+                        t.set("success", LuaValue.valueOf(r.isSuccessful))
+                        t.set("body", LuaValue.valueOf(s))
+                        t.set("code", LuaValue.valueOf(r.code))
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "HTTP GET failed")
+                LuaTable().also { t ->
+                    t.set("success", LuaValue.FALSE)
+                    t.set("body", LuaValue.valueOf(e.message ?: "Unknown HTTP error"))
+                    t.set("code", LuaValue.valueOf(-1))
+                }
+            }
+        }
+    }
+
+    private inner class HttpPostFunction : ThreeArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = runBlocking {
+            val url = a1.checkjstring()
+            val bodyStr = a2.checkjstring()
+            val config = if (a3.istable()) a3.checktable() else LuaTable()
+            
+            val headersMap = convertHeaders(config.get("headers").opttable(LuaTable()))
+            val charset = config.get("charset").optjstring("UTF-8")
+            
+            try {
+                val mediaType = (headersMap["Content-Type"] ?: "application/x-www-form-urlencoded").toMediaType()
+                val body = bodyStr.toRequestBody(mediaType)
+                networkClient.call(postRequest(url, body = body, headers = headersMap.toHeaders())).use { r ->
+                    val bytes = r.body?.bytes() ?: byteArrayOf()
+                    val s = String(bytes, java.nio.charset.Charset.forName(charset))
+                    LuaTable().also { t ->
+                        t.set("success", LuaValue.valueOf(r.isSuccessful))
+                        t.set("body", LuaValue.valueOf(s))
+                        t.set("code", LuaValue.valueOf(r.code))
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "HTTP POST failed")
+                LuaTable().also { t ->
+                    t.set("success", LuaValue.FALSE)
+                    t.set("body", LuaValue.valueOf(e.message ?: "Unknown HTTP error"))
+                    t.set("code", LuaValue.valueOf(-1))
+                }
+            }
+        }
+    }
+
+    private fun convertHeaders(table: LuaTable): Map<String, String> {
+        val headers = mutableMapOf<String, String>()
+        val keys = table.keys()
+        for (key in keys) {
+            headers[key.tojstring()] = table.get(key).tojstring()
+        }
+        return headers
+    }
+
+    private inner class GetPreferenceFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue {
+            val key = arg.checkjstring()
+            val prefs = context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE)
+            return LuaValue.valueOf(prefs.getString(key, "") ?: "")
+        }
+    }
+
+    private inner class SetPreferenceFunction : TwoArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue): LuaValue {
+            val key = a1.checkjstring()
+            val value = a2.tojstring()
+            val prefs = context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE)
+            prefs.edit().putString(key, value).apply()
+            return LuaValue.NIL
+        }
+    }
+
+    private inner class GetCookiesFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue {
+            val url = arg.checkjstring()
+            val httpUrl = url.toHttpUrl()
+            val cookies = networkClient.cookieJar.loadForRequest(httpUrl)
+            val table = LuaTable()
+            cookies.forEach { cookie: okhttp3.Cookie ->
+                table.set(cookie.name, cookie.value)
+            }
+            return table
+        }
+    }
+
+    private inner class SetCookiesFunction : TwoArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue): LuaValue {
+            val url = a1.checkjstring()
+            val cookiesTable = a2.checktable()
+            val httpUrl = url.toHttpUrl()
+            val cookies = mutableListOf<okhttp3.Cookie>()
+            val keys = cookiesTable.keys()
+            for (key in keys) {
+                cookies.add(okhttp3.Cookie.Builder()
+                    .domain(httpUrl.host)
+                    .name(key.tojstring())
+                    .value(cookiesTable.get(key).tojstring())
+                    .build())
+            }
+            networkClient.cookieJar.saveFromResponse(httpUrl, cookies)
+            return LuaValue.NIL
+        }
+    }
+
     private suspend fun safeHttp(block: suspend () -> okhttp3.Response): LuaValue = try {
-        val r = block()
-        val s = if (r.isSuccessful) r.body?.string() ?: "" else ""
-        LuaTable().also { t -> t.set("success", LuaValue.valueOf(r.isSuccessful)); t.set("body", LuaValue.valueOf(s)) }
+        block().use { r ->
+            val s = if (r.isSuccessful) r.body?.string() ?: "" else ""
+            LuaTable().also { t ->
+                t.set("success", LuaValue.valueOf(r.isSuccessful))
+                t.set("body", LuaValue.valueOf(s))
+                t.set("code", LuaValue.valueOf(r.code))
+            }
+        }
     } catch (e: Exception) {
         Timber.e(e, "HTTP failed")
-        LuaTable().also { t -> t.set("success", LuaValue.FALSE); t.set("body", LuaValue.valueOf("")) }
+        LuaTable().also { t ->
+            t.set("success", LuaValue.FALSE)
+            t.set("body", LuaValue.valueOf(e.message ?: "Unknown HTTP error"))
+            t.set("code", LuaValue.valueOf(-1))
+        }
     }
 
     // ── HTML ──────────────────────────────────────────────────────────────────
@@ -115,6 +285,11 @@ class LuaEngine @Inject constructor(
         t.set("title", LuaValue.valueOf(el.attr("title")))
         t.set("class", LuaValue.valueOf(el.attr("class")))
         t.set("id",    LuaValue.valueOf(el.attr("id")))
+
+        // Позволяем обращаться к полям как к методам для совместимости с плагинами
+        t.set("get_text", object : ZeroArgFunction() { override fun call(): LuaValue = LuaValue.valueOf(el.text()) })
+        t.set("get_html", object : ZeroArgFunction() { override fun call(): LuaValue = LuaValue.valueOf(el.html()) })
+
         t.set("attr",  object : OneArgFunction() {
             override fun call(a: LuaValue): LuaValue = try { LuaValue.valueOf(el.attr(a.checkjstring())) } catch (e: Exception) { LuaValue.NIL }
         })
@@ -125,6 +300,56 @@ class LuaEngine @Inject constructor(
 
     // ── Utilities ─────────────────────────────────────────────────────────────
 
+    private inner class HtmlTextFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue = try {
+            // Если передана таблица элемента (результат html_select)
+            val html = if (arg.istable()) arg.checktable().get("html").optjstring("") else arg.checkjstring()
+            val doc = Jsoup.parse(html)
+            LuaValue.valueOf(TextExtractor.get(doc.body()))
+        } catch (e: Exception) { Timber.e(e, "html_text"); LuaValue.NIL }
+    }
+
+    private inner class RegexReplaceFunction : ThreeArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = try {
+            val text = a1.checkjstring()
+            val pattern = a2.checkjstring()
+            val replacement = a3.checkjstring()
+            LuaValue.valueOf(text.replace(Regex(pattern), replacement))
+        } catch (e: Exception) { a1 }
+    }
+
+    private inner class StringNormalizeFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue = try {
+            LuaValue.valueOf(java.text.Normalizer.normalize(arg.checkjstring(), java.text.Normalizer.Form.NFKC))
+        } catch (e: Exception) { arg }
+    }
+
+    private inner class AesDecryptFunction : ThreeArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = try {
+            val data = a1.checkjstring()
+            val key = a2.checkjstring()
+            val iv = a3.checkjstring()
+
+            val cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding")
+            val keySpec = javax.crypto.spec.SecretKeySpec(key.toByteArray(), "AES")
+            val ivSpec = javax.crypto.spec.IvParameterSpec(iv.toByteArray())
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, ivSpec)
+
+            val decodedData = android.util.Base64.decode(data, android.util.Base64.DEFAULT)
+            val decrypted = cipher.doFinal(decodedData)
+            LuaValue.valueOf(String(decrypted, Charsets.UTF_8))
+        } catch (e: Exception) {
+            Timber.e(e, "aes_decrypt failed")
+            LuaValue.NIL
+        }
+    }
+
+    private inner class Base64DecodeFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue = try {
+            val decoded = android.util.Base64.decode(arg.checkjstring(), android.util.Base64.DEFAULT)
+            LuaValue.valueOf(String(decoded, Charsets.UTF_8))
+        } catch (e: Exception) { LuaValue.NIL }
+    }
     private inner class UrlEncodeFunction : OneArgFunction() {
         override fun call(arg: LuaValue): LuaValue = try {
             LuaValue.valueOf(java.net.URLEncoder.encode(arg.checkjstring(), "UTF-8"))
@@ -140,6 +365,23 @@ class LuaEngine @Inject constructor(
         } catch (e: Exception) { LuaTable() }
     }
 
+    private inner class UrlResolveFunction : TwoArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue): LuaValue = try {
+            val base = a1.checkjstring()
+            val relative = a2.checkjstring()
+            LuaValue.valueOf(java.net.URI(base).resolve(relative).toString())
+        } catch (e: Exception) { a2 }
+    }
+
+    private inner class UnescapeUnicodeFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue = try {
+            val s = arg.checkjstring()
+            val regex = Regex("\\\\u([0-9a-fA-F]{4})")
+            LuaValue.valueOf(regex.replace(s) { match ->
+                match.groupValues[1].toInt(16).toChar().toString()
+            })
+        } catch (e: Exception) { arg }
+    }
     private inner class LogInfoFunction  : OneArgFunction() {
         override fun call(arg: LuaValue): LuaValue { Timber.i("Lua: ${arg.optjstring("")}"); return LuaValue.NIL }
     }

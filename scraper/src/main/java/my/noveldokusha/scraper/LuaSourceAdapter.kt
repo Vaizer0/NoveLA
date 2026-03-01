@@ -18,9 +18,96 @@ import timber.log.Timber
  * Адаптер для Lua источников, реализующий SourceInterface.Catalog
  */
 class LuaSourceAdapter(
+    private val context: Context,
     private val luaScript: LuaValue,
-    private val metadata: SourceMetadata
-) : SourceInterface.Catalog {
+    private val luaEngine: LuaEngine,
+    override val iconUrl: String? = null
+) : SourceInterface.Catalog, SourceInterface.Configurable {
+
+    @Composable
+    override fun ScreenConfig() {
+        val configFunc = luaScript.get("getScreenConfig")
+        if (configFunc.isfunction()) {
+            val config = configFunc.call()
+            if (config.istable()) {
+                RenderLuaConfig(config.checktable())
+            }
+        }
+    }
+
+    @Composable
+    private fun RenderLuaConfig(config: LuaTable) {
+        val fields = config.get("fields").opttable(LuaTable())
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            for (i in 1..fields.length()) {
+                val field = fields.get(i).checktable()
+                val type = field.get("type").optjstring("text")
+                val key = field.get("key").checkjstring()
+                val label = field.get("label").optjstring(key)
+
+                when (type) {
+                    "select" -> {
+                        val options = field.get("options").checktable()
+                        LuaSelectField(key, label, options)
+                    }
+                    "switch" -> {
+                        LuaSwitchField(key, label)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun LuaSelectField(key: String, label: String, options: LuaTable) {
+        var expanded by remember { mutableStateOf(false) }
+        val currentValue = remember { mutableStateOf("") }
+        
+        // В реальном приложении здесь должно быть чтение из get_preference
+        // Для прототипа используем заглушку или прокидываем LuaEngine
+        
+        Box {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("$label: ${currentValue.value}")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                for (i in 1..options.length()) {
+                    val opt = options.get(i).checktable()
+                    val optValue = opt.get("value").checkjstring()
+                    val optLabel = opt.get("label").optjstring(optValue)
+                    DropdownMenuItem(
+                        text = { Text(optLabel) },
+                        onClick = {
+                            currentValue.value = optValue
+                            expanded = false
+                            // Здесь вызов set_preference через мост
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun LuaSwitchField(key: String, label: String) {
+        val checked = remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label)
+            Switch(checked = checked.value, onCheckedChange = { checked.value = it })
+        }
+    }
 
     override val id: String = metadata.id
     override val nameStrId: Int = 0  // Lua источники не используют строковые ресурсы
@@ -28,7 +115,13 @@ class LuaSourceAdapter(
     override val baseUrl: String = getBaseUrlFromScript()
     override val catalogUrl: String = baseUrl
     override val language: LanguageCode = fromIso639_1(metadata.language)
-    override val iconUrl: Any = metadata.icon
+
+        when {
+            icon.startsWith("http") -> icon
+            icon.isNotEmpty() -> "${metadata.url.removeSuffix("/")}/$icon"
+            else -> "$baseUrl/favicon.ico"
+        }
+    }
     override val iconResId: Int? = null
 
     init {
@@ -71,8 +164,8 @@ class LuaSourceAdapter(
                 val result = luaScript.get("getCatalogList").call(LuaValue.valueOf(index))
                 convertLuaResultToPagedList(result)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to get catalog list for ${metadata.id}")
-                Response.Error(e.message ?: "Unknown error", e)
+                Timber.e(e, "Lua Error in getCatalogList for ${metadata.id}")
+                Response.Error(e.message ?: "Unknown Lua error", e)
             }
         }
     }
@@ -86,8 +179,8 @@ class LuaSourceAdapter(
                 )
                 convertLuaResultToPagedList(result)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to search catalog for ${metadata.id}")
-                Response.Error(e.message ?: "Unknown error", e)
+                Timber.e(e, "Lua Error in getCatalogSearch for ${metadata.id}")
+                Response.Error(e.message ?: "Unknown Lua error", e)
             }
         }
     }
@@ -146,8 +239,8 @@ class LuaSourceAdapter(
 
                 Response.Success(chapters)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to get chapter list for ${metadata.id}")
-                Response.Error(e.message ?: "Unknown error", e)
+                Timber.e(e, "Lua Error in getChapterList for ${metadata.id}")
+                Response.Error(e.message ?: "Unknown Lua error", e)
             }
         }
     }
@@ -158,7 +251,7 @@ class LuaSourceAdapter(
             val result = luaScript.get("getChapterText").call(LuaValue.valueOf(html))
             result.optjstring(null)
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get chapter text for ${metadata.id}")
+            Timber.e(e, "Lua Error in getChapterText for ${metadata.id}")
             null
         }
     }
@@ -225,7 +318,8 @@ class LuaSourceAdapter(
     private fun convertLuaTableToChapterResult(table: LuaTable): ChapterResult {
         return ChapterResult(
             title = table.get("title")?.optjstring("") ?: "",
-            url = table.get("url")?.optjstring("") ?: ""
+            url = table.get("url")?.optjstring("") ?: "",
+            volume = table.get("volume")?.optjstring(null)
         )
     }
 }

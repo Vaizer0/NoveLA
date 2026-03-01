@@ -20,8 +20,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 interface NetworkClient {
+    val cookieJar: okhttp3.CookieJar
     suspend fun call(request: Request.Builder, followRedirects: Boolean = false): Response
     suspend fun get(url: String): Response
+    suspend fun getWithHeaders(url: String, headers: Map<String, String>): Response
     suspend fun get(url: Uri.Builder): Response
 }
 
@@ -35,7 +37,7 @@ class ScraperNetworkClient @Inject constructor(
     private val cacheDir = File(appContext.cacheDir, "network_cache")
     private val cacheSize = 5L * 1024 * 1024
 
-    private val cookieJar = ScraperCookieJar()
+    override val cookieJar = ScraperCookieJar()
 
     private val okhttpLoggingInterceptor = HttpLoggingInterceptor {
         Timber.v(it)
@@ -66,6 +68,11 @@ class ScraperNetworkClient @Inject constructor(
     }
 
     override suspend fun get(url: String): Response = call(getRequest(url))
+    override suspend fun getWithHeaders(url: String, headers: Map<String, String>): Response {
+        val builder = getRequest(url)
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        return call(builder)
+    }
     override suspend fun get(url: Uri.Builder): Response = call(getRequest(url.toString()))
 
     private fun getRequest(url: String): Request.Builder {

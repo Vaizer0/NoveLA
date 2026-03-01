@@ -1,5 +1,6 @@
 package my.noveldokusha.sourceexplorer
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
@@ -38,6 +39,7 @@ internal class SourceCatalogViewModel @Inject constructor(
 
     val state = SourceCatalogScreenState(
         sourceCatalogNameStrId = mutableIntStateOf(source.nameStrId),
+        sourceCatalogName = mutableStateOf(source.name),
         searchTextInput = stateHandle.asMutableStateOf("searchTextInput") { "" },
         toolbarMode = stateHandle.asMutableStateOf("toolbarMode") { ToolbarMode.MAIN },
         fetchIterator = PagedListIteratorState(viewModelScope) {

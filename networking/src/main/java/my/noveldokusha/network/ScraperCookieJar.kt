@@ -5,7 +5,7 @@ import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 
-internal class ScraperCookieJar : CookieJar {
+class ScraperCookieJar : CookieJar {
 
     private val manager = CookieManager.getInstance().apply {
         setAcceptCookie(true)
