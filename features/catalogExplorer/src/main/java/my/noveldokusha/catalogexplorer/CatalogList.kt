@@ -146,28 +146,11 @@ internal fun CatalogList(
                 },
                 leadingContent = {
                     val iconResId = it.catalog.iconResId
-                    if (iconResId != null) {
-                        ImageViewGlide(
-                            imageModel = iconResId,
-                            modifier = Modifier.size(28.dp),
-                            error = R.drawable.default_icon
-                        )
-                    } else {
-                        val icon = it.catalog.iconUrl
-                        if (icon is ImageVector) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        } else {
-                            ImageViewGlide(
-                                imageModel = icon,
-                                modifier = Modifier.size(28.dp),
-                                error = R.drawable.default_icon
-                            )
-                        }
-                    }
+                    ImageViewGlide(
+                        imageModel = iconResId ?: it.catalog.iconUrl,
+                        modifier = Modifier.size(28.dp),
+                        error = R.drawable.default_icon
+                    )
                 },
                 trailingContent = {
                     Row {

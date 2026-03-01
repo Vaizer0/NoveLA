@@ -35,7 +35,9 @@ sealed interface SourceInterface {
     interface Catalog : SourceInterface {
         val catalogUrl: String
         val language: LanguageCode?
-        val iconUrl: Any get() = "$baseUrl/favicon.ico"
+
+        // String? — иконка всегда URL-строка (из YAML) или null
+        val iconUrl: String? get() = null
         val iconResId: Int? get() = null
 
         suspend fun getBookCoverImageUrl(bookUrl: String): Response<String?> =

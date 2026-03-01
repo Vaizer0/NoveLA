@@ -45,15 +45,12 @@ class ExtensionRepository @Inject constructor(
         try {
             // codeUrl должен быть передан из YAML конфигурации
             val finalCodeUrl = codeUrl ?: throw IllegalArgumentException("codeUrl is required")
-            
-            // TODO: Скачать Lua файл и сохранить его
-            // Пока просто продолжаем с записью в БД
-            
+
             // Используем YAML для settings
             val settingsYaml = """
                 codeUrl: $finalCodeUrl
             """.trimIndent()
-            
+
             val dbExtension = my.noveldokusha.feature.local_database.tables.Extension(
                 id = id,
                 name = name,
@@ -68,7 +65,7 @@ class ExtensionRepository @Inject constructor(
                 settings = settingsYaml
             )
             extensionDao.insert(dbExtension)
-            
+
             Timber.d("Extension installed in database: $name with codeUrl: $finalCodeUrl")
         } catch (e: Exception) {
             Timber.e(e, "Failed to install extension: $name")
@@ -93,8 +90,6 @@ class ExtensionRepository @Inject constructor(
     }
 
     suspend fun loadExtensionConfig(extension: my.noveldokusha.feature.local_database.tables.Extension): HtmlSelectors? {
-        // TODO: Implement loading from network
-        // For now, return null as network loading is not implemented yet
         Timber.w("loadExtensionConfig not implemented yet for ${extension.name}")
         return null
     }
@@ -102,12 +97,9 @@ class ExtensionRepository @Inject constructor(
     override suspend fun isExtensionInstalled(extensionId: String): Boolean {
         val existsInDb = extensionDao.exists(extensionId)
         if (!existsInDb) return false
-        
-        // TODO: Проверить наличие файла расширения
-        // Пока возвращаем true если есть запись в БД
         return true
     }
-    
+
     override suspend fun getExtensionSettings(extensionId: String): String? {
         return try {
             extensionDao.get(extensionId)?.settings
@@ -117,30 +109,33 @@ class ExtensionRepository @Inject constructor(
         }
     }
 
+    // ── Mappers ───────────────────────────────────────────────────────────────
+
     private fun my.noveldokusha.feature.local_database.tables.Extension.toCoreExtension(): Extension {
         return Extension(
-            id = this.id,
-            name = this.name,
-            version = this.version,
-            language = this.language,
-            enabled = this.enabled,
-            installed = this.installed
+            id        = this.id,
+            name      = this.name,
+            version   = this.version,
+            language  = this.language,
+            enabled   = this.enabled,
+            installed = this.installed,
+            iconUrl   = this.imageURL.takeIf { it.isNotBlank() }
         )
     }
 
     private fun Extension.toDbExtension(): my.noveldokusha.feature.local_database.tables.Extension {
         return my.noveldokusha.feature.local_database.tables.Extension(
-            id = this.id,
-            name = this.name,
-            fileName = "extension_${this.id}.lua",
-            imageURL = "",
-            language = this.language,
-            version = this.version,
-            md5 = "",
-            enabled = this.enabled,
-            installed = this.installed,
+            id          = this.id,
+            name        = this.name,
+            fileName    = "extension_${this.id}.lua",
+            imageURL    = this.iconUrl ?: "",
+            language    = this.language,
+            version     = this.version,
+            md5         = "",
+            enabled     = this.enabled,
+            installed   = this.installed,
             chapterType = "HTML",
-            settings = "{}"
+            settings    = "{}"
         )
     }
 }

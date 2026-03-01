@@ -198,7 +198,7 @@ fun SelectorRule.extractMetadata(): SelectorRule = withContext { element, doc, t
     // If metadata found, append to text
     if (metadata.isNotEmpty()) {
         val metadataText = "\n\n--- Metadata ---\n" +
-                          metadata.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+                metadata.entries.joinToString("\n") { "${it.key}: ${it.value}" }
         text + metadataText
     } else {
         text

@@ -9,7 +9,8 @@ data class Extension(
     val version: String,
     val language: String,
     val enabled: Boolean,
-    val installed: Boolean
+    val installed: Boolean,
+    val iconUrl: String? = null,
 )
 
 interface ExtensionManager {
