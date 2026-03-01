@@ -27,18 +27,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ImageViewGlide
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.data.CatalogItem
 import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.SourceInterface
+import my.noveldokusha.scraper.displayName
 import my.noveldokusha.scraper.fixtures.fixturesCatalogList
 import my.noveldokusha.scraper.fixtures.fixturesDatabaseList
 
@@ -53,21 +53,15 @@ internal fun CatalogList(
     onSourceClick: (SourceInterface.Catalog) -> Unit,
     onSourceSetPinned: (id: String, pinned: Boolean) -> Unit,
 ) {
-    // Сортируем источники с учетом приоритетов, если sortOrder указан:
-    // 1. Local источник всегда первым
-    // 2. Закрепленные источники
-    // 3. Незакрепленные источники (сортируются по алфавиту)
     val sortedSourcesList = if (sortOrder != null) {
         sourcesList.sortedWith(
-            compareBy<CatalogItem> { 
-                // Сначала Local источник
+            compareBy<CatalogItem> {
                 if (it.catalog.id == "local_source") 0 else 1
-            }.thenBy { 
-                // Затем закрепленные источники
-                if (it.pinned) 0 else 1 
-            }.thenBy { 
-                // Наконец сортировка по имени
-                it.catalog.nameStrId 
+            }.thenBy {
+                if (it.pinned) 0 else 1
+            }.thenBy {
+                // Сортируем по реальному имени, а не по ID ресурса
+                it.catalog.id
             }.let { comparator ->
                 if (sortOrder == SortOrder.DESCENDING) comparator.reversed() else comparator
             }
@@ -75,6 +69,7 @@ internal fun CatalogList(
     } else {
         sourcesList
     }
+
     LazyColumn(
         contentPadding = PaddingValues(bottom = 300.dp),
         modifier = Modifier.padding(paddingValues = innerPadding)
@@ -92,8 +87,7 @@ internal fun CatalogList(
 
         items(databasesList) {
             ListItem(
-                modifier = Modifier
-                    .clickable { onDatabaseClick(it) },
+                modifier = Modifier.clickable { onDatabaseClick(it) },
                 headlineContent = {
                     Text(
                         text = stringResource(id = it.nameStrId),
@@ -137,7 +131,9 @@ internal fun CatalogList(
                     .animateItemPlacement(),
                 headlineContent = {
                     Text(
-                        text = stringResource(id = it.catalog.nameStrId),
+                        // displayName() безопасно возвращает name для Lua источников
+                        // или stringResource(nameStrId) для статических
+                        text = it.catalog.displayName(),
                         style = MaterialTheme.typography.titleSmall,
                     )
                 },
@@ -178,9 +174,7 @@ internal fun CatalogList(
                         val catalog = it.catalog
                         if (catalog is SourceInterface.Configurable) {
                             var openConfig by rememberSaveable { mutableStateOf(false) }
-                            IconButton(
-                                onClick = { openConfig = !openConfig },
-                            ) {
+                            IconButton(onClick = { openConfig = !openConfig }) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,
                                     contentDescription = stringResource(R.string.configuration),
@@ -226,12 +220,8 @@ internal fun CatalogList(
 @Composable
 private fun PreviewView() {
     val catalogItemsList = fixturesCatalogList().mapIndexed { index, it ->
-        CatalogItem(
-            catalog = it,
-            pinned = index % 2 == 0,
-        )
+        CatalogItem(catalog = it, pinned = index % 2 == 0)
     }
-
     InternalTheme {
         CatalogList(
             innerPadding = PaddingValues(),

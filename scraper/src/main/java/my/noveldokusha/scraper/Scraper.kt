@@ -4,10 +4,15 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.scraper.databases.BakaUpdates
 import my.noveldokusha.scraper.databases.NovelUpdates
-import my.noveldokusha.scraper.sources.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import my.noveldokusha.scraper.sources.LocalSource
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,101 +22,63 @@ class Scraper @Inject constructor(
     networkClient: NetworkClient,
     localSource: LocalSource,
     appPreferences: AppPreferences,
-    private val luaSourceLoader: LuaSourceLoader
+    // Интерфейс вместо LuaSourceLoader — нет зависимости от Android Context
+    private val luaSourceProvider: LuaSourceProvider
 ) {
     val databasesList = setOf(
         NovelUpdates(networkClient),
         BakaUpdates(networkClient)
     )
 
-    // LocalSource сохраняется для EPUB, остальные источники загружаются динамически
     val localSourcesList = setOf(localSource)
-    
-    // State для динамических источников
+
+    private val scraperScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val _luaSources = MutableStateFlow<Set<SourceInterface>>(emptySet())
-    val luaSources: StateFlow<Set<SourceInterface>> = _luaSources
-    
-    // Инициализация загрузки Lua источников
+    val luaSources: StateFlow<Set<SourceInterface>> = _luaSources.asStateFlow()
+
     init {
-        loadLuaSources()
-    }
-    
-    /**
-     * Перезагрузка Lua источников (вызывать после установки/удаления)
-     */
-    fun reloadLuaSources() {
-        kotlinx.coroutines.GlobalScope.launch {
-            loadLuaSources()
-        }
-    }
-    
-    /**
-     * Загрузка Lua источников из репозитория
-     */
-    private fun loadLuaSources() {
-        kotlinx.coroutines.GlobalScope.launch {
-            try {
-                val result = luaSourceLoader.loadAllSources()
-                result.onSuccess { sources ->
-                    _luaSources.value = sources.toSet()
-                    Timber.d("Loaded ${sources.size} Lua sources")
-                }
-                result.onFailure { error ->
-                    Timber.e(error, "Failed to load Lua sources")
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Exception while loading Lua sources")
+        // Подписываемся на Flow провайдера — обновляется при install/uninstall/enable/disable
+        scraperScope.launch {
+            luaSourceProvider.sourcesFlow.collect { sources ->
+                _luaSources.value = sources.toSet()
+                Timber.d("Lua sources updated: ${sources.size}")
             }
         }
     }
-    
-    // Общий список источников (локальные + динамические)
+
+    fun clearCache() = luaSourceProvider.clearCache()
+
     val sourcesList: Set<SourceInterface>
         get() = localSourcesList + _luaSources.value
 
-    val sourcesCatalogsList = sourcesList.filterIsInstance<SourceInterface.Catalog>()
-    val sourcesCatalogsLanguagesList = sourcesCatalogsList.mapNotNull { it.language }.toSet()
+    val sourcesCatalogListFlow: kotlinx.coroutines.flow.Flow<List<SourceInterface.Catalog>> =
+        _luaSources.map { lua ->
+            (localSourcesList + lua).filterIsInstance<SourceInterface.Catalog>()
+        }
+
+    val sourcesLanguagesListFlow: kotlinx.coroutines.flow.Flow<List<my.noveldokusha.core.LanguageCode>> =
+        sourcesCatalogListFlow.map { catalogs ->
+            catalogs.mapNotNull { it.language }.distinct()
+        }
 
     private fun String.isCompatibleWithBaseUrl(baseUrl: String): Boolean {
-        val normalizedUrl = if (this.endsWith("/")) this else "$this/"
-        val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-        return normalizedUrl.startsWith(normalizedBaseUrl)
+        val a = if (endsWith("/")) this else "$this/"
+        val b = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        return a.startsWith(b)
     }
 
-    fun getCompatibleSource(url: String): SourceInterface? {
-        return sourcesList.find { url.isCompatibleWithBaseUrl(it.baseUrl) }
-    }
+    fun getCompatibleSource(url: String): SourceInterface? =
+        sourcesList.find { url.isCompatibleWithBaseUrl(it.baseUrl) }
 
-    fun getCompatibleSourceCatalog(url: String): SourceInterface.Catalog? {
-        return sourcesList.filterIsInstance<SourceInterface.Catalog>()
+    fun getCompatibleSourceCatalog(url: String): SourceInterface.Catalog? =
+        sourcesList.filterIsInstance<SourceInterface.Catalog>()
             .find { url.isCompatibleWithBaseUrl(it.baseUrl) }
-    }
 
     fun getCompatibleDatabase(url: String): DatabaseInterface? =
         databasesList.find { url.isCompatibleWithBaseUrl(it.baseUrl) }
 
-    fun isUrlSupported(url: String): Boolean {
-        return getCompatibleSource(url) != null
-    }
+    fun isUrlSupported(url: String) = getCompatibleSource(url) != null
 
-    fun getSourceDisplayName(url: String): String {
-        return getCompatibleSource(url)?.let { source ->
-            // Extract domain from baseUrl for display name
-            val domain = source.baseUrl.substringBefore("/").substringAfter("://").substringBefore("www.")
-            domain.replace(".", "").replace("-", " ").capitalize()
-        } ?: "Unknown Source"
-    }
-
-    fun getSourceIconUrl(url: String): String? {
-        val source = getCompatibleSource(url)
-        return if (source is SourceInterface.Catalog) {
-            source.iconUrl.toString()
-        } else {
-            null
-        }
-    }
-
-    fun getSourceId(url: String): String? {
-        return getCompatibleSource(url)?.id
-    }
+    fun getSourceId(url: String): String? = getCompatibleSource(url)?.id
 }

@@ -14,7 +14,7 @@ import javax.inject.Singleton
 @Singleton
 class ExtensionRepository @Inject constructor(
     private val database: AppDatabase
-) : ExtensionManager {
+) : ExtensionManager, my.noveldokusha.core.ExtensionRepositoryInterface {
 
     private val extensionDao = database.extensionDao()
 
@@ -41,21 +41,39 @@ class ExtensionRepository @Inject constructor(
         extensionDao.insert(dbExtension.copy(installed = true))
     }
 
-    override suspend fun installExtensionFromInfo(id: String, name: String, version: String, language: String, imageUrl: String?) {
-        val dbExtension = my.noveldokusha.feature.local_database.tables.Extension(
-            id = id,
-            name = name,
-            fileName = "extension_${id}.jar",
-            imageURL = imageUrl ?: "",
-            language = language,
-            version = version,
-            md5 = "",
-            enabled = true,
-            installed = true,
-            chapterType = "HTML",
-            settings = "{}"
-        )
-        extensionDao.insert(dbExtension)
+    override suspend fun installExtensionFromInfo(id: String, name: String, version: String, language: String, imageUrl: String?, codeUrl: String?) {
+        try {
+            // codeUrl должен быть передан из YAML конфигурации
+            val finalCodeUrl = codeUrl ?: throw IllegalArgumentException("codeUrl is required")
+            
+            // TODO: Скачать Lua файл и сохранить его
+            // Пока просто продолжаем с записью в БД
+            
+            // Используем YAML для settings
+            val settingsYaml = """
+                codeUrl: $finalCodeUrl
+            """.trimIndent()
+            
+            val dbExtension = my.noveldokusha.feature.local_database.tables.Extension(
+                id = id,
+                name = name,
+                fileName = "extension_${id}.lua",
+                imageURL = imageUrl ?: "",
+                language = language,
+                version = version,
+                md5 = "",
+                enabled = true,
+                installed = true,
+                chapterType = "HTML",
+                settings = settingsYaml
+            )
+            extensionDao.insert(dbExtension)
+            
+            Timber.d("Extension installed in database: $name with codeUrl: $finalCodeUrl")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to install extension: $name")
+            throw e
+        }
     }
 
     override suspend fun uninstallExtension(extensionId: String) {
@@ -82,7 +100,21 @@ class ExtensionRepository @Inject constructor(
     }
 
     override suspend fun isExtensionInstalled(extensionId: String): Boolean {
-        return extensionDao.exists(extensionId)
+        val existsInDb = extensionDao.exists(extensionId)
+        if (!existsInDb) return false
+        
+        // TODO: Проверить наличие файла расширения
+        // Пока возвращаем true если есть запись в БД
+        return true
+    }
+    
+    override suspend fun getExtensionSettings(extensionId: String): String? {
+        return try {
+            extensionDao.get(extensionId)?.settings
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get extension settings for $extensionId")
+            null
+        }
     }
 
     private fun my.noveldokusha.feature.local_database.tables.Extension.toCoreExtension(): Extension {
@@ -90,6 +122,7 @@ class ExtensionRepository @Inject constructor(
             id = this.id,
             name = this.name,
             version = this.version,
+            language = this.language,
             enabled = this.enabled,
             installed = this.installed
         )
@@ -99,9 +132,9 @@ class ExtensionRepository @Inject constructor(
         return my.noveldokusha.feature.local_database.tables.Extension(
             id = this.id,
             name = this.name,
-            fileName = "extension_${this.id}.jar",
+            fileName = "extension_${this.id}.lua",
             imageURL = "",
-            language = "en",
+            language = this.language,
             version = this.version,
             md5 = "",
             enabled = this.enabled,

@@ -5,8 +5,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.LanguageCode
+import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.scraper.SourceInterface
 import javax.inject.Inject
@@ -20,31 +21,25 @@ class ScraperRepository @Inject constructor(
     private val appPreferences: AppPreferences,
     val scraper: Scraper,
 ) {
+    fun databaseList(): List<DatabaseInterface> = scraper.databasesList.toList()
 
-    fun databaseList(): List<my.noveldokusha.scraper.DatabaseInterface> {
-        return scraper.databasesList.toList()
-    }
-
-    fun sourcesCatalogListFlow(): Flow<List<CatalogItem>> {
-        return combine(
+    fun sourcesCatalogListFlow(): Flow<List<CatalogItem>> =
+        combine(
+            scraper.sourcesCatalogListFlow,
             appPreferences.SOURCES_LANGUAGES_ISO639_1.flow(),
             appPreferences.FINDER_SOURCES_PINNED.flow()
-        ) { activeLanguages, pinnedSourcesIds ->
-            scraper.sourcesCatalogsList
+        ) { catalogs, activeLanguages, pinnedIds ->
+            catalogs
                 .filter { it.language == null || it.language?.iso639_1 in activeLanguages }
-                .map { CatalogItem(catalog = it, pinned = it.id in pinnedSourcesIds) }
+                .map { CatalogItem(catalog = it, pinned = it.id in pinnedIds) }
                 .sortedByDescending { it.pinned }
         }.flowOn(Dispatchers.Default)
-    }
 
-    fun sourcesLanguagesListFlow(): Flow<List<LanguageItem>> {
-        return appPreferences.SOURCES_LANGUAGES_ISO639_1.flow()
-            .map { activeLanguages ->
-                scraper
-                    .sourcesCatalogsLanguagesList
-                    .map {
-                        LanguageItem(it, active = activeLanguages.contains(it.iso639_1))
-                    }
-            }
-    }
+    fun sourcesLanguagesListFlow(): Flow<List<LanguageItem>> =
+        combine(
+            scraper.sourcesLanguagesListFlow,
+            appPreferences.SOURCES_LANGUAGES_ISO639_1.flow()
+        ) { languages, activeLanguages ->
+            languages.map { LanguageItem(it, active = it.iso639_1 in activeLanguages) }
+        }.flowOn(Dispatchers.Default)
 }

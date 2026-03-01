@@ -23,7 +23,8 @@ class LuaSourceAdapter(
 ) : SourceInterface.Catalog {
 
     override val id: String = metadata.id
-    override val nameStrId: Int = 0 // TODO: Реализовать динамические строки
+    override val nameStrId: Int = 0  // Lua источники не используют строковые ресурсы
+    override val name: String = metadata.name  // Динамическое имя из метаданных
     override val baseUrl: String = getBaseUrlFromScript()
     override val catalogUrl: String = baseUrl
     override val language: LanguageCode = fromIso639_1(metadata.language)
@@ -53,7 +54,7 @@ class LuaSourceAdapter(
     private fun validateLuaScript() {
         val requiredFunctions = listOf(
             "getCatalogList", "getCatalogSearch", "getBookTitle",
-            "getBookCoverImageUrl", "getBookDescription", 
+            "getBookCoverImageUrl", "getBookDescription",
             "getChapterList", "getChapterText"
         )
 
@@ -132,7 +133,7 @@ class LuaSourceAdapter(
             try {
                 val result = luaScript.get("getChapterList").call(LuaValue.valueOf(bookUrl))
                 val chapters = mutableListOf<ChapterResult>()
-                
+
                 if (result.istable()) {
                     val table = result.checktable()
                     for (i in 1..table.length()) {
@@ -142,7 +143,7 @@ class LuaSourceAdapter(
                         }
                     }
                 }
-                
+
                 Response.Success(chapters)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to get chapter list for ${metadata.id}")
@@ -189,7 +190,7 @@ class LuaSourceAdapter(
             val table = luaResult.checktable()
             val items = mutableListOf<BookResult>()
             val itemsTable = table.get("items")?.checktable()
-            
+
             if (itemsTable != null) {
                 for (i in 1..itemsTable.length()) {
                     val item = itemsTable.get(LuaValue.valueOf(i))

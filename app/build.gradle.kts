@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.noveldokusha.android.compose)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
 
 inner class CLICustomSettings {
@@ -86,8 +88,6 @@ android {
         }
     }
 
-    // Removed product flavors - using FOSS (Gemini API only) for all builds
-
     buildFeatures {
         viewBinding = true
     }
@@ -103,7 +103,7 @@ dependencies {
     implementation(projects.tooling.epubImporter)
     implementation(projects.tooling.applicationWorkers)
     implementation(projects.tooling.localSource)
-    
+
     implementation(projects.features.extensions)
     implementation(projects.navigation)
     implementation(projects.features.reader)
@@ -177,6 +177,9 @@ dependencies {
     implementation(libs.retrofit)
 
     // Dependency injection
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    ksp(libs.hilt.androidx.compiler)
     implementation(libs.hilt.workmanager)
 
     // HTML text extractor

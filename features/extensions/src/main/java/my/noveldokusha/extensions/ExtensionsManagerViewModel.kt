@@ -9,16 +9,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import org.yaml.snakeyaml.Yaml
 import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.network.NetworkClient
-import my.noveldokusha.scraper.configs.RepositoryIndex
-import my.noveldokusha.scraper.configs.LanguageIndex
-import my.noveldokusha.scraper.configs.SourceMetadata
+import my.noveldokusha.scraper.LuaSourceLoader
 import my.noveldokusha.data.ScraperRepository
+import org.yaml.snakeyaml.Yaml
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -27,7 +24,8 @@ class ExtensionsManagerViewModel @Inject constructor(
     private val extensionManager: ExtensionManager,
     private val httpClient: NetworkClient,
     private val appPreferences: AppPreferences,
-    private val scraperRepository: ScraperRepository
+    private val scraperRepository: ScraperRepository,
+    private val luaSourceLoader: LuaSourceLoader,          // ← для скачивания .lua
 ) : ViewModel() {
 
     private val yaml = Yaml()
@@ -35,23 +33,22 @@ class ExtensionsManagerViewModel @Inject constructor(
     private val _state = MutableStateFlow(ExtensionsScreenState())
     val state: StateFlow<ExtensionsScreenState> = _state.asStateFlow()
 
-    // Cache for extension lists
     private var cachedAvailableExtensions: List<ExtensionInfo>? = null
     private var lastFetchTime: Long = 0
-    private val CACHE_DURATION_MS = 5 * 60 * 1000 // 5 minutes
+    private val CACHE_DURATION_MS = 5 * 60 * 1000L
 
     init {
-        // Initialize selected languages from preferences
-        _state.update { it.copy(selectedLanguages = appPreferences.EXTENSIONS_LANGUAGES_FILTER.value) }
-        
-        // Load repository URL from preferences
-        _state.update { it.copy(repositoryUrl = appPreferences.EXTENSIONS_REPOSITORY_URL.value) }
+        _state.update {
+            it.copy(
+                selectedLanguages = appPreferences.EXTENSIONS_LANGUAGES_FILTER.value,
+                repositoryUrl = appPreferences.EXTENSIONS_REPOSITORY_URL.value
+            )
+        }
 
-        // Collect installed extensions reactively
+        // Реактивно синхронизируем список установленных расширений
         viewModelScope.launch {
             extensionManager.getInstalledExtensionsFlow().collectLatest { extensions ->
                 _state.update { it.copy(extensions = extensions) }
-                // Update available extensions status when installed extensions change
                 updateAvailableExtensionsStatus()
             }
         }
@@ -59,184 +56,193 @@ class ExtensionsManagerViewModel @Inject constructor(
         loadAllAvailableExtensions()
     }
 
-    fun onEvent(event: ExtensionsScreenEvent) {
-        when (event) {
-            is ExtensionsScreenEvent.OnExtensionToggle -> toggleExtension(event.extensionId, event.enabled)
-            is ExtensionsScreenEvent.OnExtensionUninstall -> uninstallExtension(event.extensionId)
-            is ExtensionsScreenEvent.OnExtensionConfigure -> configureExtension(event.extensionId)
-            ExtensionsScreenEvent.OnRefresh -> refreshAll()
-            ExtensionsScreenEvent.OnShowRepositoryDialog -> showRepositoryDialog()
-            ExtensionsScreenEvent.OnHideRepositoryDialog -> hideRepositoryDialog()
-            is ExtensionsScreenEvent.OnUpdateRepositoryUrl -> updateRepositoryUrl(event.url)
-            is ExtensionsScreenEvent.OnSortOrderChange -> changeSortOrder(event.sortOrder)
-
-            // Filter and navigation events
-            is ExtensionsScreenEvent.OnLanguageFilterToggle -> toggleLanguageFilter(event.languageCode)
-            is ExtensionsScreenEvent.OnLanguageFilterClear -> clearLanguageFilter(event.languageCode)
-            ExtensionsScreenEvent.OnBackPressed -> handleBackPressed()
-            is ExtensionsScreenEvent.OnExtensionInstall -> installExtension(event.extensionId)
-            is ExtensionsScreenEvent.OnExtensionUninstallById -> uninstallExtensionById(event.extensionId)
-        }
+    fun onEvent(event: ExtensionsScreenEvent) = when (event) {
+        is ExtensionsScreenEvent.OnExtensionToggle       -> toggleExtension(event.extensionId, event.enabled)
+        is ExtensionsScreenEvent.OnExtensionUninstall    -> uninstallExtension(event.extensionId)
+        is ExtensionsScreenEvent.OnExtensionConfigure    -> Unit // TODO
+        ExtensionsScreenEvent.OnRefresh                  -> refreshAll()
+        ExtensionsScreenEvent.OnShowRepositoryDialog     -> _state.update { it.copy(showRepositoryDialog = true) }
+        ExtensionsScreenEvent.OnHideRepositoryDialog     -> _state.update { it.copy(showRepositoryDialog = false) }
+        is ExtensionsScreenEvent.OnUpdateRepositoryUrl   -> updateRepositoryUrl(event.url)
+        is ExtensionsScreenEvent.OnSortOrderChange       -> _state.update { it.copy(sortOrder = event.sortOrder) }
+        is ExtensionsScreenEvent.OnLanguageFilterToggle  -> toggleLanguageFilter(event.languageCode)
+        is ExtensionsScreenEvent.OnLanguageFilterClear   -> clearLanguageFilter(event.languageCode)
+        ExtensionsScreenEvent.OnBackPressed              -> Unit
+        is ExtensionsScreenEvent.OnExtensionInstall      -> installExtension(event.extensionId)
+        is ExtensionsScreenEvent.OnExtensionUninstallById -> uninstallExtensionById(event.extensionId)
     }
 
-    private fun loadInstalledExtensions() {
-        viewModelScope.launch {
-            try {
-                val extensions = extensionManager.getInstalledExtensions()
-                _state.update { it.copy(extensions = extensions) }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to load installed extensions")
-                _state.update { it.copy(error = "Failed to load installed extensions") }
-            }
-        }
-    }
+    // ── Загрузка доступных расширений из репозитория ─────────────────────────
 
     private fun loadAllAvailableExtensions(forceRefresh: Boolean = false) {
-        val currentTime = System.currentTimeMillis()
-
-        // Use cached data if available and not expired
-        if (!forceRefresh && cachedAvailableExtensions != null &&
-            currentTime - lastFetchTime < CACHE_DURATION_MS) {
-            _state.update { state ->
-                state.copy(
-                    availableExtensions = cachedAvailableExtensions!!.map { ext ->
-                        ext.copy(
-                            isInstalled = isExtensionInstalled(ext.id),
-                            isEnabled = isExtensionEnabled(ext.id)
-                        )
-                    }
-                )
-            }
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && cachedAvailableExtensions != null && now - lastFetchTime < CACHE_DURATION_MS) {
+            applyCache()
             return
         }
 
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-
             try {
-                // Load all extensions from all languages
-                val allExtensions = mutableListOf<ExtensionInfo>()
+                val repoUrl  = _state.value.repositoryUrl
+                val response = httpClient.get(repoUrl)
+                val yaml     = Yaml()
+                @Suppress("UNCHECKED_CAST")
+                val repoIndex = yaml.loadAs(
+                    response.body?.string() ?: error("Empty response"),
+                    Map::class.java
+                ) as Map<String, Any>
 
-                // Get languages index
-                val repositoryUrl = _state.value.repositoryUrl
-                val response = httpClient.get(repositoryUrl)
-                val yamlText = response.body?.string() ?: throw Exception("Empty response")
+                @Suppress("UNCHECKED_CAST")
+                val languages = repoIndex["languages"] as Map<String, Map<String, Any>>
+                val allExt = mutableListOf<ExtensionInfo>()
 
-                val repositoryIndex = yaml.loadAs(yamlText, Map::class.java) as Map<String, Any>
-                val languages = repositoryIndex["languages"] as Map<String, Map<String, Any>>
-
-                // Load extensions for each language
-                languages.forEach { (languageCode, langInfo) ->
+                languages.forEach { (langCode, langInfo) ->
                     try {
                         val langUrl = langInfo["url"] as String
-                        val langResponse = httpClient.get(langUrl)
-                        val langYamlText = langResponse.body?.string()
-                        if (langYamlText != null) {
-                            val languageData = yaml.loadAs(langYamlText, Map::class.java) as Map<String, Any>
-                            val sources = languageData["sources"] as List<Map<String, Any>>
-                            val extensions = sources.map { source ->
-                                val installedVersion = getInstalledExtensionVersion(source["id"] as String)
-                                val isUpdateAvailable = isUpdateAvailable(source["version"] as String, installedVersion)
+                        val langResp = httpClient.get(langUrl)
+                        @Suppress("UNCHECKED_CAST")
+                        val langData = yaml.loadAs(
+                            langResp.body?.string() ?: return@forEach,
+                            Map::class.java
+                        ) as Map<String, Any>
 
+                        @Suppress("UNCHECKED_CAST")
+                        val sources = langData["sources"] as List<Map<String, Any>>
+                        sources.forEach { src ->
+                            val id = src["id"] as String
+                            val installedVer = getInstalledVersion(id)
+                            allExt.add(
                                 ExtensionInfo(
-                                    id = source["id"] as String,
-                                    name = source["name"] as String,
-                                    description = source["description"] as String,
-                                    author = "", // TODO: Добавить author в YAML
-                                    version = source["version"] as String,
-                                    codeUrl = source["url"] as String,
-                                    iconUrl = source["icon"] as String,
-                                    language = languageCode,
-                                    isInstalled = installedVersion != null,
-                                    isEnabled = isExtensionEnabled(source["id"] as String),
-                                    isUpdateAvailable = isUpdateAvailable
+                                    id               = id,
+                                    name             = src["name"] as String,
+                                    description      = src["description"] as? String ?: "",
+                                    author           = src["author"] as? String ?: "",
+                                    version          = src["version"] as String,
+                                    codeUrl          = src["url"] as String,
+                                    iconUrl          = src["icon"] as? String ?: "",
+                                    language         = langCode,
+                                    isInstalled      = installedVer != null,
+                                    isEnabled        = isEnabled(id),
+                                    isUpdateAvailable = isUpdateAvailable(src["version"] as String, installedVer)
                                 )
-                            }
-                            allExtensions.addAll(extensions)
+                            )
                         }
                     } catch (e: Exception) {
-                        Timber.w(e, "Failed to load extensions for language $languageCode")
-                        // Continue with other languages
+                        Timber.w(e, "Failed to load language $langCode")
                     }
                 }
 
-                // Cache the results
-                cachedAvailableExtensions = allExtensions
-                lastFetchTime = currentTime
+                cachedAvailableExtensions = allExt
+                lastFetchTime = now
 
-                // Collect available languages from extensions
-                val languageMap = mutableMapOf<String, Int>()
-                allExtensions.forEach { ext ->
-                    languageMap[ext.language] = languageMap.getOrDefault(ext.language, 0) + 1
-                }
-                val availableLanguages = languageMap.map { (code, count) ->
-                    ExtensionLanguage(code = code, name = getLanguageDisplayName(code), count = count)
-                }.sortedBy { it.name }
+                val langList = allExt.groupBy { it.language }
+                    .map { (code, list) ->
+                        ExtensionLanguage(code, getLanguageDisplayName(code), list.size)
+                    }
+                    .sortedBy { it.name }
 
                 _state.update {
                     it.copy(
-                        availableExtensions = allExtensions,
-                        availableLanguages = availableLanguages,
-                        isLoading = false,
-                        error = null
+                        availableExtensions = allExt,
+                        availableLanguages  = langList,
+                        isLoading           = false,
+                        error               = null
                     )
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load available extensions")
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Failed to load available extensions"
+                Timber.e(e, "Failed to load extensions repository")
+                _state.update { it.copy(isLoading = false, error = "Failed to load extensions: ${e.message}") }
+            }
+        }
+    }
+
+    private fun applyCache() {
+        _state.update { state ->
+            state.copy(
+                availableExtensions = cachedAvailableExtensions!!.map { ext ->
+                    ext.copy(
+                        isInstalled = getInstalledVersion(ext.id) != null,
+                        isEnabled   = isEnabled(ext.id)
                     )
                 }
+            )
+        }
+    }
+
+    // ── Установка ─────────────────────────────────────────────────────────────
+
+    /**
+     * Процесс установки:
+     * 1. Скачать .lua файл на диск через LuaSourceLoader
+     * 2. Сохранить запись в БД через ExtensionManager
+     *    (codeUrl сохраняется в settings как JSON для последующей загрузки)
+     * 3. Scraper перезагрузится реактивно через Flow установленных расширений
+     */
+    private fun installExtension(extensionId: String) {
+        viewModelScope.launch {
+            val extInfo = _state.value.availableExtensions.find { it.id == extensionId } ?: return@launch
+            setInstalling(extensionId, true)
+            try {
+                // Шаг 1: Скачать .lua на диск
+                val downloaded = luaSourceLoader.downloadAndCacheScript(extensionId, extInfo.codeUrl)
+                if (!downloaded) {
+                    _state.update { it.copy(error = "Failed to download script for ${extInfo.name}") }
+                    return@launch
+                }
+
+                // Шаг 2: Записать в БД
+                extensionManager.installExtensionFromInfo(
+                    id       = extensionId,
+                    name     = extInfo.name,
+                    version  = extInfo.version,
+                    language = extInfo.language,
+                    imageUrl = extInfo.iconUrl,
+                    codeUrl  = extInfo.codeUrl
+                )
+                // Шаг 2б: Сохранить codeUrl в settings как YAML,
+                // чтобы LuaSourceLoader знал откуда перескачать при следующем запуске
+                val settingsYaml = "codeUrl: \"${extInfo.codeUrl}\""
+                extensionManager.updateExtensionSettings(extensionId, settingsYaml)
+
+                Timber.d("Installed extension: ${extInfo.name}")
+                // Шаг 3: Scraper обновится реактивно через extensionRepository.getInstalledExtensionsFlow()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to install ${extInfo.name}")
+                _state.update { it.copy(error = "Failed to install ${extInfo.name}: ${e.message}") }
+                // Если установка не удалась, удаляем скачанный файл
+                luaSourceLoader.removeScript(extensionId)
+            } finally {
+                setInstalling(extensionId, false)
             }
         }
     }
 
-    private fun toggleLanguageFilter(languageCode: String) {
-        _state.update { state ->
-            val newSelectedLanguages = if (state.selectedLanguages.contains(languageCode)) {
-                state.selectedLanguages - languageCode
-            } else {
-                state.selectedLanguages + languageCode
-            }
-            state.copy(selectedLanguages = newSelectedLanguages)
-        }
-        // Save to preferences
-        appPreferences.EXTENSIONS_LANGUAGES_FILTER.value = _state.value.selectedLanguages
-    }
+    // ── Удаление ──────────────────────────────────────────────────────────────
 
-    private fun clearLanguageFilter(languageCode: String?) {
-        if (languageCode == null) {
-            // Clear all
-            _state.update { it.copy(selectedLanguages = emptySet()) }
-        } else {
-            // Clear specific language
-            _state.update { state ->
-                state.copy(selectedLanguages = state.selectedLanguages - languageCode)
+    private fun uninstallExtension(extensionId: String) = uninstallExtensionById(extensionId)
+
+    private fun uninstallExtensionById(extensionId: String) {
+        viewModelScope.launch {
+            try {
+                extensionManager.uninstallExtension(extensionId)
+                luaSourceLoader.removeScript(extensionId)
+                // Scraper обновится реактивно
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to uninstall $extensionId")
+                _state.update { it.copy(error = "Failed to uninstall extension") }
             }
         }
-        // Save to preferences
-        appPreferences.EXTENSIONS_LANGUAGES_FILTER.value = _state.value.selectedLanguages
     }
 
-    private fun refreshAll() {
-        loadInstalledExtensions()
-        loadAllAvailableExtensions(forceRefresh = true)
-    }
+    // ── Вкл/выкл ─────────────────────────────────────────────────────────────
 
     private fun toggleExtension(extensionId: String, enabled: Boolean) {
         viewModelScope.launch {
             try {
-                if (enabled) {
-                    extensionManager.enableExtension(extensionId)
-                } else {
-                    extensionManager.disableExtension(extensionId)
-                }
-                // Refresh the installed extensions list
-                loadInstalledExtensions()
-                // Update installation status in available extensions
-                updateAvailableExtensionsStatus()
+                if (enabled) extensionManager.enableExtension(extensionId)
+                else         extensionManager.disableExtension(extensionId)
+                // Scraper обновится реактивно
             } catch (e: Exception) {
                 Timber.e(e, "Failed to toggle extension $extensionId")
                 _state.update { it.copy(error = "Failed to toggle extension") }
@@ -244,252 +250,86 @@ class ExtensionsManagerViewModel @Inject constructor(
         }
     }
 
-    private fun uninstallExtension(extensionId: String) {
-        viewModelScope.launch {
-            try {
-                extensionManager.uninstallExtension(extensionId)
-                // Refresh both lists
-                loadInstalledExtensions()
-                updateAvailableExtensionsStatus()
-                
-                // Reload Lua sources to update catalog
-                scraperRepository.scraper.reloadLuaSources()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to uninstall extension $extensionId")
-                _state.update { it.copy(error = "Failed to uninstall extension") }
-            }
+    // ── Фильтры / репозиторий ────────────────────────────────────────────────
+
+    private fun toggleLanguageFilter(code: String) {
+        _state.update { state ->
+            val updated = if (code in state.selectedLanguages) state.selectedLanguages - code
+            else state.selectedLanguages + code
+            state.copy(selectedLanguages = updated)
         }
+        appPreferences.EXTENSIONS_LANGUAGES_FILTER.value = _state.value.selectedLanguages
     }
 
-    private fun configureExtension(extensionId: String) {
-        // TODO: Navigate to configuration screen
-        Timber.d("Configure extension $extensionId")
+    private fun clearLanguageFilter(code: String?) {
+        _state.update { it.copy(selectedLanguages = if (code == null) emptySet() else it.selectedLanguages - code) }
+        appPreferences.EXTENSIONS_LANGUAGES_FILTER.value = _state.value.selectedLanguages
     }
 
-    private fun handleBackPressed() {
-        Timber.d("Back pressed on extensions screen")
-    }
-
-    private fun showRepositoryDialog() {
-        _state.update { it.copy(showRepositoryDialog = true) }
-    }
-
-    private fun hideRepositoryDialog() {
-        _state.update { it.copy(showRepositoryDialog = false) }
-    }
+    private fun refreshAll() = loadAllAvailableExtensions(forceRefresh = true)
 
     private fun updateRepositoryUrl(url: String) {
         viewModelScope.launch {
-            try {
-                // Save to preferences
-                appPreferences.EXTENSIONS_REPOSITORY_URL.value = url
-                _state.update { it.copy(repositoryUrl = url) }
-                hideRepositoryDialog()
-                refreshAll()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to update repository URL")
-                _state.update { it.copy(error = "Failed to update repository URL") }
-            }
+            appPreferences.EXTENSIONS_REPOSITORY_URL.value = url
+            _state.update { it.copy(repositoryUrl = url, showRepositoryDialog = false) }
+            refreshAll()
         }
     }
 
-    private fun changeSortOrder(sortOrder: SortOrder) {
-        _state.update { it.copy(sortOrder = sortOrder) }
-    }
-
-    private fun installExtension(extensionId: String) {
-        viewModelScope.launch {
-            try {
-                // Set installing state
-                setExtensionInstalling(extensionId, true)
-
-                // Find extension info
-                val extensionInfo = _state.value.availableExtensions.find { it.id == extensionId }
-                if (extensionInfo != null) {
-                    // Download and install extension
-                    installExtensionFromUrl(extensionInfo)
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to install extension $extensionId")
-                _state.update { it.copy(error = "Failed to install extension") }
-            } finally {
-                // Reset installing state and refresh data
-                setExtensionInstalling(extensionId, false)
-                // Refresh both lists to ensure consistency
-                loadInstalledExtensions()
-                updateAvailableExtensionsStatus()
-            }
-        }
-    }
-
-    private fun uninstallExtensionById(extensionId: String) {
-        viewModelScope.launch {
-            try {
-                // Use string ID directly
-                extensionManager.uninstallExtension(extensionId)
-                // Refresh both lists
-                loadInstalledExtensions()
-                updateAvailableExtensionsStatus()
-                
-                // Reload Lua sources to update catalog
-                scraperRepository.scraper.reloadLuaSources()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to uninstall extension $extensionId")
-                _state.update { it.copy(error = "Failed to uninstall extension") }
-            }
-        }
-    }
-
-    private suspend fun installExtensionFromUrl(extensionInfo: ExtensionInfo) {
-        try {
-            // Create extension entry in database
-            extensionManager.installExtensionFromInfo(
-                id = extensionInfo.id,
-                name = extensionInfo.name,
-                version = extensionInfo.version,
-                language = extensionInfo.language,
-                imageUrl = extensionInfo.iconUrl
-            )
-
-            Timber.d("Successfully installed extension: ${extensionInfo.name}")
-
-            // Refresh both lists
-            loadInstalledExtensions()
-            updateAvailableExtensionsStatus()
-
-            // Reload Lua sources to update catalog
-            scraperRepository.scraper.reloadLuaSources()
-
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to install extension from URL: ${extensionInfo.codeUrl}")
-            throw e
-        } finally {
-            // Clear installing state
-            _state.update { state ->
-                state.copy(
-                    availableExtensions = state.availableExtensions.map { ext ->
-                        if (ext.id == extensionInfo.id) {
-                            ext.copy(isInstalling = false)
-                        } else {
-                            ext
-                        }
-                    }
-                )
-            }
-        }
-    }
-
-    private fun setExtensionInstalling(extensionId: String, isInstalling: Boolean) {
-        _state.update { state ->
-            val updatedExtensions = state.availableExtensions.map { ext ->
-                if (ext.id == extensionId) {
-                    ext.copy(isInstalling = isInstalling)
-                } else {
-                    ext
-                }
-            }
-            state.copy(availableExtensions = updatedExtensions)
-        }
-    }
+    // ── Вспомогательные ──────────────────────────────────────────────────────
 
     private fun updateAvailableExtensionsStatus() {
         _state.update { state ->
-            val updatedExtensions = state.availableExtensions.map { ext ->
-                val installedVersion = getInstalledExtensionVersion(ext.id)
-                val isUpdateAvailable = isUpdateAvailable(ext.version, installedVersion)
-                ext.copy(
-                    isInstalled = installedVersion != null,
-                    isEnabled = isExtensionEnabled(ext.id),
-                    isUpdateAvailable = isUpdateAvailable
-                )
-            }
-            state.copy(availableExtensions = updatedExtensions)
-        }
-    }
-
-    private fun getInstalledExtensionVersion(extensionId: String): String? {
-        return _state.value.extensions.find { it.id == extensionId }?.version
-    }
-
-    private fun isUpdateAvailable(availableVersion: String, installedVersion: String?): Boolean {
-        if (installedVersion == null) return false
-
-        return try {
-            // Simple version comparison - split by dots and compare numbers
-            val availableParts = availableVersion.split(".").map { it.toIntOrNull() ?: 0 }
-            val installedParts = installedVersion.split(".").map { it.toIntOrNull() ?: 0 }
-
-            // Compare version parts
-            for (i in 0 until maxOf(availableParts.size, installedParts.size)) {
-                val availablePart = availableParts.getOrNull(i) ?: 0
-                val installedPart = installedParts.getOrNull(i) ?: 0
-
-                when {
-                    availablePart > installedPart -> return true
-                    availablePart < installedPart -> return false
+            state.copy(
+                availableExtensions = state.availableExtensions.map { ext ->
+                    val installedVer = getInstalledVersion(ext.id)
+                    ext.copy(
+                        isInstalled       = installedVer != null,
+                        isEnabled         = isEnabled(ext.id),
+                        isUpdateAvailable = isUpdateAvailable(ext.version, installedVer)
+                    )
                 }
+            )
+        }
+    }
+
+    private fun setInstalling(id: String, installing: Boolean) {
+        _state.update { state ->
+            state.copy(availableExtensions = state.availableExtensions.map {
+                if (it.id == id) it.copy(isInstalling = installing) else it
+            })
+        }
+    }
+
+    private fun getInstalledVersion(id: String) =
+        _state.value.extensions.find { it.id == id }?.version
+
+    private fun isEnabled(id: String) =
+        _state.value.extensions.find { it.id == id }?.enabled ?: false
+
+    private fun isUpdateAvailable(available: String, installed: String?): Boolean {
+        if (installed == null) return false
+        return try {
+            val a = available.split(".").map { it.toIntOrNull() ?: 0 }
+            val b = installed.split(".").map { it.toIntOrNull() ?: 0 }
+            for (i in 0 until maxOf(a.size, b.size)) {
+                val av = a.getOrElse(i) { 0 }
+                val bv = b.getOrElse(i) { 0 }
+                if (av > bv) return true
+                if (av < bv) return false
             }
-
-            // Versions are equal
             false
+        } catch (e: Exception) { false }
+    }
+
+    private fun getLanguageDisplayName(code: String): String {
+        if (code == "multi") return "Multilanguage"
+        return try {
+            val locale = java.util.Locale.forLanguageTag(code)
+            locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercaseChar() }
+                .takeIf { it.isNotBlank() && it != code } ?: code.uppercase()
         } catch (e: Exception) {
-            Timber.w(e, "Failed to compare versions: available=$availableVersion, installed=$installedVersion")
-            false
+            code.uppercase()
         }
-    }
-
-    private fun getLanguageDisplayName(languageCode: String): String {
-        return when (languageCode) {
-            "en" -> "English"
-            "ru" -> "Русский"
-            "zh" -> "中文"
-            "es" -> "Español"
-            "fr" -> "Français"
-            "de" -> "Deutsch"
-            "ja" -> "日本語"
-            "ko" -> "한국어"
-            else -> languageCode.uppercase() // Fallback to uppercase code
-        }
-    }
-    
-    private fun isExtensionInstalled(extensionId: String): Boolean {
-        return _state.value.extensions.any { it.id == extensionId }
-    }
-    
-    private fun isExtensionEnabled(extensionId: String): Boolean {
-        return _state.value.extensions.find { it.id == extensionId }?.enabled ?: false
     }
 }
-
-// Data classes for parsing external-sources JSON
-@kotlinx.serialization.Serializable
-private data class ExtensionsLanguagesIndex(
-    val version: String,
-    val lastUpdated: String,
-    val languages: Map<String, ExtensionsLanguageInfo>
-)
-
-@kotlinx.serialization.Serializable
-private data class ExtensionsLanguageInfo(
-    val url: String,
-    val count: Int? = null // Optional count field
-)
-
-@kotlinx.serialization.Serializable
-private data class ExtensionsLanguageIndex(
-    val language: String,
-    val sources: List<ExtensionsSourceInfo>
-)
-
-@kotlinx.serialization.Serializable
-private data class ExtensionsSourceInfo(
-    val id: String,
-    val name: String,
-    val description: String,
-    val author: String,
-    val version: String,
-    val codeUrl: String? = null,  // Legacy support
-    val jarUrl: String? = null,   // New JAR URL field
-    val ico: String? = null,      // Legacy support
-    val iconUrl: String? = null   // New icon URL field
-)

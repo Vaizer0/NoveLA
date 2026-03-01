@@ -7,6 +7,7 @@ data class Extension(
     val id: String,
     val name: String,
     val version: String,
+    val language: String,
     val enabled: Boolean,
     val installed: Boolean
 )
@@ -23,7 +24,7 @@ interface ExtensionManager {
 
     suspend fun installExtension(extension: Extension)
 
-    suspend fun installExtensionFromInfo(id: String, name: String, version: String, language: String, imageUrl: String? = null)
+    suspend fun installExtensionFromInfo(id: String, name: String, version: String, language: String, imageUrl: String? = null, codeUrl: String? = null)
 
     suspend fun uninstallExtension(extensionId: String)
 
