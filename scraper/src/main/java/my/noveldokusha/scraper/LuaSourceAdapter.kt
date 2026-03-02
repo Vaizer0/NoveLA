@@ -175,8 +175,10 @@ class LuaSourceAdapter(
         }
 
     override suspend fun getChapterText(doc: Document): String? {
-        val html = doc.outerHtml() // или doc.body().html()
-        return luaScript.get("getChapterText").call(LuaValue.valueOf(html)).optjstring(null)
+        val html = doc.outerHtml()
+        val url = doc.location() // получаем URL
+        Timber.d("LuaSourceAdapter: url='$url'")
+        return luaScript.get("getChapterText").call(LuaValue.valueOf(html), LuaValue.valueOf(url)).optjstring(null)
     }
 
     override suspend fun getChapterListHash(bookUrl: String): Response<String?> =
