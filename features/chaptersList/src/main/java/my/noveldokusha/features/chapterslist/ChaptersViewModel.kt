@@ -67,6 +67,9 @@ internal class ChaptersViewModel @Inject constructor(
             ChaptersScreenState.BookState(title = bookTitle, url = bookUrl, coverImageUrl = null)
         )
 
+    // Экспортируем scraper для доступа из Activity
+    val scraper: Scraper = scraper
+
     val state = ChaptersScreenState(
         book = book,
         error = mutableStateOf(""),

@@ -25,11 +25,13 @@ class LuaSourceAdapter(
     private val context: Context,
     private val luaScript: LuaValue,
     private val luaEngine: LuaEngine,
-    private val iconUrlFromYaml: String? = null
+    private val iconUrlFromYaml: String? = null,
+    private val fileName: String?
 ) : SourceInterface.Catalog {
 
     // Метаданные читаем из Lua один раз при создании
     private val metadata: SourceMetadata = extractMetadata()
+
 
     override val id: String         = metadata.id
     override val nameStrId: Int     = 0               // Lua источники не используют R.string
@@ -40,6 +42,8 @@ class LuaSourceAdapter(
     override val catalogUrl: String  = baseUrl
     override val language: LanguageCode? = fromIso639_1(metadata.language)
     override val iconResId: Int?    = null
+    override val charset: String = metadata.charset ?: "UTF-8"
+
 
     /**
      * Приоритет иконки:
@@ -65,13 +69,14 @@ class LuaSourceAdapter(
         } catch (_: Exception) { def }
 
         return SourceMetadata(
-            id          = s("id", "lua_unknown"),
+            id          = s("id", fileName?.let { "lua_${it}" } ?: "lua_unknown"),
             name        = s("name", "Unknown Source"),
             version     = s("version", "1.0.0"),
             description = s("description"),
             url         = s("baseUrl"),
             icon        = s("icon"),
-            language    = s("language", "en")
+            language    = s("language", "en"),
+            charset     = s("charset").takeIf { it.isNotBlank() } // ← новое поле
         )
     }
 
@@ -169,13 +174,10 @@ class LuaSourceAdapter(
             }
         }
 
-    override suspend fun getChapterText(doc: Document): String? =
-        try {
-            luaScript.get("getChapterText").call(LuaValue.valueOf(doc.html())).optjstring(null)
-        } catch (e: Exception) {
-            Timber.e(e, "Lua getChapterText [${metadata.id}]")
-            null
-        }
+    override suspend fun getChapterText(doc: Document): String? {
+        val html = doc.outerHtml() // или doc.body().html()
+        return luaScript.get("getChapterText").call(LuaValue.valueOf(html)).optjstring(null)
+    }
 
     override suspend fun getChapterListHash(bookUrl: String): Response<String?> =
         try {

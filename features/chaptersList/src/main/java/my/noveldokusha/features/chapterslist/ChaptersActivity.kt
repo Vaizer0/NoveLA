@@ -60,13 +60,13 @@ class ChaptersActivity : BaseActivity() {
                     onLibraryToggle = viewModel::toggleBookmark,
                     onSearchBookInDatabase = ::searchBookInDatabase,
                     onResumeReading = ::onOpenLastActiveChapter,
-                    onPressBack = { backPressedCallback.handleOnBackPressed() },
+                    onPressBack = ::finish,
                     onSelectedDeleteDownloads = viewModel::deleteDownloadsSelected,
                     onSelectedDownload = viewModel::downloadSelected,
                     onSelectedSetRead = viewModel::setAsReadSelected,
+                    onSelectedSetUnread = viewModel::setAsUnreadSelected,
                     onSelectedSetReadUpToChapterRead = viewModel::setAsReadUpToSelected,
                     onSelectedSetReadUpToChapterUnread = viewModel::setAsReadUpToUnSelected,
-                    onSelectedSetUnread = viewModel::setAsUnreadSelected,
                     onSelectedInvertSelection = viewModel::invertSelection,
                     onSelectAllChapters = viewModel::selectAll,
                     onCloseSelectionBar = viewModel::unselectAll,
@@ -79,7 +79,8 @@ class ChaptersActivity : BaseActivity() {
                     onCoverLongClick = { searchBookInDatabase(input = viewModel.bookTitle) },
                     onChangeCover = onDoAskForImage { viewModel.saveImageAsCover(it) },
                     onOpenInBrowser = { navigationRoutes.webView(this, url = it).let(::startActivity) },
-                    onGlobalSearchClick = { navigationRoutes.globalSearch(this, text = it).let(::startActivity) }
+                    onGlobalSearchClick = { navigationRoutes.globalSearch(this, text = it).let(::startActivity) },
+                    scraper = viewModel.scraper,
                 )
             }
         }

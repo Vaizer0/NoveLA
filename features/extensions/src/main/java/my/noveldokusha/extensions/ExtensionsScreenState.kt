@@ -25,6 +25,7 @@ data class ExtensionInfo(
     val description: String,
     val author: String,
     val version: String,
+    val remoteVersion: String = "", // Удаленная версия из YAML
     val codeUrl: String,
     val iconUrl: String,
     val language: String,

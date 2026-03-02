@@ -38,5 +38,6 @@ data class SourceMetadata(
     val description: String,
     val url: String,
     val icon: String,
-    val language: String
+    val language: String,
+    val charset: String? = null
 )

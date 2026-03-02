@@ -48,6 +48,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +67,12 @@ import com.skydoves.landscapist.glide.GlideImage
 import my.noveldokusha.core.Extension
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
+import timber.log.Timber
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.R
+
 
 @Composable
 fun ExtensionsScreen(
@@ -188,7 +195,7 @@ private fun UnifiedExtensionsScreen(
                                 Text(
                                     text = "Installed",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = colorAccent(),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier
                                         .padding(horizontal = 16.dp)
                                         .padding(top = 8.dp),
@@ -208,7 +215,7 @@ private fun UnifiedExtensionsScreen(
                                 Text(
                                     text = "Available",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = colorAccent(),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier
                                         .padding(horizontal = 16.dp)
                                         .padding(top = 8.dp),
@@ -285,6 +292,28 @@ private fun RepositoryUrlDialog(
     )
 }
 
+private fun getLanguageDisplayName(code: String): String {
+    if (code == "multi") return "Multilanguage"
+    if (code == "zh") return "Chinese"
+    if (code == "en") return "English"
+    if (code == "ru") return "Russian"
+    if (code == "es") return "Spanish"
+    if (code == "fr") return "French"
+    if (code == "pt") return "Portuguese"
+    if (code == "id") return "Indonesian"
+    if (code == "vi") return "Vietnamese"
+    if (code == "de") return "German"
+    if (code == "tr") return "Turkish"
+    if (code == "pl") return "Polish"
+    return try {
+        val locale = java.util.Locale.forLanguageTag(code)
+        locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercaseChar() }
+            .takeIf { it.isNotBlank() && it != code } ?: code.uppercase()
+    } catch (e: Exception) {
+        code.uppercase()
+    }
+}
+
 @Composable
 private fun ExtensionListItem(
     extension: ExtensionInfo,
@@ -326,14 +355,23 @@ private fun ExtensionListItem(
         },
         supportingContent = {
             Text(
-                text = "Language: ${extension.language}",
+                text = "Language: ${getLanguageDisplayName(extension.language)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            val versionText = if (extension.isUpdateAvailable) {
+                "v${extension.version} < v${extension.remoteVersion}"
+            } else {
+                "v${extension.version}"
+            }
+            Timber.d("Extension UI: ${extension.name}, version: $versionText, isUpdateAvailable: ${extension.isUpdateAvailable}, remoteVersion: ${extension.remoteVersion}")
             Text(
-                text = "v${extension.version}",
+                text = versionText,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (extension.isUpdateAvailable)
+                    MaterialTheme.colorScheme.tertiary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         leadingContent = {

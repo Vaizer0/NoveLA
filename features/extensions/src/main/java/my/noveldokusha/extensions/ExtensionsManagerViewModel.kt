@@ -112,19 +112,22 @@ class ExtensionsManagerViewModel @Inject constructor(
                         sources.forEach { src ->
                             val id = src["id"] as String
                             val installedVer = getInstalledVersion(id)
+                            val remoteVer = src["version"] as? String ?: "1.0.0"
+                            Timber.d("Processing extension: $id, installed: $installedVer, remote: $remoteVer")
                             allExt.add(
                                 ExtensionInfo(
                                     id               = id,
-                                    name             = src["name"] as String,
-                                    description      = src["description"] as? String ?: "",
-                                    author           = src["author"] as? String ?: "",
-                                    version          = src["version"] as String,
-                                    codeUrl          = src["url"] as String,
-                                    iconUrl          = src["icon"] as? String ?: "",
+                                    name             = src["name"] as? String ?: "Unknown",
+                                    description      = src.get("description") as? String ?: "",
+                                    author           = src.get("author") as? String ?: "",
+                                    version          = installedVer ?: remoteVer ?: "1.0.0",
+                                    remoteVersion    = remoteVer, // Удаленная версия из YAML
+                                    codeUrl          = src["url"] as String, // Поле называется "url" в YAML
+                                    iconUrl          = src["icon"] as String,
                                     language         = langCode,
                                     isInstalled      = installedVer != null,
                                     isEnabled        = isEnabled(id),
-                                    isUpdateAvailable = isUpdateAvailable(src["version"] as String, installedVer)
+                                    isUpdateAvailable = isUpdateAvailable(remoteVer, installedVer)
                                 )
                             )
                         }
@@ -161,9 +164,12 @@ class ExtensionsManagerViewModel @Inject constructor(
         _state.update { state ->
             state.copy(
                 availableExtensions = cachedAvailableExtensions!!.map { ext ->
+                    val installedVer = getInstalledVersion(ext.id)
                     ext.copy(
-                        isInstalled = getInstalledVersion(ext.id) != null,
-                        isEnabled   = isEnabled(ext.id)
+                        isInstalled       = installedVer != null,
+                        isEnabled         = isEnabled(ext.id),
+                        version           = installedVer ?: ext.version,
+                        isUpdateAvailable = isUpdateAvailable(ext.remoteVersion, installedVer)
                     )
                 }
             )
@@ -191,11 +197,11 @@ class ExtensionsManagerViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Шаг 2: Записать в БД
+                // Шаг 2: Записать в БД с НОВОЙ версией
                 extensionManager.installExtensionFromInfo(
                     id       = extensionId,
                     name     = extInfo.name,
-                    version  = extInfo.version,
+                    version  = extInfo.remoteVersion, // Используем новую версию!
                     language = extInfo.language,
                     imageUrl = extInfo.iconUrl,
                     codeUrl  = extInfo.codeUrl
@@ -286,7 +292,7 @@ class ExtensionsManagerViewModel @Inject constructor(
                     ext.copy(
                         isInstalled       = installedVer != null,
                         isEnabled         = isEnabled(ext.id),
-                        isUpdateAvailable = isUpdateAvailable(ext.version, installedVer)
+                        isUpdateAvailable = isUpdateAvailable(ext.remoteVersion, installedVer)
                     )
                 }
             )

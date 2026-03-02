@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.components.ErrorView
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
+import my.noveldokusha.scraper.Scraper
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -43,6 +44,7 @@ internal fun ChaptersScreenBody(
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
+    scraper: Scraper,
 ) {
     var isRefreshingDelayed by remember { mutableStateOf(state.isRefreshing.value) }
     LaunchedEffect(Unit) {
@@ -129,9 +131,14 @@ internal fun ChaptersScreenBody(
             ) {
                 ChaptersScreenHeader(
                     bookState = state.book.value,
-                    sourceCatalogName = stringResource(
-                        id = state.sourceCatalogNameStrRes.value ?: R.string.invalid_source
-                    ),
+                    sourceCatalogName = if (state.sourceCatalogNameStrRes.value == 0) {
+                        // Для Lua источников используем динамическое имя
+                        val source = scraper.getCompatibleSource(state.book.value.url)
+                        source?.name ?: stringResource(R.string.invalid_source)
+                    } else {
+                        // Для нативных источников используем строковый ресурс
+                        stringResource(id = state.sourceCatalogNameStrRes.value ?: R.string.invalid_source)
+                    },
                     numberOfChapters = state.chapters.size,
                     paddingValues = innerPadding,
                     modifier = Modifier.padding(bottom = 12.dp),

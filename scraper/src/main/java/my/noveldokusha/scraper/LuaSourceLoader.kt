@@ -59,7 +59,15 @@ class LuaEngine @Inject constructor(
         registerApi(globals)
         globals.load(scriptContent).call()
         // Передаём globals в адаптер, а не результат call()
-        return LuaSourceAdapter(context, globals, this, iconUrl)
+        return LuaSourceAdapter(context, globals, this, iconUrl, null)
+    }
+
+    suspend fun loadFromScriptWithFileName(scriptContent: String, fileName: String, iconUrl: String? = null): SourceInterface.Catalog {
+        val globals = JsePlatform.standardGlobals()
+        registerApi(globals)
+        globals.load(scriptContent).call()
+        // Передаём globals в адаптер, а не результат call()
+        return LuaSourceAdapter(context, globals, this, iconUrl, fileName)
     }
 
     private fun registerApi(g: Globals) {
@@ -353,9 +361,22 @@ class LuaEngine @Inject constructor(
      */
     private inner class HtmlTextFunction : OneArgFunction() {
         override fun call(arg: LuaValue): LuaValue = try {
-            val html = htmlFromValue(arg)
-            LuaValue.valueOf(TextExtractor.get(Jsoup.parse(html).body()))
-        } catch (e: Exception) { Timber.e(e, "html_text"); LuaValue.NIL }
+            val html = arg.tojstring()
+
+            // ЛОГ: Проверяем первые 50 символов входящего HTML
+            Timber.d("LuaEngine: html_text input (start): ${html.take(50)}")
+
+            val doc = Jsoup.parseBodyFragment(html)
+            val text = TextExtractor.get(doc.body())
+
+            // ЛОГ: Проверяем результат экстракции
+            Timber.d("LuaEngine: html_text output (start): ${text.take(50)}")
+
+            LuaValue.valueOf(text)
+        } catch (e: Exception) {
+            Timber.e(e, "html_text failed")
+            LuaValue.NIL
+        }
     }
 
     /**
@@ -666,7 +687,7 @@ class LuaSourceLoader @Inject constructor(
         if (!file.exists()) return null
         return try {
             val script = luaEngine.loadScript(file.readText(Charsets.UTF_8))
-            LuaSourceAdapter(context, script, luaEngine, iconUrl)
+            LuaSourceAdapter(context, script, luaEngine, iconUrl, id)
                 .also { cache[id] = it; Timber.d("Loaded from disk: $id") }
         } catch (e: Exception) {
             Timber.e(e, "Compile error for $id")

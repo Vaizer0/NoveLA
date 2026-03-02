@@ -70,6 +70,7 @@ import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.feature.local_database.ChapterWithContext
+import my.noveldokusha.scraper.Scraper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,6 +99,7 @@ internal fun ChaptersScreen(
     onChangeCover: () -> Unit,
     onOpenInBrowser: (url: String) -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
+    scraper: Scraper,
 ) {
     var showDropDown by rememberSaveable { mutableStateOf(false) }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
@@ -254,6 +256,7 @@ internal fun ChaptersScreen(
                 onPullRefresh = onPullRefresh,
                 onCoverLongClick = onCoverLongClick,
                 onGlobalSearchClick = onGlobalSearchClick,
+                scraper = scraper,
             )
             Box(Modifier.padding(innerPadding)) {
                 InternalLazyColumnScrollbar(state = lazyListState)
