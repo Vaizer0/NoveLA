@@ -225,6 +225,7 @@
     <string name="invalid_source">Invalid source</string>
     <string name="language_english">English</string>
     <string name="language_multilanguage">MultiLanguage</string>
+    <string name="language_MTL">MTL</string>
     <string name="language_portuguese">Portuguese</string>
     <string name="language_spanish">Spanish</string>
     <string name="language_french">French</string>

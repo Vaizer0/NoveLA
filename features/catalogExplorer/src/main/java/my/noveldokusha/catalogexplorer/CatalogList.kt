@@ -42,6 +42,7 @@ import my.noveldokusha.scraper.displayName
 import my.noveldokusha.scraper.fixtures.fixturesCatalogList
 import my.noveldokusha.scraper.fixtures.fixturesDatabaseList
 import java.util.Locale
+import my.noveldokusha.core.getLanguageDisplayName
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -197,17 +198,6 @@ internal fun CatalogList(
                 }
             )
         }
-    }
-}
-
-private fun getLanguageDisplayName(code: String): String {
-    if (code == "multi") return "Multilanguage"
-    return try {
-        val locale = Locale.forLanguageTag(code)
-        locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercaseChar() }
-            .takeIf { it.isNotBlank() && it != code } ?: code.uppercase()
-    } catch (e: Exception) {
-        code.uppercase()
     }
 }
 

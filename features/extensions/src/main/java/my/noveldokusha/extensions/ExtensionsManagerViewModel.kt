@@ -17,6 +17,7 @@ import my.noveldokusha.scraper.LuaSourceLoader
 import my.noveldokusha.data.ScraperRepository
 import org.yaml.snakeyaml.Yaml
 import timber.log.Timber
+import my.noveldokusha.core.getLanguageDisplayName
 import javax.inject.Inject
 
 @HiltViewModel
@@ -328,14 +329,4 @@ class ExtensionsManagerViewModel @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-    private fun getLanguageDisplayName(code: String): String {
-        if (code == "multi") return "Multilanguage"
-        return try {
-            val locale = java.util.Locale.forLanguageTag(code)
-            locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercaseChar() }
-                .takeIf { it.isNotBlank() && it != code } ?: code.uppercase()
-        } catch (e: Exception) {
-            code.uppercase()
-        }
-    }
 }

@@ -5,6 +5,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -59,7 +61,7 @@ class LuaEngine @Inject constructor(
         registerApi(globals)
         globals.load(scriptContent).call()
         // Передаём globals в адаптер, а не результат call()
-        return LuaSourceAdapter(context, globals, this, iconUrl, null)
+        return createLuaSourceAdapter(context, globals, this, iconUrl, null)
     }
 
     suspend fun loadFromScriptWithFileName(scriptContent: String, fileName: String, iconUrl: String? = null): SourceInterface.Catalog {
@@ -67,7 +69,7 @@ class LuaEngine @Inject constructor(
         registerApi(globals)
         globals.load(scriptContent).call()
         // Передаём globals в адаптер, а не результат call()
-        return LuaSourceAdapter(context, globals, this, iconUrl, fileName)
+        return createLuaSourceAdapter(context, globals, this, iconUrl, fileName)
     }
 
     private fun registerApi(g: Globals) {
@@ -90,6 +92,7 @@ class LuaEngine @Inject constructor(
         g.set("html_attr",              HtmlAttrFunction()             as LuaValue)
         g.set("html_text",              HtmlTextFunction()             as LuaValue)
         g.set("html_remove",            HtmlRemoveFunction()           as LuaValue)
+        g.set("http_get_batch",         HttpGetBatchFunction()         as LuaValue)
         // URL
         g.set("url_encode",             UrlEncodeFunction()            as LuaValue)
         g.set("url_encode_charset",     UrlEncodeCharsetFunction()     as LuaValue)
@@ -102,6 +105,7 @@ class LuaEngine @Inject constructor(
         g.set("string_trim",            StringTrimFunction()           as LuaValue)
         g.set("string_starts_with",     StringStartsWithFunction()     as LuaValue)
         g.set("string_ends_with",       StringEndsWithFunction()       as LuaValue)
+        g.set("string_clean",           StringCleanFunction()          as LuaValue)
         g.set("unescape_unicode",       UnescapeUnicodeFunction()      as LuaValue)
         // JSON
         g.set("json_parse",             JsonParseFunction()            as LuaValue)
@@ -118,30 +122,38 @@ class LuaEngine @Inject constructor(
 
     // ── Google Translate ──────────────────────────────────────────────────────
 
-    private inner class GoogleTranslateFunction : ThreeArgFunction() {
+    // google_translate(text, sourceLang, targetLang [, origin])
+    // origin — baseUrl плагина. ОБЯЗАТЕЛЕН для translate-pa.googleapis.com, иначе 400.
+    private inner class GoogleTranslateFunction : VarArgFunction() {
         private val apiKey = String(
             android.util.Base64.decode(
-                "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldISG1PNTIw",
+                "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldESG1PNTIw",
                 android.util.Base64.DEFAULT
             )
         ).trim()
         private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
 
-        override fun call(text: LuaValue, sourceLang: LuaValue, targetLang: LuaValue): LuaValue {
-            val t  = text.tojstring()
-            val sl = sourceLang.tojstring()
-            val tl = targetLang.tojstring()
+        override fun invoke(args: Varargs): Varargs {
+            val t      = args.arg(1).tojstring()
+            val sl     = args.arg(2).tojstring()
+            val tl     = args.arg(3).tojstring()
+            val origin = args.arg(4).optjstring("")
             val payload = listOf(listOf(t, sl, tl), "wt_lib")
             val requestBody = gson.toJson(payload).toRequestBody("application/json+protobuf".toMediaType())
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(translateUrl)
                 .addHeader("X-Goog-Api-Key", apiKey)
                 .post(requestBody)
-                .build()
+            if (origin.isNotEmpty()) {
+                requestBuilder.addHeader("Origin", origin.trimEnd('/'))
+            }
             return try {
                 runBlocking {
-                    networkClient.call(request.newBuilder()).use { response ->
-                        if (!response.isSuccessful) return@use LuaValue.valueOf(t)
+                    networkClient.call(requestBuilder).use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.e("LuaEngine: Google Translate HTTP ${response.code} (origin='$origin')")
+                            return@use LuaValue.valueOf(t)
+                        }
                         val body = response.body?.string() ?: return@use LuaValue.valueOf(t)
                         val arr = JsonParser.parseString(body).asJsonArray
                         LuaValue.valueOf(arr.get(0).asJsonArray.get(0).asString)
@@ -223,6 +235,36 @@ class LuaEngine @Inject constructor(
         val map = mutableMapOf<String, String>()
         table.keys().forEach { map[it.tojstring()] = table.get(it).tojstring() }
         return map
+    }
+
+    // http_get_batch(urls_table) → массив { success, body, code } в том же порядке
+    private inner class HttpGetBatchFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue {
+            val urlTable = arg.checktable()
+            val urls = (1..urlTable.length()).map { urlTable.get(it).checkjstring() }
+
+            val results = runBlocking {
+                urls.map { url ->
+                    async(Dispatchers.IO) {
+                        try {
+                            networkClient.getWithHeaders(url, emptyMap()).use { r ->
+                                val body = r.body?.string() ?: ""
+                                Triple(r.isSuccessful, body, r.code)
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "http_get_batch failed: $url")
+                            Triple(false, "", 0)
+                        }
+                    }
+                }.awaitAll()
+            }
+
+            return LuaTable().also { out ->
+                results.forEachIndexed { i, (success, body, code) ->
+                    out.set(i + 1, responseTable(success, body, code))
+                }
+            }
+        }
     }
 
     // ── Preferences ───────────────────────────────────────────────────────────
@@ -397,6 +439,17 @@ class LuaEngine @Inject constructor(
                 Timber.e(e, "html_remove")
                 args.arg(1)
             }
+        }
+    }
+
+    // string_clean(str) — normalize Unicode + collapse whitespace + trim
+// Эквивалент Kotlin: Clean() = normalizeUnicode().regexReplace("""\s+""", " ").trim()
+    private inner class StringCleanFunction : OneArgFunction() {
+        override fun call(arg: LuaValue): LuaValue {
+            val s = arg.optjstring("") ?: return LuaValue.valueOf("")
+            val normalized = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFKC)
+            val collapsed  = normalized.replace(Regex("""\s+"""), " ").trim()
+            return LuaValue.valueOf(collapsed)
         }
     }
 
@@ -687,7 +740,7 @@ class LuaSourceLoader @Inject constructor(
         if (!file.exists()) return null
         return try {
             val script = luaEngine.loadScript(file.readText(Charsets.UTF_8))
-            LuaSourceAdapter(context, script, luaEngine, iconUrl, id)
+            createLuaSourceAdapter(context, script, luaEngine, iconUrl, id)
                 .also { cache[id] = it; Timber.d("Loaded from disk: $id") }
         } catch (e: Exception) {
             Timber.e(e, "Compile error for $id")

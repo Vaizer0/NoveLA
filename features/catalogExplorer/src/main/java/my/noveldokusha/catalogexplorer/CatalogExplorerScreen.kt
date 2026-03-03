@@ -133,9 +133,11 @@ fun CatalogExplorerScreen(
                                     // Show dropdown for Browse tab
                                     LanguagesDropDown(
                                         expanded = languagesOptionsExpanded,
-                                        languageItemList = viewModel.languagesList,
                                         onDismiss = { languagesOptionsExpanded = false },
-                                        onSourceLanguageItemToggle = { viewModel.toggleSourceLanguage(it.language) },
+                                        availableLanguages = viewModel.availableLanguages,
+                                        selectedLanguages = viewModel.selectedLanguages,
+                                        onLanguageToggle = { viewModel.toggleSourceLanguage(it) },
+                                        onClearAll = { viewModel.clearLanguageFilter() },
                                         sortOrder = viewModel.sortOrder,
                                         onSortOrderChange = viewModel::onSortOrderChange
                                     )
@@ -146,7 +148,7 @@ fun CatalogExplorerScreen(
                             val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
                             val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
                             var settingsExpanded by remember { mutableStateOf(false) }
-                            
+
                             Row {
                                 // Refresh button
                                 IconButton(
@@ -158,7 +160,7 @@ fun CatalogExplorerScreen(
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                
+
                                 // Repository settings button
                                 IconButton(
                                     onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) }
@@ -169,7 +171,7 @@ fun CatalogExplorerScreen(
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                
+
                                 // Sort and language filter combined
                                 Box {
                                     IconButton(
@@ -182,7 +184,7 @@ fun CatalogExplorerScreen(
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
-                                    
+
                                     // Combined dropdown with same design as LanguagesDropDown
                                     DropdownMenu(
                                         expanded = settingsExpanded,
@@ -258,7 +260,7 @@ fun CatalogExplorerScreen(
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     ),
                                                 )
-                                                
+
                                                 // Available languages
                                                 extensionsState.availableLanguages.forEach { language ->
                                                     MyButton(
@@ -308,21 +310,21 @@ fun CatalogExplorerScreen(
                     Tab(
                         selected = viewModel.selectedTabIndex == 0,
                         onClick = { viewModel.setTabIndex(0) },
-                        text = { 
+                        text = {
                             Text(
-                                text = "Browse", 
+                                text = "Browse",
                                 color = MaterialTheme.colorScheme.onPrimary
-                            ) 
+                            )
                         }
                     )
                     Tab(
                         selected = viewModel.selectedTabIndex == 1,
                         onClick = { viewModel.setTabIndex(1) },
-                        text = { 
+                        text = {
                             Text(
-                                text = "Extensions", 
+                                text = "Extensions",
                                 color = MaterialTheme.colorScheme.onPrimary
-                            ) 
+                            )
                         }
                     )
                 }
@@ -332,10 +334,17 @@ fun CatalogExplorerScreen(
             when (viewModel.selectedTabIndex) {
                 0 -> {
                     // Browse tab content
+                    val filteredSources = if (viewModel.selectedLanguages.isEmpty()) {
+                        viewModel.sourcesList
+                    } else {
+                        viewModel.sourcesList.filter {
+                            it.catalog.language?.iso639_1 in viewModel.selectedLanguages
+                        }
+                    }
                     CatalogList(
                         innerPadding = innerPadding,
                         databasesList = viewModel.databaseList,
-                        sourcesList = viewModel.sourcesList,
+                        sourcesList = filteredSources,
                         sortOrder = viewModel.sortOrder,
                         onDatabaseClick = {
                             navigationRouteViewModel.databaseSearch(
@@ -366,10 +375,17 @@ fun CatalogExplorerScreen(
                 }
                 else -> {
                     // Default to Browse tab
+                    val filteredSourcesElse = if (viewModel.selectedLanguages.isEmpty()) {
+                        viewModel.sourcesList
+                    } else {
+                        viewModel.sourcesList.filter {
+                            it.catalog.language?.iso639_1 in viewModel.selectedLanguages
+                        }
+                    }
                     CatalogList(
                         innerPadding = innerPadding,
                         databasesList = viewModel.databaseList,
-                        sourcesList = viewModel.sourcesList,
+                        sourcesList = filteredSourcesElse,
                         sortOrder = viewModel.sortOrder,
                         onDatabaseClick = {
                             navigationRouteViewModel.databaseSearch(

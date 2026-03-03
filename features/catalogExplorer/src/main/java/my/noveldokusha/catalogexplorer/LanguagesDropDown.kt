@@ -9,31 +9,28 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.coreui.components.MyButton
-import my.noveldokusha.data.LanguageItem
 import my.noveldokusha.core.appPreferences.SortOrder
+import my.noveldokusha.coreui.components.MyButton
 
 @Composable
 internal fun LanguagesDropDown(
     expanded: Boolean,
     onDismiss: () -> Unit,
-    languageItemList: List<LanguageItem>,
-    onSourceLanguageItemToggle: (LanguageItem) -> Unit,
+    availableLanguages: List<SourceLanguage>,
+    selectedLanguages: Set<String>,
+    onLanguageToggle: (String) -> Unit,
+    onClearAll: () -> Unit,
     sortOrder: SortOrder,
-    onSortOrderChange: (SortOrder) -> Unit
+    onSortOrderChange: (SortOrder) -> Unit,
 ) {
-    val selectedLanguages = languageItemList.filter { it.active }
-
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
@@ -46,8 +43,11 @@ internal fun LanguagesDropDown(
                 .padding(8.dp)
                 .widthIn(min = 128.dp)
         ) {
-            // Sort section
-            Text(text = "Sort Order")
+            Text(
+                text = "Sort Order",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
             OutlinedCard {
                 MyButton(
                     text = "Name (A-Z)",
@@ -79,14 +79,36 @@ internal fun LanguagesDropDown(
                 )
             }
 
-            // Languages section
-            Text(text = "Language Filter")
+            Text(
+                text = "Language Filter",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
             OutlinedCard {
-                languageItemList.forEach { lang ->
+                // "All Languages" — сбрасывает фильтр и закрывает дропдаун, как в Extensions
+                MyButton(
+                    text = "All Languages",
+                    onClick = {
+                        onClearAll()
+                        onDismiss()
+                    },
+                    selected = selectedLanguages.isEmpty(),
+                    selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                    borderWidth = Dp.Unspecified,
+                    textAlign = TextAlign.Center,
+                    outerPadding = 0.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(0.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                )
+                // Конкретный язык — не закрывает дропдаун (мультиселект), как в Extensions
+                availableLanguages.forEach { lang ->
                     MyButton(
-                        text = stringResource(id = lang.language.nameResId),
-                        onClick = { onSourceLanguageItemToggle(lang) },
-                        selected = lang.active,
+                        text = lang.name,
+                        onClick = { onLanguageToggle(lang.code) },
+                        selected = lang.code in selectedLanguages,
                         selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
                         borderWidth = Dp.Unspecified,
                         textAlign = TextAlign.Center,

@@ -1,5 +1,6 @@
 package my.noveldokusha.catalogexplorer
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -8,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.LanguageCode
+import my.noveldokusha.core.getLanguageDisplayName
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
@@ -26,32 +28,46 @@ internal class CatalogExplorerViewModel @Inject constructor(
     private val appScope: AppCoroutineScope,
     val scraperRepository: ScraperRepository,
 ) : BaseViewModel() {
-    
+
     var selectedTabIndex by mutableStateOf(0)
         private set
-    
+
     fun setTabIndex(index: Int) {
         selectedTabIndex = index
     }
-    
+
     val databaseList = scraperRepository.databaseList()
     val sourcesList by scraperRepository.sourcesCatalogListFlow()
         .toState(viewModelScope, listOf())
 
-    val languagesList by scraperRepository.sourcesLanguagesListFlow()
-        .toState(viewModelScope, listOf())
-
     val sortOrder by appPreferences.SOURCE_SORT_ORDER.state(viewModelScope)
+
+    // Список языков динамически из реальных источников — реактивно через derivedStateOf
+    val availableLanguages: List<SourceLanguage> by derivedStateOf {
+        sourcesList
+            .mapNotNull { it.catalog.language?.iso639_1 }
+            .distinct()
+            .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
+            .sortedBy { it.name }
+    }
+
+    // Выбранные языки — Set<String> кодов, как в Extensions
+    var selectedLanguages by mutableStateOf(appPreferences.SOURCES_LANGUAGES_ISO639_1.value)
+        private set
 
     var showAddByUrlDialog by mutableStateOf(false)
 
-    fun toggleSourceLanguage(languageCode: LanguageCode) {
-        val languages = appPreferences.SOURCES_LANGUAGES_ISO639_1.value
-        appPreferences.SOURCES_LANGUAGES_ISO639_1.value =
-            when (languageCode.iso639_1 in languages) {
-                true -> languages - languageCode.iso639_1
-                false -> languages + languageCode.iso639_1
-            }
+    fun toggleSourceLanguage(code: String) {
+        selectedLanguages = if (code in selectedLanguages)
+            selectedLanguages - code
+        else
+            selectedLanguages + code
+        appPreferences.SOURCES_LANGUAGES_ISO639_1.value = selectedLanguages
+    }
+
+    fun clearLanguageFilter() {
+        selectedLanguages = emptySet()
+        appPreferences.SOURCES_LANGUAGES_ISO639_1.value = emptySet()
     }
 
     fun onSourceSetPinned(id: String, pinned: Boolean) {
@@ -259,3 +275,5 @@ internal class CatalogExplorerViewModel @Inject constructor(
         }
     }
 }
+
+data class SourceLanguage(val code: String, val name: String)

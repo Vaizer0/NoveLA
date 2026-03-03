@@ -1,6 +1,7 @@
 package my.noveldokusha.scraper
 
 import android.content.Context
+import androidx.compose.runtime.Composable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.LanguageCode
@@ -18,44 +19,67 @@ import timber.log.Timber
 /**
  * Адаптер для Lua источников, реализующий SourceInterface.Catalog.
  *
- * [iconUrlFromYaml] — иконка берётся из YAML-конфига при установке расширения
- * и передаётся сюда через LuaSourceLoader / LuaEngine.loadFromScript.
+ * [iconUrlFromYaml] — иконка из YAML-конфига при установке расширения.
+ * Приоритет иконки: YAML → Lua-скрипт → null.
+ * YAML является авторитетным источником — он может исправить неверную иконку в Lua.
+ *
+ * Настройки: если плагин объявляет getSettingsSchema() — адаптер реализует
+ * SourceInterface.Configurable и кнопка настроек появляется только для него.
  */
-class LuaSourceAdapter(
-    private val context: Context,
-    private val luaScript: LuaValue,
-    private val luaEngine: LuaEngine,
-    private val iconUrlFromYaml: String? = null,
-    private val fileName: String?
+/**
+ * Фабричный метод — возвращает LuaSourceAdapter или LuaSourceAdapterConfigurable
+ * в зависимости от наличия getSettingsSchema() в плагине.
+ */
+fun createLuaSourceAdapter(
+    context: Context,
+    luaScript: LuaValue,
+    luaEngine: LuaEngine,
+    iconUrlFromYaml: String? = null,
+    fileName: String?
+): LuaSourceAdapter {
+    val schema = parseLuaSettingsSchema(luaScript)
+    return if (schema != null) {
+        LuaSourceAdapterConfigurable(context, luaScript, luaEngine, iconUrlFromYaml, fileName, schema)
+    } else {
+        LuaSourceAdapter(context, luaScript, luaEngine, iconUrlFromYaml, fileName)
+    }
+}
+
+open class LuaSourceAdapter(
+    protected val context: Context,
+    protected val luaScript: LuaValue,
+    protected val luaEngine: LuaEngine,
+    protected val iconUrlFromYaml: String? = null,
+    protected val fileName: String?
 ) : SourceInterface.Catalog {
 
     // Метаданные читаем из Lua один раз при создании
     private val metadata: SourceMetadata = extractMetadata()
 
-
-    override val id: String         = metadata.id
-    override val nameStrId: Int     = 0               // Lua источники не используют R.string
-    override val name: String       = metadata.name.ifEmpty { "Unknown" }
-    override val baseUrl: String    = metadata.url.ifEmpty {
+    override val id: String      = metadata.id
+    override val nameStrId: Int  = 0
+    override val name: String    = metadata.name.ifEmpty { "Unknown" }
+    override val baseUrl: String = metadata.url.ifEmpty {
         try { luaScript.get("baseUrl").optjstring("") } catch (_: Exception) { "" }
     }
-    override val catalogUrl: String  = baseUrl
-    override val language: LanguageCode? = fromIso639_1(metadata.language)
-    override val iconResId: Int?    = null
+    override val catalogUrl: String = baseUrl
     override val charset: String = metadata.charset ?: "UTF-8"
 
+    override val language: LanguageCode? = when (metadata.language.lowercase().trim()) {
+        "Mtl", "multi" -> LanguageCode.MTL
+        else -> fromIso639_1(metadata.language)
+    }
 
-    /**
-     * Приоритет иконки:
-     * 1. iconUrlFromYaml  — из YAML конфига (самый надёжный, там всегда полный URL)
-     * 2. icon из Lua скрипта (если вдруг прописан)
-     * 3. null — UI покажет placeholder
-     */
+    override val iconResId: Int? = null
+
     override val iconUrl: String? = iconUrlFromYaml
         ?: metadata.icon.takeIf { it.isNotEmpty() }?.let { icon ->
             if (icon.startsWith("http")) icon
             else "${baseUrl.trimEnd('/')}/$icon"
         }
+
+    // Настройки доступны только в LuaSourceAdapterConfigurable (подкласс).
+    // Создавай через фабричный метод createLuaSourceAdapter().
 
     init {
         validateLuaScript()
@@ -76,7 +100,7 @@ class LuaSourceAdapter(
             url         = s("baseUrl"),
             icon        = s("icon"),
             language    = s("language", "en"),
-            charset     = s("charset").takeIf { it.isNotBlank() } // ← новое поле
+            charset     = s("charset").takeIf { it.isNotBlank() }
         )
     }
 
@@ -176,9 +200,12 @@ class LuaSourceAdapter(
 
     override suspend fun getChapterText(doc: Document): String? {
         val html = doc.outerHtml()
-        val url = doc.location() // получаем URL
+        val url  = doc.location()
         Timber.d("LuaSourceAdapter: url='$url'")
-        return luaScript.get("getChapterText").call(LuaValue.valueOf(html), LuaValue.valueOf(url)).optjstring(null)
+        return luaScript.get("getChapterText").call(
+            LuaValue.valueOf(html),
+            LuaValue.valueOf(url)
+        ).optjstring(null)
     }
 
     override suspend fun getChapterListHash(bookUrl: String): Response<String?> =
@@ -224,4 +251,25 @@ class LuaSourceAdapter(
         url    = table.get("url").optjstring(""),
         volume = table.get("volume").optjstring(null)
     )
+}
+
+/**
+ * Подкласс LuaSourceAdapter для плагинов с getSettingsSchema().
+ * Реализует SourceInterface.Configurable — UI подхватывает автоматически
+ * через стандартный `is SourceInterface.Configurable`, без изменений в UI-коде.
+ */
+class LuaSourceAdapterConfigurable(
+    context: Context,
+    luaScript: LuaValue,
+    luaEngine: LuaEngine,
+    iconUrlFromYaml: String? = null,
+    fileName: String?,
+    private val schema: List<LuaSetting>
+) : LuaSourceAdapter(context, luaScript, luaEngine, iconUrlFromYaml, fileName),
+    SourceInterface.Configurable {
+
+    @Composable
+    override fun ScreenConfig() {
+        LuaSettingsScreen(context, schema, luaScript)
+    }
 }

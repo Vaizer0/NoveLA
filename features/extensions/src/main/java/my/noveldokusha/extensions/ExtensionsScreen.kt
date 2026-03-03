@@ -69,6 +69,7 @@ import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
 import timber.log.Timber
 import java.util.Locale
+import my.noveldokusha.core.getLanguageDisplayName
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.R
@@ -107,7 +108,7 @@ private fun UnifiedExtensionsScreen(
     onRefresh: (() -> Unit)? = null
 ) {
     var languageFilterExpanded by remember { mutableStateOf(false) }
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -292,27 +293,6 @@ private fun RepositoryUrlDialog(
     )
 }
 
-private fun getLanguageDisplayName(code: String): String {
-    if (code == "multi") return "Multilanguage"
-    if (code == "zh") return "Chinese"
-    if (code == "en") return "English"
-    if (code == "ru") return "Russian"
-    if (code == "es") return "Spanish"
-    if (code == "fr") return "French"
-    if (code == "pt") return "Portuguese"
-    if (code == "id") return "Indonesian"
-    if (code == "vi") return "Vietnamese"
-    if (code == "de") return "German"
-    if (code == "tr") return "Turkish"
-    if (code == "pl") return "Polish"
-    return try {
-        val locale = java.util.Locale.forLanguageTag(code)
-        locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercaseChar() }
-            .takeIf { it.isNotBlank() && it != code } ?: code.uppercase()
-    } catch (e: Exception) {
-        code.uppercase()
-    }
-}
 
 @Composable
 private fun ExtensionListItem(

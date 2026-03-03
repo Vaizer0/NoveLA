@@ -26,11 +26,9 @@ class ScraperRepository @Inject constructor(
     fun sourcesCatalogListFlow(): Flow<List<CatalogItem>> =
         combine(
             scraper.sourcesCatalogListFlow,
-            appPreferences.SOURCES_LANGUAGES_ISO639_1.flow(),
             appPreferences.FINDER_SOURCES_PINNED.flow()
-        ) { catalogs, activeLanguages, pinnedIds ->
+        ) { catalogs, pinnedIds ->
             catalogs
-                .filter { it.language == null || it.language?.iso639_1 in activeLanguages }
                 .map { CatalogItem(catalog = it, pinned = it.id in pinnedIds) }
                 .sortedByDescending { it.pinned }
         }.flowOn(Dispatchers.Default)
