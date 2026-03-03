@@ -16,7 +16,7 @@ Focused on immersion, simplicity, and convenient reading of foreign content.
 
 ## 📖 Description
 
-**Novela** is an open-source Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.
+**NoveLA** is an open-source Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.
 
 The app is designed for convenient reading of foreign content: find a novel, open a chapter, and translate text instantly inside the reader.
 
@@ -40,9 +40,21 @@ Main focus:
 
 ---
 
+### 🧩 External Plugin Repository
+
+NoveLA supports external Lua-based plugin repositories, allowing community-maintained sources to be installed directly from the app.
+
+**Official external repository:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
+
+To add it: go to **Finder → Extensions → ⚙️ Settings** and paste the repository URL.
+
+Community contributions (new sources, fixes) are welcome via pull requests to the external repository.
+
+---
+
 ### 📚 Multi-Source Support
 
-Complete list of supported sources:
+Complete list of built-in sources:
 
 #### 🇨🇳 Chinese sources
 - 69书吧  
@@ -76,9 +88,8 @@ Complete list of supported sources:
 
 #### 🇮🇩 Indonesian sources
 - BacaLightnovel  
-- Novelku  
 
-#### 🌐 Multilanguage sources
+#### 🌐 MTL sources
 - WTR-LAB  
 
 #### 📄 Local source
@@ -113,6 +124,7 @@ Additional features:
 - Backup and restore support
 
 ---
+
 ## 🖼 Screenshots
 <details open>
 <summary>Show screenshots</summary>
@@ -120,27 +132,27 @@ Additional features:
   <tr>
     <td align="center"><b>Library</b><br><img src="screenshots/Screenshot_Library.png"/></td>
     <td align="center"><b>Sources</b><br><img src="screenshots/Screenshot_Finder.png"/></td>
-    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
+    <td align="center"><b>Extensions</b><br><img src="screenshots/Screenshot_Extensions.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
     <td align="center"><b>Chapter</b><br><img src="screenshots/Screenshot_Chapter.png"/></td>
     <td align="center"><b>Translation</b><br><img src="screenshots/Screenshot_Chapter_Translate.png"/></td>
-    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
     <td align="center"><b>Add by URL</b><br><img src="screenshots/Screenshot_Add_by_URLs.png"/></td>
     <td align="center"><b>Global Search</b><br><img src="screenshots/Screenshot_Global_Search.png"/></td>
-    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
     <td align="center"><b>Cloudflare Bypass</b><br><img src="screenshots/Screenshot_CF_Turnstile.png"/></td>
     <td align="center"><b>Regex settings</b><br><img src="screenshots/Screenshot_settings_regex_.png"/></td>
-    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
     <td align="center"><b>WTR-LAB language</b><br><img src="screenshots/wtrlab_set_language.png"/></td>
     <td align="center"><b>WTR-LAB settings</b><br><img src="screenshots/wrtlab_setting.png"/></td>
-    <td></td>
   </tr>
 </table>
 </details>
@@ -155,12 +167,13 @@ Additional features:
 - Coil, Glide
 - Android TTS & Media APIs
 - Google MLKit
+- LuaJ (plugin engine)
 
 ---
 
 ## 📦 Installation
 ```bash
-git clone https://github.com/HnDK0/Novela
+git clone https://github.com/HnDK0/NoveLA
 ```
 Open the project in Android Studio and run on a device or emulator.
 
@@ -176,7 +189,7 @@ GPL-3.0
 
 ## 📖 Описание
 
-**Novela** — это open source Android-приложение для чтения веб-новелл, ранобэ и EPUB с встроенным переводчиком и поддержкой множества источников.
+**NoveLA** — это open source Android-приложение для чтения веб-новелл, ранобэ и EPUB с встроенным переводчиком и поддержкой множества источников.
 
 Приложение создано для удобного чтения иностранного контента: находите новеллу, открываете главу и переводите текст прямо в ридере без лишних действий.
 
@@ -200,9 +213,21 @@ GPL-3.0
 
 ---
 
+### 🧩 Внешний репозиторий плагинов
+
+NoveLA поддерживает внешние Lua-плагины, которые можно устанавливать прямо из приложения через репозитории, поддерживаемые сообществом.
+
+**Официальный внешний репозиторий:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
+
+Чтобы подключить: **Finder → Extensions → ⚙️ Настройки** → вставьте URL репозитория.
+
+PR с новыми источниками и исправлениями приветствуются.
+
+---
+
 ### 📚 Поддержка множества источников
 
-Полный список поддерживаемых источников:
+Полный список встроенных источников:
 
 #### 🇨🇳 Китайские источники
 - 69书吧  
@@ -236,9 +261,8 @@ GPL-3.0
 
 #### 🇮🇩 Индонезийские источники
 - BacaLightnovel  
-- Novelku  
 
-#### 🌐 Мультиязычные источники
+#### 🌐 MTL источники
 - WTR-LAB  
 
 #### 📄 Локальный источник
@@ -281,27 +305,27 @@ GPL-3.0
   <tr>
     <td align="center"><b>Library</b><br><img src="screenshots/Screenshot_Library.png"/></td>
     <td align="center"><b>Sources</b><br><img src="screenshots/Screenshot_Finder.png"/></td>
-    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
+    <td align="center"><b>Extensions</b><br><img src="screenshots/Screenshot_Extensions.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Book</b><br><img src="screenshots/Screenshot_book.png"/></td>
     <td align="center"><b>Chapter</b><br><img src="screenshots/Screenshot_Chapter.png"/></td>
     <td align="center"><b>Translation</b><br><img src="screenshots/Screenshot_Chapter_Translate.png"/></td>
-    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Voice</b><br><img src="screenshots/Screenshot_Chapter_Voice.png"/></td>
     <td align="center"><b>Add by URL</b><br><img src="screenshots/Screenshot_Add_by_URLs.png"/></td>
     <td align="center"><b>Global Search</b><br><img src="screenshots/Screenshot_Global_Search.png"/></td>
-    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Settings</b><br><img src="screenshots/Screenshot_settings.png"/></td>
     <td align="center"><b>Cloudflare Bypass</b><br><img src="screenshots/Screenshot_CF_Turnstile.png"/></td>
     <td align="center"><b>Regex settings</b><br><img src="screenshots/Screenshot_settings_regex_.png"/></td>
-    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Regex cleanup</b><br><img src="screenshots/Screenshot_regex_Cleanup.png"/></td>
     <td align="center"><b>WTR-LAB language</b><br><img src="screenshots/wtrlab_set_language.png"/></td>
     <td align="center"><b>WTR-LAB settings</b><br><img src="screenshots/wrtlab_setting.png"/></td>
-    <td></td>
   </tr>
 </table>
 </details>
@@ -317,12 +341,13 @@ GPL-3.0
 - Coil, Glide
 - Android TTS & Media APIs
 - Google MLKit
+- LuaJ (движок плагинов)
 
 ---
 
 ## 📦 Установка
 ```bash
-git clone https://github.com/HnDK0/Novela
+git clone https://github.com/HnDK0/NoveLA
 ```
 Откройте проект в Android Studio и запустите на устройстве или эмуляторе.
 
