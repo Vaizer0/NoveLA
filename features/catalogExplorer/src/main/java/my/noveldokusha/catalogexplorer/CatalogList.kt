@@ -43,6 +43,8 @@ import my.noveldokusha.scraper.fixtures.fixturesCatalogList
 import my.noveldokusha.scraper.fixtures.fixturesDatabaseList
 import java.util.Locale
 import my.noveldokusha.core.getLanguageDisplayName
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -55,18 +57,28 @@ internal fun CatalogList(
     onSourceClick: (SourceInterface.Catalog) -> Unit,
     onSourceSetPinned: (id: String, pinned: Boolean) -> Unit,
 ) {
+    // displayName() is @Composable (uses stringResource for static sources).
+    // We replicate the same logic here: Lua sources have a non-null `name`, static ones have `nameStrId`.
+    val displayNames: Map<String, String> = sourcesList.associate { item ->
+        val catalog = item.catalog
+        item.catalog.id to (
+                catalog.name?.takeIf { it.isNotBlank() }
+                    ?: stringResource(id = catalog.nameStrId)
+                )
+    }
+
     val sortedSourcesList = if (sortOrder != null) {
+        val nameComparator = if (sortOrder == SortOrder.DESCENDING)
+            compareByDescending<CatalogItem> { displayNames[it.catalog.id]?.lowercase() ?: it.catalog.id }
+        else
+            compareBy<CatalogItem> { displayNames[it.catalog.id]?.lowercase() ?: it.catalog.id }
+
         sourcesList.sortedWith(
             compareBy<CatalogItem> {
                 if (it.catalog.id == "local_source") 0 else 1
             }.thenBy {
                 if (it.pinned) 0 else 1
-            }.thenBy {
-                // Сортируем по реальному имени, а не по ID ресурса
-                it.catalog.id
-            }.let { comparator ->
-                if (sortOrder == SortOrder.DESCENDING) comparator.reversed() else comparator
-            }
+            }.then(nameComparator)
         )
     } else {
         sourcesList
@@ -105,7 +117,9 @@ internal fun CatalogList(
                 leadingContent = {
                     ImageViewGlide(
                         imageModel = it.iconUrl,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(4.dp)),
                         error = R.drawable.default_icon
                     )
                 }
@@ -150,7 +164,9 @@ internal fun CatalogList(
                     val iconResId = it.catalog.iconResId
                     ImageViewGlide(
                         imageModel = iconResId ?: it.catalog.iconUrl,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(4.dp)),
                         error = R.drawable.default_icon
                     )
                 },
