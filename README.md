@@ -1,10 +1,15 @@
 # <img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.png" width="40" height="40" valign="middle"> NoveLA
 
-Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.  
-Focused on immersion, simplicity, and convenient reading of foreign content.
+<p align="center">
+  <a href="https://github.com/HnDK0/NoveLA/releases/latest"><img src="https://img.shields.io/github/v/release/HnDK0/NoveLA?style=flat-square&label=Download&color=4CAF50" alt="Latest Release"/></a>
+  <a href="https://github.com/HnDK0/NoveLA/releases"><img src="https://img.shields.io/github/downloads/HnDK0/NoveLA/total?style=flat-square&color=2196F3" alt="Downloads"/></a>
+  <a href="https://github.com/HnDK0/NoveLA/stargazers"><img src="https://img.shields.io/github/stars/HnDK0/NoveLA?style=flat-square&color=FFD700" alt="Stars"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/HnDK0/NoveLA?style=flat-square" alt="License"/></a>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=flat-square&logo=android" alt="Android"/>
+</p>
 
 <p align="center">
-  <b>Read web novels from multiple sources • Translate chapters instantly • Enjoy clean immersive reading</b>
+  <b>Open-source Android novel reader • 25+ sources • Built-in translator • TTS • EPUB support</b>
 </p>
 
 ---
@@ -14,118 +19,107 @@ Focused on immersion, simplicity, and convenient reading of foreign content.
 <details open>
 <summary>🇬🇧 English</summary>
 
-## 📖 Description
+## 📖 About
 
-**NoveLA** is an open-source Android application for reading web novels, light novels, and EPUB with built-in translation and multi-source support.
+**NoveLA** is a free, open-source Android app for reading web novels, light novels, ranobe, and EPUB files — with a built-in translator, text-to-speech, and support for 25+ sources across multiple languages.
 
-The app is designed for convenient reading of foreign content: find a novel, open a chapter, and translate text instantly inside the reader.
+Designed for readers who want to enjoy foreign content without switching apps: find a novel, open a chapter, translate in one tap.
 
-Main focus:
-- comfortable long reading
-- built-in translator
-- large multi-source ecosystem
-- clean and fast UI without clutter
+- 📚 25+ built-in sources + community plugin repository
+- 🌐 Built-in Google & Gemini translator
+- 🔊 Text-to-speech with background playback
+- 📄 Local EPUB library support
+- ☁️ Offline chapter caching
+- 🎨 Material 3 UI, light & dark themes
+
+---
+
+## 📥 Download
+
+Get the latest APK from [**Releases →**](https://github.com/HnDK0/NoveLA/releases/latest)
+
+Or build from source:
+```bash
+git clone https://github.com/HnDK0/NoveLA
+```
+Open in Android Studio and run on a device or emulator.
 
 ---
 
 ## ✨ Features
 
 ### 🌐 Built-in Translator
-- Translate chapters directly while reading
-- Free translation via Google API
-- Optional Gemini integration for higher-quality translation
-- Instant language switching without reloading chapters
+- Translate chapters directly while reading — no copy-paste needed
+- Free translation via Google Translate API
+- Optional Gemini AI integration for higher-quality output
+- Instant language switching without reloading the chapter
 
-> Note: Free Gemini API keys are rate-limited (request and speed limits depend on model and Google quota policy and may change over time).
-
----
-
-### 🧩 External Plugin Repository
-
-NoveLA supports external Lua-based plugin repositories, allowing community-maintained sources to be installed directly from the app.
-
-**Official external repository:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
-
-To add it: go to **Finder → Extensions → ⚙️ Settings** and paste the repository URL.
-
-Community contributions (new sources, fixes) are welcome via pull requests to the external repository.
+> **Note:** Free Gemini API keys are rate-limited. Limits depend on model and Google's quota policy.
 
 ---
 
-### 📚 Multi-Source Support
+### 🧩 Plugin Repository (External Sources)
 
-Complete list of built-in sources:
+NoveLA supports Lua-based external plugin repositories — community-maintained sources installable directly from the app.
 
-#### 🇨🇳 Chinese sources
-- 69书吧  
-- Twkan  
-- Ttkan  
-- Novel543  
-- Quanben5
-- Piaotia
+**Official plugin repo:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
 
-#### 🇷🇺 Russian sources
-- Jaomix  
-- RanobeLib  
-- RanobeHub  
-- Свободный Мир Ранобэ  
-- BookHamster  
-
-#### 🇬🇧 English sources
-- FreeWebNovel  
-- NovelFull  
-- NovelBin  
-- Royal Road  
-- Scribble Hub  
-- AllNovel  
-- NoBadNovel  
-- NovelBuddy  
-- NovelFire  
-- NovelHall  
-- NovLove  
-- ReadNovelFull  
-- WuxiaWorld  
-
-#### 🇮🇩 Indonesian sources
-- BacaLightnovel  
-
-#### 🌐 MTL sources
-- WTR-LAB  
-
-#### 📄 Local source
-- Local EPUB files
-
-Additional features:
-- Add novels directly by URL
-- Global multi-database search
+To add: go to **Finder → Extensions → ⚙️ Settings** and paste the repository URL.
 
 ---
 
-### 📖 Reader Features
+### 📚 Sources (25+)
+
+<details>
+<summary>Show full source list</summary>
+
+#### 🇨🇳 Chinese
+- 69书吧 · Twkan · Ttkan · Novel543 · Quanben5 · Piaotia
+
+#### 🇷🇺 Russian
+- Jaomix · RanobeLib · RanobeHub · Свободный Мир Ранобэ · BookHamster
+
+#### 🇬🇧 English
+- FreeWebNovel · NovelFull · NovelBin · Royal Road · Scribble Hub
+- AllNovel · NoBadNovel · NovelBuddy · NovelFire · NovelHall
+- NovLove · ReadNovelFull · WuxiaWorld
+
+#### 🇮🇩 Indonesian
+- BacaLightnovel
+
+#### 🌐 MTL
+- WTR-LAB
+
+#### 📄 Local
+- EPUB files
+
+**Plus:** add any novel by URL · global multi-source search
+
+</details>
+
+---
+
+### 📖 Reader
 - Infinite chapter scrolling
 - Custom fonts and text size
 - Light & dark themes (Material 3)
 - Offline chapter caching
 - Clean immersive reading mode
 
----
-
 ### 🔊 Text-to-Speech
 - Background playback
 - Voice, speed, and pitch control
-- Convenient for listening to chapters
 
----
-
-### 🛠 Advanced Tools
+### 🛠 Advanced
 - Automatic Cloudflare Turnstile bypass
-- Regex-based text cleanup (remove ads and junk text)
+- Regex-based text cleanup (strip ads & junk)
 - Local library and reading history
-- Backup and restore support
+- Backup and restore
 
 ---
 
 ## 🖼 Screenshots
+
 <details open>
 <summary>Show screenshots</summary>
 <table>
@@ -162,7 +156,7 @@ Additional features:
 ## 🧩 Tech Stack
 - Kotlin, Coroutines, LiveData
 - Jetpack Compose + XML Views
-- Material 3 UI
+- Material 3
 - Room (SQLite), Jsoup, OkHttp
 - Coil, Glide
 - Android TTS & Media APIs
@@ -171,134 +165,127 @@ Additional features:
 
 ---
 
-## 📦 Installation
-```bash
-git clone https://github.com/HnDK0/NoveLA
-```
-Open the project in Android Studio and run on a device or emulator.
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+- Fix or improve existing source parsers
+- Add new sources via the [external plugin repo](https://github.com/HnDK0/external-sources)
+- Improve the reader UI or performance
+- Report bugs via [Issues](https://github.com/HnDK0/NoveLA/issues)
 
 ---
 
 ## 📜 License
-GPL-3.0
+[GPL-3.0](LICENSE)
 
 </details>
+
+---
 
 <details>
 <summary>🇷🇺 Русский</summary>
 
-## 📖 Описание
+## 📖 О приложении
 
-**NoveLA** — это open source Android-приложение для чтения веб-новелл, ранобэ и EPUB с встроенным переводчиком и поддержкой множества источников.
+**NoveLA** — бесплатный open source Android-ридер для веб-новелл, ранобэ и EPUB с встроенным переводчиком, озвучкой и поддержкой 25+ источников.
 
-Приложение создано для удобного чтения иностранного контента: находите новеллу, открываете главу и переводите текст прямо в ридере без лишних действий.
+Создан для тех, кто читает иностранный контент: открываете главу и переводите прямо в ридере, без лишних приложений.
 
-Основной фокус:
-- удобство чтения
-- встроенный переводчик
-- поддержка множества источников
-- чистый и быстрый интерфейс без перегрузки
+- 📚 25+ встроенных источников + репозиторий плагинов сообщества
+- 🌐 Встроенный переводчик Google и Gemini
+- 🔊 Озвучка (TTS) с фоновым воспроизведением
+- 📄 Локальная EPUB-библиотека
+- ☁️ Оффлайн кэширование глав
+- 🎨 Material 3, светлая и тёмная темы
+
+---
+
+## 📥 Скачать
+
+Последний APK — в разделе [**Releases →**](https://github.com/HnDK0/NoveLA/releases/latest)
+
+Или собрать самостоятельно:
+```bash
+git clone https://github.com/HnDK0/NoveLA
+```
+Откройте в Android Studio и запустите на устройстве или эмуляторе.
 
 ---
 
 ## ✨ Возможности
 
 ### 🌐 Встроенный переводчик
-- Перевод текста прямо во время чтения
+- Перевод прямо во время чтения — без копирования
 - Бесплатный перевод через Google API
-- Опциональная интеграция Gemini для более качественного перевода
+- Опциональный Gemini для более качественного перевода
 - Мгновенное переключение языка без перезагрузки главы
 
-> Примечание: бесплатные ключи Gemini API имеют ограничения по количеству запросов и скорости (зависят от модели и квот Google и могут изменяться).
+> **Примечание:** бесплатные ключи Gemini API имеют ограничения по запросам и скорости.
 
 ---
 
-### 🧩 Внешний репозиторий плагинов
+### 🧩 Репозиторий плагинов
 
-NoveLA поддерживает внешние Lua-плагины, которые можно устанавливать прямо из приложения через репозитории, поддерживаемые сообществом.
+NoveLA поддерживает внешние Lua-плагины — источники от сообщества, устанавливаемые прямо из приложения.
 
-**Официальный внешний репозиторий:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
+**Официальный репозиторий:** [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
 
-Чтобы подключить: **Finder → Extensions → ⚙️ Настройки** → вставьте URL репозитория.
-
-PR с новыми источниками и исправлениями приветствуются.
+Подключить: **Finder → Extensions → ⚙️ Настройки** → вставьте URL репозитория.
 
 ---
 
-### 📚 Поддержка множества источников
+### 📚 Источники (25+)
 
-Полный список встроенных источников:
+<details>
+<summary>Показать полный список</summary>
 
-#### 🇨🇳 Китайские источники
-- 69书吧  
-- Twkan  
-- Ttkan  
-- Novel543  
-- Quanben5
-- Piaotia
+#### 🇨🇳 Китайские
+- 69书吧 · Twkan · Ttkan · Novel543 · Quanben5 · Piaotia
 
-#### 🇷🇺 Русские источники
-- Jaomix  
-- RanobeLib  
-- RanobeHub  
-- Свободный Мир Ранобэ  
-- BookHamster  
+#### 🇷🇺 Русские
+- Jaomix · RanobeLib · RanobeHub · Свободный Мир Ранобэ · BookHamster
 
-#### 🇬🇧 Английские источники
-- FreeWebNovel  
-- NovelFull  
-- NovelBin  
-- Royal Road  
-- Scribble Hub  
-- AllNovel  
-- NoBadNovel  
-- NovelBuddy  
-- NovelFire  
-- NovelHall  
-- NovLove  
-- ReadNovelFull  
-- WuxiaWorld  
+#### 🇬🇧 Английские
+- FreeWebNovel · NovelFull · NovelBin · Royal Road · Scribble Hub
+- AllNovel · NoBadNovel · NovelBuddy · NovelFire · NovelHall
+- NovLove · ReadNovelFull · WuxiaWorld
 
-#### 🇮🇩 Индонезийские источники
-- BacaLightnovel  
+#### 🇮🇩 Индонезийские
+- BacaLightnovel
 
-#### 🌐 MTL источники
-- WTR-LAB  
+#### 🌐 MTL
+- WTR-LAB
 
-#### 📄 Локальный источник
-- EPUB файлы (локальная библиотека)
+#### 📄 Локальные
+- EPUB файлы
 
-Дополнительно:
-- Добавление новелл по ссылке (URL)
-- Глобальный поиск по нескольким базам
+**Дополнительно:** добавление новелл по ссылке · глобальный поиск по всем источникам
+
+</details>
 
 ---
 
-### 📖 Возможности ридера
+### 📖 Ридер
 - Бесконечная прокрутка глав
 - Настройка шрифта и размера текста
 - Светлая и тёмная темы (Material 3)
-- Оффлайн кэширование глав
-- Чистый режим чтения без отвлекающих элементов
-
----
+- Оффлайн кэширование
+- Чистый режим чтения
 
 ### 🔊 Озвучка (TTS)
-- Фоновое воспроизведение глав
+- Фоновое воспроизведение
 - Настройка голоса, скорости и высоты тона
-- Удобно для прослушивания новелл
-
----
 
 ### 🛠 Продвинутые функции
 - Автоматический обход Cloudflare Turnstile
-- Очистка текста через Regex (удаление рекламы и мусора)
+- Очистка текста через Regex (удаление рекламы)
 - Локальная библиотека и история чтения
-- Простое резервное копирование и восстановление
+- Резервное копирование и восстановление
 
 ---
 
 ## 🖼 Скриншоты
+
 <details>
 <summary>Показать скриншоты</summary>
 <table>
@@ -336,8 +323,7 @@ PR с новыми источниками и исправлениями прив
 - Kotlin, Coroutines, LiveData
 - Jetpack Compose + XML Views
 - Material 3
-- Room (SQLite)
-- Jsoup, OkHttp
+- Room (SQLite), Jsoup, OkHttp
 - Coil, Glide
 - Android TTS & Media APIs
 - Google MLKit
@@ -345,20 +331,17 @@ PR с новыми источниками и исправлениями прив
 
 ---
 
-## 📦 Установка
-```bash
-git clone https://github.com/HnDK0/NoveLA
-```
-Откройте проект в Android Studio и запустите на устройстве или эмуляторе.
-
----
-
 ## 🤝 Контрибьютинг
-Приветствуются исправления парсеров, новые источники и улучшения ридера.
+
+Приветствуются:
+- Исправления парсеров существующих источников
+- Новые источники через [репозиторий плагинов](https://github.com/HnDK0/external-sources)
+- Улучшения ридера или производительности
+- Баг-репорты через [Issues](https://github.com/HnDK0/NoveLA/issues)
 
 ---
 
 ## 📄 Лицензия
-GPL-3.0
+[GPL-3.0](LICENSE)
 
 </details>
