@@ -27,6 +27,8 @@ sealed interface SourceInterface {
     val requiresLogin: Boolean get() = false
     val charset: String get() = "UTF-8"
 
+    fun resolveName(context: android.content.Context): String =
+        name ?: if (nameStrId != 0) context.getString(nameStrId) else "Unknown"
     suspend fun transformChapterUrl(url: String): String = url
 
     suspend fun getChapterText(doc: Document): String? = null
