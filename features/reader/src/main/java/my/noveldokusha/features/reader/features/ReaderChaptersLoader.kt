@@ -156,15 +156,19 @@ internal class ReaderChaptersLoader(
         launch(Dispatchers.Main.immediate) {
             val chapterUrl = orderedChapters.getOrNull(chapterIndex)?.url
 
-            // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
-            items.removeAll { it.chapterIndex == chapterIndex }
-            readerViewHandlersActions.doForceUpdateListViewState()
-
-            // Сбрасываем состояние — включая кэш тела в БД
+            // Сначала сбрасываем флаги — до любых IO-операций
             hasLoadingError = false
             if (chapterUrl != null) {
                 chaptersStats.remove(chapterUrl)
                 loadedChapters.remove(chapterUrl)
+            }
+
+            // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
+            items.removeAll { it.chapterIndex == chapterIndex }
+            readerViewHandlersActions.doForceUpdateListViewState()
+
+            // Чистим кэш тела в БД (IO после очистки UI-стейта)
+            if (chapterUrl != null) {
                 withContext(Dispatchers.IO) {
                     readerRepository.deleteChapterBody(chapterUrl)
                 }
