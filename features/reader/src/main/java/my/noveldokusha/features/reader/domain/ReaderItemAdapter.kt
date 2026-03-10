@@ -1,6 +1,7 @@
 package my.noveldokusha.features.reader.domain
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.view.MotionEvent
@@ -43,8 +44,8 @@ internal class ReaderItemAdapter(
     private val onChapterStartVisible: (chapterUrl: String) -> Unit,
     private val onChapterEndVisible: (chapterUrl: String) -> Unit,
     private val onReloadReader: () -> Unit,
-    private val onRetryChapter: (chapterIndex: Int) -> Unit,  // перезагрузить главу с ошибкой
-    private val onOpenChapterInBrowser: (url: String) -> Unit,  // открыть URL в браузере
+    private val onRetryChapter: (chapterIndex: Int) -> Unit,
+    private val onOpenChapterInBrowser: (url: String) -> Unit,
     private val onClick: () -> Unit,
 ) : ArrayAdapter<ReaderItem>(ctx, 0, list) {
     private val appFileResolver = AppFileResolver(ctx)
@@ -55,7 +56,6 @@ internal class ReaderItemAdapter(
         else -> super.getItem(position - 1)!!
     }
 
-    // Ignores paddings as items that are visible
     fun getFirstVisibleItemIndexGivenPosition(firstVisiblePosition: Int): Int =
         when (firstVisiblePosition) {
             in 1 until (count - 1) -> firstVisiblePosition - 1
@@ -64,7 +64,6 @@ internal class ReaderItemAdapter(
             else -> -1
         }
 
-    // Get list index from current position
     fun fromPositionToIndex(position: Int): Int = when (position) {
         in 1 until (count - 1) -> position - 1
         else -> -1
@@ -94,48 +93,29 @@ internal class ReaderItemAdapter(
         is ReaderItem.TranslateAttribution -> 11
     }
 
-    private fun viewTranslateAttribution(
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewTranslateAttribution(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemGoogleTranslateAttributionBinding.inflate(
-                parent.inflater,
-                parent,
-                false
-            ).also { it.root.tag = it }
+            null -> ActivityReaderListItemGoogleTranslateAttributionBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemGoogleTranslateAttributionBinding.bind(convertView)
         }
         return bind.root
     }
 
-    private fun viewTranslateAttributionNew(
-        item: ReaderItem.TranslateAttribution,
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewTranslateAttributionNew(item: ReaderItem.TranslateAttribution, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemTranslateAttributionBinding.inflate(
-                parent.inflater,
-                parent,
-                false
-            ).also { it.root.tag = it }
+            null -> ActivityReaderListItemTranslateAttributionBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemTranslateAttributionBinding.bind(convertView)
         }
-
-        // Set text based on provider
         bind.attributionText.text = when (item.provider) {
             "gemini" -> "Powered by Gemini"
             else -> "Powered by Google Translate"
         }
-
         return bind.root
     }
 
     private fun viewBody(item: ReaderItem.Body, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemBodyBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemBodyBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemBodyBinding.bind(convertView)
         }
 
@@ -154,14 +134,9 @@ internal class ReaderItemAdapter(
         return bind.root
     }
 
-    private fun viewImage(
-        item: ReaderItem.Image,
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewImage(item: ReaderItem.Image, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemImageBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemImageBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemImageBinding.bind(convertView)
         }
 
@@ -169,16 +144,8 @@ internal class ReaderItemAdapter(
             dimensionRatio = "1:${item.image.yrel}"
         }
 
-        val imageModel = appFileResolver.resolvedBookImagePath(
-            bookUrl = bookUrl,
-            imagePath = item.image.path
-        )
+        val imageModel = appFileResolver.resolvedBookImagePath(bookUrl = bookUrl, imagePath = item.image.path)
 
-        // Glide uses current imageView size to load the bitmap best optimized for it, but current
-        // size corresponds to the last image (different size) and the view layout only updates to
-        // the new values on next redraw. Execute Glide loading call in the next (parent) layout
-        // update to let it get the correct values.
-        // (Avoids getting "blurry" images)
         bind.imageContainer.doOnNextLayout {
             Glide.with(ctx)
                 .load(imageModel)
@@ -193,83 +160,51 @@ internal class ReaderItemAdapter(
             ReaderItem.Location.LAST -> onChapterEndVisible(item.chapterUrl)
             else -> run {}
         }
-
         return bind.root
     }
 
-    private fun viewBookEnd(
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewBookEnd(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemSpecialTitleBinding.inflate(
-                parent.inflater,
-                parent,
-                false
-            ).also { it.root.tag = it }
+            null -> ActivityReaderListItemSpecialTitleBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemSpecialTitleBinding.bind(convertView)
         }
-
         bind.specialTitle.updateTextSelectability()
         bind.specialTitle.text = ctx.getString(R.string.reader_no_more_chapters)
         bind.specialTitle.typeface = currentTypefaceBold()
         return bind.root
     }
 
-    private fun viewBookStart(
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewBookStart(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-
-            null -> ActivityReaderListItemSpecialTitleBinding.inflate(
-                parent.inflater,
-                parent,
-                false
-            ).also { it.root.tag = it }
+            null -> ActivityReaderListItemSpecialTitleBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemSpecialTitleBinding.bind(convertView)
         }
-
         bind.specialTitle.updateTextSelectability()
         bind.specialTitle.text = ctx.getString(R.string.reader_first_chapter)
         bind.specialTitle.typeface = currentTypefaceBold()
         return bind.root
     }
 
-    private fun viewProgressbar(
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewProgressbar(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemProgressBarBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemProgressBarBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemProgressBarBinding.bind(convertView)
         }
         return bind.root
     }
 
-    private fun viewTranslating(
-        item: ReaderItem.Translating,
-        convertView: View?,
-        parent: ViewGroup
-    ): View {
+    private fun viewTranslating(item: ReaderItem.Translating, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemTranslatingBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemTranslatingBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemTranslatingBinding.bind(convertView)
         }
-        bind.text.text = context.getString(
-            R.string.translating_from_lang_a_to_lang_b,
-            item.sourceLang,
-            item.targetLang
-        )
+        bind.text.text = context.getString(R.string.translating_from_lang_a_to_lang_b, item.sourceLang, item.targetLang)
         return bind.root
     }
 
     private fun viewDivider(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemDividerBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemDividerBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemDividerBinding.bind(convertView)
         }
         return bind.root
@@ -277,33 +212,24 @@ internal class ReaderItemAdapter(
 
     private fun viewError(item: ReaderItem.Error, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemErrorBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemErrorBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemErrorBinding.bind(convertView)
         }
-
         bind.error.updateTextSelectability()
         bind.error.text = item.text
-
-        // "Перезагрузить главу" — сбрасывает флаг ошибки и пробует загрузить снова,
-        // НЕ очищает уже загруженные главы (в отличие от полного reloadReader)
         bind.reloadButton.setOnClickListener { onRetryChapter(item.chapterIndex) }
-
-        // Кнопка "Открыть в браузере" — показываем только если есть URL
         if (item.chapterUrl.isNotBlank()) {
             bind.openInBrowserButton.visibility = View.VISIBLE
             bind.openInBrowserButton.setOnClickListener { onOpenChapterInBrowser(item.chapterUrl) }
         } else {
             bind.openInBrowserButton.visibility = View.GONE
         }
-
         return bind.root
     }
 
     private fun viewPadding(convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemPaddingBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemPaddingBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemPaddingBinding.bind(convertView)
         }
         return bind.root
@@ -311,11 +237,9 @@ internal class ReaderItemAdapter(
 
     private fun viewTitle(item: ReaderItem.Title, convertView: View?, parent: ViewGroup): View {
         val bind = when (convertView) {
-            null -> ActivityReaderListItemTitleBinding.inflate(parent.inflater, parent, false)
-                .also { it.root.tag = it }
+            null -> ActivityReaderListItemTitleBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemTitleBinding.bind(convertView)
         }
-
         bind.title.updateTextSelectability()
         bind.root.background = getItemReadingStateBackground(item)
         bind.title.text = item.textToDisplay
@@ -324,25 +248,48 @@ internal class ReaderItemAdapter(
     }
 
     private val currentReadingAloudDrawable by lazy {
-        AppCompatResources.getDrawable(
-            context,
-            R.drawable.translucent_current_reading_text_background
-        )
+        AppCompatResources.getDrawable(context, R.drawable.translucent_current_reading_text_background)
     }
 
     private val currentReadingAloudLoadingDrawable by lazy {
-        AppCompatResources.getDrawable(
-            context,
-            R.drawable.translucent_current_reading_loading_text_background
-        )
+        AppCompatResources.getDrawable(context, R.drawable.translucent_current_reading_loading_text_background)
     }
 
     private fun TextView.updateTextSelectability() {
         val selectableText = currentTextSelectability()
         setTextIsSelectable(selectableText)
         if (selectableText) {
+            // Добавляем пункт "Поиск в браузере" в меню выделения текста
+            if (customSelectionActionModeCallback == null) {
+                customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
+                    override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                        menu.add(0, MENU_ID_SEARCH_WEB, 0, ctx.getString(R.string.search_web))
+                            .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+                        return true
+                    }
+                    override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+                    override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                        if (item.itemId == MENU_ID_SEARCH_WEB) {
+                            val start = selectionStart.coerceAtLeast(0)
+                            val end = selectionEnd.coerceAtLeast(0)
+                            val selected = text.substring(minOf(start, end), maxOf(start, end))
+                            if (selected.isNotBlank()) {
+                                val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+                                    putExtra(android.app.SearchManager.QUERY, selected)
+                                }
+                                ctx.startActivity(intent)
+                            }
+                            mode.finish()
+                            return true
+                        }
+                        return false
+                    }
+                    override fun onDestroyActionMode(mode: android.view.ActionMode) {}
+                }
+            }
             setTextSelectionAwareClick { onClick() }
         } else {
+            customSelectionActionModeCallback = null
             setOnClickListener { onClick() }
             setOnTouchListener(null)
         }
@@ -365,15 +312,8 @@ internal class ReaderItemAdapter(
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
         when (val item = getItem(position)) {
-            is ReaderItem.GoogleTranslateAttribution -> viewTranslateAttribution(
-                convertView,
-                parent
-            )
-            is ReaderItem.TranslateAttribution -> viewTranslateAttributionNew(
-                item,
-                convertView,
-                parent
-            )
+            is ReaderItem.GoogleTranslateAttribution -> viewTranslateAttribution(convertView, parent)
+            is ReaderItem.TranslateAttribution -> viewTranslateAttributionNew(item, convertView, parent)
             is ReaderItem.Body -> viewBody(item, convertView, parent)
             is ReaderItem.Image -> viewImage(item, convertView, parent)
             is ReaderItem.BookEnd -> viewBookEnd(convertView, parent)
@@ -394,5 +334,9 @@ internal class ReaderItemAdapter(
             }
             false
         }
+    }
+
+    companion object {
+        private const val MENU_ID_SEARCH_WEB = 9999
     }
 }

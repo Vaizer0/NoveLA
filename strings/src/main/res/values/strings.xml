@@ -316,4 +316,5 @@
     <string name="scroll_to_last_read_chapter">Last read</string>
     <string name="go_to_chapter">Go to chapter</string>
     <string name="search_chapter_hint">Search by title…</string>
+    <string name="search_web">Search web</string>
 </resources>
