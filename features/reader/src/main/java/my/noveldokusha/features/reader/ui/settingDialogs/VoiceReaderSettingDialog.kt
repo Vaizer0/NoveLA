@@ -71,7 +71,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -128,7 +127,6 @@ internal fun VoiceReaderSettingDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(16.dp)
             ) {
-                // Player voice parameters
                 MySlider(
                     value = state.voicePitch.value,
                     valueRange = 0.1f..5f,
@@ -142,7 +140,6 @@ internal fun VoiceReaderSettingDialog(
                     text = stringResource(R.string.voice_speed) + ": %.2f".format(state.voiceSpeed.value),
                 )
 
-                // Player settings buttons
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -211,7 +208,6 @@ internal fun VoiceReaderSettingDialog(
                     }
                 }
 
-                // Player playback buttons
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
@@ -254,7 +250,8 @@ internal fun VoiceReaderSettingDialog(
                             targetState = state.isPlaying.value,
                             modifier = Modifier
                                 .size(56.dp)
-                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape), label = ""
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            label = ""
                         ) { target ->
                             when (target) {
                                 true -> Icon(
@@ -315,32 +312,27 @@ private fun VoiceSelectorDialog(
     setDialogOpen: (Boolean) -> Unit,
 ) {
     val voicesSorted = remember { mutableStateListOf<VoiceData>() }
+    val voicesFiltered = remember { mutableStateListOf<VoiceData>() }
+
     LaunchedEffect(availableVoices) {
-        withContext(Dispatchers.Default) {
+        val sorted = withContext(Dispatchers.Default) {
             availableVoices.sortedWith(
                 compareBy<VoiceData> { it.language }
                     .thenByDescending { it.quality }
                     .thenBy { it.needsInternet }
             )
-        }.let { voicesSorted.addAll(it) }
-    }
-
-    val voicesFiltered = remember {
-        mutableStateListOf<VoiceData>().apply { addAll(availableVoices) }
+        }
+        voicesSorted.clear()
+        voicesSorted.addAll(sorted)
     }
 
     LaunchedEffect(Unit) {
-        snapshotFlow { inputTextFilter.value }
+        snapshotFlow { inputTextFilter.value to voicesSorted.toList() }
             .debounce(200)
-            .collectLatest {
+            .collectLatest { (filter, sorted) ->
                 val items = withContext(Dispatchers.Default) {
-                    if (inputTextFilter.value.isEmpty()) {
-                        voicesSorted
-                    } else {
-                        voicesSorted.filter { voice ->
-                            voice.language.contains(it, ignoreCase = true)
-                        }
-                    }
+                    if (filter.isEmpty()) sorted
+                    else sorted.filter { it.language.contains(filter, ignoreCase = true) }
                 }
                 voicesFiltered.clear()
                 voicesFiltered.addAll(items)
@@ -348,8 +340,37 @@ private fun VoiceSelectorDialog(
     }
 
     val listState = rememberLazyListState()
-
     val inputFocusRequester = remember { FocusRequester() }
+
+    // Автоскролл к текущему голосу только при открытии диалога, не при смене голоса
+    LaunchedEffect(isDialogOpen) {
+        if (!isDialogOpen || currentVoice == null) return@LaunchedEffect
+        snapshotFlow { voicesFiltered.toList() }
+            .debounce(100)
+            .collectLatest { filtered ->
+                val index = filtered.indexOfFirst { it.id == currentVoice.id }
+                if (index < 0) return@collectLatest
+
+                // stickyHeader занимает индекс 0, голоса начинаются с индекса 1
+                val targetIndex = index + 1
+
+                // Первый скролл — чтобы элемент попал в viewport и был laid out
+                listState.scrollToItem(index = targetIndex)
+
+                // Берём реальную высоту stickyHeader из layoutInfo (он index=0)
+                // и делаем отступ чтобы элемент был виден под шапкой, а не за ней
+                val headerHeight = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == 0 }
+                    ?.size ?: 0
+
+                if (headerHeight > 0) {
+                    listState.scrollToItem(
+                        index = targetIndex,
+                        scrollOffset = -headerHeight
+                    )
+                }
+            }
+    }
 
     if (isDialogOpen) Dialog(
         onDismissRequest = { setDialogOpen(false) }
@@ -380,7 +401,6 @@ private fun VoiceSelectorDialog(
                 }
             }
 
-
             if (voicesFiltered.isEmpty()) item {
                 Text(
                     text = stringResource(R.string.no_matches),
@@ -391,8 +411,10 @@ private fun VoiceSelectorDialog(
                 )
             }
 
-            items(voicesFiltered) {
-                val selected by remember { derivedStateOf { it.id == currentVoice?.id } }
+            items(voicesFiltered) { voice ->
+                val selected by remember(voice.id, currentVoice?.id) {
+                    derivedStateOf { voice.id == currentVoice?.id }
+                }
                 Row(
                     modifier = Modifier
                         .heightIn(min = 54.dp)
@@ -400,7 +422,7 @@ private fun VoiceSelectorDialog(
                             if (selected) MaterialTheme.colorApp.tintedSelectedSurface
                             else MaterialTheme.colorScheme.primary
                         )
-                        .clickable(enabled = !selected) { setVoice(it.id) }
+                        .clickable(enabled = !selected) { setVoice(voice.id) }
                         .padding(horizontal = 16.dp)
                         .padding(4.dp)
                         .fillMaxWidth(),
@@ -408,13 +430,13 @@ private fun VoiceSelectorDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = it.language,
+                        text = voice.language,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.widthIn(min = 84.dp)
                     )
                     Row {
                         for (star in 0..4) {
-                            val yay = it.quality > star * 100
+                            val yay = voice.quality > star * 100
                             Icon(
                                 imageVector = if (yay) Icons.Filled.StarRate else Icons.Outlined.StarBorder,
                                 contentDescription = null,
@@ -430,7 +452,7 @@ private fun VoiceSelectorDialog(
                         modifier = Modifier.wrapContentHeight()
                     ) {
                         Text(
-                            text = it.id,
+                            text = voice.id,
                             modifier = Modifier
                                 .background(
                                     MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium
@@ -440,7 +462,7 @@ private fun VoiceSelectorDialog(
                             style = MaterialTheme.typography.bodyMedium,
                             fontSize = 10.sp,
                         )
-                        if (it.needsInternet) {
+                        if (voice.needsInternet) {
                             Text(
                                 text = stringResource(R.string.needs_internet),
                                 modifier = Modifier
@@ -472,7 +494,6 @@ private fun DropdownCustomSavedVoices(
     onPredefinedSelected: (VoicePredefineState) -> Unit,
     setCustomSavedVoices: (List<VoicePredefineState>) -> Unit,
 ) {
-
     var expandedAddNextEntry by rememberMutableStateOf(false)
     DropdownMenu(
         expanded = expanded.value,
@@ -536,7 +557,6 @@ private fun DropdownCustomSavedVoices(
         }
     }
 
-
     if (expandedAddNextEntry) {
         var name by rememberMutableStateOf(value = "")
         val focusRequester = remember { FocusRequester() }
@@ -590,7 +610,8 @@ private fun VoiceSelectorDialogContentPreview() {
                     id = "$it",
                     language = "lang${it / 2}",
                     needsInternet = (it % 2) == 0,
-                    quality = (it * 100) % 501
+                    quality = (it * 100) % 501,
+                    enginePackage = "",
                 )
             },
             setVoice = {},
@@ -599,7 +620,8 @@ private fun VoiceSelectorDialogContentPreview() {
                 id = "2",
                 language = "",
                 needsInternet = false,
-                quality = 100
+                quality = 100,
+                enginePackage = "",
             ),
             setDialogOpen = {},
             isDialogOpen = true

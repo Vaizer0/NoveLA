@@ -69,11 +69,12 @@ internal class ReaderTextToSpeech(
     private val loadNextChapter: () -> Unit,
     private val getPreferredVoiceId: () -> String,
     private val setPreferredVoiceId: (voiceId: String) -> Unit,
+    private val getPreferredVoiceEngine: () -> String,
+    private val setPreferredVoiceEngine: (enginePackage: String) -> Unit,
     private val getPreferredVoicePitch: () -> Float,
     private val setPreferredVoicePitch: (voiceId: Float) -> Unit,
     private val getPreferredVoiceSpeed: () -> Float,
     private val setPreferredVoiceSpeed: (voiceId: Float) -> Unit,
-    // Callback for pre-loading next chapter when buffer is low
     private val onBufferLow: (() -> Unit)? = null,
 ) {
     private val halfBuffer = 2
@@ -95,7 +96,7 @@ internal class ReaderTextToSpeech(
     val scrolledToTheBottom = MutableSharedFlow<Unit>()
     val currentReaderItem = manager.currentTextSpeakFlow
     val currentTextPlaying = manager.currentActiveItemState as State<TextSynthesis>
-    val reachedChapterEndFlowChapterIndex = MutableSharedFlow<ChapterIndex>() // chapter pos
+    val reachedChapterEndFlowChapterIndex = MutableSharedFlow<ChapterIndex>()
     val startReadingFromFirstVisibleItem = MutableSharedFlow<Unit>()
     val scrollToReaderItem = MutableSharedFlow<ReaderItem>()
     val scrollToChapterTop = MutableSharedFlow<ChapterIndex>()
@@ -130,14 +131,29 @@ internal class ReaderTextToSpeech(
 
     init {
         coroutineScope.launch {
-            manager
-                .serviceLoadedFlow
-                .take(1)
-                .collect {
-                    manager.trySetVoiceById(getPreferredVoiceId())
-                    manager.trySetVoicePitch(getPreferredVoicePitch())
-                    manager.trySetVoiceSpeed(getPreferredVoiceSpeed())
+            // Ждём пока все голоса собраны (один раз при старте)
+            manager.serviceLoadedFlow.take(1).collect {
+                manager.trySetVoicePitch(getPreferredVoicePitch())
+                manager.trySetVoiceSpeed(getPreferredVoiceSpeed())
+
+                val preferredVoiceId = getPreferredVoiceId()
+                val preferredEngine = getPreferredVoiceEngine()
+                val defaultEngine = manager.service.defaultEngine ?: ""
+
+                // Ищем голос в availableVoices — там все движки с правильным enginePackage
+                val voiceData = manager.availableVoices.find { it.id == preferredVoiceId }
+                val targetEngine = voiceData?.enginePackage ?: preferredEngine
+
+                if (targetEngine.isNotEmpty() && targetEngine != defaultEngine) {
+                    // Голос из другого движка — переключаем service для воспроизведения
+                    manager.reinitWithEngine(
+                        enginePackage = targetEngine,
+                        voiceId = preferredVoiceId
+                    )
+                } else {
+                    manager.trySetVoiceById(preferredVoiceId)
                 }
+            }
         }
     }
 
@@ -162,7 +178,6 @@ internal class ReaderTextToSpeech(
                                     chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
                                     quantity = halfBuffer
                                 )
-                                // Trigger pre-loading of next chapter when buffer is low
                                 onBufferLow?.invoke()
                             }
                             0 -> {
@@ -305,9 +320,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     private fun playNextItem() {
-        if (!state.isThereActiveItem.value) {
-            return
-        }
+        if (!state.isThereActiveItem.value) return
 
         coroutineScope.launch {
             val currentItemPos = state.currentActiveItemState.value.itemPos
@@ -335,9 +348,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     private fun playPreviousItem() {
-        if (!state.isThereActiveItem.value) {
-            return
-        }
+        if (!state.isThereActiveItem.value) return
 
         coroutineScope.launch {
             val currentItemPos = state.currentActiveItemState.value.itemPos
@@ -366,9 +377,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     private fun playNextChapter() {
-        if (!state.isThereActiveItem.value) {
-            return
-        }
+        if (!state.isThereActiveItem.value) return
 
         val currentState = state.currentActiveItemState.value
         val nextChapterIndex = currentState.itemPos.chapterIndex + 1
@@ -405,12 +414,9 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     private fun playPreviousChapter() {
-        if (!state.isThereActiveItem.value) {
-            return
-        }
+        if (!state.isThereActiveItem.value) return
 
         val currentItemState = state.currentActiveItemState.value
-        // Scroll to current chapter top if not already otherwise scroll to previous top
         val targetChapterIndex = when (currentItemState.itemPos is ReaderItem.Title) {
             true -> currentItemState.itemPos.chapterIndex - 1
             false -> currentItemState.itemPos.chapterIndex
@@ -442,10 +448,41 @@ internal class ReaderTextToSpeech(
     }
 
     private fun setVoice(voiceId: String) {
-        val success = manager.trySetVoiceById(id = voiceId)
-        if (success) {
+        val voiceData = manager.availableVoices.find { it.id == voiceId }
+        // Берём движок из найденного голоса, иначе из текущего service
+        val targetEngine = voiceData?.enginePackage ?: (manager.service.defaultEngine ?: "")
+        val currentEngine = manager.getCurrentEnginePackage()
+
+        if (targetEngine.isNotEmpty() && targetEngine != currentEngine) {
+            // Голос из другого движка — пересоздаём service для воспроизведения
+            val wasPlaying = state.isPlaying.value
+            stop()
             setPreferredVoiceId(voiceId)
-            resumeFromCurrentState()
+            setPreferredVoiceEngine(targetEngine)
+            manager.reinitWithEngine(
+                enginePackage = targetEngine,
+                voiceId = voiceId,
+            )
+            if (wasPlaying) {
+                coroutineScope.launch {
+                    manager.serviceLoadedFlow.take(1).collect()
+                    start()
+                    val currentState = manager.currentActiveItemState.value
+                    if (isChapterIndexValid(currentState.itemPos.chapterIndex)) {
+                        readChapterStartingFromChapterItemPosition(
+                            chapterIndex = currentState.itemPos.chapterIndex,
+                            chapterItemPosition = currentState.itemPos.chapterItemPosition
+                        )
+                    }
+                }
+            }
+        } else {
+            val success = manager.trySetVoiceById(id = voiceId)
+            if (success) {
+                setPreferredVoiceId(voiceId)
+                if (voiceData != null) setPreferredVoiceEngine(voiceData.enginePackage)
+                resumeFromCurrentState()
+            }
         }
     }
 
@@ -466,9 +503,7 @@ internal class ReaderTextToSpeech(
     }
 
     private fun resumeFromCurrentState() {
-        if (!state.isPlaying.value) {
-            return
-        }
+        if (!state.isPlaying.value) return
         stop()
         start()
         val state = manager.currentActiveItemState.value
@@ -532,5 +567,3 @@ internal class ReaderTextToSpeech(
         }
     }
 }
-
-

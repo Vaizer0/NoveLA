@@ -65,6 +65,11 @@ class AppPreferences @Inject constructor(
         object : Preference<String>("READER_TEXT_TO_SPEECH_VOICE_ID") {
             override var value by SharedPreference_String(name, preferences, "")
         }
+    // Пакет TTS-движка, которому принадлежит сохранённый голос (например "com.rhvoice.android")
+    val READER_TEXT_TO_SPEECH_VOICE_ENGINE =
+        object : Preference<String>("READER_TEXT_TO_SPEECH_VOICE_ENGINE") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
     val READER_TEXT_TO_SPEECH_VOICE_SPEED =
         object : Preference<Float>("READER_TEXT_TO_SPEECH_VOICE_SPEED") {
             override var value by SharedPreference_Float(name, preferences, 1f)
@@ -117,14 +122,14 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_StringSet(
             name,
             preferences,
-            setOf() // Empty by default - show all extensions
+            setOf()
         )
     }
     val EXTENSIONS_REPOSITORY_URL = object : Preference<String>("EXTENSIONS_REPOSITORY_URL") {
         override var value by SharedPreference_String(
             name,
             preferences,
-            "https://raw.githubusercontent.com/HnDK0/external-sources/main/index.yaml" // Default URL
+            "https://raw.githubusercontent.com/HnDK0/external-sources/main/index.yaml"
         )
     }
     val FINDER_SOURCES_PINNED = object : Preference<Set<String>>("FINDER_SOURCES_PINNED") {
@@ -247,7 +252,6 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "en")
     }
 
-    // WTR-Lab translation mode: "ai" = English translation, "raw" = Chinese original
     val WTR_LAB_MODE = object : Preference<String>("WTR_LAB_MODE") {
         override var value by SharedPreference_String(name, preferences, "ai")
     }
@@ -298,11 +302,6 @@ class AppPreferences @Inject constructor(
         )
     }
 
-    /**
-     * Given a key, returns a flow of values of the mapper if that key preference
-     * had any change.
-     * Notice: will always return an initial value.
-     */
     private fun <T> toFlow(key: String, mapper: (String) -> T): Flow<T> {
         val flow = MutableStateFlow(mapper(key))
         val scope = CoroutineScope(Dispatchers.Default)
@@ -321,10 +320,6 @@ class AppPreferences @Inject constructor(
             }.flowOn(Dispatchers.Default)
     }
 
-    /**
-     * This custom implementation has probably some details wrong
-     * Use only OUTSIDE of composable scope (e.g. viewModel)
-     */
     private fun <T> toState(
         scope: CoroutineScope,
         key: String,

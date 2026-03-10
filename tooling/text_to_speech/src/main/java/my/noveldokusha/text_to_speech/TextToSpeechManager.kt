@@ -29,42 +29,119 @@ data class VoiceData(
     val language: String,
     val needsInternet: Boolean,
     val quality: Int,
+    val enginePackage: String,
 )
 
 class TextToSpeechManager<T : Utterance<T>>(
-    context: Context,
+    private val context: Context,
     initialItemState: T,
 ) {
     private val scope = CoroutineScope(Dispatchers.Default)
     private val _queueList = mutableMapOf<String, T>()
     private val _queueListItemSize = mutableMapOf<String, Int>()
     private val _currentTextSpeakFlow = MutableSharedFlow<T>()
+
     val availableVoices = mutableStateListOf<VoiceData>()
     val voiceSpeed = mutableFloatStateOf(1f)
     val voicePitch = mutableFloatStateOf(1f)
     val activeVoice = mutableStateOf<VoiceData?>(null)
-    val serviceLoadedFlow = MutableSharedFlow<Unit>(replay = 1)
-
+    val serviceLoadedFlow = MutableSharedFlow<Unit>(replay = 0)
     val queueList = _queueList as Map<String, T>
     val currentTextSpeakFlow = _currentTextSpeakFlow.shareIn(
         scope = scope,
         started = SharingStarted.WhileSubscribed()
     )
 
-    val service = TextToSpeech(context) {
-        when (it) {
-            TextToSpeech.SUCCESS -> {
-                listenToUtterances()
-                availableVoices.addAll(getAvailableVoices())
-                updateActiveVoice()
-                scope.launch { serviceLoadedFlow.emit(Unit) }
-            }
-            TextToSpeech.ERROR -> Unit
-            else -> Unit
+    private val auxiliaryServices = mutableListOf<TextToSpeech>()
+
+    // Храним enginePackage сами — service.defaultEngine всегда возвращает системный дефолт,
+    // независимо от того с каким enginePackage был создан этот конкретный service объект.
+    private var currentEnginePackage: String = ""
+
+    var service: TextToSpeech = createService(enginePackage = null, onReady = ::onServiceReady)
+        private set
+
+    val currentActiveItemState = mutableStateOf(initialItemState)
+
+    private fun onServiceReady() {
+        currentEnginePackage = service.defaultEngine ?: ""
+        listenToUtterances()
+        updateActiveVoice()
+        collectVoicesFromAllEngines()
+    }
+
+    private fun createService(enginePackage: String?, onReady: () -> Unit): TextToSpeech {
+        val init: (Int) -> Unit = { status ->
+            if (status == TextToSpeech.SUCCESS) onReady()
+        }
+        return if (enginePackage.isNullOrEmpty()) {
+            TextToSpeech(context, init)
+        } else {
+            TextToSpeech(context, init, enginePackage)
         }
     }
 
-    val currentActiveItemState = mutableStateOf(initialItemState)
+    fun getCurrentEnginePackage(): String = currentEnginePackage
+
+    fun reinitWithEngine(enginePackage: String, voiceId: String) {
+        auxiliaryServices.forEach { runCatching { it.shutdown() } }
+        auxiliaryServices.clear()
+
+        service.stop()
+        service.shutdown()
+
+        val savedSpeed = voiceSpeed.floatValue
+        val savedPitch = voicePitch.floatValue
+
+        service = createService(enginePackage = enginePackage) {
+            // Запоминаем реальный движок этого service объекта
+            currentEnginePackage = enginePackage
+            service.setSpeechRate(savedSpeed)
+            service.setPitch(savedPitch)
+            val voice = service.voices?.find { it.name == voiceId }
+            if (voice != null) {
+                service.voice = voice
+                updateActiveVoice()
+            }
+            listenToUtterances()
+            scope.launch { serviceLoadedFlow.emit(Unit) }
+        }
+    }
+
+    private fun collectVoicesFromAllEngines() {
+        val engines = service.engines
+        var pending = engines.size
+
+        if (engines.isEmpty()) {
+            scope.launch { serviceLoadedFlow.emit(Unit) }
+            return
+        }
+
+        engines.forEach { engineInfo ->
+            if (engineInfo.name == service.defaultEngine) {
+                // Голоса дефолтного движка уже доступны через текущий service
+                val voices = service.voices
+                    ?.map { it.toVoiceData(engineInfo.name) }
+                    ?: emptyList()
+                availableVoices.addAll(voices)
+                if (--pending == 0) scope.launch { serviceLoadedFlow.emit(Unit) }
+            } else {
+                var aux: TextToSpeech? = null
+                aux = TextToSpeech(context, { auxStatus ->
+                    if (auxStatus == TextToSpeech.SUCCESS) {
+                        val voices = aux?.voices
+                            ?.map { it.toVoiceData(engineInfo.name) }
+                            ?: emptyList()
+                        availableVoices.addAll(voices)
+                    }
+                    runCatching { aux?.shutdown() }
+                    auxiliaryServices.remove(aux)
+                    if (--pending == 0) scope.launch { serviceLoadedFlow.emit(Unit) }
+                }, engineInfo.name)
+                auxiliaryServices.add(aux)
+            }
+        }
+    }
 
     fun stop() {
         service.stop()
@@ -96,7 +173,7 @@ class TextToSpeechManager<T : Utterance<T>>(
     }
 
     fun trySetVoiceById(id: String): Boolean {
-        val voice = service.voices.find { it.name == id } ?: return false
+        val voice = service.voices?.find { it.name == id } ?: return false
         service.voice = voice
         updateActiveVoice()
         return true
@@ -122,37 +199,28 @@ class TextToSpeechManager<T : Utterance<T>>(
         return false
     }
 
-    private fun maxStringLengthPerTextUnit(): Int {
-        return TextToSpeech.getMaxSpeechInputLength()
-    }
+    private fun maxStringLengthPerTextUnit() = TextToSpeech.getMaxSpeechInputLength()
 
     private fun updateActiveVoice() {
-        activeVoice.value = service.voice?.toVoiceData()
+        activeVoice.value = service.voice?.toVoiceData(currentEnginePackage)
     }
 
-    private fun Voice.toVoiceData() = VoiceData(
+    private fun Voice.toVoiceData(enginePackage: String) = VoiceData(
         id = name,
         language = locale.displayLanguage,
         needsInternet = isNetworkConnectionRequired,
-        quality = quality
+        quality = quality,
+        enginePackage = enginePackage,
     )
-
-    private fun getAvailableVoices(): List<VoiceData> {
-        return service.voices.map { it.toVoiceData() }
-    }
 
     private fun listenToUtterances() {
         service.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 if (utteranceId == null) return
-
                 val itemUtteranceIndex = utteranceId
                     .substringBefore('|', "")
                     .toIntOrNull() ?: return
-                val isFirstSubItem = itemUtteranceIndex == 0
-                if (!isFirstSubItem) {
-                    return
-                }
+                if (itemUtteranceIndex != 0) return
 
                 val itemUtteranceId = utteranceId.substringAfter('|')
                 val res: T = _queueList[itemUtteranceId]
@@ -163,20 +231,12 @@ class TextToSpeechManager<T : Utterance<T>>(
                 scope.launch { _currentTextSpeakFlow.emit(res) }
             }
 
-            override fun onDone(utteranceId: String?) {
-                onErrorCall(utteranceId = utteranceId)
-            }
+            override fun onDone(utteranceId: String?) = onFinished(utteranceId)
 
             @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                onErrorCall(utteranceId = utteranceId)
-            }
+            override fun onError(utteranceId: String?) = onFinished(utteranceId)
 
-            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                super.onRangeStart(utteranceId, start, end, frame)
-            }
-
-            private fun onErrorCall(utteranceId: String?) {
+            private fun onFinished(utteranceId: String?) {
                 if (utteranceId == null) return
                 val subItemUtteranceIndex = utteranceId
                     .substringBefore('|', "")
@@ -184,10 +244,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                 val itemUtteranceId = utteranceId.substringAfter('|')
 
                 val itemSize = _queueListItemSize[itemUtteranceId]?.minus(1) ?: return
-                val isSubItemLastIndex = itemSize == subItemUtteranceIndex
-                if (!isSubItemLastIndex) {
-                    return
-                }
+                if (itemSize != subItemUtteranceIndex) return
 
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.FINISHED)

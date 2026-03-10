@@ -57,8 +57,7 @@ internal class ReaderSession(
 
     private val readRoutine = ChaptersIsReadRoutine(appRepository)
     private val orderedChapters = mutableListOf<Chapter>()
-    
-    // Track which chapter index has been triggered for pre-translation to avoid duplicates
+
     private var lastPreTranslatedChapterIndex: Int = -1
 
     var bookTitle: String? = null
@@ -120,13 +119,11 @@ internal class ReaderSession(
         chapterTranslationDao = chapterTranslationDao,
         regexRulesProvider = { appPreferences.USER_REGEX_CLEANUP_RULES.value },
     ).also {
-        // Connect the translation refresh callback to clear chapter cache
         readerLiveTranslation.onClearChapterCache = { it.clearTranslationCache() }
     }
 
     val items = readerChaptersLoader.getItems()
 
-    // Track current TTS chapter index for pre-loading
     private var ttsCurrentChapterIndex: Int = -1
 
     val readerTextToSpeech = ReaderTextToSpeech(
@@ -138,31 +135,29 @@ internal class ReaderSession(
         isChapterIndexValid = readerChaptersLoader::isChapterIndexValid,
         tryLoadPreviousChapter = readerChaptersLoader::tryLoadPrevious,
         loadNextChapter = readerChaptersLoader::tryLoadNext,
-        customSavedVoices = appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.state(
-            scope
-        ),
+        customSavedVoices = appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.state(scope),
         setCustomSavedVoices = {
             appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.value = it
         },
         getPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value },
         setPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value = it },
+        getPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value },
+        setPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value = it },
         getPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value },
         setPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value = it },
         getPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value },
         setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
-        // Pre-load next chapter when TTS buffer is low
         onBufferLow = {
             val currentChapterIndex = ttsCurrentChapterIndex
             if (currentChapterIndex < 0) return@ReaderTextToSpeech
             if (!readerChaptersLoader.isLastChapter(currentChapterIndex)) {
                 val nextChapterIndex = currentChapterIndex + 1
-                // Pre-load next chapter if not already loaded
                 if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
                     readerChaptersLoader.tryLoadNext()
                 }
-                // Pre-translate next chapter if translation is active
-                if (readerLiveTranslation.translatorState != null && 
-                    currentChapterIndex != lastPreTranslatedChapterIndex) {
+                if (readerLiveTranslation.translatorState != null &&
+                    currentChapterIndex != lastPreTranslatedChapterIndex
+                ) {
                     lastPreTranslatedChapterIndex = currentChapterIndex
                     scope.launch {
                         readerChaptersLoader.preTranslateNextChapter(currentChapterIndex)
@@ -203,13 +198,11 @@ internal class ReaderSession(
                 chapterItemPosition = chapter.await()?.lastReadPosition ?: 0,
                 offset = chapter.await()?.lastReadOffset ?: 0,
             )
-            // All data prepared! Let's load the current chapter
             readerChaptersLoader.tryLoadInitial(chapterIndex = chapterIndex.await())
         }
     }
 
     private fun initReaderTTSObservers() {
-        // Track TTS chapter changes for pre-loading
         scope.launch {
             readerTextToSpeech
                 .currentReaderItem
@@ -251,7 +244,6 @@ internal class ReaderSession(
                 }
         }
 
-        // Обновляем позицию при воспроизведении для сохранения в базу данных
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
@@ -260,7 +252,6 @@ internal class ReaderSession(
                 .collect { saveLastReadPositionStateSpeaker(it.itemPos) }
         }
 
-        // Отмечаем начало и конец главы при воспроизведении
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
@@ -277,7 +268,6 @@ internal class ReaderSession(
                 }
         }
 
-        // Обновляем readingStats при TTS воспроизведении для отображения актуальной информации в UI
         scope.launch(Dispatchers.Main.immediate) {
             readerTextToSpeech
                 .currentReaderItem
@@ -292,8 +282,6 @@ internal class ReaderSession(
                     }
                 }
         }
-
-        // Прокрутка обрабатывается в ReaderActivity для избежания дублирования
     }
 
     fun startSpeaker(itemIndex: Int) {
@@ -309,8 +297,6 @@ internal class ReaderSession(
 
     fun close() {
         readerChaptersLoader.coroutineContext.cancelChildren()
-        // Ensure we save the latest TTS position regardless of the savePositionMode
-        // because the speaking state might not be properly reflected at the moment of closing
         if (readerTextToSpeech.isActive.value) {
             saveLastReadPositionStateSpeaker(
                 item = readerTextToSpeech.currentTextPlaying.value.itemPos
@@ -342,12 +328,10 @@ internal class ReaderSession(
             chapterUrl = chapterUrl
         ) ?: return
         readingStats.value = stats
-        
-        // Trigger pre-fetch and pre-translation based on reading progress
+
         val progress = stats.chapterReadPercentage()
         val chapterIndex = stats.chapterIndex
-        
-        // Pre-fetch next chapter at 90% (even without translation)
+
         if (progress >= 0.90f && !readerChaptersLoader.isLastChapter(chapterIndex)) {
             val nextChapterIndex = chapterIndex + 1
             if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
@@ -356,12 +340,11 @@ internal class ReaderSession(
                 }
             }
         }
-        
-        // Pre-translate next chapter at 80% (only with translation enabled)
-        // Only trigger once per chapter to avoid duplicate API calls
-        if (progress >= 0.80f && 
-            readerLiveTranslation.translatorState != null && 
-            chapterIndex != lastPreTranslatedChapterIndex) {
+
+        if (progress >= 0.80f &&
+            readerLiveTranslation.translatorState != null &&
+            chapterIndex != lastPreTranslatedChapterIndex
+        ) {
             lastPreTranslatedChapterIndex = chapterIndex
             scope.launch {
                 readerChaptersLoader.preTranslateNextChapter(chapterIndex)
