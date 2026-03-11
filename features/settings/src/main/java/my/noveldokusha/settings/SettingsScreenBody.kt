@@ -54,7 +54,8 @@ internal fun SettingsScreenBody(
     onCheckForUpdatesManual: () -> Unit,
     onGeminiApiKeyChange: (String) -> Unit,
     onGeminiModelChange: (String) -> Unit,
-    onPreferOnlineChange: (Boolean) -> Unit,
+    onTranslationProviderChange: (String) -> Unit,
+    onGooglePaApiKeysChange: (String) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onNavigateToRegexCleanup: () -> Unit,
 ) {
@@ -103,12 +104,14 @@ internal fun SettingsScreenBody(
             )
             HorizontalDivider()
             SettingsGeminiTranslation(
+                translationProvider = state.translationProvider.value,
                 geminiApiKey = state.geminiApiKey.value,
                 geminiModel = state.geminiModel.value,
-                preferOnlineTranslation = state.preferOnlineTranslation.value,
+                googlePaApiKeys = state.googlePaApiKeys.value,
+                onTranslationProviderChange = onTranslationProviderChange,
                 onGeminiApiKeyChange = onGeminiApiKeyChange,
                 onGeminiModelChange = onGeminiModelChange,
-                onPreferOnlineChange = onPreferOnlineChange
+                onGooglePaApiKeysChange = onGooglePaApiKeysChange,
             )
         }
         HorizontalDivider()
@@ -159,11 +162,7 @@ private fun Preview() {
                     updateAppSetting = SettingsScreenState.UpdateApp(
                         currentAppVersion = "1.0.0",
                         appUpdateCheckerEnabled = remember { mutableStateOf(true) },
-                        showNewVersionDialog = remember {
-                            mutableStateOf(
-                                null
-                            )
-                        },
+                        showNewVersionDialog = remember { mutableStateOf(null) },
                         checkingForNewVersion = remember { mutableStateOf(true) },
                     ),
                     libraryAutoUpdate = SettingsScreenState.LibraryAutoUpdate(
@@ -173,7 +172,8 @@ private fun Preview() {
                     massAddDelayMs = remember { derivedStateOf { 2000L } },
                     geminiApiKey = remember { derivedStateOf { "" } },
                     geminiModel = remember { derivedStateOf { "" } },
-                    preferOnlineTranslation = remember { derivedStateOf { false } },
+                    translationProvider = remember { mutableStateOf("GOOGLE_PA") },
+                    googlePaApiKeys = remember { derivedStateOf { "" } },
                     scraperUserAgent = remember { mutableStateOf("") },
                     cloudflareBypassEnabled = remember { mutableStateOf(true) },
                     cloudflareChallengeTimeoutSeconds = remember { mutableStateOf(120) },
@@ -190,7 +190,8 @@ private fun Preview() {
                 onCheckForUpdatesManual = { },
                 onGeminiApiKeyChange = { },
                 onGeminiModelChange = { },
-                onPreferOnlineChange = { },
+                onTranslationProviderChange = { },
+                onGooglePaApiKeysChange = { },
                 onLanguageChange = { },
                 onNavigateToRegexCleanup = { },
             )

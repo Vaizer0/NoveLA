@@ -297,4 +297,15 @@
     <string name="go_to_chapter">Перейти к главе</string>
     <string name="search_chapter_hint">Поиск по названию…</string>
     <string name="search_web">Поиск в браузере</string>
+    <string name="provider_google_pa">Google Переводчик (Улучшенный)</string>
+    <string name="provider_google_pa_description">На базе HTML, более высокое качество. API-ключ не требуется.</string>
+    <string name="provider_google_free">Google Переводчик (Простой)</string>
+    <string name="provider_google_free_description">Простой текстовый перевод. API-ключ не требуется.</string>
+    <string name="provider_gemini">Google Gemini API</string>
+    <string name="provider_gemini_description">ИИ-перевод. Требуется ваш собственный API-ключ.</string>
+    <string name="google_pa_api_keys">Ключи Google PA API</string>
+    <string name="enter_google_pa_api_keys">Введите API-ключи</string>
+    <string name="google_pa_api_keys_placeholder">AIzaSy…\nAIzaSy…</string>
+    <string name="google_pa_api_keys_tip">Один ключ на строку. Ключи проверяются автоматически: нерабочие пропускаются, и при необходимости запрашивается новый ключ из wtr-lab.</string>
+
 </resources>

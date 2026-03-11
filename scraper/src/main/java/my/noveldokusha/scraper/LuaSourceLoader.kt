@@ -112,7 +112,6 @@ class LuaEngine @Inject constructor(
         g.set("json_stringify",         JsonStringifyFunction()        as LuaValue)
         // Misc
         g.set("detect_pagination",      DetectPaginationFunction()     as LuaValue)
-        g.set("google_translate",       GoogleTranslateFunction()      as LuaValue)
         g.set("sleep",                  SleepFunction()                as LuaValue)
         g.set("log_info",               LogInfoFunction()              as LuaValue)
         g.set("log_error",              LogErrorFunction()             as LuaValue)
@@ -120,51 +119,6 @@ class LuaEngine @Inject constructor(
         g.set("os_time",                OsTimeFunction()               as LuaValue)
     }
 
-    // ── Google Translate ──────────────────────────────────────────────────────
-
-    // google_translate(text, sourceLang, targetLang [, origin])
-    // origin — baseUrl плагина. ОБЯЗАТЕЛЕН для translate-pa.googleapis.com, иначе 400.
-    private inner class GoogleTranslateFunction : VarArgFunction() {
-        private val apiKey = String(
-            android.util.Base64.decode(
-                "QUl6YVN5QVRCWGFqdnpRTFRESEVRYmNwcTBJaGUwdldESG1PNTIw",
-                android.util.Base64.DEFAULT
-            )
-        ).trim()
-        private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
-
-        override fun invoke(args: Varargs): Varargs {
-            val t      = args.arg(1).tojstring()
-            val sl     = args.arg(2).tojstring()
-            val tl     = args.arg(3).tojstring()
-            val origin = args.arg(4).optjstring("")
-            val payload = listOf(listOf(t, sl, tl), "wt_lib")
-            val requestBody = gson.toJson(payload).toRequestBody("application/json+protobuf".toMediaType())
-            val requestBuilder = Request.Builder()
-                .url(translateUrl)
-                .addHeader("X-Goog-Api-Key", apiKey)
-                .post(requestBody)
-            if (origin.isNotEmpty()) {
-                requestBuilder.addHeader("Origin", origin.trimEnd('/'))
-            }
-            return try {
-                runBlocking {
-                    networkClient.call(requestBuilder).use { response ->
-                        if (!response.isSuccessful) {
-                            Timber.e("LuaEngine: Google Translate HTTP ${response.code} (origin='$origin')")
-                            return@use LuaValue.valueOf(t)
-                        }
-                        val body = response.body?.string() ?: return@use LuaValue.valueOf(t)
-                        val arr = JsonParser.parseString(body).asJsonArray
-                        LuaValue.valueOf(arr.get(0).asJsonArray.get(0).asString)
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "LuaEngine: Google Translate failed")
-                LuaValue.valueOf(t)
-            }
-        }
-    }
 
     // ── HTTP ──────────────────────────────────────────────────────────────────
 

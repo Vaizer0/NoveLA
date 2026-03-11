@@ -216,6 +216,39 @@ class AppPreferences @Inject constructor(
             override var value by SharedPreference_Boolean(name, preferences, false)
         }
 
+    val TRANSLATION_PROVIDER =
+        object : Preference<String>("TRANSLATION_PROVIDER") {
+            override var value by SharedPreference_String(name, preferences, "GOOGLE_PA")
+        }
+
+    // Список Google PA API ключей (каждый на новой строке)
+    // Первый ключ — захардкоженный фолбэк, остальные добавляются пользователем или с wtr-lab
+    val TRANSLATION_GOOGLE_PA_API_KEYS =
+        object : Preference<String>("TRANSLATION_GOOGLE_PA_API_KEYS") {
+            override var value by SharedPreference_String(
+                name, preferences,
+                "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520"
+            )
+        }
+
+    // Последний проверенный рабочий ключ
+    val TRANSLATION_GOOGLE_PA_CACHED_KEY =
+        object : Preference<String>("TRANSLATION_GOOGLE_PA_CACHED_KEY") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    // Unix timestamp (мс) последней успешной проверки ключа
+    val TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED =
+        object : Preference<Long>("TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED") {
+            override var value by SharedPreference_Serializable(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = 0L,
+                encode = { it.toString() },
+                decode = { it.toLongOrNull() ?: 0L }
+            )
+        }
+
     val MASS_ADD_DELAY_MS = object : Preference<Long>("MASS_ADD_DELAY_MS") {
         override var value by SharedPreference_Serializable(
             name = name,
@@ -332,6 +365,7 @@ class AppPreferences @Inject constructor(
             get() = internalValue.value
             set(newValue) {
                 if (internalValue.value != newValue) {
+                    internalValue.value = newValue
                     setter(newValue)
                 }
             }

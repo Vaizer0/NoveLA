@@ -69,7 +69,8 @@ fun SettingsScreen(
                     onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
                     onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
                     onGeminiModelChange = viewModel::onGeminiModelChange,
-                    onPreferOnlineChange = viewModel::onPreferOnlineTranslationChange,
+                    onTranslationProviderChange = viewModel::onTranslationProviderChange,
+                    onGooglePaApiKeysChange = viewModel::onGooglePaApiKeysChange,
                     onLanguageChange = viewModel::onLanguageChange,
                     onNavigateToRegexCleanup = {
                         currentScreen = "regex-cleanup"

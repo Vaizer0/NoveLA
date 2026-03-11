@@ -79,7 +79,8 @@ internal class SettingsViewModel @Inject constructor(
         massAddDelayMs = appPreferences.MASS_ADD_DELAY_MS.state(viewModelScope),
         geminiApiKey = appPreferences.TRANSLATION_GEMINI_API_KEY.state(viewModelScope),
         geminiModel = appPreferences.TRANSLATION_GEMINI_MODEL.state(viewModelScope),
-        preferOnlineTranslation = appPreferences.TRANSLATION_PREFER_ONLINE.state(viewModelScope),
+        translationProvider = appPreferences.TRANSLATION_PROVIDER.state(viewModelScope),
+        googlePaApiKeys = appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.state(viewModelScope),
         scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
         cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
         cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
@@ -159,7 +160,7 @@ internal class SettingsViewModel @Inject constructor(
                 .toSet()
 
             val booksFolder = appRepository.settings.folderBooks
-            
+
             // Сначала удаляем папки, которые не соответствуют книгам в библиотеке
             val foldersToDelete = booksFolder.listFiles()
                 ?.asSequence()
@@ -212,6 +213,13 @@ internal class SettingsViewModel @Inject constructor(
         onRestartApp?.invoke()
     }
 
+    fun onGooglePaApiKeysChange(keys: String) {
+        appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value = keys
+        // Сбрасываем кеш чтобы новые ключи проверились при следующем переводе
+        appPreferences.TRANSLATION_GOOGLE_PA_CACHED_KEY.value = ""
+        appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value = 0L
+    }
+
     fun onGeminiApiKeyChange(apiKey: String) {
         appPreferences.TRANSLATION_GEMINI_API_KEY.value = apiKey
     }
@@ -222,6 +230,9 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onPreferOnlineTranslationChange(prefer: Boolean) {
         appPreferences.TRANSLATION_PREFER_ONLINE.value = prefer
+    }
+    fun onTranslationProviderChange(provider: String) {
+        appPreferences.TRANSLATION_PROVIDER.value = provider
     }
 
     private fun updateDatabaseSize() = viewModelScope.launch {
@@ -261,7 +272,7 @@ internal class SettingsViewModel @Inject constructor(
     fun onMassAddDelayChange(newDelayMs: Long) {
         appPreferences.MASS_ADD_DELAY_MS.value = newDelayMs
     }
-    
+
     private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {
         when {
             !file.exists() -> {

@@ -19,16 +19,16 @@ object FossModule {
         appCoroutineScope: AppCoroutineScope,
         appPreferences: AppPreferences
     ): TranslationManager {
-        // Create both managers
-        val geminiManager = TranslationManagerGemini(appCoroutineScope, appPreferences)
+        val geminiManager     = TranslationManagerGemini(appCoroutineScope, appPreferences)
         val googleFreeManager = TranslationManagerGoogleFree(appCoroutineScope)
-        
-        // Use composite to switch between them based on API key availability
+        val googlePAManager   = TranslationManagerGooglePA(appCoroutineScope, appPreferences)
+
         return TranslationManagerComposite(
-            appCoroutineScope,
-            geminiManager,
-            googleFreeManager,
-            appPreferences
+            coroutineScope    = appCoroutineScope,
+            geminiManager     = geminiManager,
+            googleFreeManager = googleFreeManager,
+            googlePAManager   = googlePAManager,
+            appPreferences    = appPreferences
         )
     }
 }
