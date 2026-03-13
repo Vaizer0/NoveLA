@@ -1,6 +1,5 @@
 package my.noveldokusha.text_translator
 
-import android.text.Html
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import com.google.gson.Gson
@@ -29,6 +28,11 @@ import java.util.concurrent.TimeUnit
  * Translation manager using translate-pa.googleapis.com/v1/translateHtml —
  * the same API used by WtrLab plugin. Sends HTML-wrapped paragraphs which gives
  * significantly better quality than the plain-text translate.googleapis.com endpoint.
+ *
+ * Paragraph strategy (mirrors wtr-lab website exactly):
+ *   - Join paragraphs with <br> (NOT <p> tags)
+ *   - After translation split result back on <br>
+ *   - No Html.fromHtml() needed — avoids tag stripping and paragraph misalignment
  *
  * Key management strategy:
  * 1. Use cached key if it was verified less than KEY_CACHE_DURATION_MS ago
@@ -60,10 +64,6 @@ class TranslationManagerGooglePA(
     // Regex to find the key in wtr-lab JS bundle
     private val keyHeaderRegex = Regex(""""X-Goog-API-Key"\s*:\s*"([^"]+)"""")
 
-    // Real device User-Agent — same as the system HTTP client on this device
-    private val deviceUserAgent: String =
-        System.getProperty("http.agent") ?: "okhttp/${okhttp3.OkHttp.VERSION}"
-
     // ─── Concurrency guard for key fetching ────────────────────────────────────
 
     private val keyFetchMutex = Mutex()
@@ -80,7 +80,12 @@ class TranslationManagerGooglePA(
             "fi", "no", "cs", "el", "he", "ro", "hu", "uk", "bg", "hr"
         )
         addAll(supportedLanguages.map { lang ->
-            TranslationModelState(language = lang, available = true, downloading = false, downloadingFailed = false)
+            TranslationModelState(
+                language = lang,
+                available = true,
+                downloading = false,
+                downloadingFailed = false
+            )
         })
     }
 
@@ -220,7 +225,8 @@ class TranslationManagerGooglePA(
             .split("\n")
             .map { it.trim() }
             .filter { it.isNotBlank() && it != key }
-        appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value = (listOf(key) + existing).joinToString("\n")
+        appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value =
+            (listOf(key) + existing).joinToString("\n")
     }
 
     /**
@@ -245,7 +251,10 @@ class TranslationManagerGooglePA(
             // Step 2: Find any /novel/... link on the ranking page
             val novelUrl = Regex("""href=["']([^"']*/novel/[^"']+)["']""")
                 .findAll(rankingHtml)
-                .map { if (it.groupValues[1].startsWith("http")) it.groupValues[1] else "https://wtr-lab.com${it.groupValues[1]}" }
+                .map {
+                    if (it.groupValues[1].startsWith("http")) it.groupValues[1]
+                    else "https://wtr-lab.com${it.groupValues[1]}"
+                }
                 .firstOrNull() ?: run {
                 Log.w(TAG, "fetchKeyFromWtrLab: no novel link found on ranking page")
                 return@withContext null
@@ -287,6 +296,7 @@ class TranslationManagerGooglePA(
             null
         }
     }
+
     /**
      * Loads a list of JS URLs in parallel and returns the first API key found.
      */
@@ -342,6 +352,33 @@ class TranslationManagerGooglePA(
         }
     }
 
+    /**
+     * Mirrors wtr-lab website's v() function — unescapes HTML entities in translated text.
+     */
+    private fun unescapeHtmlEntities(text: String): String {
+        return text
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&nbsp;", " ")
+            .replace(Regex("&#(\\d+);")) {
+                it.groupValues[1].toIntOrNull()
+                    ?.toChar()
+                    ?.toString()
+                    ?: it.value
+            }
+    }
+
+    /**
+     * Splits paragraphs into chunks and translates each chunk.
+     *
+     * Mirrors wtr-lab website strategy exactly:
+     *   - Join paragraphs with <br> instead of wrapping in <p> tags
+     *   - Split translated result back on <br>
+     *   - Unescape HTML entities via unescapeHtmlEntities() instead of Html.fromHtml()
+     *   - No Html.fromHtml() — avoids stripping tags and paragraph misalignment
+     */
     private suspend fun translateChunks(
         paragraphs: List<String>,
         sourceLang: String,
@@ -354,19 +391,24 @@ class TranslationManagerGooglePA(
 
         val chunks = mutableListOf<Chunk>()
         val currentIndices = mutableListOf<Int>()
-        val currentHtml = StringBuilder()
+        val currentParts = mutableListOf<String>()
+        var currentLen = 0
 
         for ((i, para) in paragraphs.withIndex()) {
-            val paraHtml = "<p>$para</p>"
-            if (currentHtml.isNotEmpty() && currentHtml.length + paraHtml.length > maxChunkChars) {
-                chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
+            // +4 accounts for "<br>" separator length
+            if (currentLen > 0 && currentLen + para.length + 4 > maxChunkChars) {
+                chunks.add(Chunk(currentIndices.toList(), currentParts.joinToString("<br>")))
                 currentIndices.clear()
-                currentHtml.clear()
+                currentParts.clear()
+                currentLen = 0
             }
             currentIndices.add(i)
-            currentHtml.append(paraHtml)
+            currentParts.add(para)
+            currentLen += para.length + 4
         }
-        if (currentHtml.isNotEmpty()) chunks.add(Chunk(currentIndices.toList(), currentHtml.toString()))
+        if (currentParts.isNotEmpty()) {
+            chunks.add(Chunk(currentIndices.toList(), currentParts.joinToString("<br>")))
+        }
 
         Log.d(TAG, "translateChunks: ${paragraphs.size} paragraphs → ${chunks.size} chunks, $sourceLang→$targetLang")
 
@@ -384,19 +426,23 @@ class TranslationManagerGooglePA(
 
             if (translated == chunk.html) continue
 
-            val unescaped = Html.fromHtml(translated, Html.FROM_HTML_MODE_LEGACY).toString()
-            val translatedParas = Regex("<p>(.*?)</p>", RegexOption.DOT_MATCHES_ALL)
-                .findAll(unescaped)
-                .map { it.groupValues[1].trim() }
+            // Mirror wtr-lab: replace <br> back to newline, split, unescape entities
+            val translatedParas = translated
+                .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+                .split("\n")
+                .map { unescapeHtmlEntities(it.trim()) }
                 .filter { it.isNotBlank() }
-                .toList()
-                .ifEmpty { unescaped.split("\n").filter { it.isNotBlank() } }
 
             val minSize = minOf(translatedParas.size, chunk.indices.size)
-            for (pos in 0 until minSize) result[chunk.indices[pos]] = translatedParas[pos]
+            for (pos in 0 until minSize) {
+                result[chunk.indices[pos]] = translatedParas[pos]
+            }
 
             if (translatedParas.size != chunk.indices.size) {
-                Log.w(TAG, "Chunk ${idx + 1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}")
+                Log.w(
+                    TAG,
+                    "Chunk ${idx + 1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}"
+                )
             }
         }
 
@@ -451,7 +497,7 @@ class TranslationManagerGooglePA(
             val lines = text.split("\n").filter { it.isNotBlank() }
             val start = allParagraphs.size
             allParagraphs.addAll(lines)
-            boundaries.add(start until allParagraphs.size)
+            boundaries.add(start until start + lines.size)
         }
 
         val translatedAll = try {
@@ -464,10 +510,17 @@ class TranslationManagerGooglePA(
         val result = mutableMapOf<String, String>()
         for ((i, text) in texts.withIndex()) {
             val range = boundaries[i]
-            if (range.isEmpty()) continue
-            val end = range.last.coerceAtMost(translatedAll.size - 1)
-            val translatedLines = translatedAll.subList(range.first, end + 1)
-            if (translatedLines.isNotEmpty()) result[text] = translatedLines.joinToString("\n")
+            if (range.isEmpty()) {
+                result[text] = text
+                continue
+            }
+            val safeEnd = range.last.coerceAtMost(translatedAll.size - 1)
+            if (safeEnd < range.first) {
+                result[text] = text
+                continue
+            }
+            val translatedLines = translatedAll.subList(range.first, safeEnd + 1)
+            result[text] = if (translatedLines.isNotEmpty()) translatedLines.joinToString("\n") else text
         }
 
         Log.d(TAG, "translateBatch: total=${texts.size}, translated=${result.size}")
