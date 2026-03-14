@@ -128,7 +128,19 @@ internal class LibraryPageViewModel @Inject constructor(
                 SortDirection.DESC -> sortedList.reversed()
             }
         }.combine(_searchQueryFlow) { list, query ->
-            if (query.isBlank()) list else list.filter { it.book.title.contains(query, ignoreCase = true) }
+            if (query.isBlank()) list
+            else {
+                val q = query.trim()
+                val cache = genreToBookUrls.value
+                list.filter { book ->
+                    // Совпадение по названию
+                    book.book.title.contains(q, ignoreCase = true) ||
+                            // Совпадение по жанру — ищем в кэше какие жанры содержат bookUrl
+                            cache.any { (genre, urls) ->
+                                book.book.url in urls && genre.contains(q, ignoreCase = true)
+                            }
+                }
+            }
         }.combine(_selectedGenres) { list, selectedGenres ->
             if (selectedGenres.isEmpty()) list
             else {
