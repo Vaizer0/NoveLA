@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,7 +47,9 @@ import my.noveldokusha.core.appPreferences.ListLayoutMode
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.core.utils.actionCopyToClipboard
 import my.noveldokusha.coreui.states.IteratorState
+import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.feature.local_database.BookMetadata
+import my.noveldokusha.scraper.ActiveFilters
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -59,6 +64,8 @@ internal fun SourceCatalogScreen(
     onBookClicked: (BookMetadata) -> Unit,
     onBookLongClicked: (BookMetadata) -> Unit,
     onPressBack: () -> Unit,
+    onOpenFilterSheet: () -> Unit,
+    onApplyFilters: (ActiveFilters) -> Unit,
 ) {
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
@@ -68,6 +75,10 @@ internal fun SourceCatalogScreen(
         snapAnimationSpec = null,
         flingAnimationSpec = null
     )
+
+    // Фильтры видны только в режиме основного toolbar (не во время поиска)
+    val isSearchMode = state.toolbarMode.value == ToolbarMode.SEARCH
+    val hasActiveFilters = !state.activeFilters.value.isEmpty
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -85,7 +96,8 @@ internal fun SourceCatalogScreen(
                                 title = {
                                     Column {
                                         val title = state.sourceCatalogName.value
-                                            ?: if (state.sourceCatalogNameStrId.value != 0) stringResource(id = state.sourceCatalogNameStrId.value)
+                                            ?: if (state.sourceCatalogNameStrId.value != 0)
+                                                stringResource(id = state.sourceCatalogNameStrId.value)
                                             else ""
                                         Text(
                                             text = title,
@@ -99,9 +111,7 @@ internal fun SourceCatalogScreen(
                                     }
                                 },
                                 navigationIcon = {
-                                    IconButton(
-                                        onClick = onPressBack
-                                    ) {
+                                    IconButton(onClick = onPressBack) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
                                     }
                                 },
@@ -117,6 +127,25 @@ internal fun SourceCatalogScreen(
                                             painter = painterResource(id = R.drawable.ic_baseline_search_24),
                                             contentDescription = stringResource(R.string.search_for_title)
                                         )
+                                    }
+                                    // Кнопка фильтров — только если источник их поддерживает
+                                    if (state.hasFilters) {
+                                        IconButton(onClick = onOpenFilterSheet) {
+                                            BadgedBox(
+                                                badge = {
+                                                    if (hasActiveFilters) {
+                                                        Badge(containerColor = ColorAccent)
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.FilterList,
+                                                    contentDescription = "Фильтры",
+                                                    tint = if (hasActiveFilters) ColorAccent
+                                                    else LocalContentColor
+                                                )
+                                            }
+                                        }
                                     }
                                     IconButton(onClick = { optionsExpanded = !optionsExpanded }) {
                                         Icon(
@@ -165,7 +194,7 @@ internal fun SourceCatalogScreen(
             }
         )
 
-        // Loading indicator overlay for initial load and during loading
+        // Loading indicator для первоначальной загрузки
         if (state.fetchIterator.state == IteratorState.LOADING && state.fetchIterator.list.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -177,5 +206,19 @@ internal fun SourceCatalogScreen(
                 )
             }
         }
+
+        // Filter Bottom Sheet
+        if (state.isFilterSheetOpen.value && state.hasFilters) {
+            FilterBottomSheet(
+                filterList    = state.filterList.value,
+                activeFilters = state.activeFilters.value,
+                onApply       = onApplyFilters,
+                onDismiss     = { state.isFilterSheetOpen.value = false }
+            )
+        }
     }
 }
+
+// Вспомогательный extension для получения цвета контента из LocalContentColor
+private val LocalContentColor: androidx.compose.ui.graphics.Color
+    @Composable get() = androidx.compose.material3.LocalContentColor.current

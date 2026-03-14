@@ -13,7 +13,6 @@ import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.navigation.NavigationRoutes
 import javax.inject.Inject
 
-
 @AndroidEntryPoint
 class SourceCatalogActivity : BaseActivity() {
     class IntentData : Intent, SourceCatalogStateBundle {
@@ -38,7 +37,6 @@ class SourceCatalogActivity : BaseActivity() {
 
         val backPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Обработка нажатия кнопки "назад"
                 finish()
             }
         }
@@ -50,15 +48,17 @@ class SourceCatalogActivity : BaseActivity() {
                     state = viewModel.state,
                     onSearchTextInputChange = viewModel.state.searchTextInput::value::set,
                     onSearchTextInputSubmit = viewModel::onSearchText,
-                    onSearchCatalogSubmit = viewModel::onSearchCatalog,
-                    onListLayoutModeChange = viewModel.state.listLayoutMode::value::set,
-                    onToolbarModeChange = viewModel.state.toolbarMode::value::set,
-                    onOpenSourceWebPage = {
+                    onSearchCatalogSubmit   = viewModel::onSearchCatalog,
+                    onListLayoutModeChange  = viewModel.state.listLayoutMode::value::set,
+                    onToolbarModeChange     = viewModel.state.toolbarMode::value::set,
+                    onOpenSourceWebPage     = {
                         navigationRoutes.webView(this, viewModel.sourceBaseUrl).let(::startActivity)
                     },
-                    onBookClicked = { navigationRoutes.chapters(this, it).let(::startActivity) },
-                    onBookLongClicked = viewModel::addToLibraryToggle,
-                    onPressBack = { backPressedCallback.handleOnBackPressed() }
+                    onBookClicked           = { navigationRoutes.chapters(this, it).let(::startActivity) },
+                    onBookLongClicked       = viewModel::addToLibraryToggle,
+                    onPressBack             = { backPressedCallback.handleOnBackPressed() },
+                    onOpenFilterSheet       = { viewModel.state.isFilterSheetOpen.value = true },
+                    onApplyFilters          = viewModel::onApplyFilters,
                 )
             }
         }

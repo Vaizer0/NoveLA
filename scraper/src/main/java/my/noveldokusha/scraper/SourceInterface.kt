@@ -56,6 +56,33 @@ sealed interface SourceInterface {
         suspend fun getChapterListHash(bookUrl: String): Response<String?> = Response.Success(null)
     }
 
+    /**
+     * Источник поддерживающий фильтрацию каталога.
+     * Плагин объявляет getFilterList() и getCatalogFiltered().
+     *
+     * Проверка в UI: source is SourceInterface.FilterableCatalog
+     * Кнопка фильтров показывается только для таких источников.
+     *
+     * Список фильтров всегда исходит из Lua — getFilterList() вызывает
+     * Lua-функцию каждый раз, без кэширования в адаптере.
+     */
+    interface FilterableCatalog : Catalog {
+        /**
+         * Возвращает список доступных фильтров из Lua-плагина.
+         * ViewModel вызывает один раз при init и кэширует в своём состоянии.
+         */
+        suspend fun getFilterList(): Response<List<LuaFilter>>
+
+        /**
+         * Загружает каталог с применёнными фильтрами.
+         * Вызывается вместо getCatalogList() когда activeFilters.isEmpty == false.
+         */
+        suspend fun getCatalogFiltered(
+            index: Int,
+            filters: ActiveFilters
+        ): Response<PagedList<BookResult>>
+    }
+
     interface Configurable {
         @Composable
         fun ScreenConfig()

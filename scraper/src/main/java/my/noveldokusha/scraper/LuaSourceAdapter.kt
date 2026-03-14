@@ -19,16 +19,23 @@ import timber.log.Timber
 /**
  * Адаптер для Lua источников, реализующий SourceInterface.Catalog.
  *
- * [iconUrlFromYaml] — иконка из YAML-конфига при установке расширения.
- * Приоритет иконки: YAML → Lua-скрипт → null.
- * YAML является авторитетным источником — он может исправить неверную иконку в Lua.
+ * Иерархия классов:
  *
- * Настройки: если плагин объявляет getSettingsSchema() — адаптер реализует
- * SourceInterface.Configurable и кнопка настроек появляется только для него.
+ *   LuaSourceAdapter                         (базовый)
+ *     ├── LuaSourceAdapterConfigurable       (+ getSettingsSchema → Configurable)
+ *     ├── LuaSourceAdapterFilterable         (+ getFilterList → FilterableCatalog)
+ *     └── LuaSourceAdapterFull               (+ оба → Configurable + FilterableCatalog)
+ *           extends LuaSourceAdapterConfigurable
+ *
+ * Создавать только через фабричный метод createLuaSourceAdapter().
+ *
+ * Фильтры: список фильтров всегда исходит из Lua — getFilterList() вызывает
+ * Lua-функцию каждый раз, без кэширования List<LuaFilter> в адаптере.
  */
+
 /**
- * Фабричный метод — возвращает LuaSourceAdapter или LuaSourceAdapterConfigurable
- * в зависимости от наличия getSettingsSchema() в плагине.
+ * Фабричный метод — определяет нужный подкласс по наличию функций в Lua-скрипте.
+ * Только проверяет isnil() — НЕ вызывает getFilterList() / getSettingsSchema().
  */
 fun createLuaSourceAdapter(
     context: Context,
@@ -37,11 +44,21 @@ fun createLuaSourceAdapter(
     iconUrlFromYaml: String? = null,
     fileName: String?
 ): LuaSourceAdapter {
-    val schema = parseLuaSettingsSchema(luaScript)
-    return if (schema != null) {
-        LuaSourceAdapterConfigurable(context, luaScript, luaEngine, iconUrlFromYaml, fileName, schema)
-    } else {
-        LuaSourceAdapter(context, luaScript, luaEngine, iconUrlFromYaml, fileName)
+    val hasSettings = !luaScript.get("getSettingsSchema").isnil()
+    val hasFilters  = !luaScript.get("getFilterList").isnil()
+
+    // Settings парсятся сразу — они статичны и нужны для UI настроек при открытии экрана
+    val schema = if (hasSettings) parseLuaSettingsSchema(luaScript) else null
+
+    return when {
+        schema != null && hasFilters ->
+            LuaSourceAdapterFull(context, luaScript, luaEngine, iconUrlFromYaml, fileName, schema)
+        schema != null ->
+            LuaSourceAdapterConfigurable(context, luaScript, luaEngine, iconUrlFromYaml, fileName, schema)
+        hasFilters ->
+            LuaSourceAdapterFilterable(context, luaScript, luaEngine, iconUrlFromYaml, fileName)
+        else ->
+            LuaSourceAdapter(context, luaScript, luaEngine, iconUrlFromYaml, fileName)
     }
 }
 
@@ -66,7 +83,7 @@ open class LuaSourceAdapter(
     override val charset: String = metadata.charset ?: "UTF-8"
 
     override val language: LanguageCode? = when (metadata.language.lowercase().trim()) {
-        "Mtl", "multi" -> LanguageCode.MTL
+        "mtl", "multi" -> LanguageCode.MTL
         else -> fromIso639_1(metadata.language)
     }
 
@@ -77,9 +94,6 @@ open class LuaSourceAdapter(
             if (icon.startsWith("http")) icon
             else "${baseUrl.trimEnd('/')}/$icon"
         }
-
-    // Настройки доступны только в LuaSourceAdapterConfigurable (подкласс).
-    // Создавай через фабричный метод createLuaSourceAdapter().
 
     init {
         validateLuaScript()
@@ -220,7 +234,8 @@ open class LuaSourceAdapter(
 
     // ── Конвертация Lua → Kotlin ──────────────────────────────────────────────
 
-    private fun convertLuaResultToPagedList(luaResult: LuaValue): Response<PagedList<BookResult>> {
+    // protected — доступен подклассам FilterableCatalog
+    protected fun convertLuaResultToPagedList(luaResult: LuaValue): Response<PagedList<BookResult>> {
         if (!luaResult.istable()) return Response.Success(PagedList(listOf(), 0, true))
         return try {
             val table = luaResult.checktable()
@@ -253,12 +268,13 @@ open class LuaSourceAdapter(
     )
 }
 
+// ── Подклассы ─────────────────────────────────────────────────────────────────
+
 /**
- * Подкласс LuaSourceAdapter для плагинов с getSettingsSchema().
- * Реализует SourceInterface.Configurable — UI подхватывает автоматически
- * через стандартный `is SourceInterface.Configurable`, без изменений в UI-коде.
+ * Плагин с getSettingsSchema() — постоянные настройки.
+ * UI подхватывает через `is SourceInterface.Configurable`.
  */
-class LuaSourceAdapterConfigurable(
+open class LuaSourceAdapterConfigurable(
     context: Context,
     luaScript: LuaValue,
     luaEngine: LuaEngine,
@@ -271,5 +287,98 @@ class LuaSourceAdapterConfigurable(
     @Composable
     override fun ScreenConfig() {
         LuaSettingsScreen(context, schema, luaScript)
+    }
+}
+
+/**
+ * Плагин с getFilterList() — фильтрация каталога.
+ * UI подхватывает через `is SourceInterface.FilterableCatalog`.
+ *
+ * Ключевой принцип: getFilterList() вызывает Lua каждый раз.
+ * Нет кэширования List<LuaFilter> в адаптере — только в ViewModel на время сессии.
+ */
+class LuaSourceAdapterFilterable(
+    context: Context,
+    luaScript: LuaValue,
+    luaEngine: LuaEngine,
+    iconUrlFromYaml: String? = null,
+    fileName: String?
+) : LuaSourceAdapter(context, luaScript, luaEngine, iconUrlFromYaml, fileName),
+    SourceInterface.FilterableCatalog {
+
+    override suspend fun getFilterList(): Response<List<LuaFilter>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val fn = luaScript.get("getFilterList")
+                if (fn.isnil()) return@withContext Response.Success(emptyList())
+                val result = fn.call()
+                Response.Success(parseLuaFilterList(result))
+            } catch (e: Exception) {
+                Timber.e(e, "Lua getFilterList [$id]")
+                Response.Error(e.message ?: "Unknown Lua error", e)
+            }
+        }
+
+    override suspend fun getCatalogFiltered(
+        index: Int,
+        filters: ActiveFilters
+    ): Response<PagedList<BookResult>> = withContext(Dispatchers.IO) {
+        try {
+            val luaFilters = filters.toLuaTable(luaEngine)
+            val result = luaScript.get("getCatalogFiltered").call(
+                LuaValue.valueOf(index),
+                luaFilters
+            )
+            convertLuaResultToPagedList(result)
+        } catch (e: Exception) {
+            Timber.e(e, "Lua getCatalogFiltered [$id]")
+            Response.Error(e.message ?: "Unknown Lua error", e)
+        }
+    }
+}
+
+/**
+ * Плагин с обоими: getSettingsSchema() + getFilterList().
+ * Реализует и Configurable и FilterableCatalog.
+ * Наследует от LuaSourceAdapterConfigurable (Settings), добавляет FilterableCatalog.
+ */
+class LuaSourceAdapterFull(
+    context: Context,
+    luaScript: LuaValue,
+    luaEngine: LuaEngine,
+    iconUrlFromYaml: String? = null,
+    fileName: String?,
+    schema: List<LuaSetting>
+) : LuaSourceAdapterConfigurable(context, luaScript, luaEngine, iconUrlFromYaml, fileName, schema),
+    SourceInterface.FilterableCatalog {
+
+    override suspend fun getFilterList(): Response<List<LuaFilter>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val fn = luaScript.get("getFilterList")
+                if (fn.isnil()) return@withContext Response.Success(emptyList())
+                val result = fn.call()
+                Response.Success(parseLuaFilterList(result))
+            } catch (e: Exception) {
+                Timber.e(e, "Lua getFilterList [$id]")
+                Response.Error(e.message ?: "Unknown Lua error", e)
+            }
+        }
+
+    override suspend fun getCatalogFiltered(
+        index: Int,
+        filters: ActiveFilters
+    ): Response<PagedList<BookResult>> = withContext(Dispatchers.IO) {
+        try {
+            val luaFilters = filters.toLuaTable(luaEngine)
+            val result = luaScript.get("getCatalogFiltered").call(
+                LuaValue.valueOf(index),
+                luaFilters
+            )
+            convertLuaResultToPagedList(result)
+        } catch (e: Exception) {
+            Timber.e(e, "Lua getCatalogFiltered [$id]")
+            Response.Error(e.message ?: "Unknown Lua error", e)
+        }
     }
 }

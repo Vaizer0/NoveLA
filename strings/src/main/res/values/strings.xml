@@ -327,4 +327,9 @@
     <string name="enter_google_pa_api_keys">Enter API keys</string>
     <string name="google_pa_api_keys_placeholder">AIzaSy…\nAIzaSy…</string>
     <string name="google_pa_api_keys_tip">One key per line. Keys are validated automatically — dead keys are skipped and a fresh key is fetched from wtr-lab if needed.</string>
+    <!-- Filters -->
+    <string name="filters">Filters</string>
+    <string name="filters_reset">Reset</string>
+    <string name="filters_apply">Apply</string>
+    <string name="filters_search_hint">Search…</string>
 </resources>
