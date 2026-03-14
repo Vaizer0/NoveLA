@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import my.noveldokusha.coreui.R
 
@@ -27,6 +28,7 @@ fun ImageView(
     contentScale: ContentScale = ContentScale.Crop,
     @DrawableRes error: Int = R.drawable.default_book_cover,
     colorFilter: ColorFilter? = null,
+    forceCache: Boolean = false,
 ) {
     val model by remember(imageModel, error) {
         derivedStateOf {
@@ -51,12 +53,18 @@ fun ImageView(
         )
     } else {
         val context by rememberUpdatedState(LocalContext.current)
-        val imageRequest by remember(model) {
+        val imageRequest by remember(model, forceCache) {
             derivedStateOf {
                 ImageRequest
                     .Builder(context)
                     .data(model)
                     .crossfade(fadeInDurationMillis)
+                    .apply {
+                        if (forceCache) {
+                            diskCachePolicy(CachePolicy.ENABLED)
+                            memoryCachePolicy(CachePolicy.ENABLED)
+                        }
+                    }
                     .build()
             }
         }

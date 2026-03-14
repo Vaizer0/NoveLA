@@ -64,7 +64,7 @@ internal fun SettingsData(
             },
             supportingContent = {
                 Column {
-                    Text(text = stringResource(id = R.string.preserve_only_images_from_library_books))
+                    //Text(text = stringResource(id = R.string.preserve_only_images_from_library_books))
                     Text(text = stringResource(id = R.string.size) + " " + imagesFolderSize)
                 }
             },

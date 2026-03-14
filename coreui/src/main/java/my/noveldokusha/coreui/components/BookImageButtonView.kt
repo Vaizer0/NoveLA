@@ -57,6 +57,7 @@ fun BookImageButtonView(
     interactionSource: MutableInteractionSource = MutableInteractionSource(),
     sourceIcon: (@Composable () -> Unit)? = null,
     sourceText: String? = null,
+    forceCache: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = { },
 ) {
@@ -81,6 +82,7 @@ fun BookImageButtonView(
                 contentDescription = title,
                 modifier = Modifier.fillMaxSize(),
                 error = R.drawable.default_book_cover,
+                forceCache = forceCache,
             )
 
             // Source text in top-right corner

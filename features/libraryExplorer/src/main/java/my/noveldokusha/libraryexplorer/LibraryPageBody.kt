@@ -81,7 +81,8 @@ internal fun LibraryPageBody(
                     ),
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
-                    sourceText = extractDomainFromUrl(it.book.url)
+                    sourceText = extractDomainFromUrl(it.book.url),
+                    forceCache = true
                 )
 
                 // Selection overlay

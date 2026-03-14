@@ -179,9 +179,17 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
 
-            // Обновляем размер папки после удаления "мусорных" папок
-            updateImagesFolderSizeAndWait()
+            // Очищаем Glide disk cache
             Glide.get(context).clearDiskCache()
+            // Очищаем Coil disk cache (кэш сетевых обложек)
+            context.cacheDir.resolve("image_cache").deleteRecursively()
+            withContext(Dispatchers.Main) {
+                Glide.get(context).clearMemory()
+                coil.Coil.imageLoader(context).memoryCache?.clear()
+            }
+
+            // Обновляем размер папки после удаления
+            updateImagesFolderSizeAndWait()
             kotlinx.coroutines.delay(500) // Give time for UI update
 
             if (deletedCount > 0) {
@@ -274,22 +282,16 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {
-        when {
-            !file.exists() -> {
-                // Создаем папку, если она не существует
-                file.mkdirs()
-                0
-            }
-            file.isFile -> file.length()
-            else -> {
-                var totalSize = 0L
-                file.walk().forEach { currentFile ->
-                    if (currentFile.isFile) {
-                        totalSize += currentFile.length()
-                    }
-                }
-                totalSize
-            }
+        fun dirSize(dir: File): Long {
+            if (!dir.exists()) return 0L
+            var total = 0L
+            dir.walk().forEach { if (it.isFile) total += it.length() }
+            return total
         }
+        // Папка с локальными файлами книг (обложки epub и т.д.)
+        val booksSize = dirSize(file)
+        // Coil disk cache (кэш сетевых обложек)
+        val coilCacheSize = dirSize(context.cacheDir.resolve("image_cache"))
+        booksSize + coilCacheSize
     }
 }
