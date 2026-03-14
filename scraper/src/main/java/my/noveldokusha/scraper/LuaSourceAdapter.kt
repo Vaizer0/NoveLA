@@ -193,6 +193,27 @@ open class LuaSourceAdapter(
             }
         }
 
+    override suspend fun getBookGenres(bookUrl: String): Response<List<String>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val fn = luaScript.get("getBookGenres")
+                // Функция необязательна — если плагин её не объявил, возвращаем пустой список
+                if (fn.isnil()) return@withContext Response.Success(emptyList())
+                val result = fn.call(LuaValue.valueOf(bookUrl))
+                if (!result.istable()) return@withContext Response.Success(emptyList())
+                val table = result.checktable()
+                val genres = mutableListOf<String>()
+                for (i in 1..table.length()) {
+                    val v = table.get(LuaValue.valueOf(i)).optjstring(null)
+                    if (!v.isNullOrBlank()) genres.add(v)
+                }
+                Response.Success(genres)
+            } catch (e: Exception) {
+                Timber.e(e, "Lua getBookGenres [${metadata.id}]")
+                Response.Error(e.message ?: "Unknown error", e)
+            }
+        }
+
     override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> =
         withContext(Dispatchers.IO) {
             try {

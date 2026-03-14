@@ -88,7 +88,7 @@ interface LibraryDao {
 
     @Query("SELECT url FROM Book WHERE inLibrary == 0")
     suspend fun getNonLibraryBookUrls(): List<String>
-    
+
     @Query("DELETE FROM Book WHERE url IN (:urls)")
     suspend fun removeBooksByUrls(urls: List<String>)
 

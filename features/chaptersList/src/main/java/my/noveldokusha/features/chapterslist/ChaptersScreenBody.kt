@@ -131,6 +131,7 @@ internal fun ChaptersScreenBody(
             ) {
                 ChaptersScreenHeader(
                     bookState = state.book.value,
+                    genres = state.genres.value,
                     sourceCatalogName = if (state.sourceCatalogNameStrRes.value == 0) {
                         // Для Lua источников используем динамическое имя
                         val source = scraper.getCompatibleSource(state.book.value.url)

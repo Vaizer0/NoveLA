@@ -19,6 +19,7 @@ internal data class ChaptersScreenState(
     val settingChapterSort: MutableState<TernaryState>,
     val isLocalSource: State<Boolean>,
     val isRefreshable: State<Boolean>,
+    val genres: MutableState<List<String>>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }
@@ -39,7 +40,7 @@ internal data class ChaptersScreenState(
             lastReadChapter = book.lastReadChapter,
             inLibrary = book.inLibrary,
             coverImageUrl = book.coverImageUrl,
-            description = book.description
+            description = book.description,
         )
     }
 }

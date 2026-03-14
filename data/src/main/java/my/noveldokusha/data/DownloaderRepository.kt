@@ -83,6 +83,17 @@ class DownloaderRepository @Inject constructor(
         }
     }
 
+    suspend fun bookGenres(
+        bookUrl: String,
+    ): Response<List<String>> = withContext(Dispatchers.Default) {
+        val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
+            ?: return@withContext Response.Success(emptyList())
+
+        my.noveldokusha.network.tryFlatConnect {
+            scrap.getBookGenres(bookUrl)
+        }
+    }
+
     suspend fun bookDescription(
         bookUrl: String,
     ): Response<String?> = withContext(Dispatchers.Default) {

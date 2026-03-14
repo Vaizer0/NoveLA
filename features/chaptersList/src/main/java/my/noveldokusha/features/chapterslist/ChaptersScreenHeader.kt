@@ -1,9 +1,13 @@
 package my.noveldokusha.features.chapterslist
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +20,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -49,9 +55,11 @@ import my.noveldokusha.coreui.theme.clickableNoIndicator
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.rememberResolvedBookImagePath
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ChaptersScreenHeader(
     bookState: ChaptersScreenState.BookState,
+    genres: List<String>,
     sourceCatalogName: String,
     numberOfChapters: Int,
     paddingValues: PaddingValues,
@@ -167,6 +175,69 @@ internal fun ChaptersScreenHeader(
                     text = text,
                     linesForExpand = 4
                 )
+            }
+
+            // Жанры — показываем только если есть, с возможностью свернуть/развернуть
+            if (genres.isNotEmpty()) {
+                val genresCollapsedCount = 8
+                var genresExpanded by rememberSaveable { mutableStateOf(false) }
+                val visibleGenres = if (genresExpanded || genres.size <= genresCollapsedCount)
+                    genres
+                else
+                    genres.take(genresCollapsedCount)
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize()
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { if (genres.size > genresCollapsedCount) genresExpanded = !genresExpanded }
+                        )
+                ) {
+                    visibleGenres.forEach { genre ->
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    text = genre,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = ColorAccent.copy(alpha = 0.10f),
+                                labelColor = ColorAccent,
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(
+                                enabled = false,
+                                borderColor = ColorAccent.copy(alpha = 0.3f),
+                            ),
+                        )
+                    }
+                    // Чип "ещё N" когда свёрнуто
+                    if (!genresExpanded && genres.size > genresCollapsedCount) {
+                        AssistChip(
+                            onClick = { genresExpanded = true },
+                            label = {
+                                Text(
+                                    text = "+${genres.size - genresCollapsedCount}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(
+                                enabled = true,
+                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            ),
+                        )
+                    }
+                }
             }
 
             // Кнопки навигации по главам

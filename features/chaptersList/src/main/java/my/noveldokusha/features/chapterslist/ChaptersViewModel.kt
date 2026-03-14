@@ -26,6 +26,8 @@ import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.ChapterWithContext
+import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
+import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.scraper.Scraper
 import javax.inject.Inject
 
@@ -45,6 +47,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val downloaderRepository: DownloaderRepository,
     private val chaptersRepository: ChaptersRepository,
     private val epubImporterRepository: EpubImporterRepository,
+    private val bookGenreDao: BookGenreDao,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel(), ChapterStateBundle {
 
@@ -79,7 +82,8 @@ internal class ChaptersViewModel @Inject constructor(
         sourceCatalogNameStrRes = mutableStateOf(source?.nameStrId),
         settingChapterSort = appPreferences.CHAPTERS_SORT_ASCENDING.state(viewModelScope),
         isLocalSource = mutableStateOf(bookUrl.isLocalUri),
-        isRefreshable = mutableStateOf(rawBookUrl.isContentUri || !bookUrl.isLocalUri)
+        isRefreshable = mutableStateOf(rawBookUrl.isContentUri || !bookUrl.isLocalUri),
+        genres = mutableStateOf(emptyList()),
     )
 
     init {
@@ -102,9 +106,21 @@ internal class ChaptersViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            if (state.isLocalSource.value) return@launch
+            updateGenres()
+        }
+
+        viewModelScope.launch {
             chaptersRepository.getChaptersSortedFlow(bookUrl = bookUrl).collect {
                 state.chapters.clear()
                 state.chapters.addAll(it)
+            }
+        }
+
+        // Подписываемся на жанры из БД — UI обновится как только они появятся
+        viewModelScope.launch {
+            bookGenreDao.getGenresFlow(bookUrl).collect {
+                state.genres.value = it
             }
         }
     }
@@ -132,6 +148,15 @@ internal class ChaptersViewModel @Inject constructor(
             updateTitle()
             updateDescription()
             updateChaptersList()
+        }
+    }
+
+    private fun updateGenres() = viewModelScope.launch {
+        if (state.isLocalSource.value) return@launch
+        downloaderRepository.bookGenres(bookUrl = bookUrl).onSuccess { genres ->
+            if (genres.isEmpty()) return@onSuccess
+            bookGenreDao.deleteByBook(bookUrl)
+            bookGenreDao.insert(genres.map { BookGenre(bookUrl = bookUrl, genre = it) })
         }
     }
 
@@ -247,15 +272,15 @@ internal class ChaptersViewModel @Inject constructor(
 
     fun downloadSelected() {
         if (state.isLocalSource.value) return
-        
+
         // Get selected chapter URLs
         val selectedUrls = state.selectedChaptersUrl.keys.toSet()
-        
+
         // Filter and sort chapters by position to ensure sequential download
         val sortedChapters = state.chapters
             .filter { selectedUrls.contains(it.chapter.url) }
             .sortedBy { it.chapter.position }
-        
+
         // Download chapters sequentially in order
         appScope.launch(Dispatchers.Default) {
             sortedChapters.forEach { chapter ->

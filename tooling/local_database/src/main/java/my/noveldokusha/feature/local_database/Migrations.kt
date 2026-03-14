@@ -144,6 +144,17 @@ internal fun databaseMigrations() = arrayOf(
             ON ChapterTranslation (chapterUrl, sourceLang, targetLang)
         """)
     },
+    migration(15) {
+        it.execSQL("""
+            CREATE TABLE IF NOT EXISTS BookGenre (
+                bookUrl TEXT NOT NULL,
+                genre TEXT NOT NULL,
+                PRIMARY KEY (bookUrl, genre)
+            )
+        """)
+        it.execSQL("CREATE INDEX IF NOT EXISTS index_BookGenre_bookUrl ON BookGenre (bookUrl)")
+        it.execSQL("CREATE INDEX IF NOT EXISTS index_BookGenre_genre ON BookGenre (genre)")
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =
