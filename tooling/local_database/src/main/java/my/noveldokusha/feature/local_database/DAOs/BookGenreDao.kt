@@ -7,8 +7,19 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.tables.BookGenre
 
+data class GenreBookUrlPair(val genre: String, val bookUrl: String)
+
 @Dao
 interface BookGenreDao {
+
+    /** Все пары жанр+bookUrl для книг в библиотеке — один запрос для кэша в памяти */
+    @Query("""
+        SELECT BookGenre.genre, BookGenre.bookUrl 
+        FROM BookGenre 
+        INNER JOIN Book ON Book.url = BookGenre.bookUrl 
+        WHERE Book.inLibrary = 1
+    """)
+    fun getAllLibraryGenreBookUrlsFlow(): Flow<List<GenreBookUrlPair>>
 
     /** Все жанры конкретной книги, отсортированные алфавитно */
     @Query("SELECT genre FROM BookGenre WHERE bookUrl = :bookUrl ORDER BY genre ASC")
@@ -36,6 +47,15 @@ interface BookGenreDao {
         WHERE Book.inLibrary = 1 AND BookGenre.genre = :genre
     """)
     suspend fun getBooksWithGenre(genre: String): List<String>
+
+    /** Flow-версия для реактивной фильтрации библиотеки */
+    @Query("""
+        SELECT BookGenre.bookUrl 
+        FROM BookGenre 
+        INNER JOIN Book ON Book.url = BookGenre.bookUrl 
+        WHERE Book.inLibrary = 1 AND BookGenre.genre = :genre
+    """)
+    fun getBooksWithGenreFlow(genre: String): Flow<List<String>>
 
     /** Вставить список жанров (IGNORE дубли — safe для повторного вызова) */
     @Insert(onConflict = OnConflictStrategy.IGNORE)

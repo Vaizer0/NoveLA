@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -104,11 +105,11 @@ internal fun LibraryScreenBody(
                         }
                         Tab(
                             selected = selected,
-                            text = { 
+                            text = {
                                 Text(
-                                    text = "$text ($count)", 
+                                    text = "$text ($count)",
                                     color = MaterialTheme.colorScheme.onPrimary
-                                ) 
+                                )
                             },
                             onClick = { scope.launch { pagerState.animateScrollToPage(index) } }
                         )
@@ -136,12 +137,14 @@ internal fun LibraryScreenBody(
                         }
                     }
                 }
+                val gridState = rememberLazyGridState()
                 LibraryPageBody(
                     list = list,
                     onClick = onBookClick,
                     onLongClick = onBookLongClick,
                     selectedBooks = selectedBooks,
-                    isSelectionMode = isSelectionMode
+                    isSelectionMode = isSelectionMode,
+                    gridState = gridState,
                 )
             }
         }

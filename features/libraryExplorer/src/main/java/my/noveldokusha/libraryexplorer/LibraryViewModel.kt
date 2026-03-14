@@ -15,6 +15,7 @@ import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.feature.local_database.BookWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -93,6 +94,10 @@ internal class LibraryViewModel @Inject constructor(
 
     fun sortConfigNextOption() {
         sortConfig = sortConfig.nextOption()
+    }
+
+    fun setSortOption(option: LibrarySortOption) {
+        sortConfig = sortConfig.copy(option = option)
     }
 
     fun bookCompletedToggle(bookUrl: String) {

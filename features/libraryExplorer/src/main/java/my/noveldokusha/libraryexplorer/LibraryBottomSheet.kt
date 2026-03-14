@@ -1,47 +1,121 @@
 package my.noveldokusha.libraryexplorer
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.SortByAlpha
-import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.PosNegCheckbox
-import my.noveldokusha.coreui.components.SingleChoiceToggle
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.utils.toToggleableState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun LibraryBottomSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
-    model: LibraryViewModel = viewModel()
+    model: LibraryViewModel = viewModel(),
+    pageModel: LibraryPageViewModel = viewModel()
 ) {
     if (!visible) return
 
+    val availableGenres by pageModel.availableGenres
+    val selectedGenres by pageModel.selectedGenres.collectAsState()
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(top = 16.dp, bottom = 64.dp)) {
+        Column(
+            Modifier
+                .padding(top = 8.dp, bottom = 64.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+
+            // ── Сортировка ────────────────────────────────────────────────────
+            Text(
+                text = stringResource(id = R.string.sort),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = ColorAccent,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            val sortOptions = listOf(
+                LibrarySortOption.TITLE        to R.string.title,
+                LibrarySortOption.UNREAD_CHAPTERS to R.string.unread_chapters,
+                LibrarySortOption.LAST_READ    to R.string.last_read,
+                LibrarySortOption.LAST_UPDATE  to R.string.last_update,
+                LibrarySortOption.ADDED        to R.string.date_added,
+            )
+
+            sortOptions.forEach { (option, labelRes) ->
+                val isSelected = model.sortConfig.option == option
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    RadioButton(
+                        selected = isSelected,
+                        onClick = { model.setSortOption(option) },
+                        colors = RadioButtonDefaults.colors(selectedColor = ColorAccent)
+                    )
+                    Text(
+                        text = stringResource(id = labelRes),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isSelected) ColorAccent
+                        else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Стрелка направления — только у выбранной опции
+                    if (isSelected) {
+                        IconButton(onClick = { model.sortConfigToggleDirection() }) {
+                            Icon(
+                                imageVector = if (model.sortConfig.direction == SortDirection.ASC)
+                                    Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                                contentDescription = null,
+                                tint = ColorAccent
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .alpha(0.4f)
+            )
+
+            // ── Фильтры ───────────────────────────────────────────────────────
             Text(
                 text = stringResource(id = R.string.filter),
-                modifier = Modifier
-                    .padding(8.dp)
-                    .padding(horizontal = 8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 color = ColorAccent,
                 style = MaterialTheme.typography.titleMedium
             )
@@ -52,51 +126,58 @@ internal fun LibraryBottomSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Text(
-                text = stringResource(id = R.string.sort),
-                modifier = Modifier
-                    .padding(8.dp)
-                    .padding(horizontal = 8.dp),
-                color = ColorAccent,
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            // Показываем текущую опцию сортировки с возможностью переключения типа
-            SingleChoiceToggle(
-                text = stringResource(id = when (model.sortConfig.option) {
-                    LibrarySortOption.TITLE -> R.string.title
-                    LibrarySortOption.UNREAD_CHAPTERS -> R.string.unread_chapters
-                    LibrarySortOption.LAST_READ -> R.string.last_read
-                    LibrarySortOption.LAST_UPDATE -> R.string.last_update
-                    LibrarySortOption.ADDED -> R.string.date_added
-                }),
-                selected = true,
-                onClick = { model.sortConfigNextOption() },
-                modifier = Modifier.fillMaxWidth(),
-                icon = {
-                    when (model.sortConfig.option) {
-                        LibrarySortOption.TITLE -> Icon(imageVector = Icons.Filled.SortByAlpha, null)
-                        LibrarySortOption.UNREAD_CHAPTERS -> Icon(imageVector = Icons.Default.Sort, null)
-                        LibrarySortOption.LAST_READ -> Icon(imageVector = Icons.Default.Sort, null)
-                        LibrarySortOption.LAST_UPDATE -> Icon(imageVector = Icons.Filled.Update, null)
-                        LibrarySortOption.ADDED -> Icon(imageVector = Icons.Default.Sort, null)
+            // ── Жанры — только если есть хоть один в библиотеке ──────────────
+            if (availableGenres.isNotEmpty()) {
+                HorizontalDivider(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .alpha(0.4f)
+                )
+                Text(
+                    text = stringResource(id = R.string.genres),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = ColorAccent,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedGenres.isEmpty(),
+                        onClick = { pageModel.clearGenreFilters() },
+                        label = { Text(stringResource(R.string.all_genres)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ColorAccent.copy(alpha = 0.15f),
+                            selectedLabelColor = ColorAccent,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedGenres.isEmpty(),
+                            selectedBorderColor = ColorAccent,
+                        )
+                    )
+                    availableGenres.forEach { genre ->
+                        FilterChip(
+                            selected = genre in selectedGenres,
+                            onClick = { pageModel.toggleGenreFilter(genre) },
+                            label = { Text(genre, style = MaterialTheme.typography.labelMedium) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = ColorAccent.copy(alpha = 0.15f),
+                                selectedLabelColor = ColorAccent,
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = genre in selectedGenres,
+                                selectedBorderColor = ColorAccent,
+                            )
+                        )
                     }
                 }
-            )
-
-            // Показываем направление сортировки
-            SingleChoiceToggle(
-                text = stringResource(id = if (model.sortConfig.direction == SortDirection.ASC) R.string.ascending else R.string.descending),
-                selected = true,
-                onClick = { model.sortConfigToggleDirection() },
-                modifier = Modifier.fillMaxWidth(),
-                icon = {
-                    when (model.sortConfig.direction) {
-                        SortDirection.ASC -> Icon(imageVector = Icons.Filled.ArrowUpward, null)
-                        SortDirection.DESC -> Icon(imageVector = Icons.Filled.ArrowDownward, null)
-                    }
-                }
-            )
+            }
         }
     }
 }

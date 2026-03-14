@@ -307,10 +307,12 @@
     <string name="enter_google_pa_api_keys">Введите API-ключи</string>
     <string name="google_pa_api_keys_placeholder">AIzaSy…\nAIzaSy…</string>
     <string name="google_pa_api_keys_tip">Один ключ на строку. Ключи проверяются автоматически: нерабочие пропускаются, и при необходимости запрашивается новый ключ из wtr-lab.</string>
+    <string name="all_genres">Все</string>
     <!-- Filters -->
     <string name="filters">Фильтры</string>
     <string name="filters_reset">Сбросить</string>
     <string name="filters_apply">Применить</string>
     <string name="filters_search_hint">Поиск…</string>
+
 
 </resources>
