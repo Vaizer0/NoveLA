@@ -64,11 +64,13 @@ sealed class LuaFilter {
     /**
      * Множественный выбор — только включить (CheckboxGroup в lnreader).
      * Передаётся как filters["key_included"] = LuaTable
+     * Если multiselect = false — можно выбрать только один вариант.
      */
     data class CheckboxGroup(
         override val key: String,
         override val label: String,
-        val options: List<LuaFilterOption>
+        val options: List<LuaFilterOption>,
+        val multiselect: Boolean = true
     ) : LuaFilter()
 
     /**
@@ -204,7 +206,12 @@ fun parseLuaFilterList(luaTable: LuaValue): List<LuaFilter> {
                 else {
                     val opts = parseOptions(optsTable)
                     if (opts.isEmpty()) null
-                    else LuaFilter.CheckboxGroup(key = key, label = label, options = opts)
+                    else LuaFilter.CheckboxGroup(
+                        key         = key,
+                        label       = label,
+                        options     = opts,
+                        multiselect = t.get("multiselect").optboolean(true)
+                    )
                 }
             }
             "tristate" -> {

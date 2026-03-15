@@ -197,8 +197,13 @@ internal fun FilterBottomSheet(
                             included = checkboxState[filter.key] ?: emptySet(),
                             onToggle = { value ->
                                 val current = checkboxState[filter.key] ?: emptySet()
-                                checkboxState[filter.key] =
-                                    if (value in current) current - value else current + value
+                                checkboxState[filter.key] = when {
+                                    !filter.multiselect ->
+                                        // single-select: снимаем если уже выбран, иначе заменяем
+                                        if (value in current) emptySet() else setOf(value)
+                                    else ->
+                                        if (value in current) current - value else current + value
+                                }
                             }
                         )
                         is LuaFilter.TriState -> TriStateSection(
