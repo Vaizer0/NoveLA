@@ -198,33 +198,6 @@ class RestoreDataService : Service() {
             Timber.e(e, "restoreData: Failed to reset stream")
         }
 
-        // Read all ZIP entries into memory
-        val zipSequence = try {
-            ZipInputStream(bufferedStream).use { zipStream ->
-                val entries = mutableMapOf<ZipEntry, ByteArray>()
-                generateSequence {
-                    try { zipStream.nextEntry } catch (e: Exception) { null }
-                }
-                    .filterNotNull()
-                    .filterNot { it.isDirectory }
-                    .forEach { entry ->
-                        entries[entry] = zipStream.readBytes()
-                    }
-                entries.toMap()
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "restoreData: Failed to read ZIP file")
-            notificationsCenter.showNotification(
-                channelName = channelName,
-                channelId = channelId,
-                notificationId = "Backup restore failure - invalid zip".hashCode()
-            ) {
-                removeProgressBar()
-                text = "Failed to read backup file: ${e.message}"
-            }
-            return@withContext
-        }
-
         suspend fun mergeToDatabase(dbInputStream: InputStream) {
             tryAsResponse {
                 notificationsCenter.modifyNotification(
@@ -408,7 +381,7 @@ class RestoreDataService : Service() {
                     return
                 }
                 file.outputStream().use { output ->
-                    entryInputStream.use { it.copyTo(output) }
+                    entryInputStream.copyTo(output)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "mergeToBookFolder: Error processing entry: ${entry.name}")
@@ -422,16 +395,37 @@ class RestoreDataService : Service() {
             text = getString(R.string.adding_images)
         }
 
-        for ((entry, file) in zipSequence) {
-            try {
-                when {
-                    entry.name == "database.sqlite3" -> mergeToDatabase(file.inputStream())
-                    entry.name.startsWith("books/") -> mergeToBookFolder(entry, file.inputStream())
-                    else -> Timber.w("restoreData: Skipping unknown entry: ${entry.name}")
+        try {
+            ZipInputStream(bufferedStream).use { zipStream ->
+                generateSequence {
+                    try { zipStream.nextEntry } catch (e: Exception) { null }
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "restoreData: Error processing entry ${entry.name}")
+                    .filterNotNull()
+                    .filterNot { it.isDirectory }
+                    .forEach { entry ->
+                        try {
+                            when {
+                                entry.name == "database.sqlite3" -> mergeToDatabase(zipStream)
+                                entry.name.startsWith("books/") -> mergeToBookFolder(entry, zipStream)
+                                else -> Timber.w("restoreData: Skipping unknown entry: ${entry.name}")
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "restoreData: Error processing entry ${entry.name}")
+                        }
+                        zipStream.closeEntry()
+                    }
             }
+        } catch (e: Exception) {
+            Timber.e(e, "restoreData: Failed to read ZIP file")
+            notificationsCenter.showNotification(
+                channelName = channelName,
+                channelId = channelId,
+                notificationId = "Backup restore failure - invalid zip".hashCode()
+            ) {
+                removeProgressBar()
+                text = "Failed to read backup file: ${e.message}"
+            }
+            return@withContext
         }
 
         inputStream.closeQuietly()
