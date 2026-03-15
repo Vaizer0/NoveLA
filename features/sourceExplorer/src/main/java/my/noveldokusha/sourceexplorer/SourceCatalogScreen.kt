@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,8 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -44,7 +41,6 @@ import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.core.appPreferences.ListLayoutMode
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.core.utils.actionCopyToClipboard
 import my.noveldokusha.coreui.states.IteratorState
 import my.noveldokusha.coreui.theme.ColorAccent
@@ -70,7 +66,6 @@ internal fun SourceCatalogScreen(
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
     val focusManager by rememberUpdatedState(newValue = LocalFocusManager.current)
-    var optionsExpanded by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         snapAnimationSpec = null,
         flingAnimationSpec = null
@@ -146,12 +141,6 @@ internal fun SourceCatalogScreen(
                                                 )
                                             }
                                         }
-                                    }
-                                    IconButton(onClick = { optionsExpanded = !optionsExpanded }) {
-                                        Icon(
-                                            Icons.Filled.MoreVert,
-                                            contentDescription = stringResource(R.string.open_for_more_options)
-                                        )
                                     }
                                 }
                             )
