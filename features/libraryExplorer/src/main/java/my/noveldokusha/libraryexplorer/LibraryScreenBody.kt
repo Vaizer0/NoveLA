@@ -52,6 +52,8 @@ internal fun LibraryScreenBody(
     topAppBarState: TopAppBarState,
     onBookClick: (BookWithContext) -> Unit,
     onBookLongClick: (BookWithContext) -> Unit,
+    // Количество колонок из общего AppPreferences
+    gridColumns: Int = 3,
     selectedBooks: Set<String> = emptySet(),
     isSelectionMode: Boolean = false,
     viewModel: LibraryPageViewModel = viewModel()
@@ -60,7 +62,7 @@ internal fun LibraryScreenBody(
 
     val pagerState = rememberPagerState(
         initialPage = 0,
-        initialPageOffsetFraction = 0f ,
+        initialPageOffsetFraction = 0f,
         pageCount = { tabsSizeUpdated.value }
     )
     val scope = rememberCoroutineScope()
@@ -123,7 +125,6 @@ internal fun LibraryScreenBody(
                 state = pagerState,
                 verticalAlignment = Alignment.Top,
             ) { page ->
-                // TODO: improve + make more generic (use database table?)
                 val showCompleted by remember {
                     derivedStateOf {
                         tabs[page] == "Completed"
@@ -142,6 +143,7 @@ internal fun LibraryScreenBody(
                     list = list,
                     onClick = onBookClick,
                     onLongClick = onBookLongClick,
+                    gridColumns = gridColumns,
                     selectedBooks = selectedBooks,
                     isSelectionMode = isSelectionMode,
                     gridState = gridState,

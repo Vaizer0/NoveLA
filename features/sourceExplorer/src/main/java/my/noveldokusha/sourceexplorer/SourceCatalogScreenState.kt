@@ -19,12 +19,12 @@ internal data class SourceCatalogScreenState(
     val listLayoutMode: MutableState<ListLayoutMode>,
     val sortOrder: MutableState<SortOrder>,
 
+    // Размер сетки — общий preference (2..6), дефолт 3
+    val gridColumns: MutableState<Int>,
+
     // Фильтры — показывать кнопку только если источник реализует FilterableCatalog
     val hasFilters: Boolean,
-    // Список доступных фильтров — загружается из Lua один раз при старте ViewModel
     val filterList: State<List<LuaFilter>>,
-    // Текущие активные фильтры — в памяти, сброс при пересоздании ViewModel
     val activeFilters: MutableState<ActiveFilters>,
-    // Управление видимостью bottom sheet
     val isFilterSheetOpen: MutableState<Boolean>,
 )

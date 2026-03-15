@@ -16,28 +16,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.BookSettingsDialog
 import my.noveldokusha.coreui.components.BookSettingsDialogState
 import my.noveldokusha.coreui.components.TopAppBarSearch
-import my.noveldokusha.coreui.theme.ColorNotice
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
 import my.noveldokusha.core.domain.LibraryCategory
@@ -52,9 +42,12 @@ fun LibraryScreen(
     val pageViewModel: LibraryPageViewModel = viewModel()
 
     val context by rememberUpdatedState(LocalContext.current)
-    val focusRequester = remember { FocusRequester() }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val showDropdownMenu = remember { mutableStateOf(false) }
     val lastClickTime = remember { mutableStateOf(0L) }
+
+    // Читаем количество колонок из общего preference
+    val gridColumns by libraryModel.gridColumns
 
     val handleBookClick = { book: BookWithContext ->
         val currentTime = System.currentTimeMillis()
@@ -62,11 +55,9 @@ fun LibraryScreen(
             // Debounce - ignore click
         } else {
             lastClickTime.value = currentTime
-
             if (libraryModel.isSelectionMode) {
                 libraryModel.toggleBookSelection(book.book.url)
             } else {
-                // Always open the book
                 navigationRouteViewModel.chapters(
                     context = context,
                     bookMetadata = BookMetadata(
@@ -100,19 +91,13 @@ fun LibraryScreen(
                         )
                     },
                     actions = {
-                        // Selection mode actions
                         IconButton(
                             onClick = {
-                                // TODO: Implement select all for current tab
-                                // For now, select from reading tab
                                 val currentBooks = pageViewModel.listReading
                                 libraryModel.selectAllBooks(currentBooks)
                             }
                         ) {
-                            Icon(
-                                Icons.Filled.SelectAll,
-                                stringResource(R.string.select_all)
-                            )
+                            Icon(Icons.Filled.SelectAll, stringResource(R.string.select_all))
                         }
                         IconButton(
                             onClick = { libraryModel.deleteSelectedBooks() },
@@ -122,16 +107,12 @@ fun LibraryScreen(
                                 Icons.Filled.Delete,
                                 stringResource(R.string.delete),
                                 tint = if (libraryModel.selectedBooks.isNotEmpty())
-                                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                    MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             )
                         }
-                        IconButton(
-                            onClick = { libraryModel.toggleSelectionMode() }
-                        ) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                stringResource(R.string.cancel)
-                            )
+                        IconButton(onClick = { libraryModel.toggleSelectionMode() }) {
+                            Icon(Icons.Filled.CheckCircle, stringResource(R.string.cancel))
                         }
                     }
                 )
@@ -140,7 +121,7 @@ fun LibraryScreen(
                     focusRequester = focusRequester,
                     searchTextInput = pageViewModel.searchQuery,
                     onSearchTextChange = { pageViewModel.updateSearchQuery(it) },
-                    onTextDone = { /* Optional: handle search submit */ },
+                    onTextDone = { },
                     onClose = {
                         pageViewModel.updateSearchQuery("")
                         focusRequester.freeFocus()
@@ -204,18 +185,16 @@ fun LibraryScreen(
                         libraryModel.toggleBookSelection(book.book.url)
                     }
                 },
+                gridColumns = gridColumns,
                 selectedBooks = libraryModel.selectedBooks,
                 isSelectionMode = libraryModel.isSelectionMode
             )
         }
     )
 
-
-
     // Book selected options dialog
     when (val state = libraryModel.bookSettingsDialogState) {
         is BookSettingsDialogState.Show -> {
-
             BookSettingsDialog(
                 book = state.book,
                 categories = libraryModel.getCategories(),
@@ -228,7 +207,6 @@ fun LibraryScreen(
                 onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(state.book.url) }
             )
         }
-
         else -> Unit
     }
 
@@ -236,6 +214,4 @@ fun LibraryScreen(
         visible = libraryModel.showBottomSheet,
         onDismiss = { libraryModel.showBottomSheet = false }
     )
-
-
 }

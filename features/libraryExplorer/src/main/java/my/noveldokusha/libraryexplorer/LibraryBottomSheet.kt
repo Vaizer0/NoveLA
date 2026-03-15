@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -50,6 +52,8 @@ internal fun LibraryBottomSheet(
 
     val availableGenres by pageModel.availableGenres
     val selectedGenres by pageModel.selectedGenres.collectAsState()
+    // Читаем текущее значение из общего preference
+    val gridColumns by model.gridColumns
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -57,6 +61,65 @@ internal fun LibraryBottomSheet(
                 .padding(top = 8.dp, bottom = 64.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+
+            // ── Размер сетки ──────────────────────────────────────────────────
+            Text(
+                text = stringResource(id = R.string.grid_columns),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = ColorAccent,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Метка с текущим числом колонок слева
+                Text(
+                    text = gridColumns.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ColorAccent,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Slider(
+                    value = gridColumns.toFloat(),
+                    onValueChange = { model.setGridColumns(it.toInt()) },
+                    valueRange = 2f..6f,
+                    steps = 3, // шаги: 2, 3, 4, 5, 6 → 3 внутренних шага
+                    colors = SliderDefaults.colors(
+                        thumbColor = ColorAccent,
+                        activeTrackColor = ColorAccent,
+                        inactiveTrackColor = ColorAccent.copy(alpha = 0.3f),
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            // Подписи минимума и максимума
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 4.dp)
+            ) {
+                Text(
+                    text = "2",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = "6",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .alpha(0.4f)
+            )
 
             // ── Сортировка ────────────────────────────────────────────────────
             Text(
@@ -67,11 +130,11 @@ internal fun LibraryBottomSheet(
             )
 
             val sortOptions = listOf(
-                LibrarySortOption.TITLE        to R.string.title,
+                LibrarySortOption.TITLE           to R.string.title,
                 LibrarySortOption.UNREAD_CHAPTERS to R.string.unread_chapters,
-                LibrarySortOption.LAST_READ    to R.string.last_read,
-                LibrarySortOption.LAST_UPDATE  to R.string.last_update,
-                LibrarySortOption.ADDED        to R.string.date_added,
+                LibrarySortOption.LAST_READ       to R.string.last_read,
+                LibrarySortOption.LAST_UPDATE     to R.string.last_update,
+                LibrarySortOption.ADDED           to R.string.date_added,
             )
 
             sortOptions.forEach { (option, labelRes) ->
@@ -88,11 +151,9 @@ internal fun LibraryBottomSheet(
                     Text(
                         text = stringResource(id = labelRes),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isSelected) ColorAccent
-                        else MaterialTheme.colorScheme.onSurface,
+                        color = if (isSelected) ColorAccent else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    // Стрелка направления — только у выбранной опции
                     if (isSelected) {
                         IconButton(onClick = { model.sortConfigToggleDirection() }) {
                             Icon(

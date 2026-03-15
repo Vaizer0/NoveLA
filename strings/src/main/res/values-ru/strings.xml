@@ -308,6 +308,7 @@
     <string name="google_pa_api_keys_placeholder">AIzaSy…\nAIzaSy…</string>
     <string name="google_pa_api_keys_tip">Один ключ на строку. Ключи проверяются автоматически: нерабочие пропускаются, и при необходимости запрашивается новый ключ из wtr-lab.</string>
     <string name="all_genres">Все</string>
+    <string name="grid_columns">Размер сетки</string>
     <!-- Filters -->
     <string name="filters">Фильтры</string>
     <string name="filters_reset">Сбросить</string>

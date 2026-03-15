@@ -29,6 +29,7 @@ internal class LibraryViewModel @Inject constructor(
     private val scraperRepository: ScraperRepository,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel() {
+
     var bookSettingsDialogState by stateHandle.asMutableStateOf<BookSettingsDialogState>(
         key = "bookSettingsDialogState",
         default = { BookSettingsDialogState.Hide },
@@ -40,11 +41,20 @@ internal class LibraryViewModel @Inject constructor(
     var isSelectionMode by mutableStateOf(false)
     var selectedBooks by mutableStateOf<Set<String>>(emptySet())
 
+    // ── Размер сетки — общий preference для библиотеки и каталога ────────────
+    // Диапазон 2..6, дефолт 3.
+    // AppPreferences.BOOKS_GRID_COLUMNS — Int preference, добавить в AppPreferences:
+    //   val BOOKS_GRID_COLUMNS = AppPreference(preferences, "BOOKS_GRID_COLUMNS", 3)
+    val gridColumns = appPreferences.BOOKS_GRID_COLUMNS.state(viewModelScope)
+
+    fun setGridColumns(columns: Int) {
+        appPreferences.BOOKS_GRID_COLUMNS.value = columns.coerceIn(2, 6)
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     fun toggleSelectionMode() {
         isSelectionMode = !isSelectionMode
-        if (!isSelectionMode) {
-            selectedBooks = emptySet()
-        }
+        if (!isSelectionMode) selectedBooks = emptySet()
     }
 
     fun toggleBookSelection(bookUrl: String) {
@@ -65,7 +75,6 @@ internal class LibraryViewModel @Inject constructor(
 
     /**
      * Removes selected books from library (sets inLibrary=false).
-     * Data is kept in DB and cleaned up separately (e.g. via Settings → Clean database).
      */
     fun deleteSelectedBooks() {
         viewModelScope.launch {
@@ -107,10 +116,6 @@ internal class LibraryViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Removes a book from library (sets inLibrary=false).
-     * Data is kept in DB and cleaned up separately (e.g. via Settings → Clean database).
-     */
     fun deleteBook(bookUrl: String) {
         viewModelScope.launch {
             val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
@@ -126,25 +131,21 @@ internal class LibraryViewModel @Inject constructor(
     fun markAllChaptersAsRead(bookUrl: String) {
         viewModelScope.launch {
             val chapters = appRepository.bookChapters.chapters(bookUrl)
-            val chapterUrls = chapters.map { it.url }
-            appRepository.bookChapters.setAsRead(chapterUrls)
+            appRepository.bookChapters.setAsRead(chapters.map { it.url })
         }
     }
 
     fun markAllChaptersAsUnread(bookUrl: String) {
         viewModelScope.launch {
             val chapters = appRepository.bookChapters.chapters(bookUrl)
-            val chapterUrls = chapters.map { it.url }
-            appRepository.bookChapters.setAsUnread(chapterUrls)
+            appRepository.bookChapters.setAsUnread(chapters.map { it.url })
         }
     }
 
     // Category management
     var customCategories by appPreferences.LIBRARY_CUSTOM_CATEGORIES.state(viewModelScope)
 
-    fun getCategories(): List<String> {
-        return listOf("", "Completed") + customCategories
-    }
+    fun getCategories(): List<String> = listOf("", "Completed") + customCategories
 
     fun updateBookCategory(bookUrl: String, category: String) {
         viewModelScope.launch {
@@ -163,7 +164,7 @@ internal class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             urls.forEach { url ->
                 updateNovelWithRetry(url)
-                kotlinx.coroutines.delay(500)
+                delay(500)
             }
         }
     }
@@ -185,23 +186,17 @@ internal class LibraryViewModel @Inject constructor(
                     }
                     if (book.coverImageUrl.isBlank()) {
                         val coverUrl = getBookCover(url)
-                        if (coverUrl != null) {
-                            appRepository.libraryBooks.updateCover(url, coverUrl)
-                        }
+                        if (coverUrl != null) appRepository.libraryBooks.updateCover(url, coverUrl)
                     }
                     if (book.description.isBlank()) {
                         val description = getBookDescription(url)
-                        if (description != null) {
-                            appRepository.libraryBooks.updateDescription(url, description)
-                        }
+                        if (description != null) appRepository.libraryBooks.updateDescription(url, description)
                     }
                     appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(url)
                     success = true
                 } catch (e: Exception) {
                     retryCount++
-                    if (retryCount < maxRetries) {
-                        delay(1000L * (1 shl (retryCount - 1)))
-                    }
+                    if (retryCount < maxRetries) delay(1000L * (1 shl (retryCount - 1)))
                 }
             }
         } finally {

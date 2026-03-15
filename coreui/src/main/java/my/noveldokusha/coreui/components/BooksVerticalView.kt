@@ -1,6 +1,5 @@
 package my.noveldokusha.coreui.components
 
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,7 +24,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.composableActions.ListGridLoadWatcher
-import my.noveldokusha.coreui.modifiers.bounceOnPressed
 import my.noveldokusha.coreui.states.IteratorState
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.appPreferences.ListLayoutMode
@@ -47,15 +45,16 @@ fun BooksVerticalView(
     onReload: () -> Unit = {},
     onCopyError: (String) -> Unit = {},
     onWebViewOpen: () -> Unit = {},
-    cells: GridCells = GridCells.Adaptive(120.dp),
+    // Количество колонок из общего preference BOOKS_GRID_COLUMNS (2..6, дефолт 3)
+    gridColumns: Int = 3,
     innerPadding: PaddingValues = PaddingValues(),
 ) {
 
-    val columns by remember(layoutMode, cells) {
+    val columns by remember(layoutMode, gridColumns) {
         derivedStateOf {
             when (layoutMode) {
                 ListLayoutMode.VerticalList -> GridCells.Fixed(1)
-                ListLayoutMode.VerticalGrid -> cells
+                ListLayoutMode.VerticalGrid -> GridCells.Fixed(gridColumns.coerceIn(2, 6))
             }
         }
     }

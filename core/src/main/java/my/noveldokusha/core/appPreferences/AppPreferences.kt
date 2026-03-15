@@ -167,6 +167,10 @@ class AppPreferences @Inject constructor(
             ListLayoutMode.VerticalGrid
         ) { enumValueOf(it) }
     }
+    // Количество колонок в сетке — общее для библиотеки и каталога плагинов (2..6, дефолт 3)
+    val BOOKS_GRID_COLUMNS = object : Preference<Int>("BOOKS_GRID_COLUMNS") {
+        override var value by SharedPreference_Int(name, preferences, 3)
+    }
     val SOURCE_SORT_ORDER = object : Preference<SortOrder>("SOURCE_SORT_ORDER") {
         override var value by SharedPreference_Enum(
             name,

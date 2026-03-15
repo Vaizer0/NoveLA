@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -21,15 +20,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.components.BookImageButtonView
-import my.noveldokusha.coreui.components.ImageView
-import my.noveldokusha.coreui.modifiers.bounceOnPressed
 import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.rememberResolvedBookImagePath
@@ -39,7 +35,6 @@ private fun extractDomainFromUrl(url: String): String {
     return try {
         val uri = android.net.Uri.parse(url)
         val host = uri.host?.removePrefix("www.") ?: ""
-        // Return domain in lowercase without replacing dots
         host.lowercase()
     } catch (e: Exception) {
         "Unknown Source"
@@ -51,6 +46,8 @@ internal fun LibraryPageBody(
     list: List<BookWithContext>,
     onClick: (BookWithContext) -> Unit,
     onLongClick: (BookWithContext) -> Unit,
+    // Количество колонок: от 2 до 6, дефолт 3
+    gridColumns: Int = 3,
     selectedBooks: Set<String> = emptySet(),
     isSelectionMode: Boolean = false,
     gridState: LazyGridState = rememberLazyGridState(),
@@ -64,7 +61,7 @@ internal fun LibraryPageBody(
 
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(160.dp),
+        columns = GridCells.Fixed(gridColumns.coerceIn(2, 6)),
         contentPadding = PaddingValues(top = 4.dp, bottom = 400.dp, start = 4.dp, end = 4.dp)
     ) {
         items(
@@ -102,6 +99,7 @@ internal fun LibraryPageBody(
                         )
                     }
                 }
+
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 AnimatedVisibility(
                     visible = notReadCount != 0,

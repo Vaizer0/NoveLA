@@ -38,14 +38,9 @@ internal class SourceCatalogViewModel @Inject constructor(
 
     override var sourceBaseUrl by StateExtra_String(stateHandle)
     private val source = scraper.getCompatibleSourceCatalog(sourceBaseUrl)!!
-
-    // Если источник поддерживает фильтры — храним ссылку
     private val filterableSource = source as? SourceInterface.FilterableCatalog
 
-    // Список фильтров — загружается из Lua один раз, кэшируется здесь в UI-слое
     private val _filterList = mutableStateOf(emptyList<my.noveldokusha.scraper.LuaFilter>())
-
-    // Активные фильтры — в памяти, сброс при пересоздании ViewModel (смена конфигурации/закрытие)
     private val _activeFilters = mutableStateOf(ActiveFilters())
 
     val state = SourceCatalogScreenState(
@@ -58,6 +53,8 @@ internal class SourceCatalogViewModel @Inject constructor(
         },
         listLayoutMode         = appPreferences.BOOKS_LIST_LAYOUT_MODE.state(viewModelScope),
         sortOrder              = appPreferences.SOURCE_SORT_ORDER.state(viewModelScope),
+        // Общий preference количества колонок
+        gridColumns            = appPreferences.BOOKS_GRID_COLUMNS.state(viewModelScope),
         hasFilters             = filterableSource != null,
         filterList             = _filterList,
         activeFilters          = _activeFilters,
@@ -67,9 +64,6 @@ internal class SourceCatalogViewModel @Inject constructor(
     init {
         onSearchCatalog()
 
-        // Загружаем список фильтров один раз при старте.
-        // Адаптер вызывает Lua каждый раз — кэш только здесь, в UI-слое.
-        // При пересоздании ViewModel (смена настроек плагина) фильтры перезагрузятся.
         if (filterableSource != null) {
             viewModelScope.launch {
                 filterableSource.getFilterList()
@@ -86,16 +80,11 @@ internal class SourceCatalogViewModel @Inject constructor(
     }
 
     fun onSearchText(input: String) {
-        // При текстовом поиске фильтры не применяются
         state.fetchIterator.setFunction { source.getCatalogSearch(it, input).mapToBookMetadata() }
         state.fetchIterator.reset()
         state.fetchIterator.fetchNext()
     }
 
-    /**
-     * Применить выбранные фильтры.
-     * Если фильтры пустые — возвращаемся к обычному каталогу getCatalogList.
-     */
     fun onApplyFilters(filters: ActiveFilters) {
         _activeFilters.value = filters
         state.isFilterSheetOpen.value = false
@@ -111,7 +100,6 @@ internal class SourceCatalogViewModel @Inject constructor(
         state.fetchIterator.fetchNext()
     }
 
-    /** Сбросить все фильтры и вернуться к обычному каталогу. */
     fun onResetFilters() {
         onApplyFilters(ActiveFilters())
     }

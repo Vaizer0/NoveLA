@@ -40,7 +40,6 @@ import my.noveldokusha.coreui.components.BooksVerticalView
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
-import my.noveldokusha.core.appPreferences.ListLayoutMode
 import my.noveldokusha.core.utils.actionCopyToClipboard
 import my.noveldokusha.coreui.states.IteratorState
 import my.noveldokusha.coreui.theme.ColorAccent
@@ -54,7 +53,7 @@ internal fun SourceCatalogScreen(
     onSearchTextInputChange: (String) -> Unit,
     onSearchTextInputSubmit: (String) -> Unit,
     onSearchCatalogSubmit: () -> Unit,
-    onListLayoutModeChange: (ListLayoutMode) -> Unit,
+    onListLayoutModeChange: (my.noveldokusha.core.appPreferences.ListLayoutMode) -> Unit,
     onToolbarModeChange: (ToolbarMode) -> Unit,
     onOpenSourceWebPage: () -> Unit,
     onBookClicked: (BookMetadata) -> Unit,
@@ -71,8 +70,6 @@ internal fun SourceCatalogScreen(
         flingAnimationSpec = null
     )
 
-    // Фильтры видны только в режиме основного toolbar (не во время поиска)
-    val isSearchMode = state.toolbarMode.value == ToolbarMode.SEARCH
     val hasActiveFilters = !state.activeFilters.value.isEmpty
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -123,7 +120,6 @@ internal fun SourceCatalogScreen(
                                             contentDescription = stringResource(R.string.search_for_title)
                                         )
                                     }
-                                    // Кнопка фильтров — только если источник их поддерживает
                                     if (state.hasFilters) {
                                         IconButton(onClick = onOpenFilterSheet) {
                                             BadgedBox(
@@ -135,7 +131,7 @@ internal fun SourceCatalogScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.FilterList,
-                                                    contentDescription = "Фильтры",
+                                                    contentDescription = stringResource(R.string.filter),
                                                     tint = if (hasActiveFilters) ColorAccent
                                                     else LocalContentColor
                                                 )
@@ -168,6 +164,8 @@ internal fun SourceCatalogScreen(
             content = { innerPadding ->
                 BooksVerticalView(
                     layoutMode = state.listLayoutMode.value,
+                    // Передаём количество колонок из общего preference
+                    gridColumns = state.gridColumns.value,
                     list = state.fetchIterator.list,
                     state = rememberLazyGridState(),
                     error = state.fetchIterator.error,
@@ -183,7 +181,6 @@ internal fun SourceCatalogScreen(
             }
         )
 
-        // Loading indicator для первоначальной загрузки
         if (state.fetchIterator.state == IteratorState.LOADING && state.fetchIterator.list.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -196,7 +193,6 @@ internal fun SourceCatalogScreen(
             }
         }
 
-        // Filter Bottom Sheet
         if (state.isFilterSheetOpen.value && state.hasFilters) {
             FilterBottomSheet(
                 filterList    = state.filterList.value,
@@ -208,6 +204,5 @@ internal fun SourceCatalogScreen(
     }
 }
 
-// Вспомогательный extension для получения цвета контента из LocalContentColor
 private val LocalContentColor: androidx.compose.ui.graphics.Color
     @Composable get() = androidx.compose.material3.LocalContentColor.current
