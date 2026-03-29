@@ -29,6 +29,7 @@ import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.scraper.Scraper
+import my.noveldokusha.text_translator.domain.TranslationManager
 import javax.inject.Inject
 
 interface ChapterStateBundle {
@@ -42,12 +43,13 @@ internal class ChaptersViewModel @Inject constructor(
     private val appScope: AppCoroutineScope,
     scraper: Scraper,
     private val toasty: Toasty,
-    appPreferences: AppPreferences,
+    private val appPreferences: AppPreferences,
     appFileResolver: AppFileResolver,
     private val downloaderRepository: DownloaderRepository,
     private val chaptersRepository: ChaptersRepository,
     private val epubImporterRepository: EpubImporterRepository,
     private val bookGenreDao: BookGenreDao,
+    private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel(), ChapterStateBundle {
 
@@ -85,6 +87,54 @@ internal class ChaptersViewModel @Inject constructor(
         isRefreshable = mutableStateOf(rawBookUrl.isContentUri || !bookUrl.isLocalUri),
         genres = mutableStateOf(emptyList()),
     )
+
+    // ─── Перевод названия и описания ──────────────────────────────────────────
+
+    val translatedTitle = mutableStateOf<String?>(null)
+    val translatedDescription = mutableStateOf<String?>(null)
+    val isTranslatingInfo = mutableStateOf(false)
+
+    fun translateBookInfo() {
+        if (isTranslatingInfo.value) return
+        viewModelScope.launch {
+            val targetLang = appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.value
+            if (targetLang.isBlank()) {
+                toasty.show(R.string.translate_target_lang_not_set)
+                return@launch
+            }
+
+            isTranslatingInfo.value = true
+            try {
+                // Всегда используем GoogleFree через source=auto —
+                // он нативно поддерживает sl=auto для любого языка включая китайский
+                val translator = translationManager.getTranslator(
+                    source = "auto",
+                    target = targetLang
+                )
+
+                val title = state.book.value.title
+                val description = state.book.value.description
+
+                if (title.isNotBlank())
+                    translatedTitle.value = translator.translate(title)
+                if (description.isNotBlank())
+                    translatedDescription.value = translator.translate(description)
+
+            } catch (e: Exception) {
+                toasty.show(R.string.translate_failed)
+            } finally {
+                isTranslatingInfo.value = false
+            }
+        }
+    }
+
+
+    fun clearBookInfoTranslation() {
+        translatedTitle.value = null
+        translatedDescription.value = null
+    }
+
+    // ─── Инициализация ────────────────────────────────────────────────────────
 
     init {
         appScope.launch {
@@ -172,7 +222,6 @@ internal class ChaptersViewModel @Inject constructor(
         if (state.isLocalSource.value) return@launch
         downloaderRepository.bookTitle(bookUrl = bookUrl).onSuccess {
             if (it == null) return@onSuccess
-            // Only update if the title is "Unknown Novel" or empty
             val currentBook = appRepository.libraryBooks.get(bookUrl)
             if (currentBook?.title == "Unknown Novel" || currentBook?.title.isNullOrBlank()) {
                 appRepository.libraryBooks.updateTitle(bookUrl, it)
@@ -221,7 +270,6 @@ internal class ChaptersViewModel @Inject constructor(
                     state.error.value = it.message
                 }
             state.isRefreshing.value = false
-
         }
     }
 
@@ -273,15 +321,11 @@ internal class ChaptersViewModel @Inject constructor(
     fun downloadSelected() {
         if (state.isLocalSource.value) return
 
-        // Get selected chapter URLs
         val selectedUrls = state.selectedChaptersUrl.keys.toSet()
-
-        // Filter and sort chapters by position to ensure sequential download
         val sortedChapters = state.chapters
             .filter { selectedUrls.contains(it.chapter.url) }
             .sortedBy { it.chapter.position }
 
-        // Download chapters sequentially in order
         appScope.launch(Dispatchers.Default) {
             sortedChapters.forEach { chapter ->
                 appRepository.chapterBody.fetchBody(chapter.chapter.url)

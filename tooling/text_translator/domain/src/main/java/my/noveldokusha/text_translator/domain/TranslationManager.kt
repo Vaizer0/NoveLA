@@ -41,9 +41,17 @@ interface TranslationManager {
     fun downloadModel(language: String)
 
     fun removeModel(language: String)
+
     suspend fun translateBatch(
         texts: List<String>,
         sourceLanguage: String,
         targetLanguage: String
-    ): Map<String, String>?
+    ): Map<String, String>
+
+    /**
+     * Detect the language of the given text.
+     * Returns a BCP-47 language tag (e.g. "zh", "en", "ru") or null if detection failed.
+     * Default implementation returns null — override in online managers.
+     */
+    suspend fun detectLanguage(text: String): String? = null
 }

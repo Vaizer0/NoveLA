@@ -38,6 +38,11 @@ internal fun ChaptersScreenBody(
     state: ChaptersScreenState,
     lazyListState: LazyListState,
     innerPadding: PaddingValues,
+    translatedTitle: String?,
+    translatedDescription: String?,
+    isTranslating: Boolean,
+    onTranslateClick: () -> Unit,
+    onClearTranslationClick: () -> Unit,
     onChapterClick: (chapter: ChapterWithContext) -> Unit,
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
@@ -133,16 +138,19 @@ internal fun ChaptersScreenBody(
                     bookState = state.book.value,
                     genres = state.genres.value,
                     sourceCatalogName = if (state.sourceCatalogNameStrRes.value == 0) {
-                        // Для Lua источников используем динамическое имя
                         val source = scraper.getCompatibleSource(state.book.value.url)
                         source?.name ?: stringResource(R.string.invalid_source)
                     } else {
-                        // Для нативных источников используем строковый ресурс
                         stringResource(id = state.sourceCatalogNameStrRes.value ?: R.string.invalid_source)
                     },
                     numberOfChapters = state.chapters.size,
                     paddingValues = innerPadding,
                     modifier = Modifier.padding(bottom = 12.dp),
+                    translatedTitle = translatedTitle,
+                    translatedDescription = translatedDescription,
+                    isTranslating = isTranslating,
+                    onTranslateClick = onTranslateClick,
+                    onClearTranslationClick = onClearTranslationClick,
                     onCoverLongClick = onCoverLongClick,
                     onGlobalSearchClick = onGlobalSearchClick,
                     onScrollToLastRead = onScrollToLastRead,

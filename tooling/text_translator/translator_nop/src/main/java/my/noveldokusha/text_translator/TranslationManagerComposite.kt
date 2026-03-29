@@ -61,10 +61,11 @@ class TranslationManagerComposite(
     override fun getTranslator(source: String, target: String): TranslatorState {
         val provider = activeProvider()
         Log.d(TAG, "getTranslator: source=$source, target=$target, provider=$provider")
-        return when (provider) {
-            "GEMINI"      -> buildGeminiWithFallback(source, target)
-            "GOOGLE_FREE" -> googleFreeManager.getTranslator(source, target)
-            else          -> googlePAManager.getTranslator(source, target)
+        return when {
+            provider == "GEMINI"      -> buildGeminiWithFallback(source, target)
+            provider == "GOOGLE_FREE" -> googleFreeManager.getTranslator(source, target)
+            source == "auto"          -> googleFreeManager.getTranslator(source, target)
+            else                      -> googlePAManager.getTranslator(source, target)
         }
     }
 
@@ -109,25 +110,43 @@ class TranslationManagerComposite(
         targetLanguage: String
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
+
+        val resolvedSource = if (sourceLanguage == "auto") {
+            val sample = texts.firstOrNull { it.isNotBlank() }?.take(200) ?: ""
+            val detected = googleFreeManager.detectLanguage(sample)
+            Log.d(TAG, "translateBatch: detected language=$detected")
+            detected ?: sourceLanguage
+        } else {
+            sourceLanguage
+        }
+
         when (activeProvider()) {
             "GEMINI" -> {
                 Log.d(TAG, "translateBatch: using Gemini")
                 try {
-                    return@withContext geminiManager.translateBatch(texts, sourceLanguage, targetLanguage)
+                    return@withContext geminiManager.translateBatch(texts, resolvedSource, targetLanguage)
                 } catch (e: Exception) {
                     Log.e(TAG, "translateBatch: Gemini failed, falling back to Google PA", e)
                 }
-                googlePAManager.translateBatch(texts, sourceLanguage, targetLanguage)
+                googlePAManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
             "GOOGLE_FREE" -> {
                 Log.d(TAG, "translateBatch: using Google Free")
-                googleFreeManager.translateBatch(texts, sourceLanguage, targetLanguage)
+                googleFreeManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
             else -> {
                 Log.d(TAG, "translateBatch: using Google PA")
-                googlePAManager.translateBatch(texts, sourceLanguage, targetLanguage)
+                googlePAManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
         }
+    }
+
+    /**
+     * Определение языка всегда делегируется GoogleFree — он всегда доступен
+     * и поддерживает sl=auto через стандартный Google Translate endpoint.
+     */
+    override suspend fun detectLanguage(text: String): String? {
+        return googleFreeManager.detectLanguage(text)
     }
 
     override fun downloadModel(language: String) {}

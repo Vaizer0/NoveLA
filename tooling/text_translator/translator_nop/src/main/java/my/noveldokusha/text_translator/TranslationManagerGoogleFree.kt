@@ -59,6 +59,45 @@ class TranslationManagerGoogleFree(
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
+     * Определяет язык текста через Google Translate API.
+     * Возвращает BCP-47 код языка (например "zh", "en", "ru") или null при ошибке.
+     */
+    override suspend fun detectLanguage(text: String): String? = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext null
+
+        try {
+            val url = "https://translate.googleapis.com/translate_a/single".toHttpUrl().newBuilder()
+                .addQueryParameter("client", "gtx")
+                .addQueryParameter("sl", "auto")
+                .addQueryParameter("tl", "en")
+                .addQueryParameter("dt", "t")
+                .addQueryParameter("q", text.take(100))
+                .build()
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", GLOBAL_USER_AGENT)
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+
+                val body = response.body?.string() ?: return@withContext null
+                val jsonArray = json.parseToJsonElement(body).jsonArray
+
+                val detectedLang = jsonArray.getOrNull(2)?.jsonPrimitive?.contentOrNull
+
+                if (detectedLang != null && detectedLang.length in 2..6) {
+                    // Нормализуем zh-CN, zh-TW → zh, pt-BR → pt и т.д.
+                    detectedLang.substringBefore("-")
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
      * Возвращает null при ошибке (вместо строки с ошибкой).
      * Вызывающий код сам решает что делать — fallback на оригинал или не добавлять в map.
      */

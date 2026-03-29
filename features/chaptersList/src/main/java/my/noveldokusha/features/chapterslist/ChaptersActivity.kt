@@ -46,7 +46,6 @@ class ChaptersActivity : BaseActivity() {
 
         val backPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Обработка нажатия кнопки "назад"
                 finish()
             }
         }
@@ -80,6 +79,11 @@ class ChaptersActivity : BaseActivity() {
                     onChangeCover = onDoAskForImage { viewModel.saveImageAsCover(it) },
                     onOpenInBrowser = { navigationRoutes.webView(this, url = it).let(::startActivity) },
                     onGlobalSearchClick = { navigationRoutes.globalSearch(this, text = it).let(::startActivity) },
+                    translatedTitle = viewModel.translatedTitle.value,
+                    translatedDescription = viewModel.translatedDescription.value,
+                    isTranslatingInfo = viewModel.isTranslatingInfo.value,
+                    onTranslateBookInfo = viewModel::translateBookInfo,
+                    onClearBookInfoTranslation = viewModel::clearBookInfoTranslation,
                     scraper = viewModel.scraper,
                 )
             }

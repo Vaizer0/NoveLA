@@ -99,6 +99,11 @@ internal fun ChaptersScreen(
     onChangeCover: () -> Unit,
     onOpenInBrowser: (url: String) -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
+    translatedTitle: String?,
+    translatedDescription: String?,
+    isTranslatingInfo: Boolean,
+    onTranslateBookInfo: () -> Unit,
+    onClearBookInfoTranslation: () -> Unit,
     scraper: Scraper,
 ) {
     var showDropDown by rememberSaveable { mutableStateOf(false) }
@@ -145,25 +150,19 @@ internal fun ChaptersScreen(
                             )
                         },
                         navigationIcon = {
-                            IconButton(
-                                onClick = onPressBack
-                            ) {
+                            IconButton(onClick = onPressBack) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
                             }
                         },
                         actions = {
-                            IconButton(
-                                onClick = onLibraryToggle
-                            ) {
+                            IconButton(onClick = onLibraryToggle) {
                                 Icon(
                                     if (state.book.value.inLibrary) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                                     stringResource(R.string.open_the_web_view),
                                     tint = ColorLike
                                 )
                             }
-                            IconButton(
-                                onClick = { showBottomSheet = !showBottomSheet }
-                            ) {
+                            IconButton(onClick = { showBottomSheet = !showBottomSheet }) {
                                 Icon(
                                     Icons.Filled.FilterList,
                                     stringResource(R.string.filter),
@@ -250,6 +249,11 @@ internal fun ChaptersScreen(
                 state = state,
                 lazyListState = lazyListState,
                 innerPadding = innerPadding,
+                translatedTitle = translatedTitle,
+                translatedDescription = translatedDescription,
+                isTranslating = isTranslatingInfo,
+                onTranslateClick = onTranslateBookInfo,
+                onClearTranslationClick = onClearBookInfoTranslation,
                 onChapterClick = if (state.isInSelectionMode.value) onSelectionModeChapterClick else onChapterClick,
                 onChapterLongClick = if (state.isInSelectionMode.value) onSelectionModeChapterLongClick else onChapterLongClick,
                 onChapterDownload = onChapterDownload,
@@ -276,7 +280,6 @@ internal fun ChaptersScreen(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-
                         if (!state.isLocalSource.value) {
                             IconButton(onClick = onSelectedDeleteDownloads) {
                                 Icon(
@@ -320,13 +323,11 @@ internal fun ChaptersScreen(
                                         Icons.Filled.DoneAll,
                                         stringResource(id = R.string.set_as_read_up_to_selected_chapter)
                                     )
-
                                 }
                             }
                         }
                     }
                 }
-
             }
         },
         floatingActionButton = {

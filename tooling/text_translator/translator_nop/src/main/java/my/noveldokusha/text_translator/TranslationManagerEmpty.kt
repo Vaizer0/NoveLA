@@ -26,7 +26,7 @@ class TranslationManagerEmpty : TranslationManager {
         texts: List<String>,
         sourceLanguage: String,
         targetLanguage: String
-    ): Map<String, String>? {
-        return null
+    ): Map<String, String> {
+        return emptyMap()
     }
 }

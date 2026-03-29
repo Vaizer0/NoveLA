@@ -344,8 +344,9 @@ class TranslationManagerGooglePA(
         if (text.isBlank()) return@withContext text
         val paragraphs = text.split("\n").filter { it.isNotBlank() }
         if (paragraphs.isEmpty()) return@withContext text
+        val sourceLang = if (sourceLanguage == "auto") "auto" else sourceLanguage
         try {
-            translateChunks(paragraphs, sourceLanguage, targetLanguage).joinToString("\n")
+            translateChunks(paragraphs, sourceLang, targetLanguage).joinToString("\n")
         } catch (e: Exception) {
             Log.e(TAG, "translateSingle failed: ${e.message}")
             null
@@ -424,7 +425,10 @@ class TranslationManagerGooglePA(
                 continue
             }
 
-            if (translated == chunk.html) continue
+            if (translated == chunk.html) {
+                Log.w(TAG, "Chunk ${idx + 1}: translated == original, skipping update")
+                continue
+            }
 
             // Mirror wtr-lab: replace <br> back to newline, split, unescape entities
             val translatedParas = translated
@@ -491,6 +495,8 @@ class TranslationManagerGooglePA(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
+        val sourceLang = if (sourceLanguage == "auto") "auto" else sourceLanguage
+
         val boundaries = mutableListOf<IntRange>()
         val allParagraphs = mutableListOf<String>()
         for (text in texts) {
@@ -501,7 +507,7 @@ class TranslationManagerGooglePA(
         }
 
         val translatedAll = try {
-            translateChunks(allParagraphs, sourceLanguage, targetLanguage)
+            translateChunks(allParagraphs, sourceLang, targetLanguage)
         } catch (e: Exception) {
             Log.e(TAG, "translateBatch failed: ${e.message}")
             return@withContext emptyMap()

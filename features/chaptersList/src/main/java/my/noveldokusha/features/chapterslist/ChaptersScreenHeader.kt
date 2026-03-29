@@ -16,16 +16,21 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +68,11 @@ internal fun ChaptersScreenHeader(
     sourceCatalogName: String,
     numberOfChapters: Int,
     paddingValues: PaddingValues,
+    translatedTitle: String?,
+    translatedDescription: String?,
+    isTranslating: Boolean,
+    onTranslateClick: () -> Unit,
+    onClearTranslationClick: () -> Unit,
     modifier: Modifier = Modifier,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -142,7 +152,7 @@ internal fun ChaptersScreenHeader(
                 ) {
                     SelectionContainer {
                         Text(
-                            text = bookState.title,
+                            text = translatedTitle ?: bookState.title,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             maxLines = 5,
@@ -169,12 +179,45 @@ internal fun ChaptersScreenHeader(
                 }
             }
 
-            SelectionContainer {
-                val text by remember(bookState.description) { derivedStateOf { bookState.description.trim() } }
-                ExpandableText(
-                    text = text,
-                    linesForExpand = 4
-                )
+            // Описание с кнопкой перевода
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val displayDesc = (translatedDescription ?: bookState.description).trim()
+                val text by remember(displayDesc) { derivedStateOf { displayDesc } }
+                SelectionContainer(modifier = Modifier.weight(1f)) {
+                    ExpandableText(
+                        text = text,
+                        linesForExpand = 4,
+                    )
+                }
+
+                when {
+                    isTranslating -> CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(start = 4.dp, top = 2.dp)
+                            .size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = ColorAccent
+                    )
+                    translatedTitle != null || translatedDescription != null -> IconButton(
+                        onClick = onClearTranslationClick
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = stringResource(R.string.clear_translation),
+                            tint = ColorAccent
+                        )
+                    }
+                    else -> IconButton(onClick = onTranslateClick) {
+                        Icon(
+                            Icons.Outlined.GTranslate,
+                            contentDescription = stringResource(R.string.translate),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             // Жанры — показываем только если есть, с возможностью свернуть/развернуть
@@ -201,6 +244,7 @@ internal fun ChaptersScreenHeader(
                     visibleGenres.forEach { genre ->
                         AssistChip(
                             onClick = {},
+                            enabled = false,
                             label = {
                                 Text(
                                     text = genre,
@@ -208,8 +252,8 @@ internal fun ChaptersScreenHeader(
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = ColorAccent.copy(alpha = 0.10f),
-                                labelColor = ColorAccent,
+                                disabledContainerColor = ColorAccent.copy(alpha = 0.10f),
+                                disabledLabelColor = ColorAccent,
                             ),
                             border = AssistChipDefaults.assistChipBorder(
                                 enabled = false,
