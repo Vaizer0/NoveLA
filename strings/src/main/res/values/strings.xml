@@ -334,4 +334,11 @@
     <string name="filters_reset">Reset</string>
     <string name="filters_apply">Apply</string>
     <string name="filters_search_hint">Search…</string>
+
+    <string name="translate_target_lang_not_set">Select a translation language in the reader settings first</string>
+    <string name="translate_detect_lang_failed">Failed to detect source language</string>
+    <string name="translate_already_target_lang">Text is already in the selected language</string>
+    <string name="translate_failed">Translation failed</string>
+    <string name="clear_translation">Clear translation</string>
+
 </resources>

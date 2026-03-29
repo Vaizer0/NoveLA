@@ -315,5 +315,11 @@
     <string name="filters_apply">Применить</string>
     <string name="filters_search_hint">Поиск…</string>
 
+    <string name="translate_target_lang_not_set">Сначала выберите язык перевода в настройках читалки</string>
+    <string name="translate_detect_lang_failed">Не удалось определить язык оригинала</string>
+    <string name="translate_already_target_lang">Текст уже на выбранном языке перевода</string>
+    <string name="translate_failed">Ошибка перевода</string>
+    <string name="clear_translation">Сбросить перевод</string>
+
 
 </resources>
