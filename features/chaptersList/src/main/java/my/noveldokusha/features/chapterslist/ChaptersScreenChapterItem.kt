@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -22,7 +21,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
@@ -40,6 +38,7 @@ import my.noveldokusha.feature.local_database.tables.Chapter
 @Composable
 internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
+    translatedTitle: String? = null,
     selected: Boolean,
     isLocalSource: Boolean,
     highlighted: Boolean = false,
@@ -55,14 +54,12 @@ internal fun ChaptersScreenChapterItem(
         highlighted -> ColorAccent.copy(alpha = 0.18f)
         else -> MaterialTheme.colorScheme.surface
     }
-    // Плавная подсветка при навигации, статичный цвет при выборе/обычном состоянии
     val containerColor by animateColorAsState(
         targetValue = targetContainerColor,
         animationSpec = tween(durationMillis = if (highlighted) 300 else 600),
         label = "chapterItemBackground"
     )
 
-    // Стабилизируем лямбды чтобы не триггерить лишние рекомпозиции соседних элементов
     val stableOnClick = remember(onClick) { onClick }
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
@@ -70,13 +67,11 @@ internal fun ChaptersScreenChapterItem(
     ListItem(
         headlineContent = {
             Text(
-                text = chapter.title,
+                text = translatedTitle ?: chapter.title,
                 style = MaterialTheme.typography.bodyMedium
             )
         },
         supportingContent = {
-            // key() предотвращает лишние анимации при скролле —
-            // анимация запустится только при реальном изменении состояния главы
             AnimatedTransition(
                 targetState = chapterWithContext.lastReadChapter to chapter.read,
                 transitionSpec = { fadeIn() togetherWith fadeOut(tween(delayMillis = 150)) }
@@ -112,7 +107,6 @@ internal fun ChaptersScreenChapterItem(
             containerColor = containerColor,
         ),
         modifier = modifier
-            // animateContentSize() убран — он вызывал лишние измерения при каждом скролле
             .combinedClickable(
                 onClick = stableOnClick,
                 onLongClick = stableOnLongClick,

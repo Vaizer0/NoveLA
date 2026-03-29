@@ -4,14 +4,17 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.tables.ChapterTranslation
+
+data class ChapterTitleTranslation(
+    val chapterUrl: String,
+    val translatedText: String
+)
 
 @Dao
 interface ChapterTranslationDao {
-    
-    /**
-     * Get all translations for a specific chapter and language pair
-     */
+
     @Query("""
         SELECT * FROM ChapterTranslation 
         WHERE chapterUrl = :chapterUrl 
@@ -23,31 +26,19 @@ interface ChapterTranslationDao {
         sourceLang: String,
         targetLang: String
     ): List<ChapterTranslation>
-    
-    /**
-     * Insert or replace a batch of translations
-     */
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReplace(translations: List<ChapterTranslation>)
-    
-    /**
-     * Delete translations for chapters that no longer exist
-     */
+
     @Query("""
         DELETE FROM ChapterTranslation 
         WHERE chapterUrl NOT IN (SELECT url FROM Chapter)
     """)
     suspend fun removeOrphanedTranslations()
-    
-    /**
-     * Delete all translations for a specific chapter
-     */
+
     @Query("DELETE FROM ChapterTranslation WHERE chapterUrl = :chapterUrl")
     suspend fun deleteChapterTranslations(chapterUrl: String)
-    
-    /**
-     * Delete all translations for chapters of specific books
-     */
+
     @Query("""
         DELETE FROM ChapterTranslation 
         WHERE chapterUrl IN (
@@ -57,10 +48,7 @@ interface ChapterTranslationDao {
         )
     """)
     suspend fun deleteTranslationsByBookUrls(bookUrls: List<String>)
-    
-    /**
-     * Delete all translations for a specific language pair
-     */
+
     @Query("""
         DELETE FROM ChapterTranslation 
         WHERE sourceLang = :sourceLang 
@@ -70,16 +58,10 @@ interface ChapterTranslationDao {
         sourceLang: String,
         targetLang: String
     ): Int
-    
-    /**
-     * Delete ALL translations (used for refresh)
-     */
+
     @Query("DELETE FROM ChapterTranslation")
     suspend fun deleteAllTranslations(): Int
-    
-    /**
-     * Get count of translations for a chapter
-     */
+
     @Query("""
         SELECT COUNT(*) FROM ChapterTranslation 
         WHERE chapterUrl = :chapterUrl 
@@ -91,4 +73,21 @@ interface ChapterTranslationDao {
         sourceLang: String,
         targetLang: String
     ): Int
+
+    /**
+     * Переведённые названия глав книги — originalText совпадает с title главы.
+     * Используется для отображения переведённых названий в списке глав.
+     */
+    @Query("""
+        SELECT ChapterTranslation.chapterUrl, ChapterTranslation.translatedText
+        FROM ChapterTranslation
+        INNER JOIN Chapter ON Chapter.url = ChapterTranslation.chapterUrl
+        WHERE Chapter.bookUrl = :bookUrl
+        AND ChapterTranslation.targetLang = :targetLang
+        AND ChapterTranslation.originalText = Chapter.title
+    """)
+    fun getTranslatedTitlesFlow(
+        bookUrl: String,
+        targetLang: String
+    ): Flow<List<ChapterTitleTranslation>>
 }

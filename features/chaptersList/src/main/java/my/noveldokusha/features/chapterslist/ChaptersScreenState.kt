@@ -20,6 +20,7 @@ internal data class ChaptersScreenState(
     val isLocalSource: State<Boolean>,
     val isRefreshable: State<Boolean>,
     val genres: MutableState<List<String>>,
+    val translatedChapterTitles: MutableState<Map<String, String>>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }

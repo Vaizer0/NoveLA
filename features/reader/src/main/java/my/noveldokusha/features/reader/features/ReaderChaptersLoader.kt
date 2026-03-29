@@ -489,12 +489,36 @@ internal class ReaderChaptersLoader(
         val chapter = orderedChapters[chapterIndex]
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
+        val titleOriginal = chapter.title
+        val titleTranslated = if (translatorIsActive()) {
+            val sourceLang = translatorSourceLanguageOrNull()
+            val targetLang = translatorTargetLanguageOrNull()
+            val translated = translatorTranslateOrNull(titleOriginal) ?: titleOriginal
+            // Сохраняем перевод названия в БД чтобы список глав мог его отобразить
+            if (sourceLang != null && targetLang != null && translated != titleOriginal) {
+                withContext(Dispatchers.IO) {
+                    chapterTranslationDao.insertReplace(
+                        listOf(
+                            ChapterTranslation(
+                                chapterUrl = chapter.url,
+                                sourceLang = sourceLang,
+                                targetLang = targetLang,
+                                originalText = titleOriginal,
+                                translatedText = translated,
+                            )
+                        )
+                    )
+                }
+            }
+            translated
+        } else titleOriginal
+
         val itemTitle = ReaderItem.Title(
             chapterUrl = chapter.url,
             chapterIndex = chapterIndex,
-            text = chapter.title,
+            text = titleOriginal,
             chapterItemPosition = chapterItemPosition,
-        ).copy(textTranslated = translatorTranslateOrNull(chapter.title) ?: chapter.title)
+        ).copy(textTranslated = titleTranslated)
         chapterItemPosition += 1
 
         maintainPosition {

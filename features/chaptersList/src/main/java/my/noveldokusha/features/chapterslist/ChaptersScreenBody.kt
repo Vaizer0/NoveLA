@@ -68,13 +68,10 @@ internal fun ChaptersScreenBody(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // URL главы, которую нужно подсветить после прокрутки
     var highlightedChapterUrl by remember { mutableStateOf<String?>(null) }
 
-    // Смещение вниз от верха экрана (чтобы глава не скрывалась за toolbar)
     val scrollOffset = -350
 
-    // Плавная прокрутка к индексу: если элемент далеко — сначала прыгаем рядом, потом анимируем
     suspend fun smoothScrollToIndex(index: Int) {
         val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
         val firstVisible = lazyListState.firstVisibleItemIndex
@@ -86,7 +83,6 @@ internal fun ChaptersScreenBody(
         lazyListState.animateScrollToItem(index, scrollOffset)
     }
 
-    // Индекс последней читаемой главы (+1 за header)
     val lastReadChapterIndex = remember(state.book.value.lastReadChapter, state.chapters.size) {
         val url = state.book.value.lastReadChapter ?: return@remember null
         val idx = state.chapters.indexOfFirst { it.chapter.url == url }
@@ -105,7 +101,6 @@ internal fun ChaptersScreenBody(
         }
     }
 
-    // Состояние диалога выбора главы
     var showGoToChapterDialog by rememberSaveable { mutableStateOf(false) }
 
     if (showGoToChapterDialog) {
@@ -165,6 +160,7 @@ internal fun ChaptersScreenBody(
             ) {
                 ChaptersScreenChapterItem(
                     chapterWithContext = it,
+                    translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
                     highlighted = it.chapter.url == highlightedChapterUrl,

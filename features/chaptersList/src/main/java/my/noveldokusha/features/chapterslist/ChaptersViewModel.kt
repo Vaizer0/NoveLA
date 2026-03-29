@@ -9,7 +9,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
@@ -27,6 +29,7 @@ import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
+import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.text_translator.domain.TranslationManager
@@ -49,6 +52,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val chaptersRepository: ChaptersRepository,
     private val epubImporterRepository: EpubImporterRepository,
     private val bookGenreDao: BookGenreDao,
+    private val chapterTranslationDao: ChapterTranslationDao,
     private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel(), ChapterStateBundle {
@@ -72,7 +76,6 @@ internal class ChaptersViewModel @Inject constructor(
             ChaptersScreenState.BookState(title = bookTitle, url = bookUrl, coverImageUrl = null)
         )
 
-    // Экспортируем scraper для доступа из Activity
     val scraper: Scraper = scraper
 
     val state = ChaptersScreenState(
@@ -86,6 +89,7 @@ internal class ChaptersViewModel @Inject constructor(
         isLocalSource = mutableStateOf(bookUrl.isLocalUri),
         isRefreshable = mutableStateOf(rawBookUrl.isContentUri || !bookUrl.isLocalUri),
         genres = mutableStateOf(emptyList()),
+        translatedChapterTitles = mutableStateOf(emptyMap()),
     )
 
     // ─── Перевод названия и описания ──────────────────────────────────────────
@@ -105,8 +109,6 @@ internal class ChaptersViewModel @Inject constructor(
 
             isTranslatingInfo.value = true
             try {
-                // Всегда используем GoogleFree через source=auto —
-                // он нативно поддерживает sl=auto для любого языка включая китайский
                 val translator = translationManager.getTranslator(
                     source = "auto",
                     target = targetLang
@@ -127,7 +129,6 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
     }
-
 
     fun clearBookInfoTranslation() {
         translatedTitle.value = null
@@ -167,11 +168,23 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
-        // Подписываемся на жанры из БД — UI обновится как только они появятся
         viewModelScope.launch {
             bookGenreDao.getGenresFlow(bookUrl).collect {
                 state.genres.value = it
             }
+        }
+
+        // Подписываемся на переведённые названия глав из БД
+        viewModelScope.launch {
+            appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.flow()
+                .flatMapLatest { targetLang ->
+                    chapterTranslationDao.getTranslatedTitlesFlow(bookUrl, targetLang)
+                }
+                .collectLatest { list ->
+                    state.translatedChapterTitles.value = list.associate {
+                        it.chapterUrl to it.translatedText
+                    }
+                }
         }
     }
 
