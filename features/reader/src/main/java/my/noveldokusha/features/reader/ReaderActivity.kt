@@ -620,30 +620,34 @@ class ReaderActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
 
-        // FIX: If TTS is active after screen unlock, scroll to TTS position ONLY if
-        // the reader is behind TTS. If the user has read ahead, don't jump them back.
         if (viewModel.readerSpeaker.isActive.value) {
             val itemPos = viewModel.readerSpeaker.currentTextPlaying.value.itemPos
             if (itemPos.chapterIndex >= 0) {
                 viewBind.listView.post {
-                    // Get current reader position (first visible item on screen)
-                    val firstVisiblePosition = viewBind.listView.firstVisiblePosition
-                    val firstVisibleItemIndex = viewAdapter.listView.fromPositionToIndex(firstVisiblePosition)
-                    val firstVisibleItem = viewModel.items.getOrNull(firstVisibleItemIndex)
+                    val firstVisible = viewBind.listView.firstVisiblePosition
+                    val lastVisible = viewBind.listView.lastVisiblePosition
 
-                    // Compare reader position vs TTS position
-                    val readerIsAhead = if (firstVisibleItem is ReaderItem.Position) {
+                    // Ищем первый видимый элемент который является Position
+                    // (Padding/Divider/BookStart не имеют позиции чтения)
+                    val firstVisiblePositionItem = (firstVisible..lastVisible)
+                        .asSequence()
+                        .mapNotNull { pos ->
+                            val idx = viewAdapter.listView.fromPositionToIndex(pos)
+                            viewModel.items.getOrNull(idx)
+                        }
+                        .filterIsInstance<ReaderItem.Position>()
+                        .firstOrNull()
+
+                    val readerIsAhead = if (firstVisiblePositionItem != null) {
                         when {
-                            // Reader is in a later chapter → don't scroll back
-                            firstVisibleItem.chapterIndex > itemPos.chapterIndex -> true
-                            // Same chapter: reader is at same or later item → don't scroll back
-                            firstVisibleItem.chapterIndex == itemPos.chapterIndex ->
-                                firstVisibleItem.chapterItemPosition >= itemPos.chapterItemPosition
-                            // Reader is behind TTS (earlier chapter) → scroll to TTS
+                            firstVisiblePositionItem.chapterIndex > itemPos.chapterIndex -> true
+                            firstVisiblePositionItem.chapterIndex == itemPos.chapterIndex ->
+                                firstVisiblePositionItem.chapterItemPosition >= itemPos.chapterItemPosition
                             else -> false
                         }
                     } else {
-                        false
+                        // Список ещё не перерисован после разблокировки — не скроллим
+                        true
                     }
 
                     if (!readerIsAhead) {
