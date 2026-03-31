@@ -16,6 +16,7 @@ dependencies {
     implementation(projects.navigation)
     implementation(projects.tooling.localDatabase)
     implementation(projects.tooling.textTranslator.domain)
+    implementation(projects.tooling.textTranslator.translatorNop)
     implementation(projects.tooling.backupRestore)
     implementation(projects.tooling.backupCreate)
 

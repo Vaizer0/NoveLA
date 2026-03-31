@@ -42,8 +42,8 @@ class TranslationManagerGemini(
             .filter { it.isNotBlank() }
 
     private fun getApiEndpoint(key: String): String {
-        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-2.0-flash-exp" }
-        return "https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?key=$key"
+        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-2.5-flash-lite" }
+        return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
     }
 
     override val available = true
@@ -337,33 +337,49 @@ class TranslationManagerGemini(
         return translations
     }
 
-    private fun buildTranslationPrompt(text: String, sourceLangName: String, targetLangName: String) = """
-        You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate the following text from $sourceLangName to $targetLangName.
+    private fun buildTranslationPrompt(text: String, sourceLangName: String, targetLangName: String): String {
+        val isEnglish = targetLangName.equals("English", ignoreCase = true)
+        val terminologyRule = if (isEnglish) {
+            "2. TRANSLATE all terminology to English equivalents:\n   - Cultivation realms, technique names, sect names, artifact names"
+        } else {
+            "2. TRANSLATE all terminology to $targetLangName:\n   - Cultivation realms, technique names, sect names, artifact names\n   - Use natural $targetLangName translations for these terms"
+        }
         
-        CRITICAL TRANSLATION RULES:
-        1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
-        2. TRANSLATE EVERYTHING ELSE to English equivalents:
-           - Location names, cultivation terms, technique names, titles, sect names, realm names, artifact names
-        3. Produce natural, fluent $targetLangName. Remove ads or author notes.
-        4. Provide ONLY the translation, no explanations.
-        
-        Text to translate:
-        $text
-    """.trimIndent()
+        return """
+            You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate the following text from $sourceLangName to $targetLangName.
+            
+            CRITICAL TRANSLATION RULES:
+            1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
+            $terminologyRule
+            3. Produce natural, fluent $targetLangName. Remove ads or author notes.
+            4. Provide ONLY the translation, no explanations.
+            
+            Text to translate:
+            $text
+        """.trimIndent()
+    }
 
-    private fun buildBatchTranslationPrompt(numberedTexts: String, sourceLangName: String, targetLangName: String) = """
-        You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate these numbered paragraphs from $sourceLangName to $targetLangName.
+    private fun buildBatchTranslationPrompt(numberedTexts: String, sourceLangName: String, targetLangName: String): String {
+        val isEnglish = targetLangName.equals("English", ignoreCase = true)
+        val terminologyRule = if (isEnglish) {
+            "2. TRANSLATE all terminology to English equivalents:\n   - Cultivation realms, technique names, sect names, artifact names"
+        } else {
+            "2. TRANSLATE all terminology to $targetLangName:\n   - Cultivation realms, technique names, sect names, artifact names\n   - Use natural $targetLangName translations for these terms"
+        }
         
-        CRITICAL TRANSLATION RULES:
-        1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
-        2. TRANSLATE EVERYTHING ELSE to English equivalents:
-           - Location names, cultivation terms, technique names, titles, sect names, realm names, artifact names
-        3. Produce natural, fluent $targetLangName. Remove ads or author notes.
-        4. Maintain exact numbering format (1., 2., 3., etc.). Provide ONLY translations.
-        
-        Paragraphs to translate:
-        $numberedTexts
-    """.trimIndent()
+        return """
+            You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate these numbered paragraphs from $sourceLangName to $targetLangName.
+            
+            CRITICAL TRANSLATION RULES:
+            1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
+            $terminologyRule
+            3. Produce natural, fluent $targetLangName. Remove ads or author notes.
+            4. Maintain exact numbering format (1., 2., 3., etc.). Provide ONLY translations.
+            
+            Paragraphs to translate:
+            $numberedTexts
+        """.trimIndent()
+    }
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}

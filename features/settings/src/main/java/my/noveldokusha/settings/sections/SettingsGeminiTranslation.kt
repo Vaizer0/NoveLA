@@ -14,6 +14,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -36,6 +40,7 @@ import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsGeminiTranslation(
     translationProvider: String,
@@ -47,6 +52,13 @@ internal fun SettingsGeminiTranslation(
     onGeminiModelChange: (String) -> Unit,
     onGooglePaApiKeysChange: (String) -> Unit,
 ) {
+    val predefinedModels = listOf(
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
+    )
     var apiKeyText by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
     var modelText  by remember(geminiModel)  { mutableStateOf(geminiModel) }
     var paKeysText by remember(googlePaApiKeys) { mutableStateOf(googlePaApiKeys) }
@@ -192,26 +204,51 @@ internal fun SettingsGeminiTranslation(
                 ListItem(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(text = stringResource(R.string.gemini_model), style = MaterialTheme.typography.titleSmall)
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value         = modelText,
-                                onValueChange = { modelText = it; onGeminiModelChange(it) },
-                                label         = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
-                                placeholder   = { Text(stringResource(R.string.gemini_model_placeholder)) },
-                                modifier      = Modifier.fillMaxWidth(),
-                                singleLine    = true,
-                                colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                    cursorColor          = MaterialTheme.colorScheme.onSurface
-                                )
+                            Text(
+                                text = stringResource(R.string.gemini_model),
+                                style = MaterialTheme.typography.titleSmall,
                             )
+                            Spacer(Modifier.height(8.dp))
+                            
+                            var expanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = expanded,
+                                onExpandedChange = { expanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = modelText.ifEmpty { predefinedModels.first() },
+                                    onValueChange = { modelText = it; onGeminiModelChange(it) },
+                                    label = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    singleLine = true,
+                                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                        cursorColor = MaterialTheme.colorScheme.onSurface
+                                    )
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false }
+                                ) {
+                                    predefinedModels.forEach { model ->
+                                        DropdownMenuItem(
+                                            text = { Text(model) },
+                                            onClick = {
+                                                modelText = model
+                                                onGeminiModelChange(model)
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text  = stringResource(R.string.default_gemini_model) + "\n" +
-                                        stringResource(R.string.model_examples) + "\n" +
-                                        stringResource(R.string.find_models_at),
+                                text = stringResource(R.string.default_gemini_model) + "\n" +
+                                        stringResource(R.string.model_examples),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -106,6 +106,7 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
         }
+
     }
 
     fun downloadTranslationModel(lang: String) {
