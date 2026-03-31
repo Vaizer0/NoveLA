@@ -620,8 +620,9 @@ class ReaderActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
 
-        if (viewModel.readerSpeaker.isActive.value) {
-            val itemPos = viewModel.readerSpeaker.currentTextPlaying.value.itemPos
+        if (viewModel.readerSpeaker.isSpeaking.value) {
+            // Get actual position directly from TTS manager to avoid stale state
+            val itemPos = viewModel.readerSpeaker.getActualPlayingPosition()
             if (itemPos.chapterIndex >= 0) {
                 viewBind.listView.post {
                     val firstVisible = viewBind.listView.firstVisiblePosition
@@ -646,8 +647,8 @@ class ReaderActivity : BaseActivity() {
                             else -> false
                         }
                     } else {
-                        // Список ещё не перерисован после разблокировки — не скроллим
-                        true
+                        // Список ещё не перерисован после разблокировки — скроллим к TTS позиции
+                        false
                     }
 
                     if (!readerIsAhead) {

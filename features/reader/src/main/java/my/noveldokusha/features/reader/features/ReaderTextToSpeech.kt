@@ -286,6 +286,15 @@ internal class ReaderTextToSpeech(
         }
     }
 
+    /**
+     * Returns the actual current playing position directly from the TTS manager.
+     * Unlike currentTextPlaying.value.itemPos which may be stale when app is backgrounded,
+     * this always returns the up-to-date position from the underlying utterance state.
+     */
+    fun getActualPlayingPosition(): ReaderItem.Position {
+        return manager.currentActiveItemState.value.itemPos
+    }
+
     @Synchronized
     private fun playFirstVisibleItem() {
         stop()
