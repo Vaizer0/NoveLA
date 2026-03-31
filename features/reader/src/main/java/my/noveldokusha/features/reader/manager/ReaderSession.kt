@@ -59,6 +59,7 @@ internal class ReaderSession(
     private val orderedChapters = mutableListOf<Chapter>()
 
     private var lastPreTranslatedChapterIndex: Int = -1
+    private var lastChapterIndex: Int = -1
 
     var bookTitle: String? = null
     private var bookCoverUrl: String? = null
@@ -331,6 +332,15 @@ internal class ReaderSession(
 
         val progress = stats.chapterReadPercentage()
         val chapterIndex = stats.chapterIndex
+
+        // Принудительный сброс ошибки при смене главы
+        if (chapterIndex != lastChapterIndex) {
+            if (lastChapterIndex != -1 && readerChaptersLoader.hasLoadingError) {
+                readerChaptersLoader.hasLoadingError = false
+                android.util.Log.d("ReaderSession", "Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
+            }
+            lastChapterIndex = chapterIndex
+        }
 
         if (progress >= 0.90f && !readerChaptersLoader.isLastChapter(chapterIndex)) {
             val nextChapterIndex = chapterIndex + 1

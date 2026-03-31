@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,7 +67,25 @@ internal class ReaderChaptersLoader(
     private val loaderQueue = mutableSetOf<LoadChapter.Type>()
     private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>()
 
-    @Volatile var hasLoadingError = false
+    private @Volatile var _hasLoadingError = false
+    private var autoResetJob: kotlinx.coroutines.Job? = null
+
+    var hasLoadingError: Boolean
+        get() = _hasLoadingError
+        set(value) {
+            _hasLoadingError = value
+            autoResetJob?.cancel()
+            autoResetJob = null
+            if (value) {
+                autoResetJob = launch {
+                    delay(30_000L)
+                    _hasLoadingError = false
+                    autoResetJob = null
+                    android.util.Log.d(TAG, "Auto-reset hasLoadingError after 30s timeout")
+                }
+            }
+        }
+
 
     init {
         startChapterLoaderWatcher()
@@ -251,7 +270,8 @@ internal class ReaderChaptersLoader(
                 if (res !is Response.Success) return@launch
 
                 if (!isValidChapterContent(res.data)) {
-                    android.util.Log.w(TAG, "Pre-translation: Invalid content, skipping (background pre-translate only, not blocking load)")
+                    android.util.Log.w(TAG, "Pre-translation: Invalid content, skipping")
+                    hasLoadingError = true
                     return@launch
                 }
 
