@@ -15,6 +15,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.network.ScraperNetworkClient
+import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import my.noveldokusha.text_translator.domain.TranslatorState
@@ -45,13 +47,11 @@ import java.util.concurrent.TimeUnit
  */
 class TranslationManagerGooglePA(
     private val coroutineScope: AppCoroutineScope,
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val networkClient: ScraperNetworkClient
 ) : TranslationManager {
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
+    private val client get() = networkClient.client
 
     override val available = true
     override val isUsingOnlineTranslation = true
@@ -243,29 +243,48 @@ class TranslationManagerGooglePA(
      */
     private suspend fun fetchKeyFromWtrLab(): String? = withContext(Dispatchers.IO) {
         try {
-            // Step 1: Load ranking page to find a novel link
             val rankingHtml = client.newCall(
-                Request.Builder().url("https://wtr-lab.com/en/ranking/daily").build()
-            ).execute().body?.string() ?: return@withContext null
+                Request.Builder()
+                    .url("https://wtr-lab.com/en/ranking/monthly")
+                    .header("User-Agent", GLOBAL_USER_AGENT)
+                    .build()
+            ).execute().body?.string() ?: run {
+                Log.w(TAG, "fetchKeyFromWtrLab: ranking page returned null body")
+                return@withContext null
+            }
 
-            // Step 2: Find any /novel/... link on the ranking page
-            val novelUrl = Regex("""href=["']([^"']*/novel/[^"']+)["']""")
-                .findAll(rankingHtml)
-                .map {
-                    if (it.groupValues[1].startsWith("http")) it.groupValues[1]
-                    else "https://wtr-lab.com${it.groupValues[1]}"
-                }
-                .firstOrNull() ?: run {
+            // ← НОВЫЕ ЛОГИ
+            Log.d(TAG, "fetchKeyFromWtrLab: ranking page length=${rankingHtml.length}")
+            Log.d(TAG, "fetchKeyFromWtrLab: ranking page first 500 chars=${rankingHtml.take(500)}")
+            val novelMatches = Regex("""href=["']([^"']*/novel/[^"']+)["']""").findAll(rankingHtml).toList()
+            Log.d(TAG, "fetchKeyFromWtrLab: /novel/ matches found=${novelMatches.size}")
+            if (novelMatches.isEmpty()) {
+                // Посмотрим какие href вообще есть
+                val allHrefs = Regex("""href=["']([^"']+)["']""").findAll(rankingHtml)
+                    .map { it.groupValues[1] }
+                    .take(20)
+                    .toList()
+                Log.w(TAG, "fetchKeyFromWtrLab: no /novel/ links, all hrefs sample=$allHrefs")
+            }
+            // ← КОНЕЦ НОВЫХ ЛОГОВ
+
+            val novelUrl = novelMatches.map {
+                if (it.groupValues[1].startsWith("http")) it.groupValues[1]
+                else "https://wtr-lab.com${it.groupValues[1]}"
+            }.firstOrNull() ?: run {
                 Log.w(TAG, "fetchKeyFromWtrLab: no novel link found on ranking page")
                 return@withContext null
             }
 
             // Step 3: Navigate to chapter-1 — this page loads the Turbopack bundle with the key
-            val chapterUrl = novelUrl.trimEnd('/') + "/chapter-1?service=webplus"
+            val chapterUrl = novelUrl.trimEnd('/') + "/chapter-1"
             Log.d(TAG, "fetchKeyFromWtrLab: loading chapter page: $chapterUrl")
 
             val chapterHtml = client.newCall(
-                Request.Builder().url(chapterUrl).build()
+                Request.Builder()
+                    .url(chapterUrl)
+                    .header("User-Agent", GLOBAL_USER_AGENT)
+                    .build()
             ).execute().body?.string() ?: return@withContext null
 
             // Step 4: Check inline first
@@ -279,6 +298,7 @@ class TranslationManagerGooglePA(
                 .findAll(chapterHtml)
                 .map { it.groupValues[1] }
                 .map { if (it.startsWith("http")) it else "https://wtr-lab.com$it" }
+                .filter { !it.contains("_buildManifest") && !it.contains("_ssgManifest") }
                 .distinct()
                 .toList()
 
@@ -300,38 +320,22 @@ class TranslationManagerGooglePA(
     /**
      * Loads a list of JS URLs in parallel and returns the first API key found.
      */
-    private suspend fun searchKeyInScripts(urls: List<String>): String? = coroutineScope {
-        Log.d(TAG, "searchKeyInScripts: searching ${urls.size} scripts (parallel)")
-
-        val channel = Channel<String>(capacity = 1)
-
-        val jobs = urls.map { url ->
-            async(Dispatchers.IO) {
-                try {
-                    val js = client.newCall(
-                        Request.Builder().url(url).build()
-                    ).execute().body?.string() ?: return@async
-                    val key = keyHeaderRegex.find(js)?.groupValues?.get(1) ?: return@async
-                    Log.d(TAG, "searchKeyInScripts: found key in $url")
-                    channel.trySend(key)
-                } catch (e: Exception) {
-                    Log.w(TAG, "searchKeyInScripts: failed $url: ${e.message}")
-                }
+    private suspend fun searchKeyInScripts(urls: List<String>): String? = withContext(Dispatchers.IO) {
+        Log.d(TAG, "searchKeyInScripts: searching ${urls.size} scripts (sequential)")
+        for (url in urls) {
+            try {
+                val js = client.newCall(
+                    Request.Builder().url(url).build()
+                ).execute().body?.string() ?: continue
+                val key = keyHeaderRegex.find(js)?.groupValues?.get(1) ?: continue
+                Log.d(TAG, "searchKeyInScripts: found key in $url")
+                return@withContext key
+            } catch (e: Exception) {
+                Log.w(TAG, "searchKeyInScripts: failed $url: ${e.message}")
             }
         }
-
-        var result: String? = null
-        while (result == null && jobs.any { it.isActive }) {
-            result = channel.tryReceive().getOrNull()
-            if (result == null) delay(50L)
-        }
-        if (result == null) result = channel.tryReceive().getOrNull()
-
-        jobs.forEach { it.cancel() }
-        channel.close()
-
-        if (result == null) Log.w(TAG, "searchKeyInScripts: key not found in any script")
-        result
+        Log.w(TAG, "searchKeyInScripts: key not found in any script")
+        null
     }
 
     // ─── Translation ────────────────────────────────────────────────────────────
@@ -465,7 +469,7 @@ class TranslationManagerGooglePA(
 
         val request = Request.Builder()
             .url(translateUrl)
-            .addHeader("X-Goog-Api-Key", apiKey)
+            .addHeader("X-Goog-API-Key", apiKey)
             .addHeader("Origin", "https://translate.google.com")
             .post(requestBody)
             .build()

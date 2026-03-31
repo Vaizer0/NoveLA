@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.text_translator.domain.TranslationManager
 import javax.inject.Singleton
 
@@ -17,18 +18,20 @@ object FossModule {
     @Singleton
     fun provideTranslationManager(
         appCoroutineScope: AppCoroutineScope,
-        appPreferences: AppPreferences
+        appPreferences: AppPreferences,
+        networkClient: ScraperNetworkClient  // ← добавить
     ): TranslationManager {
-        val geminiManager     = TranslationManagerGemini(appCoroutineScope, appPreferences)
+        val geminiManager = TranslationManagerGemini(appCoroutineScope, appPreferences)
         val googleFreeManager = TranslationManagerGoogleFree(appCoroutineScope)
-        val googlePAManager   = TranslationManagerGooglePA(appCoroutineScope, appPreferences)
+        val googlePAManager =
+            TranslationManagerGooglePA(appCoroutineScope, appPreferences, networkClient)
 
         return TranslationManagerComposite(
-            coroutineScope    = appCoroutineScope,
-            geminiManager     = geminiManager,
+            coroutineScope = appCoroutineScope,
+            geminiManager = geminiManager,
             googleFreeManager = googleFreeManager,
-            googlePAManager   = googlePAManager,
-            appPreferences    = appPreferences
+            googlePAManager = googlePAManager,
+            appPreferences = appPreferences
         )
     }
 }
