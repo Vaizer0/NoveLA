@@ -251,8 +251,7 @@ internal class ReaderChaptersLoader(
                 if (res !is Response.Success) return@launch
 
                 if (!isValidChapterContent(res.data)) {
-                    android.util.Log.w(TAG, "Pre-translation: Invalid content, skipping")
-                    hasLoadingError = true
+                    android.util.Log.w(TAG, "Pre-translation: Invalid content, skipping (background pre-translate only, not blocking load)")
                     return@launch
                 }
 
