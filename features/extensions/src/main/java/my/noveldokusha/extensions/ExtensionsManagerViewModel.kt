@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.ExtensionInfoCached
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.scraper.LuaSourceLoader
@@ -54,6 +55,10 @@ class ExtensionsManagerViewModel @Inject constructor(
             }
         }
 
+        // Загружаем кеш из SharedPreferences
+        loadCachedExtensions()
+
+        // Загружаем актуальные данные из сети
         loadAllAvailableExtensions()
     }
 
@@ -86,7 +91,12 @@ class ExtensionsManagerViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 val repoUrl  = _state.value.repositoryUrl
-                val response = httpClient.get(repoUrl)
+                // При forceRefresh используем getWithHeaders с Cache-Control: no-cache для обхода HTTP-кеша
+                val response = if (forceRefresh) {
+                    httpClient.getWithHeaders(repoUrl, mapOf("Cache-Control" to "no-cache"))
+                } else {
+                    httpClient.get(repoUrl)
+                }
                 val yaml     = Yaml()
                 @Suppress("UNCHECKED_CAST")
                 val repoIndex = yaml.loadAs(
@@ -140,6 +150,9 @@ class ExtensionsManagerViewModel @Inject constructor(
                 cachedAvailableExtensions = allExt
                 lastFetchTime = now
 
+                // Сохраняем в кеш для быстрой загрузки при следующем запуске
+                saveCachedExtensions(allExt)
+
                 val langList = allExt.groupBy { it.language }
                     .map { (code, list) ->
                         ExtensionLanguage(code, getLanguageDisplayName(code), list.size)
@@ -175,6 +188,59 @@ class ExtensionsManagerViewModel @Inject constructor(
                 }
             )
         }
+    }
+
+    private fun loadCachedExtensions() {
+        val cached = appPreferences.EXTENSIONS_AVAILABLE_CACHE.value
+        if (cached.isNotEmpty()) {
+            val extensions = cached.map { cached ->
+                ExtensionInfo(
+                    id = cached.id,
+                    name = cached.name,
+                    description = cached.description,
+                    author = cached.author,
+                    version = cached.version,
+                    remoteVersion = cached.remoteVersion,
+                    codeUrl = cached.codeUrl,
+                    iconUrl = cached.iconUrl,
+                    language = cached.language,
+                    isInstalled = getInstalledVersion(cached.id) != null,
+                    isEnabled = isEnabled(cached.id),
+                    isUpdateAvailable = isUpdateAvailable(cached.remoteVersion, getInstalledVersion(cached.id))
+                )
+            }
+            val langList = extensions.groupBy { it.language }
+                .map { (code, list) ->
+                    ExtensionLanguage(code, getLanguageDisplayName(code), list.size)
+                }
+                .sortedBy { it.name }
+
+            _state.update {
+                it.copy(
+                    availableExtensions = extensions,
+                    availableLanguages = langList
+                )
+            }
+            Timber.d("Loaded ${extensions.size} extensions from cache")
+        }
+    }
+
+    private fun saveCachedExtensions(extensions: List<ExtensionInfo>) {
+        val cached = extensions.map { ext ->
+            ExtensionInfoCached(
+                id = ext.id,
+                name = ext.name,
+                description = ext.description,
+                author = ext.author,
+                version = ext.version,
+                remoteVersion = ext.remoteVersion,
+                codeUrl = ext.codeUrl,
+                iconUrl = ext.iconUrl,
+                language = ext.language
+            )
+        }
+        appPreferences.EXTENSIONS_AVAILABLE_CACHE.value = cached
+        Timber.d("Saved ${cached.size} extensions to cache")
     }
 
     // ── Установка ─────────────────────────────────────────────────────────────
