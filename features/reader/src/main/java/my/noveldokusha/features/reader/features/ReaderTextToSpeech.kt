@@ -292,6 +292,21 @@ internal class ReaderTextToSpeech(
      * this always returns the up-to-date position from the underlying utterance state.
      */
     fun getActualPlayingPosition(): ReaderItem.Position {
+        // Try to find currently playing item from queue
+        val playingItem = manager.queueList.values
+            .firstOrNull { it.playState == Utterance.PlayState.PLAYING }
+        if (playingItem != null) {
+            return playingItem.itemPos
+        }
+        
+        // Fallback to LOADING item
+        val loadingItem = manager.queueList.values
+            .firstOrNull { it.playState == Utterance.PlayState.LOADING }
+        if (loadingItem != null) {
+            return loadingItem.itemPos
+        }
+        
+        // Fallback to currentActiveItemState
         return manager.currentActiveItemState.value.itemPos
     }
 
