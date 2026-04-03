@@ -18,6 +18,7 @@ import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.features.reader.manager.ReaderManager
 import my.noveldokusha.features.reader.ui.ReaderScreenState
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
+import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import javax.inject.Inject
 import kotlin.properties.Delegates
 
@@ -92,6 +93,20 @@ internal class ReaderViewModel @Inject constructor(
                     }
                 }
         }
+
+        // Автоперезагрузка после обхода Cloudflare.
+        // Сравниваем host из сигнала с host текущей главы —
+        // чтобы не перезагружать читалку открытую на другом сайте.
+        viewModelScope.launch {
+            for (bypassedHost in CloudflareBypassSignal.bypassCompleted) {
+                val currentHost = runCatching {
+                    android.net.Uri.parse(chapterUrl).host
+                }.getOrNull()
+                if (currentHost != null && currentHost == bypassedHost) {
+                    reloadReader()
+                }
+            }
+        }
     }
 
     val items = readerSession.items
@@ -107,7 +122,6 @@ internal class ReaderViewModel @Inject constructor(
     fun onCloseManually() {
         readerManager.close()
     }
-
 
     fun startSpeaker(itemIndex: Int) =
         readerSession.startSpeaker(itemIndex = itemIndex)

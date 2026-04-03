@@ -3,6 +3,7 @@ package my.noveldokusha.network.interceptors
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -30,7 +31,12 @@ private val CLOUDFLARE_WHITELIST = listOf(
 )
 
 object CloudflareBypassSignal {
+    // Сигнал от кнопки в WebViewActivity — пользователь нажал "готово"
     val channel = Channel<Unit>(Channel.CONFLATED)
+    // Сигнал для читалки — CF успешно пройден, содержит host домена.
+    // Channel<String> а не Channel<Unit> чтобы перезагружать только
+    // ту читалку чей домен совпадает с пройденным CF.
+    val bypassCompleted = Channel<String>(Channel.UNLIMITED)
 }
 
 internal class CloudFareVerificationInterceptor(
@@ -38,8 +44,6 @@ internal class CloudFareVerificationInterceptor(
 ) : Interceptor {
 
     private val lock = ReentrantLock()
-
-    // Домены где cf_clearance уже получена в этой сессии
     private val resolvedDomains = mutableSetOf<String>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -92,10 +96,18 @@ internal class CloudFareVerificationInterceptor(
         cookieManager: CookieManager,
         userAgent: String
     ): Response {
+        // Если плагин проставил Referer — это читаемая страница (например страница главы).
+        // Открываем именно её, а не API endpoint — пользователь сможет пройти CF там.
+        // Fallback: корень домена.
+        val referer = originalRequest.header("Referer")
+        val webViewUrl = if (!referer.isNullOrEmpty()) referer else {
+            Uri.parse(siteUrl).run { "$scheme://$host/" }
+        }
+
         // 1. АВТОМАТИКА
         runBlocking(Dispatchers.Main) {
             withTimeoutOrNull(15_000) {
-                resolveWithWebViewAutomatic(siteUrl, cookieManager)
+                resolveWithWebViewAutomatic(webViewUrl, cookieManager)
             }
         }
 
@@ -109,16 +121,18 @@ internal class CloudFareVerificationInterceptor(
 
         if (isNotCloudflare(firstRetryResponse, peekBodySafe(firstRetryResponse))) {
             resolvedDomains.add(host)
+            // Уведомляем читалку с хостом чтобы она перезагрузилась
+            CloudflareBypassSignal.bypassCompleted.trySend(host)
             return firstRetryResponse
         }
 
         // 2. РУЧНОЙ ВВОД
         firstRetryResponse.close()
-        Log.d(TAG, "CF: Step 2 - Launching manual Activity...")
+        Log.d(TAG, "CF: Step 2 - Launching manual Activity... webViewUrl=$webViewUrl")
         clearCookiesForDomain(siteUrl, cookieManager)
 
         runBlocking(Dispatchers.IO) {
-            resolveWithWebViewManual(siteUrl, cookieManager)
+            resolveWithWebViewManual(webViewUrl, siteUrl, cookieManager)
         }
 
         cookieManager.flush()
@@ -137,6 +151,8 @@ internal class CloudFareVerificationInterceptor(
         }
 
         resolvedDomains.add(host)
+        // Уведомляем читалку с хостом чтобы она перезагрузилась
+        CloudflareBypassSignal.bypassCompleted.trySend(host)
         return finalResponse
     }
 
@@ -163,7 +179,7 @@ internal class CloudFareVerificationInterceptor(
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun resolveWithWebViewAutomatic(url: String, cm: CookieManager) {
+    private suspend fun resolveWithWebViewAutomatic(webViewUrl: String, cm: CookieManager) {
         withContext(Dispatchers.Main) {
             val webView = WebView(appContext)
             webView.settings.apply {
@@ -175,10 +191,10 @@ internal class CloudFareVerificationInterceptor(
             webView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) { cm.flush() }
             }
-            webView.loadUrl(url)
+            webView.loadUrl(webViewUrl)
             for (i in 1..30) {
                 delay(500)
-                if (cm.getCookie(url)?.contains("cf_clearance") == true) {
+                if (cm.getCookie(webViewUrl)?.contains("cf_clearance") == true) {
                     Log.d(TAG, "CF: Auto WebView success on iteration $i")
                     break
                 }
@@ -188,13 +204,17 @@ internal class CloudFareVerificationInterceptor(
         }
     }
 
-    private suspend fun resolveWithWebViewManual(url: String, cm: CookieManager) {
+    private suspend fun resolveWithWebViewManual(
+        webViewUrl: String, // читаемая страница — открываем в браузере
+        siteUrl: String,    // оригинальный URL — проверяем куку по домену
+        cm: CookieManager
+    ) {
         while (CloudflareBypassSignal.channel.tryReceive().isSuccess) {}
 
         withContext(Dispatchers.Main) {
             val intent = Intent().apply {
                 setClassName(appContext, "my.noveldokusha.webview.WebViewActivity")
-                putExtra("url", url)
+                putExtra("url", webViewUrl)
                 putExtra("isBypassMode", true)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
@@ -208,7 +228,7 @@ internal class CloudFareVerificationInterceptor(
                     while (isActive) {
                         delay(1500)
                         cm.flush()
-                        if (cm.getCookie(url)?.contains("cf_clearance") == true) break
+                        if (cm.getCookie(siteUrl)?.contains("cf_clearance") == true) break
                     }
                 }
                 select<Unit> {
