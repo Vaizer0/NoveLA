@@ -88,6 +88,10 @@ class ReaderActivity : BaseActivity() {
     private var listIsScrolling = false
     private val fadeInTextLiveData = MutableLiveData(false)
 
+    // Double-tap detection for showing/hiding reader info
+    private var lastTapTime = 0L
+    private val doubleTapThresholdMs = 350L
+
     private val viewModel by viewModels<ReaderViewModel>()
 
     private val viewBind by lazy { ActivityReaderBinding.inflate(layoutInflater) }
@@ -116,7 +120,13 @@ class ReaderActivity : BaseActivity() {
                         .let(::startActivity)
                 },
                 onClick = {
-                    viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTime < doubleTapThresholdMs) {
+                        viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
+                        lastTapTime = 0L
+                    } else {
+                        lastTapTime = now
+                    }
                 },
             )
         }
