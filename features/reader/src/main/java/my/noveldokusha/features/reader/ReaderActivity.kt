@@ -321,10 +321,6 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
-        viewBind.listView.setOnItemClickListener { _, _, _, _ ->
-            viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
-        }
-
         viewBind.listView.setOnScrollListener(
             object : AbsListView.OnScrollListener {
                 override fun onScroll(
@@ -339,11 +335,19 @@ class ReaderActivity : BaseActivity() {
                         )
                     )
                     updateInfoView()
-                    updateReadingState()
+                    // Only trigger chapter loading when the user is actually scrolling,
+                    // not during programmatic layout changes (e.g. after notifyDataSetChanged).
+                    if (listIsScrolling) {
+                        updateReadingState()
+                    }
                 }
 
                 override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {
                     listIsScrolling = scrollState != AbsListView.OnScrollListener.SCROLL_STATE_IDLE
+                    // When the user lifts their finger, check if we need to load more chapters
+                    if (!listIsScrolling) {
+                        updateReadingState()
+                    }
                 }
             })
 
