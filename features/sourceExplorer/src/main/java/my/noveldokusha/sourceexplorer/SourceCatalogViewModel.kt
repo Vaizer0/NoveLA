@@ -17,6 +17,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.feature.local_database.BookMetadata
+import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import my.noveldokusha.scraper.ActiveFilters
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.scraper.SourceInterface
@@ -53,7 +54,6 @@ internal class SourceCatalogViewModel @Inject constructor(
         },
         listLayoutMode         = appPreferences.BOOKS_LIST_LAYOUT_MODE.state(viewModelScope),
         sortOrder              = appPreferences.SOURCE_SORT_ORDER.state(viewModelScope),
-        // Общий preference количества колонок
         gridColumns            = appPreferences.BOOKS_GRID_COLUMNS.state(viewModelScope),
         hasFilters             = filterableSource != null,
         filterList             = _filterList,
@@ -69,6 +69,22 @@ internal class SourceCatalogViewModel @Inject constructor(
                 filterableSource.getFilterList()
                     .onSuccess { _filterList.value = it }
                     .onError { Timber.e(it.exception, "Failed to load filter list") }
+            }
+        }
+
+        // Перезагружаем текущий список после успешного обхода CF.
+        // SharedFlow — сигнал получают все подписчики одновременно.
+        // Сравниваем host источника чтобы не трогать каталоги других сайтов.
+        viewModelScope.launch {
+            val sourceHost = runCatching {
+                android.net.Uri.parse(sourceBaseUrl).host
+            }.getOrNull()
+
+            CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
+                if (sourceHost != null && sourceHost == bypassedHost) {
+                    state.fetchIterator.reset()
+                    state.fetchIterator.fetchNext()
+                }
             }
         }
     }

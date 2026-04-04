@@ -3,7 +3,6 @@ package my.noveldokusha.network.interceptors
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -12,11 +11,14 @@ import android.webkit.WebViewClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.selects.select
 import my.noveldokusha.core.domain.CloudfareVerificationBypassFailedException
 import my.noveldokusha.core.domain.WebViewCookieManagerInitializationFailedException
 import okhttp3.Interceptor
 import okhttp3.Response
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.withLock
@@ -24,6 +26,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private val ERROR_CODES = listOf(HttpsURLConnection.HTTP_FORBIDDEN, HttpsURLConnection.HTTP_UNAVAILABLE)
 private const val TAG = "CloudflareInterceptor"
+private const val MAX_MANUAL_ATTEMPTS = 3
 
 private val CLOUDFLARE_WHITELIST = listOf(
     "github.com",
@@ -33,10 +36,16 @@ private val CLOUDFLARE_WHITELIST = listOf(
 object CloudflareBypassSignal {
     // Сигнал от кнопки в WebViewActivity — пользователь нажал "готово"
     val channel = Channel<Unit>(Channel.CONFLATED)
-    // Сигнал для читалки — CF успешно пройден, содержит host домена.
-    // Channel<String> а не Channel<Unit> чтобы перезагружать только
-    // ту читалку чей домен совпадает с пройденным CF.
-    val bypassCompleted = Channel<String>(Channel.UNLIMITED)
+
+    // SharedFlow вместо Channel — сигнал получают ВСЕ подписчики одновременно.
+    // Channel забирает сообщение у одного получателя, поэтому если открыты
+    // читалка + каталог одновременно — обновился бы только один из них.
+    private val _bypassCompleted = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val bypassCompleted: SharedFlow<String> = _bypassCompleted
+
+    fun notifyBypassCompleted(host: String) {
+        _bypassCompleted.tryEmit(host)
+    }
 }
 
 internal class CloudFareVerificationInterceptor(
@@ -45,6 +54,7 @@ internal class CloudFareVerificationInterceptor(
 
     private val lock = ReentrantLock()
     private val resolvedDomains = mutableSetOf<String>()
+    private val manualAttempts = ConcurrentHashMap<String, Int>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -66,7 +76,6 @@ internal class CloudFareVerificationInterceptor(
                 ?: throw WebViewCookieManagerInitializationFailedException()
             val userAgent = GLOBAL_USER_AGENT
 
-            // Если cf_clearance уже есть — пробуем сразу без WebView
             val existingCookie = cookieManager.getCookie(siteUrl) ?: ""
             if (resolvedDomains.contains(host) || existingCookie.contains("cf_clearance")) {
                 Log.d(TAG, "CF: cf_clearance cached for $host, trying direct retry")
@@ -78,7 +87,6 @@ internal class CloudFareVerificationInterceptor(
                 if (isNotCloudflare(retryResponse, peekBodySafe(retryResponse))) {
                     return@withLock retryResponse
                 }
-                // Кука протухла — сбрасываем и идём через bypass
                 retryResponse.close()
                 resolvedDomains.remove(host)
                 clearCookiesForDomain(siteUrl, cookieManager)
@@ -96,9 +104,6 @@ internal class CloudFareVerificationInterceptor(
         cookieManager: CookieManager,
         userAgent: String
     ): Response {
-        // Если плагин проставил Referer — это читаемая страница (например страница главы).
-        // Открываем именно её, а не API endpoint — пользователь сможет пройти CF там.
-        // Fallback: корень домена.
         val referer = originalRequest.header("Referer")
         val webViewUrl = when {
             siteUrl.contains("/api/") && !referer.isNullOrEmpty() -> referer
@@ -122,14 +127,23 @@ internal class CloudFareVerificationInterceptor(
 
         if (isNotCloudflare(firstRetryResponse, peekBodySafe(firstRetryResponse))) {
             resolvedDomains.add(host)
-            // Уведомляем читалку с хостом чтобы она перезагрузилась
-            CloudflareBypassSignal.bypassCompleted.trySend(host)
+            manualAttempts.remove(host)
+            CloudflareBypassSignal.notifyBypassCompleted(host)
             return firstRetryResponse
         }
 
         // 2. РУЧНОЙ ВВОД
         firstRetryResponse.close()
-        Log.d(TAG, "CF: Step 2 - Launching manual Activity... webViewUrl=$webViewUrl")
+
+        val attempts = manualAttempts.getOrDefault(host, 0)
+        if (attempts >= MAX_MANUAL_ATTEMPTS) {
+            Log.e(TAG, "CF: Max manual attempts ($MAX_MANUAL_ATTEMPTS) reached for $host, giving up")
+            manualAttempts.remove(host)
+            throw CloudfareVerificationBypassFailedException()
+        }
+        manualAttempts[host] = attempts + 1
+        Log.d(TAG, "CF: Step 2 - manual attempt ${attempts + 1}/$MAX_MANUAL_ATTEMPTS for $host, webViewUrl=$webViewUrl")
+
         clearCookiesForDomain(siteUrl, cookieManager)
 
         runBlocking(Dispatchers.IO) {
@@ -152,8 +166,8 @@ internal class CloudFareVerificationInterceptor(
         }
 
         resolvedDomains.add(host)
-        // Уведомляем читалку с хостом чтобы она перезагрузилась
-        CloudflareBypassSignal.bypassCompleted.trySend(host)
+        manualAttempts.remove(host)
+        CloudflareBypassSignal.notifyBypassCompleted(host)
         return finalResponse
     }
 
@@ -206,8 +220,8 @@ internal class CloudFareVerificationInterceptor(
     }
 
     private suspend fun resolveWithWebViewManual(
-        webViewUrl: String, // читаемая страница — открываем в браузере
-        siteUrl: String,    // оригинальный URL — проверяем куку по домену
+        webViewUrl: String,
+        siteUrl: String,
         cm: CookieManager
     ) {
         while (CloudflareBypassSignal.channel.tryReceive().isSuccess) {}

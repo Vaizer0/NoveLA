@@ -95,13 +95,14 @@ internal class ReaderViewModel @Inject constructor(
         }
 
         // Автоперезагрузка после обхода Cloudflare.
-        // Сравниваем host из сигнала с host текущей главы —
-        // чтобы не перезагружать читалку открытую на другом сайте.
+        // SharedFlow — сигнал получают все подписчики одновременно.
+        // Сравниваем host чтобы не перезагружать читалку открытую на другом сайте.
         viewModelScope.launch {
-            for (bypassedHost in CloudflareBypassSignal.bypassCompleted) {
-                val currentHost = runCatching {
-                    android.net.Uri.parse(chapterUrl).host
-                }.getOrNull()
+            val currentHost = runCatching {
+                android.net.Uri.parse(chapterUrl).host
+            }.getOrNull()
+
+            CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
                 if (currentHost != null && currentHost == bypassedHost) {
                     reloadReader()
                 }

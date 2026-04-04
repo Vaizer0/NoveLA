@@ -14,6 +14,7 @@ import my.noveldokusha.data.CatalogItem
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.asMutableStateOf
+import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import javax.inject.Inject
 
 internal interface GlobalSourceSearchStateBundle {
@@ -35,6 +36,24 @@ internal class GlobalSourceSearchViewModel @Inject constructor(
 
     init {
         search(text = searchInput.value)
+
+        // После обхода CF перезапускаем поиск только для источников
+        // чей домен совпадает с пройденным хостом.
+        // SharedFlow — сигнал получают все подписчики одновременно.
+        viewModelScope.launch {
+            CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
+                sourcesResults
+                    .filter { result ->
+                        runCatching {
+                            android.net.Uri.parse(result.source.catalog.baseUrl).host == bypassedHost
+                        }.getOrDefault(false)
+                    }
+                    .forEach { result ->
+                        result.fetchIterator.reset()
+                        result.fetchIterator.fetchNext()
+                    }
+            }
+        }
     }
 
     fun search(text: String) {
@@ -56,7 +75,6 @@ internal class GlobalSourceSearchViewModel @Inject constructor(
                 }
         }
     }
-
 }
 
 internal data class SourceResults(
