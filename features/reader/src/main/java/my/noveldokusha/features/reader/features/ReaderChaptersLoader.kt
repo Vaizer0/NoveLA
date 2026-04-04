@@ -748,7 +748,14 @@ internal class ReaderChaptersLoader(
                 }
                 maintainPosition {
                     remove(itemProgressBar)
-                    val detail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
+                    val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
+                    // LuaError dumps the entire plugin source into the message after ":N " —
+                    // extract only the short error part that follows the last colon+space pattern
+                    // e.g. "...script...:301 [1401] You are not logged in!" → "[1401] You are not logged in!"
+                    val detail = Regex(""":\d+\s+(\[?\w.*?)$""", RegexOption.DOT_MATCHES_ALL)
+                        .find(rawDetail)?.groupValues?.get(1)?.trim()
+                        ?: rawDetail.lines().lastOrNull { it.isNotBlank() }?.trim()
+                        ?: rawDetail
                     val userMessage = if (java.util.Locale.getDefault().language == "ru")
                         "Ошибка загрузки: $detail\n\nВозможные причины: защита Cloudflare, требуется авторизация или проблема с источником. Попробуйте открыть в браузере."
                     else
