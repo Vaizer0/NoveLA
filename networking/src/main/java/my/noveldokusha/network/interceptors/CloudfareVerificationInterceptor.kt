@@ -17,7 +17,10 @@ import kotlinx.coroutines.selects.select
 import my.noveldokusha.core.domain.CloudfareVerificationBypassFailedException
 import my.noveldokusha.core.domain.WebViewCookieManagerInitializationFailedException
 import okhttp3.Interceptor
+import okhttp3.RequestBody
 import okhttp3.Response
+import okio.Buffer
+import okio.BufferedSink
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import javax.net.ssl.HttpsURLConnection
@@ -34,12 +37,8 @@ private val CLOUDFLARE_WHITELIST = listOf(
 )
 
 object CloudflareBypassSignal {
-    // Сигнал от кнопки в WebViewActivity — пользователь нажал "готово"
     val channel = Channel<Unit>(Channel.CONFLATED)
 
-    // SharedFlow вместо Channel — сигнал получают ВСЕ подписчики одновременно.
-    // Channel забирает сообщение у одного получателя, поэтому если открыты
-    // читалка + каталог одновременно — обновился бы только один из них.
     private val _bypassCompleted = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val bypassCompleted: SharedFlow<String> = _bypassCompleted
 
@@ -58,20 +57,40 @@ internal class CloudFareVerificationInterceptor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-        val response = chain.proceed(originalRequest)
+
+        // Буферизуем тело запроса ДО первого proceed.
+        // RequestBody одноразовый — после первого chain.proceed тело вычитано
+        // и повторный запрос уйдёт пустым (POST без тела → сервер вернёт ошибку).
+        val bufferedRequest = if (originalRequest.body != null) {
+            val buffer = Buffer()
+            originalRequest.body!!.writeTo(buffer)
+            val bodyBytes = buffer.readByteArray()
+            val replayableBody = object : RequestBody() {
+                override fun contentType() = originalRequest.body!!.contentType()
+                override fun contentLength() = bodyBytes.size.toLong()
+                override fun writeTo(sink: BufferedSink) { sink.write(bodyBytes) }
+            }
+            originalRequest.newBuilder()
+                .method(originalRequest.method, replayableBody)
+                .build()
+        } else {
+            originalRequest
+        }
+
+        val response = chain.proceed(bufferedRequest)
         val bodyPreview = peekBodySafe(response)
 
         if (isNotCloudflare(response, bodyPreview)) {
             return response
         }
 
-        Log.d(TAG, "CF: Challenge detected. URL: ${originalRequest.url}")
+        Log.d(TAG, "CF: Challenge detected. URL: ${bufferedRequest.url}")
 
         return lock.withLock {
             response.close()
 
-            val siteUrl = originalRequest.url.toString()
-            val host = originalRequest.url.host
+            val siteUrl = bufferedRequest.url.toString()
+            val host = bufferedRequest.url.host
             val cookieManager = CookieManager.getInstance()
                 ?: throw WebViewCookieManagerInitializationFailedException()
             val userAgent = GLOBAL_USER_AGENT
@@ -79,7 +98,7 @@ internal class CloudFareVerificationInterceptor(
             val existingCookie = cookieManager.getCookie(siteUrl) ?: ""
             if (resolvedDomains.contains(host) || existingCookie.contains("cf_clearance")) {
                 Log.d(TAG, "CF: cf_clearance cached for $host, trying direct retry")
-                val retryRequest = originalRequest.newBuilder()
+                val retryRequest = bufferedRequest.newBuilder()
                     .header("Cookie", formatCookies(existingCookie))
                     .header("User-Agent", userAgent)
                     .build()
@@ -92,7 +111,7 @@ internal class CloudFareVerificationInterceptor(
                 clearCookiesForDomain(siteUrl, cookieManager)
             }
 
-            proceedWithBypass(chain, originalRequest, siteUrl, host, cookieManager, userAgent)
+            proceedWithBypass(chain, bufferedRequest, siteUrl, host, cookieManager, userAgent)
         }
     }
 
@@ -171,6 +190,7 @@ internal class CloudFareVerificationInterceptor(
         return finalResponse
     }
 
+    // Оригинальная логика без изменений
     private fun isNotCloudflare(response: Response, body: String): Boolean {
         val host = response.request.url.host
         if (CLOUDFLARE_WHITELIST.any { host.contains(it) }) return true
@@ -215,6 +235,8 @@ internal class CloudFareVerificationInterceptor(
                 }
             }
             webView.stopLoading()
+            cm.flush()
+            delay(200)
             webView.destroy()
         }
     }
@@ -226,11 +248,14 @@ internal class CloudFareVerificationInterceptor(
     ) {
         while (CloudflareBypassSignal.channel.tryReceive().isSuccess) {}
 
+        val oldCfClearance = extractCfClearance(cm.getCookie(siteUrl))
+
         withContext(Dispatchers.Main) {
             val intent = Intent().apply {
                 setClassName(appContext, "my.noveldokusha.webview.WebViewActivity")
                 putExtra("url", webViewUrl)
                 putExtra("isBypassMode", true)
+                putExtra("oldCfClearance", oldCfClearance)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             appContext.startActivity(intent)
@@ -254,6 +279,15 @@ internal class CloudFareVerificationInterceptor(
                 cookieJob.cancel()
             }
         }
+    }
+
+    private fun extractCfClearance(cookies: String?): String {
+        if (cookies.isNullOrEmpty()) return ""
+        return cookies.split(";")
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("cf_clearance=") }
+            ?.removePrefix("cf_clearance=")
+            ?: ""
     }
 
     private fun formatCookies(cookies: String?): String {

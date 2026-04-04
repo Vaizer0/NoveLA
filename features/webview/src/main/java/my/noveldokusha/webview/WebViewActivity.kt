@@ -25,6 +25,10 @@ class WebViewActivity : ComponentActivity() {
     @Inject lateinit var themeProvider: ThemeProvider
 
     private val urlExtra by lazy { intent.getStringExtra("url") ?: "" }
+    // Флаг выставляется интерцептором когда Activity открывается для обхода CF.
+    // При обычном открытии страниц через WebView флаг false — авто-закрытие не происходит.
+    private val isBypassMode by lazy { intent.getBooleanExtra("isBypassMode", false) }
+    private val oldCfClearance by lazy { intent.getStringExtra("oldCfClearance") ?: "" }
     private lateinit var webView: WebView
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -41,32 +45,56 @@ class WebViewActivity : ComponentActivity() {
             }
         }
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                // Все ссылки (включая magic link из почты) открываем внутри этого WebView
-                val url = request?.url?.toString() ?: return false
-                view?.loadUrl(url)
-                return true
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                val cookies = CookieManager.getInstance().getCookie(url) ?: ""
-                if (cookies.contains("cf_clearance")) {
-                    Log.d("WebViewActivity", "CF Cookie detected!")
-                }
-            }
-        }
-
         setContent {
             var isReady by remember { mutableStateOf(false) }
             var currentUrl by remember { mutableStateOf(urlExtra) }
+            // Флаг: страница загружена после открытия Activity.
+            // Без него авто-закрытие срабатывает на старых cookie от предыдущей попытки
+            // ещё до того как новая CF-проверка успела пройти.
+            var pageLoadedOnce by remember { mutableStateOf(false) }
+
+            webView.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+                    view?.loadUrl(url)
+                    return true
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    CookieManager.getInstance().flush()
+                    val cookies = CookieManager.getInstance().getCookie(url) ?: ""
+                    if (cookies.contains("cf_clearance")) {
+                        Log.d("WebViewActivity", "CF Cookie detected!")
+                        pageLoadedOnce = true
+                    }
+                }
+            }
 
             LaunchedEffect(Unit) {
                 while (true) {
                     val cookies = CookieManager.getInstance().getCookie(urlExtra) ?: ""
-                    if (cookies.contains("cf_clearance")) {
+                    val currentCfClearance = cookies.split(";")
+                        .map { it.trim() }
+                        .firstOrNull { it.startsWith("cf_clearance=") }
+                        ?.removePrefix("cf_clearance=")
+                        ?: ""
+                    if (currentCfClearance.isNotEmpty() && currentCfClearance != oldCfClearance) {
                         isReady = true
+                        if (isBypassMode && pageLoadedOnce) {
+                            delay(500)
+                            CookieManager.getInstance().flush()
+                            CloudflareBypassSignal.channel.trySend(Unit)
+                            val host = Uri.parse(urlExtra).host ?: ""
+                            if (host.isNotEmpty()) {
+                                CloudflareBypassSignal.notifyBypassCompleted(host)
+                            }
+                            finish()
+                            return@LaunchedEffect
+                        }
                     }
                     webView.url?.let { currentUrl = it }
                     delay(500)
@@ -83,6 +111,12 @@ class WebViewActivity : ComponentActivity() {
                     onDoneClicked = {
                         CookieManager.getInstance().flush()
                         CloudflareBypassSignal.channel.trySend(Unit)
+                        // Уведомляем ViewModels напрямую — интерцептор может упасть
+                        // с исключением до того как сам вызовет notifyBypassCompleted.
+                        val host = Uri.parse(urlExtra).host ?: ""
+                        if (host.isNotEmpty()) {
+                            CloudflareBypassSignal.notifyBypassCompleted(host)
+                        }
                         finish()
                     },
                     onReloadClicked = { webView.reload() },
@@ -95,7 +129,6 @@ class WebViewActivity : ComponentActivity() {
         webView.loadUrl(urlExtra)
     }
 
-    // Когда magic link открывается через Intent — перехватываем и грузим в наш WebView
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val url = intent.data?.toString()
