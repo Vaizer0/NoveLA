@@ -100,8 +100,9 @@ internal class CloudFareVerificationInterceptor(
         // Открываем именно её, а не API endpoint — пользователь сможет пройти CF там.
         // Fallback: корень домена.
         val referer = originalRequest.header("Referer")
-        val webViewUrl = if (!referer.isNullOrEmpty()) referer else {
-            Uri.parse(siteUrl).run { "$scheme://$host/" }
+        val webViewUrl = when {
+            siteUrl.contains("/api/") && !referer.isNullOrEmpty() -> referer
+            else -> siteUrl
         }
 
         // 1. АВТОМАТИКА
