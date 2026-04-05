@@ -611,7 +611,6 @@ class ReaderActivity : BaseActivity() {
             viewBind.listView.setSelectionFromTop(position, offset)
         }
         fadeInTextLiveData.postValue(true)
-        viewBind.listView.doOnNextLayout { updateReadingState() }
     }
 
     private fun updateInfoView() {

@@ -45,13 +45,6 @@ internal class ReaderChaptersLoader(
 
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Main.immediate
 
-    private val preTranslatingChapters = mutableSetOf<String>()
-
-    fun clearTranslationCache() {
-        android.util.Log.d(TAG, "clearTranslationCache: clearing pre-translating chapters tracking")
-        preTranslatingChapters.clear()
-    }
-
     private sealed interface LoadChapter {
         enum class Type { RestartInitial, Initial, Previous, Next }
         data class RestartInitialChapter(val state: ChapterState) : LoadChapter
@@ -225,86 +218,9 @@ internal class ReaderChaptersLoader(
             items.clear()
             readerViewHandlersActions.doForceUpdateListViewState()
             loadedChapters.clear()
-            preTranslatingChapters.clear()
             hasLoadingError = false
             readerState = ReaderState.INITIAL_LOAD
             startChapterLoaderWatcher()
-        }
-    }
-
-    fun preTranslateNextChapter(currentChapterIndex: Int) {
-        if (hasLoadingError) return
-
-        val batchTranslator = translatorBatchTranslateOrNull()
-        if (!translatorIsActive() || batchTranslator == null) return
-
-        val nextIndex = currentChapterIndex + 1
-        if (nextIndex >= orderedChapters.size) return
-
-        val nextChapter = orderedChapters[nextIndex]
-
-        if (!preTranslatingChapters.add(nextChapter.url)) {
-            android.util.Log.d(TAG, "Pre-translation: Chapter ${nextChapter.title} already in progress, skipping")
-            return
-        }
-
-        android.util.Log.d(TAG, "Pre-translation: Starting for chapter ${nextChapter.title}")
-
-        launch(Dispatchers.IO) {
-            try {
-                kotlinx.coroutines.delay(3_000L)
-                val sourceLang = translatorSourceLanguageOrNull() ?: return@launch
-                val targetLang = translatorTargetLanguageOrNull() ?: return@launch
-
-                val existing = chapterTranslationDao.getTranslations(
-                    chapterUrl = nextChapter.url,
-                    sourceLang = sourceLang,
-                    targetLang = targetLang
-                )
-                if (existing.isNotEmpty()) {
-                    android.util.Log.d(TAG, "Pre-translation: Chapter ${nextChapter.title} already in DB (${existing.size}), skipping")
-                    return@launch
-                }
-
-                val res = readerRepository.downloadChapter(nextChapter.url)
-                if (res !is Response.Success) return@launch
-
-                if (!isValidChapterContent(res.data)) {
-                    android.util.Log.w(TAG, "Pre-translation: Invalid content, skipping")
-                    hasLoadingError = true
-                    return@launch
-                }
-
-                val itemsOriginal = textToItemsConverter(
-                    chapterUrl = nextChapter.url,
-                    chapterIndex = nextIndex,
-                    chapterItemPositionDisplacement = 0,
-                    text = res.data,
-                    userRegexRules = regexRulesProvider(),
-                )
-
-                val textsToTranslate = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
-                if (textsToTranslate.isEmpty()) return@launch
-
-                android.util.Log.d(TAG, "Pre-translation: Translating ${textsToTranslate.size} paragraphs for ${nextChapter.title}")
-                val translations = batchTranslator.invoke(textsToTranslate)
-
-                val entities = textsToTranslate.map { original ->
-                    ChapterTranslation(
-                        chapterUrl = nextChapter.url,
-                        sourceLang = sourceLang,
-                        targetLang = targetLang,
-                        originalText = original,
-                        translatedText = translations[original] ?: original
-                    )
-                }
-                chapterTranslationDao.insertReplace(entities)
-                android.util.Log.d(TAG, "Pre-translation: Saved ${entities.size} translations (${textsToTranslate.size - translations.size} fallback to original)")
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Pre-translation: Failed - ${e.message}")
-            } finally {
-                preTranslatingChapters.remove(nextChapter.url)
-            }
         }
     }
 
@@ -646,64 +562,8 @@ internal class ReaderChaptersLoader(
                                     }
                                 }
                             } else {
-                                // Кэша нет — ждём если pre-translate сейчас идёт, иначе переводим сами
-                                if (preTranslatingChapters.contains(chapter.url)) {
-                                    android.util.Log.d(TAG, "Pre-translation in progress for ${chapter.title}, waiting...")
-                                    var waited = 0
-                                    while (preTranslatingChapters.contains(chapter.url) && waited < 10_000) {
-                                        kotlinx.coroutines.delay(200)
-                                        waited += 200
-                                    }
-                                    val freshTranslations = withContext(Dispatchers.IO) {
-                                        chapterTranslationDao.getTranslations(
-                                            chapterUrl = chapter.url,
-                                            sourceLang = sourceLang,
-                                            targetLang = targetLang
-                                        ).associate { it.originalText to it.translatedText }
-                                    }
-                                    if (freshTranslations.isNotEmpty()) {
-                                        android.util.Log.d(TAG, "Pre-translation finished, using DB cache (${freshTranslations.size} translations)")
-                                        // Проверяем что всё покрыто — скрейпинг может дать немного другой текст
-                                        val bodyItems = itemsOriginal.filterIsInstance<ReaderItem.Body>()
-                                        val notInCache = bodyItems.filter { !freshTranslations.containsKey(it.text) }
-                                        if (notInCache.isNotEmpty()) {
-                                            android.util.Log.w(TAG, "Cache miss ${notInCache.size} paragraphs after pre-translate, translating missing...")
-                                            val missingTexts = notInCache.map { it.text }
-                                            val extraTranslations = withContext(Dispatchers.IO) {
-                                                batchTranslator.invoke(missingTexts)
-                                            }
-                                            withContext(Dispatchers.IO) {
-                                                val entities = missingTexts.map { original ->
-                                                    ChapterTranslation(
-                                                        chapterUrl = chapter.url,
-                                                        sourceLang = sourceLang,
-                                                        targetLang = targetLang,
-                                                        originalText = original,
-                                                        translatedText = extraTranslations[original] ?: original
-                                                    )
-                                                }
-                                                chapterTranslationDao.insertReplace(entities)
-                                            }
-                                            val fullTranslations = freshTranslations + extraTranslations
-                                            itemsOriginal.map {
-                                                if (it is ReaderItem.Body) it.copy(textTranslated = fullTranslations[it.text] ?: it.text)
-                                                else it
-                                            }
-                                        } else {
-                                            android.util.Log.d(TAG, "All ${bodyItems.size} paragraphs covered (${freshTranslations.size} unique keys)")
-                                            itemsOriginal.map {
-                                                if (it is ReaderItem.Body) it.copy(textTranslated = freshTranslations[it.text] ?: it.text)
-                                                else it
-                                            }
-                                        }
-                                    } else {
-                                        // Pre-translate не успел или упал — переводим сами
-                                        translateAndCache(itemsOriginal, textsToTranslate, batchTranslator, chapter.url, sourceLang, targetLang)
-                                    }
-                                } else {
-                                    // Нет кэша и нет pre-translate — переводим сами
-                                    translateAndCache(itemsOriginal, textsToTranslate, batchTranslator, chapter.url, sourceLang, targetLang)
-                                }
+                                // Кэша нет — переводим и сохраняем
+                                translateAndCache(itemsOriginal, textsToTranslate, batchTranslator, chapter.url, sourceLang, targetLang)
                             }
                         } else {
                             android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (batch not available)")

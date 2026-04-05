@@ -58,7 +58,6 @@ internal class ReaderSession(
     private val readRoutine = ChaptersIsReadRoutine(appRepository)
     private val orderedChapters = mutableListOf<Chapter>()
 
-    private var lastPreTranslatedChapterIndex: Int = -1
     private var lastChapterIndex: Int = -1
 
     var bookTitle: String? = null
@@ -120,7 +119,6 @@ internal class ReaderSession(
         chapterTranslationDao = chapterTranslationDao,
         regexRulesProvider = { appPreferences.USER_REGEX_CLEANUP_RULES.value },
     ).also {
-        readerLiveTranslation.onClearChapterCache = { it.clearTranslationCache() }
     }
 
     val items = readerChaptersLoader.getItems()
@@ -155,14 +153,6 @@ internal class ReaderSession(
                 val nextChapterIndex = currentChapterIndex + 1
                 if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
                     readerChaptersLoader.tryLoadNext()
-                }
-                if (readerLiveTranslation.translatorState != null &&
-                    currentChapterIndex != lastPreTranslatedChapterIndex
-                ) {
-                    lastPreTranslatedChapterIndex = currentChapterIndex
-                    scope.launch {
-                        readerChaptersLoader.preTranslateNextChapter(currentChapterIndex)
-                    }
                 }
             }
         },
@@ -342,22 +332,12 @@ internal class ReaderSession(
             lastChapterIndex = chapterIndex
         }
 
-        if (progress >= 0.90f && !readerChaptersLoader.isLastChapter(chapterIndex)) {
+        if (progress >= 0.80f && !readerChaptersLoader.isLastChapter(chapterIndex)) {
             val nextChapterIndex = chapterIndex + 1
             if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
                 scope.launch {
                     readerChaptersLoader.tryLoadNext()
                 }
-            }
-        }
-
-        if (progress >= 0.80f &&
-            readerLiveTranslation.translatorState != null &&
-            chapterIndex != lastPreTranslatedChapterIndex
-        ) {
-            lastPreTranslatedChapterIndex = chapterIndex
-            scope.launch {
-                readerChaptersLoader.preTranslateNextChapter(chapterIndex)
             }
         }
     }
