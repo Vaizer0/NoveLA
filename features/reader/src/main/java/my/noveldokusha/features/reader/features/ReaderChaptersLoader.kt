@@ -381,12 +381,10 @@ internal class ReaderChaptersLoader(
     private suspend fun loadNextChapter() = withContext(Dispatchers.Main.immediate) {
         readerState = ReaderState.LOADING
 
-        val lastItem = items.lastOrNull()
-        if (lastItem == null) {
-            readerState = ReaderState.IDLE
-            return@withContext
-        }
-        if (lastItem is ReaderItem.BookEnd) {
+        // ✅ Правильный способ определить последнюю загруженную главу
+        val lastChapterIndex = items.maxOfOrNull { it.chapterIndex }
+        
+        if (lastChapterIndex == null) {
             readerState = ReaderState.IDLE
             return@withContext
         }
@@ -401,13 +399,17 @@ internal class ReaderChaptersLoader(
             withContext(Dispatchers.Main.immediate) { items.remove(it); readerViewHandlersActions.doForceUpdateListViewState() }
         }
 
-        val nextIndex = lastItem.chapterIndex + 1
-        if (nextIndex >= orderedChapters.size) {
-            insert(ReaderItem.BookEnd(chapterIndex = nextIndex))
-            readerViewHandlersActions.doForceUpdateListViewState()
+        if (lastChapterIndex >= orderedChapters.lastIndex) {
+            if (items.none { it is ReaderItem.BookEnd }) {
+                insert(ReaderItem.BookEnd(chapterIndex = lastChapterIndex + 1))
+                readerViewHandlersActions.doForceUpdateListViewState()
+            }
             readerState = ReaderState.IDLE
             return@withContext
         }
+
+        // ✅ Всегда грузим только следующую по порядку главу
+        val nextIndex = lastChapterIndex + 1
 
         addChapter(chapterIndex = nextIndex, insert = insert, insertAll = insertAll, remove = remove)
         chapterLoadedFlow.emit(ChapterLoaded(chapterIndex = nextIndex, type = ChapterLoaded.Type.Next))
@@ -422,30 +424,55 @@ internal class ReaderChaptersLoader(
         maintainPosition: suspend (suspend () -> Unit) -> Unit = { it() },
     ) = withContext(Dispatchers.Default) {
         val chapter = orderedChapters[chapterIndex]
+        
+        // Защита от двойной загрузки: блокируем сразу при входе в функцию
+        synchronized(loadedChapters) {
+            if (loadedChapters.contains(chapter.url)) {
+                android.util.Log.d(TAG, "addChapter: chapter ${chapter.url} already loaded or loading, skipping")
+                return@withContext
+            }
+            loadedChapters.add(chapter.url)
+        }
+        
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
         val titleOriginal = chapter.title
         val titleTranslated = if (translatorIsActive()) {
             val sourceLang = translatorSourceLanguageOrNull()
             val targetLang = translatorTargetLanguageOrNull()
-            val translated = translatorTranslateOrNull(titleOriginal) ?: titleOriginal
-            // Сохраняем перевод названия в БД чтобы список глав мог его отобразить
-            if (sourceLang != null && targetLang != null && translated != titleOriginal) {
+            // Сначала проверяем кэш — избегаем лишнего сетевого запроса при повторном открытии
+            val cachedTitle = if (sourceLang != null && targetLang != null) {
                 withContext(Dispatchers.IO) {
-                    chapterTranslationDao.insertReplace(
-                        listOf(
-                            ChapterTranslation(
-                                chapterUrl = chapter.url,
-                                sourceLang = sourceLang,
-                                targetLang = targetLang,
-                                originalText = titleOriginal,
-                                translatedText = translated,
+                    chapterTranslationDao.getTranslations(
+                        chapterUrl = chapter.url,
+                        sourceLang = sourceLang,
+                        targetLang = targetLang
+                    ).find { it.originalText == titleOriginal }?.translatedText
+                }
+            } else null
+
+            if (cachedTitle != null) {
+                cachedTitle
+            } else {
+                val translated = translatorTranslateOrNull(titleOriginal) ?: titleOriginal
+                // Сохраняем перевод названия в БД чтобы список глав мог его отобразить
+                if (sourceLang != null && targetLang != null && translated != titleOriginal) {
+                    withContext(Dispatchers.IO) {
+                        chapterTranslationDao.insertReplace(
+                            listOf(
+                                ChapterTranslation(
+                                    chapterUrl = chapter.url,
+                                    sourceLang = sourceLang,
+                                    targetLang = targetLang,
+                                    originalText = titleOriginal,
+                                    translatedText = translated,
+                                )
                             )
                         )
-                    )
+                    }
                 }
+                translated
             }
-            translated
         } else titleOriginal
 
         val itemTitle = ReaderItem.Title(
@@ -528,11 +555,18 @@ internal class ReaderChaptersLoader(
 
                             val textsToTranslate = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
 
-                            if (dbTranslations.isNotEmpty()) {
+                            val result = if (dbTranslations.isNotEmpty()) {
                                 // Кэш есть — проверяем полноту
                                 val missingFromDb = textsToTranslate.filter { !dbTranslations.containsKey(it) }
 
-                                if (missingFromDb.isNotEmpty()) {
+                                // ✅ Если всё уже переведено — пропускаем запрос полностью
+                                if (missingFromDb.isEmpty()) {
+                                    android.util.Log.d(TAG, "Using full DB cache for chapter ${chapter.title} (${dbTranslations.size} translations)")
+                                    itemsOriginal.map {
+                                        if (it is ReaderItem.Body) it.copy(textTranslated = dbTranslations[it.text] ?: it.text)
+                                        else it
+                                    }
+                                } else {
                                     android.util.Log.d(TAG, "DB cache partial: ${dbTranslations.size}/${textsToTranslate.size}, translating ${missingFromDb.size} missing")
                                     val extraTranslations = withContext(Dispatchers.IO) {
                                         batchTranslator.invoke(missingFromDb)
@@ -554,17 +588,12 @@ internal class ReaderChaptersLoader(
                                         if (it is ReaderItem.Body) it.copy(textTranslated = fullTranslations[it.text] ?: it.text)
                                         else it
                                     }
-                                } else {
-                                    android.util.Log.d(TAG, "Using full DB cache for chapter ${chapter.title} (${dbTranslations.size} translations)")
-                                    itemsOriginal.map {
-                                        if (it is ReaderItem.Body) it.copy(textTranslated = dbTranslations[it.text] ?: it.text)
-                                        else it
-                                    }
                                 }
                             } else {
                                 // Кэша нет — переводим и сохраняем
                                 translateAndCache(itemsOriginal, textsToTranslate, batchTranslator, chapter.url, sourceLang, targetLang)
                             }
+                            result
                         } else {
                             android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (batch not available)")
                             itemsOriginal.map {
@@ -592,9 +621,6 @@ internal class ReaderChaptersLoader(
                     insert(ReaderItem.Divider(chapterIndex = chapterIndex))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
-                withContext(Dispatchers.Main.immediate) {
-                    loadedChapters.add(chapter.url)
-                }
             }
             is Response.Error -> {
                 withContext(Dispatchers.Main.immediate) {
@@ -604,6 +630,10 @@ internal class ReaderChaptersLoader(
                         orderedChaptersIndex = chapterIndex
                     )
                     hasLoadingError = true
+                    // ✅ Освобождаем блокировку чтобы можно было повторить попытку
+                    synchronized(loadedChapters) {
+                        loadedChapters.remove(chapter.url)
+                    }
                     android.util.Log.w(TAG, "Chapter load error: ${res.message}, stopping further auto-loading")
                 }
                 maintainPosition {

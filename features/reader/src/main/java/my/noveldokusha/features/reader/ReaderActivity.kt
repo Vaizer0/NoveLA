@@ -87,6 +87,10 @@ class ReaderActivity : BaseActivity() {
 
     private var listIsScrolling = false
     private val fadeInTextLiveData = MutableLiveData(false)
+    // Предотвращает загрузку следующей главы до первого реального скролла пользователя.
+    // Сбрасывается в false при каждом открытии Activity, устанавливается в true только при
+    // TOUCH_SCROLL или FLING — т.е. при реальном жесте, не при programmatic setSelectionFromTop.
+    private var userHasScrolled = false
 
     // Double-tap detection for showing/hiding reader info
     private var lastTapTime = 0L
@@ -344,6 +348,9 @@ class ReaderActivity : BaseActivity() {
 
                 override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {
                     listIsScrolling = scrollState != AbsListView.OnScrollListener.SCROLL_STATE_IDLE
+                    if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_FLING) {
+                        userHasScrolled = true
+                    }
                     // When the user lifts their finger, check if we need to load more chapters
                     if (!listIsScrolling) {
                         updateReadingState()
@@ -584,9 +591,13 @@ class ReaderActivity : BaseActivity() {
 
         when (viewModel.chaptersLoader.readerState) {
             ReaderState.IDLE -> {
-                if (isBottom) {
-                    viewModel.chaptersLoader.tryLoadNext()
-                }
+                // Загружаем следующую главу только если пользователь уже реально скроллил.
+                // Это предотвращает преждевременную загрузку при programmatic setSelectionFromTop
+                // в начале сессии, когда список ещё короткий и isBottom сразу true.
+                // isBottom отключён — загрузка следующей главы только через 80% в ReaderSession
+                // if (isBottom && userHasScrolled) {
+                //     viewModel.chaptersLoader.tryLoadNext()
+                // }
                 if (isTop) {
                     viewModel.chaptersLoader.tryLoadPrevious()
                 }
@@ -616,7 +627,7 @@ class ReaderActivity : BaseActivity() {
     private fun updateInfoView() {
         val lastVisiblePosition = viewBind.listView.lastVisiblePosition
         val itemIndex = viewAdapter.listView.fromPositionToIndex(lastVisiblePosition)
-        viewModel.updateInfoViewTo(itemIndex)
+        viewModel.updateInfoViewTo(itemIndex, userHasScrolled = userHasScrolled)
     }
 
     override fun onPause() {

@@ -133,8 +133,8 @@ internal class ReaderViewModel @Inject constructor(
         chaptersLoader.tryLoadRestartedInitial(currentChapter)
     }
 
-    fun updateInfoViewTo(itemIndex: Int) =
-        readerSession.updateInfoViewTo(itemIndex = itemIndex)
+    fun updateInfoViewTo(itemIndex: Int, userHasScrolled: Boolean = false) =
+        readerSession.updateInfoViewTo(itemIndex = itemIndex, userHasScrolled = userHasScrolled)
 
     fun markChapterStartAsSeen(chapterUrl: String) =
         readerSession.markChapterStartAsSeen(chapterUrl = chapterUrl)

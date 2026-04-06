@@ -59,6 +59,8 @@ internal class ReaderSession(
     private val orderedChapters = mutableListOf<Chapter>()
 
     private var lastChapterIndex: Int = -1
+    private var preloadTriggeredForChapter = -1
+    private val sessionCreatedTime = System.currentTimeMillis()
 
     var bookTitle: String? = null
     private var bookCoverUrl: String? = null
@@ -125,38 +127,48 @@ internal class ReaderSession(
 
     private var ttsCurrentChapterIndex: Int = -1
 
-    val readerTextToSpeech = ReaderTextToSpeech(
-        coroutineScope = scope,
-        context = context,
-        items = items,
-        chapterLoadedFlow = readerChaptersLoader.chapterLoadedFlow,
-        isChapterIndexLoaded = readerChaptersLoader::isChapterIndexLoaded,
-        isChapterIndexValid = readerChaptersLoader::isChapterIndexValid,
-        tryLoadPreviousChapter = readerChaptersLoader::tryLoadPrevious,
-        loadNextChapter = readerChaptersLoader::tryLoadNext,
-        customSavedVoices = appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.state(scope),
-        setCustomSavedVoices = {
-            appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.value = it
-        },
-        getPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value },
-        setPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value = it },
-        getPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value },
-        setPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value = it },
-        getPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value },
-        setPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value = it },
-        getPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value },
-        setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
-        onBufferLow = {
-            val currentChapterIndex = ttsCurrentChapterIndex
-            if (currentChapterIndex < 0) return@ReaderTextToSpeech
-            if (!readerChaptersLoader.isLastChapter(currentChapterIndex)) {
-                val nextChapterIndex = currentChapterIndex + 1
-                if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
-                    readerChaptersLoader.tryLoadNext()
+    lateinit var readerTextToSpeech: ReaderTextToSpeech
+
+    init {
+        readerTextToSpeech = ReaderTextToSpeech(
+            coroutineScope = scope,
+            context = context,
+            items = items,
+            chapterLoadedFlow = readerChaptersLoader.chapterLoadedFlow,
+            isChapterIndexLoaded = readerChaptersLoader::isChapterIndexLoaded,
+            isChapterIndexValid = readerChaptersLoader::isChapterIndexValid,
+            tryLoadPreviousChapter = readerChaptersLoader::tryLoadPrevious,
+            loadNextChapter = readerChaptersLoader::tryLoadNext,
+            customSavedVoices = appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.state(scope),
+            setCustomSavedVoices = {
+                appPreferences.READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST.value = it
+            },
+            getPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value },
+            setPreferredVoiceId = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value = it },
+            getPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value },
+            setPreferredVoiceEngine = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value = it },
+            getPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value },
+            setPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value = it },
+            getPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value },
+            setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
+            onBufferLow = {
+                val currentChapterIndex = ttsCurrentChapterIndex
+                val sessionAge = System.currentTimeMillis() - sessionCreatedTime
+                if (currentChapterIndex < 0) return@ReaderTextToSpeech
+                if (sessionAge < 3000) return@ReaderTextToSpeech
+                if (
+                    readerTextToSpeech.isSpeaking.value &&
+                    !readerChaptersLoader.hasLoadingError &&
+                    !readerChaptersLoader.isLastChapter(currentChapterIndex)
+                ) {
+                    val nextChapterIndex = currentChapterIndex + 1
+                    if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
+                        readerChaptersLoader.tryLoadNext()
+                    }
                 }
-            }
-        },
-    )
+            },
+        )
+    }
 
     fun init() {
         initLoadData()
@@ -206,6 +218,7 @@ internal class ReaderSession(
             readerTextToSpeech.reachedChapterEndFlowChapterIndex.collect { chapterIndex ->
                 withContext(Dispatchers.Main.immediate) {
                     if (readerChaptersLoader.isLastChapter(chapterIndex)) return@withContext
+                    if (readerChaptersLoader.hasLoadingError) return@withContext
                     val nextChapterIndex = chapterIndex + 1
                     val chapterItem = readerChaptersLoader.orderedChapters[nextChapterIndex]
                     if (readerChaptersLoader.loadedChapters.contains(chapterItem.url)) {
@@ -313,7 +326,10 @@ internal class ReaderSession(
         readerTextToSpeech.stop()
     }
 
-    fun updateInfoViewTo(itemIndex: Int) {
+    fun updateInfoViewTo(itemIndex: Int, userHasScrolled: Boolean = false) {
+        val sessionAge = System.currentTimeMillis() - sessionCreatedTime
+        if (sessionAge < 3000) return
+
         val stats = readerChaptersLoader.getItemContext(
             itemIndex = itemIndex,
             chapterUrl = chapterUrl
@@ -330,11 +346,19 @@ internal class ReaderSession(
                 android.util.Log.d("ReaderSession", "Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
             }
             lastChapterIndex = chapterIndex
+            preloadTriggeredForChapter = -1
         }
 
-        if (progress >= 0.80f && !readerChaptersLoader.isLastChapter(chapterIndex)) {
+        if (
+            userHasScrolled &&
+            preloadTriggeredForChapter != chapterIndex &&
+            progress >= 80f &&
+            !readerChaptersLoader.isLastChapter(chapterIndex) &&
+            !readerChaptersLoader.hasLoadingError
+        ) {
             val nextChapterIndex = chapterIndex + 1
             if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
+                preloadTriggeredForChapter = chapterIndex
                 scope.launch {
                     readerChaptersLoader.tryLoadNext()
                 }
