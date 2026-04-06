@@ -18,7 +18,6 @@ import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.features.reader.manager.ReaderManager
 import my.noveldokusha.features.reader.ui.ReaderScreenState
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
-import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import javax.inject.Inject
 import kotlin.properties.Delegates
 
@@ -94,20 +93,6 @@ internal class ReaderViewModel @Inject constructor(
                 }
         }
 
-        // Автоперезагрузка после обхода Cloudflare.
-        // SharedFlow — сигнал получают все подписчики одновременно.
-        // Сравниваем host чтобы не перезагружать читалку открытую на другом сайте.
-        viewModelScope.launch {
-            val currentHost = runCatching {
-                android.net.Uri.parse(chapterUrl).host
-            }.getOrNull()
-
-            CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
-                if (currentHost != null && currentHost == bypassedHost) {
-                    reloadReader()
-                }
-            }
-        }
     }
 
     val items = readerSession.items

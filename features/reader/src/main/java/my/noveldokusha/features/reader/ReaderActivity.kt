@@ -348,7 +348,9 @@ class ReaderActivity : BaseActivity() {
 
                 override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {
                     listIsScrolling = scrollState != AbsListView.OnScrollListener.SCROLL_STATE_IDLE
-                    if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_FLING) {
+                    if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_FLING ||
+                        scrollState == AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL
+                    ) {
                         userHasScrolled = true
                     }
                     // When the user lifts their finger, check if we need to load more chapters
@@ -594,10 +596,9 @@ class ReaderActivity : BaseActivity() {
                 // Загружаем следующую главу только если пользователь уже реально скроллил.
                 // Это предотвращает преждевременную загрузку при programmatic setSelectionFromTop
                 // в начале сессии, когда список ещё короткий и isBottom сразу true.
-                // isBottom отключён — загрузка следующей главы только через 80% в ReaderSession
-                // if (isBottom && userHasScrolled) {
-                //     viewModel.chaptersLoader.tryLoadNext()
-                // }
+                if (isBottom && userHasScrolled) {
+                    viewModel.chaptersLoader.tryLoadNext()
+                }
                 if (isTop) {
                     viewModel.chaptersLoader.tryLoadPrevious()
                 }
