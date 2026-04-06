@@ -5,6 +5,7 @@ import android.content.*
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.net.http.SslError
 import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,8 +26,6 @@ class WebViewActivity : ComponentActivity() {
     @Inject lateinit var themeProvider: ThemeProvider
 
     private val urlExtra by lazy { intent.getStringExtra("url") ?: "" }
-    // Флаг выставляется интерцептором когда Activity открывается для обхода CF.
-    // При обычном открытии страниц через WebView флаг false — авто-закрытие не происходит.
     private val isBypassMode by lazy { intent.getBooleanExtra("isBypassMode", false) }
     private val oldCfClearance by lazy { intent.getStringExtra("oldCfClearance") ?: "" }
     private lateinit var webView: WebView
@@ -48,12 +47,22 @@ class WebViewActivity : ComponentActivity() {
         setContent {
             var isReady by remember { mutableStateOf(false) }
             var currentUrl by remember { mutableStateOf(urlExtra) }
-            // Флаг: страница загружена после открытия Activity.
-            // Без него авто-закрытие срабатывает на старых cookie от предыдущей попытки
-            // ещё до того как новая CF-проверка успела пройти.
             var pageLoadedOnce by remember { mutableStateOf(false) }
 
             webView.webViewClient = object : WebViewClient() {
+
+                // ✅ ИСПРАВЛЕНИЕ: обработка SSL-ошибок (handshake failed, net_error -100)
+                // Без этого WebView молча отменяет запрос при любой проблеме с сертификатом,
+                // что особенно актуально при обходе Cloudflare.
+                override fun onReceivedSslError(
+                    view: WebView?,
+                    handler: SslErrorHandler?,
+                    error: SslError?
+                ) {
+                    Log.w("WebViewActivity", "SSL error: ${error?.primaryError}, proceeding anyway")
+                    handler?.proceed()
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -71,6 +80,32 @@ class WebViewActivity : ComponentActivity() {
                         Log.d("WebViewActivity", "CF Cookie detected!")
                         pageLoadedOnce = true
                     }
+                }
+
+                // ✅ ИСПРАВЛЕНИЕ: логируем HTTP ошибки для диагностики
+                override fun onReceivedHttpError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    errorResponse: WebResourceResponse?
+                ) {
+                    super.onReceivedHttpError(view, request, errorResponse)
+                    Log.w(
+                        "WebViewActivity",
+                        "HTTP error ${errorResponse?.statusCode} for ${request?.url}"
+                    )
+                }
+
+                // ✅ ИСПРАВЛЕНИЕ: логируем сетевые ошибки для диагностики
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    super.onReceivedError(view, request, error)
+                    Log.e(
+                        "WebViewActivity",
+                        "Network error: code=${error?.errorCode}, desc=${error?.description}, url=${request?.url}"
+                    )
                 }
             }
 
@@ -111,8 +146,6 @@ class WebViewActivity : ComponentActivity() {
                     onDoneClicked = {
                         CookieManager.getInstance().flush()
                         CloudflareBypassSignal.channel.trySend(Unit)
-                        // Уведомляем ViewModels напрямую — интерцептор может упасть
-                        // с исключением до того как сам вызовет notifyBypassCompleted.
                         val host = Uri.parse(urlExtra).host ?: ""
                         if (host.isNotEmpty()) {
                             CloudflareBypassSignal.notifyBypassCompleted(host)

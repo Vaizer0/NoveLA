@@ -3,12 +3,12 @@ package my.noveldokusha.webview
 import android.content.ClipboardManager
 import android.content.Context
 import android.view.View
-import android.view.inputmethod.EditorInfo
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,14 +27,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+
+@Composable
+private fun LabeledIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Icon(icon, contentDescription = label)
+        Text(text = label, fontSize = 9.sp, maxLines = 1, softWrap = false)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,24 +72,30 @@ internal fun <T : View> WebViewScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    // Локальный стейт для редактирования URL
     var editingUrl by remember(toolbarTitle) { mutableStateOf(toolbarTitle) }
     var isFocused by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             Surface(tonalElevation = 3.dp) {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Unspecified,
-                    ),
-                    title = {
+                Column {
+                    // Строка 1: кнопка "назад" + поле URL (на всю ширину)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        IconButton(onClick = onBackClicked) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
                         OutlinedTextField(
                             value = editingUrl,
                             onValueChange = { editingUrl = it },
                             singleLine = true,
                             textStyle = TextStyle(fontSize = 12.sp),
                             modifier = Modifier
+                                .weight(1f)
                                 .height(48.dp)
                                 .onFocusChanged { isFocused = it.isFocused },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
@@ -89,58 +115,67 @@ internal fun <T : View> WebViewScreen(
                                 unfocusedContainerColor = Color.Transparent,
                             ),
                         )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClicked) {
-                            Icon(Icons.Default.Close, contentDescription = "Close")
-                        }
-                    },
-                    actions = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isReady) {
-                                Button(
-                                    onClick = onDoneClicked,
-                                    modifier = Modifier
-                                        .padding(end = 4.dp)
-                                        .height(36.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                ) {
-                                    Text(
-                                        text = "DONE",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                    )
-                                }
-                            }
+                    }
 
-                            // Вставить URL из буфера и сразу перейти
-                            IconButton(onClick = {
+                    // Строка 2: кнопки действий с подписями
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        if (isReady) {
+                            Button(
+                                onClick = onDoneClicked,
+                                modifier = Modifier
+                                    .padding(start = 8.dp, end = 4.dp)
+                                    .height(36.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text(
+                                    text = "DONE",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        LabeledIconButton(
+                            icon = Icons.Default.ContentPaste,
+                            label = "Paste",
+                            onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val pastedUrl = clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: return@IconButton
+                                val pastedUrl = clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: return@LabeledIconButton
                                 val url = if (!pastedUrl.startsWith("http")) "https://$pastedUrl" else pastedUrl
                                 editingUrl = url
                                 onNavigateToUrl(url)
-                            }) {
-                                Icon(Icons.Default.ContentPaste, "Paste URL")
                             }
+                        )
 
-                            IconButton(onClick = onCopyUrlClicked) {
-                                Icon(Icons.Default.ContentCopy, "Copy")
-                            }
+                        LabeledIconButton(
+                            icon = Icons.Default.ContentCopy,
+                            label = "Copy",
+                            onClick = onCopyUrlClicked
+                        )
 
-                            IconButton(onClick = onReloadClicked) {
-                                Icon(Icons.Default.Refresh, "Reload")
-                            }
+                        LabeledIconButton(
+                            icon = Icons.Default.Refresh,
+                            label = "Reload",
+                            onClick = onReloadClicked
+                        )
 
-                            IconButton(onClick = onClearCookiesClicked) {
-                                Icon(Icons.Default.Delete, "Clear")
-                            }
-                        }
+                        LabeledIconButton(
+                            icon = Icons.Default.Delete,
+                            label = "Clear",
+                            onClick = onClearCookiesClicked
+                        )
                     }
-                )
+                }
             }
         },
         content = { padding ->
