@@ -383,7 +383,7 @@ internal class ReaderChaptersLoader(
 
         // ✅ Правильный способ определить последнюю загруженную главу
         val lastChapterIndex = items.maxOfOrNull { it.chapterIndex }
-        
+
         if (lastChapterIndex == null) {
             readerState = ReaderState.IDLE
             return@withContext
@@ -424,7 +424,7 @@ internal class ReaderChaptersLoader(
         maintainPosition: suspend (suspend () -> Unit) -> Unit = { it() },
     ) = withContext(Dispatchers.Default) {
         val chapter = orderedChapters[chapterIndex]
-        
+
         // Защита от двойной загрузки: блокируем сразу при входе в функцию
         synchronized(loadedChapters) {
             if (loadedChapters.contains(chapter.url)) {
@@ -433,7 +433,7 @@ internal class ReaderChaptersLoader(
             }
             loadedChapters.add(chapter.url)
         }
-        
+
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
         val titleOriginal = chapter.title
@@ -499,6 +499,11 @@ internal class ReaderChaptersLoader(
                     }
                     maintainPosition {
                         remove(itemProgressBar)
+                        // Откатываем Divider и Title, вставленные до загрузки контента.
+                        // Без этого скролл до Error-item'а обновляет currentChapter на следующую главу,
+                        // что приводит к сохранению неверной позиции и пропуску главы при retry.
+                        remove(itemTitle)
+                        items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
                         val preview = res.data.take(300).ifBlank { "<null>" }
                         val userMessage = if (java.util.Locale.getDefault().language == "ru")
                             "Ошибка контента: защита Cloudflare, пустая глава или требуется авторизация. Попробуйте открыть в браузере, чтобы пройти проверку.\n\nПолучено: $preview"
@@ -638,6 +643,11 @@ internal class ReaderChaptersLoader(
                 }
                 maintainPosition {
                     remove(itemProgressBar)
+                    // Откатываем Divider и Title, вставленные до загрузки контента.
+                    // Без этого скролл до Error-item'а обновляет currentChapter на следующую главу,
+                    // что приводит к сохранению неверной позиции и пропуску главы при retry.
+                    remove(itemTitle)
+                    items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
                     val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
                     // LuaError dumps the entire plugin source into the message after ":N " —
                     // extract only the short error part that follows the last colon+space pattern
