@@ -191,27 +191,26 @@ internal class ReaderChaptersLoader(
 
             // Вставляем на правильное место: перед первым итемом следующей главы.
             // Без этого items.add() кладёт главу в конец списка, и она оказывается после уже загруженных следующих глав.
-            var insertIndex = items.indexOfFirst { it.chapterIndex > chapterIndex }
-            if (insertIndex == -1) insertIndex = items.size
+            // Индекс вычисляется заново при каждой вставке — items может измениться между вызовами (IO, перевод).
+            fun findInsertIndex(): Int {
+                val idx = items.indexOfFirst { it.chapterIndex > chapterIndex }
+                return if (idx == -1) items.size else idx
+            }
 
             val insert: suspend (ReaderItem) -> Unit = {
                 withContext(Dispatchers.Main.immediate) {
-                    items.add(insertIndex, it)
-                    insertIndex += 1
+                    items.add(findInsertIndex(), it)
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
             }
             val insertAll: suspend (Collection<ReaderItem>) -> Unit = {
                 withContext(Dispatchers.Main.immediate) {
-                    items.addAll(insertIndex, it)
-                    insertIndex += it.size
+                    items.addAll(findInsertIndex(), it)
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
             }
             val remove: suspend (ReaderItem) -> Unit = {
                 withContext(Dispatchers.Main.immediate) {
-                    val idx = items.indexOf(it)
-                    if (idx != -1 && idx < insertIndex) insertIndex -= 1
                     items.remove(it)
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
