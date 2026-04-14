@@ -47,6 +47,7 @@
     <string name="importing_epub">Импорт epub</string>
     <string name="no_results_found">Результатов не найдено</string>
     <string name="updating_library_notice">Обновление библиотеки</string>
+    <string name="chapter_downloaded">Глава загружена</string>
     <string name="search_by_title">Поиск по названию</string>
     <string name="clean_images_folder">Очистить папку изображений</string>
     <string name="preserve_only_images_from_library_books">Сохранить только изображения из книг библиотеки</string>

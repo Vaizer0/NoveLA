@@ -58,7 +58,7 @@ internal class ReaderChaptersLoader(
     val chapterLoadedFlow = MutableSharedFlow<ChapterLoaded>()
     private val items: MutableList<ReaderItem> = ArrayList()
     private val loaderQueue = mutableSetOf<LoadChapter.Type>()
-    private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>(extraBufferCapacity = 1)
+    private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>(extraBufferCapacity = 3)
 
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
@@ -74,7 +74,9 @@ internal class ReaderChaptersLoader(
                     delay(30_000L)
                     _hasLoadingError = false
                     autoResetJob = null
-                    android.util.Log.d(TAG, "Auto-reset hasLoadingError after 30s timeout")
+                    android.util.Log.d(TAG, "Auto-reset hasLoadingError after 30s timeout, resuming preload")
+                    // После автосброса ошибки автоматически пробуем загрузить следующую главу
+                    tryLoadNext()
                 }
             }
         }
@@ -165,25 +167,27 @@ internal class ReaderChaptersLoader(
      * Без удаления из БД fetchBody вернёт кэшированную пустую строку и до сети не дойдёт.
      */
     fun retryChapter(chapterIndex: Int) {
+        // Валидация индекса — предотвращаем некорректные операции
+        if (chapterIndex < 0 || chapterIndex >= orderedChapters.size) {
+            android.util.Log.e(TAG, "retryChapter: invalid chapterIndex $chapterIndex, size ${orderedChapters.size}")
+            return
+        }
+
         launch(Dispatchers.Main.immediate) {
-            val chapterUrl = orderedChapters.getOrNull(chapterIndex)?.url
+            val chapterUrl = orderedChapters[chapterIndex].url
 
             // Сначала сбрасываем флаги — до любых IO-операций
             hasLoadingError = false
-            if (chapterUrl != null) {
-                chaptersStats.remove(chapterUrl)
-                loadedChapters.remove(chapterUrl)
-            }
+            chaptersStats.remove(chapterUrl)
+            loadedChapters.remove(chapterUrl)
 
             // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
             items.removeAll { it.chapterIndex == chapterIndex }
             readerViewHandlersActions.doForceUpdateListViewState()
 
             // Чистим кэш тела в БД (IO после очистки UI-стейта)
-            if (chapterUrl != null) {
-                withContext(Dispatchers.IO) {
-                    readerRepository.deleteChapterBody(chapterUrl)
-                }
+            withContext(Dispatchers.IO) {
+                readerRepository.deleteChapterBody(chapterUrl)
             }
 
             // Перезагружаем главу
@@ -215,8 +219,14 @@ internal class ReaderChaptersLoader(
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
             }
-            addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove)
+            val success = addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove)
             readerState = ReaderState.IDLE
+
+            // После успешного retry автоматически возобновляем предзагрузку следующей главы
+            if (success == true && !hasLoadingError) {
+                android.util.Log.d(TAG, "retryChapter: auto-resuming preload for next chapter")
+                tryLoadNext()
+            }
         }
     }
 
@@ -431,17 +441,44 @@ internal class ReaderChaptersLoader(
         insertAll: suspend (Collection<ReaderItem>) -> Unit,
         remove: suspend (ReaderItem) -> Unit,
         maintainPosition: suspend (suspend () -> Unit) -> Unit = { it() },
-    ) = withContext(Dispatchers.Default) {
-        val chapter = orderedChapters[chapterIndex]
+    ): Boolean? = withContext(Dispatchers.Default) {
+        val chapter = orderedChapters.getOrNull(chapterIndex) ?: return@withContext null
 
         // Защита от двойной загрузки: блокируем сразу при входе в функцию
         synchronized(loadedChapters) {
             if (loadedChapters.contains(chapter.url)) {
                 android.util.Log.d(TAG, "addChapter: chapter ${chapter.url} already loaded or loading, skipping")
-                return@withContext
+                return@withContext null
             }
             loadedChapters.add(chapter.url)
         }
+
+        // При отмене/исключении гарантированно очищаем блокировку
+        try {
+            _addChapterInternal(chapter, chapterIndex, insert, insertAll, remove, maintainPosition)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            android.util.Log.w(TAG, "addChapter: cancelled for chapter ${chapter.url}, cleaning up")
+            synchronized(loadedChapters) {
+                loadedChapters.remove(chapter.url)
+            }
+            null
+        } catch (e: Throwable) {
+            android.util.Log.e(TAG, "addChapter: unexpected error for chapter ${chapter.url}", e)
+            synchronized(loadedChapters) {
+                loadedChapters.remove(chapter.url)
+            }
+            false
+        }
+    }
+
+    private suspend fun _addChapterInternal(
+        chapter: Chapter,
+        chapterIndex: Int,
+        insert: suspend (ReaderItem) -> Unit,
+        insertAll: suspend (Collection<ReaderItem>) -> Unit,
+        remove: suspend (ReaderItem) -> Unit,
+        maintainPosition: suspend (suspend () -> Unit) -> Unit,
+    ): Boolean? {
 
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
@@ -521,7 +558,7 @@ internal class ReaderChaptersLoader(
                         insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
-                    return@withContext
+                    return@_addChapterInternal false
                 }
 
                 val itemsOriginal = textToItemsConverter(
@@ -635,6 +672,7 @@ internal class ReaderChaptersLoader(
                     insert(ReaderItem.Divider(chapterIndex = chapterIndex))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
+                return@_addChapterInternal true // успех
             }
             is Response.Error -> {
                 withContext(Dispatchers.Main.immediate) {
@@ -644,10 +682,7 @@ internal class ReaderChaptersLoader(
                         orderedChaptersIndex = chapterIndex
                     )
                     hasLoadingError = true
-                    // ✅ Освобождаем блокировку чтобы можно было повторить попытку
-                    synchronized(loadedChapters) {
-                        loadedChapters.remove(chapter.url)
-                    }
+                    // Блокировка очищается в try-finally обёртке addChapter
                     android.util.Log.w(TAG, "Chapter load error: ${res.message}, stopping further auto-loading")
                 }
                 maintainPosition {
@@ -672,6 +707,7 @@ internal class ReaderChaptersLoader(
                     insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
+                return@_addChapterInternal false // ошибка
             }
         }
     }

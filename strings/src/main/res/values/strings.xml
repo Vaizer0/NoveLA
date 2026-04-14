@@ -48,6 +48,7 @@
     <string name="importing_epub">Importing epub</string>
     <string name="no_results_found">No results found</string>
     <string name="updating_library_notice">Updating library</string>
+    <string name="chapter_downloaded">Chapter downloaded</string>
     <string name="search_by_title">Search by title</string>
     <string name="clean_images_folder">Clean images folder</string>
     <string name="preserve_only_images_from_library_books">Preserve only images from library books</string>

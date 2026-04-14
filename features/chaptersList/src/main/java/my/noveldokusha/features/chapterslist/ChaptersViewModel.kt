@@ -57,6 +57,10 @@ internal class ChaptersViewModel @Inject constructor(
     stateHandle: SavedStateHandle,
 ) : BaseViewModel(), ChapterStateBundle {
 
+    companion object {
+        private const val TAG = "ChaptersViewModel"
+    }
+
     override val rawBookUrl by StateExtra_String(stateHandle)
     override val bookTitle by StateExtra_String(stateHandle)
 
@@ -340,8 +344,23 @@ internal class ChaptersViewModel @Inject constructor(
             .sortedBy { it.chapter.position }
 
         appScope.launch(Dispatchers.Default) {
+            var successCount = 0
+            var errorCount = 0
             sortedChapters.forEach { chapter ->
-                appRepository.chapterBody.fetchBody(chapter.chapter.url)
+                appRepository.chapterBody.fetchBody(chapter.chapter.url).onSuccess {
+                    successCount++
+                }.onError {
+                    errorCount++
+                    android.util.Log.w(TAG, "downloadSelected: failed for ${chapter.chapter.title}: ${it.message}")
+                }
+            }
+            if (errorCount > 0) {
+                val msg = if (successCount > 0) {
+                    "Downloaded: $successCount, errors: $errorCount"
+                } else {
+                    "Download error: $errorCount chapters"
+                }
+                toasty.show(msg)
             }
         }
     }
@@ -401,7 +420,12 @@ internal class ChaptersViewModel @Inject constructor(
     fun onChapterDownload(chapter: ChapterWithContext) {
         if (state.isLocalSource.value) return
         appScope.launch {
-            appRepository.chapterBody.fetchBody(chapter.chapter.url)
+            appRepository.chapterBody.fetchBody(chapter.chapter.url).onSuccess {
+                toasty.show(R.string.chapter_downloaded)
+            }.onError {
+                toasty.show("Download error: ${chapter.chapter.title}")
+                android.util.Log.w(TAG, "onChapterDownload: failed for ${chapter.chapter.title}: ${it.message}")
+            }
         }
     }
 
