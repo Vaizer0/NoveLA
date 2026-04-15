@@ -346,13 +346,10 @@ internal class ReaderSession(
                 android.util.Log.d("ReaderSession", "Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
             }
             lastChapterIndex = chapterIndex
-            // Сбрасываем триггер предзагрузки только если следующая глава ещё не загружена.
-            // Если она уже загружена — сбрасывать не нужно, иначе после retry получаем
-            // цепочку: вставка итемов → смена chapterIndex → сброс → progress >= 80% → tryLoadNext → ...
-            val nextChapterIndex = chapterIndex + 1
-            if (!readerChaptersLoader.isChapterIndexLoaded(nextChapterIndex)) {
-                preloadTriggeredForChapter = -1
-            }
+            // Всегда сбрасываем триггер предзагрузки при смене главы.
+            // Это гарантирует корректную работу после retry: старая глава могла быть
+            // загружена/удалена, и флаг должен быть сброшен независимо от состояния следующей главы.
+            preloadTriggeredForChapter = -1
         }
 
         if (

@@ -77,7 +77,7 @@ internal class ReaderTextToSpeech(
     private val setPreferredVoiceSpeed: (voiceId: Float) -> Unit,
     private val onBufferLow: (() -> Unit)? = null,
 ) {
-    private val halfBuffer = 2
+    private val halfBuffer = 1
     private var updateJob: Job? = null
     private val manager = TextToSpeechManager(
         context = context,

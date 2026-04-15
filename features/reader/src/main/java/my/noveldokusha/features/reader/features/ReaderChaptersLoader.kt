@@ -58,7 +58,7 @@ internal class ReaderChaptersLoader(
     val chapterLoadedFlow = MutableSharedFlow<ChapterLoaded>()
     private val items: MutableList<ReaderItem> = ArrayList()
     private val loaderQueue = mutableSetOf<LoadChapter.Type>()
-    private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>(extraBufferCapacity = 3)
+    private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>(extraBufferCapacity = 1)
 
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
@@ -78,6 +78,9 @@ internal class ReaderChaptersLoader(
                     // После автосброса ошибки автоматически пробуем загрузить следующую главу
                     tryLoadNext()
                 }
+            } else {
+                // При сбросе ошибки очищаем очередь — разблокируем tryLoadNext()
+                loaderQueue.remove(LoadChapter.Type.Next)
             }
         }
 
@@ -180,6 +183,8 @@ internal class ReaderChaptersLoader(
             hasLoadingError = false
             chaptersStats.remove(chapterUrl)
             loadedChapters.remove(chapterUrl)
+            // Очищаем очередь — разблокируем tryLoadNext() для последующей предзагрузки
+            loaderQueue.remove(LoadChapter.Type.Next)
 
             // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
             items.removeAll { it.chapterIndex == chapterIndex }
