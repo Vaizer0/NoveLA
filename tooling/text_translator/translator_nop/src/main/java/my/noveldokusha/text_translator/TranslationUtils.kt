@@ -75,9 +75,9 @@ const val DEFAULT_TRANSLATION_PROMPT = PROMPT_BALANCED
  * Список встроенных промптов для отображения в настройках.
  */
 val BUILT_IN_PROMPTS = listOf(
-    "Minimal (fast models / Ollama)" to PROMPT_MINIMAL,
-    "Balanced (universal)" to PROMPT_BALANCED,
-    "Detailed (GPT-4 / Gemini Pro)" to PROMPT_DETAILED,
+    "Minimal" to PROMPT_MINIMAL,
+    "Balanced" to PROMPT_BALANCED,
+    "Detailed" to PROMPT_DETAILED,
 )
 
 /**
