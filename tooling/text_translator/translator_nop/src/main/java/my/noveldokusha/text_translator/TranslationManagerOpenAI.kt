@@ -128,13 +128,9 @@ class TranslationManagerOpenAI(
 
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
 
-        // "1. Chapter Title\n2. First paragraph\n3. ..."
-        val numberedTexts = texts.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n")
-        val userMessage = "Translate the following ${texts.size} numbered paragraphs " +
-                "(item 1 is the chapter title). " +
-                "Return exactly ${texts.size} numbered items in the same order. " +
-                "Format: each item starts with its number and a dot (1., 2., etc.). " +
-                "Return ONLY the numbered translations:\n\n$numberedTexts"
+        // All format instructions are in the system prompt.
+        // User message contains only the numbered text — clean and simple.
+        val userMessage = texts.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n\n")
 
         val responseText = sendWithKeyRotation(systemPrompt, userMessage)
         parseNumberedTranslations(responseText, texts)
@@ -266,50 +262,65 @@ class TranslationManagerOpenAI(
 
     /**
      * Parses a numbered translation response back to a map of original → translated.
-     * Format expected: "1. translated text\n2. translated text\n..."
+     * Uses index-based matching to correctly handle duplicate paragraphs.
+     *
+     * Tolerates:
+     *  - Preamble before the first numbered item (silently discarded)
+     *  - Alternate numbering formats: "1)", "**1.**", "№1.", "1 ."
+     *  - Missing items (falls back to original text)
      */
     private fun parseNumberedTranslations(
         translatedText: String,
         originalTexts: List<String>
     ): Map<String, String> {
-        val translations = mutableMapOf<String, String>()
-        val lines = translatedText.split("\n").filter { it.isNotBlank() }
-        var currentIndex = 0
-        var currentTranslation = StringBuilder()
+        // Index-based map: key = 0-based index, value = translated text
+        val byIndex = mutableMapOf<Int, String>()
+
+        // Matches: "1.", "1)", "**1.**", "№1.", "#1.", "1 ." at start of line
+        val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
+
+        val lines = translatedText.split("\n")
+        var currentIndex = -1  // -1 = before first numbered item (preamble)
+        var currentText = StringBuilder()
+
+        fun flush() {
+            if (currentIndex >= 0 && currentText.isNotBlank()) {
+                byIndex[currentIndex] = currentText.toString().trim()
+            }
+            currentText.clear()
+        }
 
         for (line in lines) {
-            val numberMatch = Regex("""^(\d+)\.\s*""").find(line)
-            if (numberMatch != null) {
-                if (currentTranslation.isNotEmpty() && currentIndex > 0) {
-                    originalTexts.getOrNull(currentIndex - 1)?.let {
-                        translations[it] = currentTranslation.toString().trim()
-                    }
-                    currentTranslation.clear()
-                }
-                currentIndex = numberMatch.groupValues[1].toIntOrNull() ?: (currentIndex + 1)
-                currentTranslation.append(line.substring(numberMatch.range.last + 1))
+            val match = numberPattern.find(line)
+            if (match != null) {
+                flush()
+                val num = match.groupValues[1].toIntOrNull() ?: continue
+                currentIndex = num - 1  // convert to 0-based
+                val rest = line.substring(match.value.length)
+                if (rest.isNotBlank()) currentText.append(rest)
             } else {
-                if (currentTranslation.isNotEmpty()) currentTranslation.append("\n")
-                currentTranslation.append(line.trim())
+                if (currentIndex == -1) continue  // preamble before "1." — discard
+                val trimmed = line.trim()
+                if (currentText.isNotEmpty()) currentText.append("\n")
+                currentText.append(trimmed)
+            }
+        }
+        flush()
+
+        // Build final result by index — handles duplicate original texts correctly
+        val result = mutableMapOf<String, String>()
+        originalTexts.forEachIndexed { index, originalText ->
+            val translation = byIndex[index]
+            if (translation != null) {
+                result[originalText] = translation
+            } else {
+                Log.w(TAG, "parseNumberedTranslations: missing index $index, using original")
+                result[originalText] = originalText
             }
         }
 
-        if (currentTranslation.isNotEmpty() && currentIndex > 0) {
-            originalTexts.getOrNull(currentIndex - 1)?.let {
-                translations[it] = currentTranslation.toString().trim()
-            }
-        }
-
-        // Fill any missing paragraphs with the original text
-        originalTexts.forEach { text ->
-            if (!translations.containsKey(text)) {
-                Log.w(TAG, "parseNumberedTranslations: missing translation for paragraph, using original")
-                translations[text] = text
-            }
-        }
-
-        Log.d(TAG, "parseNumberedTranslations: ${translations.size}/${originalTexts.size} parsed")
-        return translations
+        Log.d(TAG, "parseNumberedTranslations: ${byIndex.size}/${originalTexts.size} parsed")
+        return result
     }
 
     override fun downloadModel(language: String) {}

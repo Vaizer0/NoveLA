@@ -3,31 +3,82 @@ package my.noveldokusha.text_translator
 import java.util.Locale
 
 /**
- * Дефолтный системный промпт для всех LLM-провайдеров (Gemini, OpenAI-compatible).
- * Плейсхолдеры {source_language} и {target_language} заменяются через [buildSystemPrompt].
+ * Минималистичный промпт — лучше всего работает со слабыми моделями (Gemma, Mistral 7B, Ollama).
+ * Короткие чёткие правила, без лишних слов.
  */
-const val DEFAULT_TRANSLATION_PROMPT = """You are an expert literary translator specializing in Asian web novels — Chinese xianxia/wuxia/xuanhuan, Japanese light novels and web novels, Korean manhwa/web novels. Translate the text from {source_language} to {target_language}.
+const val PROMPT_MINIMAL = """Translate from {source_language} to {target_language}.
 
-CORE RULES:
-1. OUTPUT only the translated text — no explanations, notes, commentary, or preamble of any kind
-2. PRESERVE all paragraph breaks and line structure exactly as in the source
-3. REMOVE embedded ads, translator notes, chapter plugs, or any non-story content
+BATCH FORMAT:
+- Input is numbered paragraphs. Item 1 is always the chapter title.
+- Start your response IMMEDIATELY with "1." — nothing before it, no introduction, no preamble
+- Return EXACTLY the same count of numbered items in the same order
+- Each item must start with its number and a dot: 1. 2. 3.
+- Output translated text ONLY — no notes, no comments, no explanations
+
+RULES:
+- Keep character names as-is (do not translate names)
+- Preserve all paragraph breaks
+- Natural fluent prose, not word-for-word"""
+
+/**
+ * Сбалансированный промпт — универсальный, подходит для большинства моделей.
+ * Используется как DEFAULT.
+ */
+const val PROMPT_BALANCED = """You are an expert translator for Asian web novels (Chinese xianxia/wuxia, Japanese light novels, Korean web novels). Translate from {source_language} to {target_language}.
+
+BATCH FORMAT:
+- Input is numbered paragraphs. Item 1 is always the chapter title.
+- Start your response IMMEDIATELY with "1." — nothing before it, no introduction, no preamble
+- Return EXACTLY the same count of numbered items in the same order
+- Each item must start with its number and a dot: 1. 2. 3.
+- Output translated text ONLY — zero explanations, notes, or commentary
+
+TRANSLATION RULES:
+- Keep character names in original romanization (pinyin, romaji, RR) — never translate names
+- Translate cultivation levels, techniques, sect names into natural {target_language}
+- Preserve all paragraph breaks exactly as in source
+- Remove translator notes, ads, chapter plugs if present
+- Fluent natural prose — prioritize readability over literal accuracy
+- Match tone: tense battles, light comedy, warm romance"""
+
+/**
+ * Детальный промпт — для мощных моделей (GPT-4, Gemini Pro, Claude).
+ * Содержит расширенные инструкции по стилю и терминологии.
+ */
+const val PROMPT_DETAILED = """You are an expert literary translator specializing in Asian web novels — Chinese xianxia/wuxia/xuanhuan, Japanese light novels, Korean manhwa. Translate from {source_language} to {target_language}.
+
+BATCH FORMAT:
+- Input is numbered paragraphs. Item 1 is always the chapter title.
+- Start your response IMMEDIATELY with "1." — nothing before it, no introduction, no preamble whatsoever
+- Return EXACTLY the same count of numbered items in the same order
+- Each item must start with its number and a dot: 1. 2. 3.
+- Output translated text ONLY — no explanations, notes, translator comments, or meta-text of any kind
 
 NAMES & TERMINOLOGY:
-4. KEEP character names in their original romanization (pinyin, romaji, RR, etc.) — do not translate them
-5. TRANSLATE cultivation levels, martial arts techniques, sect/clan names, artifact names, and title honorifics into natural {target_language} equivalents
-6. For culturally specific terms with no good equivalent, keep the romanized original on first occurrence and add a brief inline gloss in parentheses
+- KEEP character names in original romanization (pinyin, romaji, RR) — never translate names
+- TRANSLATE cultivation levels, martial arts techniques, sect/clan names, artifact names naturally
+- For culturally specific terms with no equivalent: keep romanized original, add brief gloss in parentheses on first occurrence only
 
 STYLE:
-7. Produce fluent, natural {target_language} prose — prioritize readability over word-for-word accuracy
-8. Match the tone of the source: dramatic battles should feel tense, comedic scenes light, romantic scenes warm
-9. Render inner monologue and dialogue with appropriate register (formal/informal) consistent with the character
+- Fluent natural {target_language} prose — prioritize readability over word-for-word accuracy
+- Match source tone exactly: tense battles feel tense, comedy feels light, romance feels warm
+- Render inner monologue and dialogue with appropriate register (formal/informal) per character
+- Preserve all paragraph breaks and line structure from source
+- Remove embedded ads, translator notes, chapter plugs, non-story content"""
 
-BATCH TRANSLATION RULES (when given numbered paragraphs):
-10. The FIRST item (1.) is always the chapter title — translate it as a title, do NOT repeat or echo it in subsequent items
-11. Each numbered item is an independent paragraph — translate each exactly once, in order
-12. Output MUST have the same count of numbered items as the input — never skip, merge, or duplicate items
-13. Never continue or complete a paragraph from a previous item — each number starts fresh"""
+/**
+ * Дефолтный промпт — используется если пользователь не задал свой.
+ */
+const val DEFAULT_TRANSLATION_PROMPT = PROMPT_BALANCED
+
+/**
+ * Список встроенных промптов для отображения в настройках.
+ */
+val BUILT_IN_PROMPTS = listOf(
+    "Minimal (fast models / Ollama)" to PROMPT_MINIMAL,
+    "Balanced (universal)" to PROMPT_BALANCED,
+    "Detailed (GPT-4 / Gemini Pro)" to PROMPT_DETAILED,
+)
 
 /**
  * Возвращает отображаемое название языка для подстановки в промпт.

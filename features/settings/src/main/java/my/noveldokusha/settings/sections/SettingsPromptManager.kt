@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
-import my.noveldokusha.text_translator.DEFAULT_TRANSLATION_PROMPT
+import my.noveldokusha.text_translator.BUILT_IN_PROMPTS
 
 /**
  * Единый менеджер промптов для LLM-провайдеров (Gemini и OpenAI-compatible).
@@ -121,18 +121,18 @@ internal fun SettingsPromptManager(
                 Spacer(Modifier.height(12.dp))
 
                 // ── Preset chips ──────────────────────────────────────────────
-                val defaultLabel = stringResource(R.string.llm_preset_default)
                 val allPresets: List<Pair<String, String>> = buildList {
-                    add(defaultLabel to DEFAULT_TRANSLATION_PROMPT)
+                    addAll(BUILT_IN_PROMPTS)
                     addAll(promptPresets)
                 }
+                val builtInNames = BUILT_IN_PROMPTS.map { it.first }.toSet()
 
                 Row(
                     modifier              = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     allPresets.forEach { (presetName, presetPrompt) ->
-                        val isBuiltIn  = presetName == defaultLabel
+                        val isBuiltIn  = presetName in builtInNames
                         val isSelected = promptText == presetPrompt
 
                         // Для пользовательских чипов: при нажатии на уже выбранный
