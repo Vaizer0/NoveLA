@@ -1,20 +1,22 @@
 package my.noveldokusha.settings.sections
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -26,14 +28,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.settings.R
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsOpenAITranslation(
     baseUrl: String,
@@ -62,10 +67,15 @@ internal fun SettingsOpenAITranslation(
         cursorColor = MaterialTheme.colorScheme.onSurface
     )
 
-    var baseUrlText    by remember(baseUrl)     { mutableStateOf(baseUrl) }
-    var apiKeysText    by remember(apiKeys)     { mutableStateOf(apiKeys) }
-    var modelText      by remember(model)       { mutableStateOf(model) }
+    // Local state for text fields — NOT synced back from props to avoid
+    // resetting the cursor while the user is typing.
+    var baseUrlText by rememberSaveable { mutableStateOf(baseUrl) }
+    var apiKeysText by rememberSaveable { mutableStateOf(apiKeys) }
 
+    // Model field: plain independent state, no LaunchedEffect reset.
+    var modelText by rememberSaveable { mutableStateOf(model) }
+
+    val focusManager = LocalFocusManager.current
 
     Column {
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
@@ -92,7 +102,10 @@ internal fun SettingsOpenAITranslation(
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = baseUrlText,
-                        onValueChange = { baseUrlText = it; onBaseUrlChange(it) },
+                        onValueChange = {
+                            baseUrlText = it
+                            onBaseUrlChange(it)
+                        },
                         label = {
                             Text(
                                 stringResource(R.string.openai_base_url_label),
@@ -102,6 +115,8 @@ internal fun SettingsOpenAITranslation(
                         placeholder = { Text("https://api.openai.com") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         colors = textFieldColors
                     )
                     Spacer(Modifier.height(4.dp))
@@ -136,7 +151,10 @@ internal fun SettingsOpenAITranslation(
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = apiKeysText,
-                        onValueChange = { apiKeysText = it; onApiKeysChange(it) },
+                        onValueChange = {
+                            apiKeysText = it
+                            onApiKeysChange(it)
+                        },
                         label = {
                             Text(
                                 stringResource(R.string.openai_api_keys_label),
@@ -169,44 +187,53 @@ internal fun SettingsOpenAITranslation(
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it }
+                    // Plain text field — no dropdown wrapper stealing events
+                    OutlinedTextField(
+                        value = modelText,
+                        onValueChange = {
+                            modelText = it
+                            onModelChange(it)
+                        },
+                        label = {
+                            Text(
+                                stringResource(R.string.openai_model_label),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        placeholder = { Text(predefinedModels.first()) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        colors = textFieldColors
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Preset chips — tap to fill the field instantly
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        OutlinedTextField(
-                            value = modelText,
-                            onValueChange = { modelText = it; onModelChange(it) },
-                            placeholder = { Text(predefinedModels.first()) },
-                            label = {
-                                Text(
-                                    stringResource(R.string.openai_model_label),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            singleLine = true,
-                            colors = textFieldColors
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            predefinedModels.forEach { m ->
-                                DropdownMenuItem(
-                                    text = { Text(m) },
-                                    onClick = {
-                                        modelText = m
-                                        onModelChange(m)
-                                        expanded = false
-                                    }
-                                )
-                            }
+                        predefinedModels.forEach { preset ->
+                            FilterChip(
+                                selected = modelText == preset,
+                                onClick = {
+                                    modelText = preset
+                                    onModelChange(preset)
+                                    focusManager.clearFocus()
+                                },
+                                label = {
+                                    Text(
+                                        text = preset,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            )
                         }
                     }
+
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.openai_model_tip),
@@ -216,6 +243,5 @@ internal fun SettingsOpenAITranslation(
                 }
             }
         )
-
     }
 }

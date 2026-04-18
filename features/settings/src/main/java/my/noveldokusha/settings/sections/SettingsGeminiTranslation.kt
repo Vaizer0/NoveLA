@@ -3,7 +3,10 @@ package my.noveldokusha.settings.sections
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,35 +15,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsGeminiTranslation(
     translationProvider: String,
@@ -73,9 +78,18 @@ internal fun SettingsGeminiTranslation(
         "gemini-1.0-pro"
     )
 
-    var apiKeyText by remember(geminiApiKey)    { mutableStateOf(geminiApiKey) }
-    var modelText  by remember(geminiModel)     { mutableStateOf(geminiModel) }
-    var paKeysText by remember(googlePaApiKeys) { mutableStateOf(googlePaApiKeys) }
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+        cursorColor          = MaterialTheme.colorScheme.onSurface
+    )
+
+    // rememberSaveable — survives rotation; no LaunchedEffect reset so typing isn't interrupted
+    var apiKeyText by rememberSaveable { mutableStateOf(geminiApiKey) }
+    var modelText  by rememberSaveable { mutableStateOf(geminiModel) }
+    var paKeysText by rememberSaveable { mutableStateOf(googlePaApiKeys) }
+
+    val focusManager = LocalFocusManager.current
 
     Column {
         Text(
@@ -152,11 +166,7 @@ internal fun SettingsGeminiTranslation(
                                 modifier      = Modifier.fillMaxWidth(),
                                 minLines      = 2,
                                 maxLines      = 5,
-                                colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                    cursorColor          = MaterialTheme.colorScheme.onSurface
-                                )
+                                colors        = textFieldColors
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -178,6 +188,7 @@ internal fun SettingsGeminiTranslation(
         ) {
             Column {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+
                 // API Key
                 ListItem(
                     headlineContent = {
@@ -202,11 +213,7 @@ internal fun SettingsGeminiTranslation(
                                 modifier      = Modifier.fillMaxWidth(),
                                 minLines      = 2,
                                 maxLines      = 5,
-                                colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                    cursorColor          = MaterialTheme.colorScheme.onSurface
-                                )
+                                colors        = textFieldColors
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -230,41 +237,45 @@ internal fun SettingsGeminiTranslation(
                             )
                             Spacer(Modifier.height(8.dp))
 
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded         = expanded,
-                                onExpandedChange = { expanded = it }
+                            // Plain TextField — no ExposedDropdownMenuBox stealing events
+                            OutlinedTextField(
+                                value         = modelText,
+                                onValueChange = {
+                                    modelText = it
+                                    onGeminiModelChange(it)
+                                },
+                                placeholder   = { Text(predefinedGeminiModels.first()) },
+                                label         = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
+                                modifier      = Modifier.fillMaxWidth(),
+                                singleLine    = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                colors        = textFieldColors
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            // Preset chips
+                            FlowRow(
+                                modifier             = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement  = Arrangement.spacedBy(4.dp)
                             ) {
-                                OutlinedTextField(
-                                    value         = modelText,
-                                    onValueChange = { modelText = it; onGeminiModelChange(it) },
-                                    placeholder   = { Text(predefinedGeminiModels.first()) },
-                                    label         = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
-                                    trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    modifier      = Modifier
-                                        .menuAnchor()
-                                        .fillMaxWidth(),
-                                    singleLine    = true,
-                                    colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                        cursorColor          = MaterialTheme.colorScheme.onSurface
+                                predefinedGeminiModels.forEach { preset ->
+                                    FilterChip(
+                                        selected = modelText == preset,
+                                        onClick  = {
+                                            modelText = preset
+                                            onGeminiModelChange(preset)
+                                            focusManager.clearFocus()
+                                        },
+                                        label    = {
+                                            Text(
+                                                text  = preset,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
                                     )
-                                )
-                                ExposedDropdownMenu(
-                                    expanded         = expanded,
-                                    onDismissRequest = { expanded = false }
-                                ) {
-                                    predefinedGeminiModels.forEach { m ->
-                                        DropdownMenuItem(
-                                            text    = { Text(m) },
-                                            onClick = {
-                                                modelText = m
-                                                onGeminiModelChange(m)
-                                                expanded = false
-                                            }
-                                        )
-                                    }
                                 }
                             }
 
@@ -298,8 +309,6 @@ internal fun SettingsGeminiTranslation(
             enter   = expandVertically(),
             exit    = shrinkVertically()
         ) {
-            // Оба composable обёрнуты в Column — иначе AnimatedVisibility
-            // показывает только первый дочерний элемент
             Column {
                 SettingsOpenAITranslation(
                     baseUrl         = openAiBaseUrl,
