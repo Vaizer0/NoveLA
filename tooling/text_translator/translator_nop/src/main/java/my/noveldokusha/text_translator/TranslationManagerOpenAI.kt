@@ -111,9 +111,7 @@ class TranslationManagerOpenAI(
         targetLanguage: String
     ): String = withContext(Dispatchers.IO) {
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
-        val userMessage = text
-
-        val responseText = sendWithKeyRotation(systemPrompt, userMessage)
+        val responseText = sendWithKeyRotation(systemPrompt, text)
         responseText.trim().ifEmpty { text }
     }
 
@@ -130,10 +128,12 @@ class TranslationManagerOpenAI(
 
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
 
-        // Number each paragraph: "1. text\n2. text\n..."
+        // "1. Chapter Title\n2. First paragraph\n3. ..."
         val numberedTexts = texts.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n")
-        val userMessage = "Translate the following numbered paragraphs. " +
-                "Keep the numbering format exactly (1., 2., etc.). " +
+        val userMessage = "Translate the following ${texts.size} numbered paragraphs " +
+                "(item 1 is the chapter title). " +
+                "Return exactly ${texts.size} numbered items in the same order. " +
+                "Format: each item starts with its number and a dot (1., 2., etc.). " +
                 "Return ONLY the numbered translations:\n\n$numberedTexts"
 
         val responseText = sendWithKeyRotation(systemPrompt, userMessage)
@@ -173,13 +173,13 @@ class TranslationManagerOpenAI(
                         Log.w(TAG, "sendWithKeyRotation: 401 on $keyLabel, trying next")
                         response.body?.close()
                         lastException = IllegalStateException("OpenAI: Invalid API key ($keyLabel). Check your key in Settings.")
-                        continue // try next key
+                        continue
                     }
                     code == 429 -> {
                         Log.w(TAG, "sendWithKeyRotation: 429 on $keyLabel, trying next")
                         response.body?.close()
                         lastException = IllegalStateException("OpenAI: Rate limit exceeded ($keyLabel).")
-                        continue // try next key
+                        continue
                     }
                     code in 500..599 -> {
                         response.body?.close()
@@ -191,7 +191,6 @@ class TranslationManagerOpenAI(
                         throw IllegalStateException("OpenAI: Unexpected error ($code): $errorBody")
                     }
                     else -> {
-                        // Success — advance the round-robin counter to the next key for the next call
                         keyIndex.set((startIndex + attempt + 1) % keys.size)
                         val body = response.body?.string()
                             ?: throw IllegalStateException("OpenAI: Empty response body")
@@ -199,13 +198,11 @@ class TranslationManagerOpenAI(
                     }
                 }
             } catch (e: IOException) {
-                // Network/timeout errors — no point trying other keys
                 Log.e(TAG, "sendWithKeyRotation: network error — ${e.message}")
                 throw e
             }
         }
 
-        // All keys failed
         throw lastException
             ?: IllegalStateException("OpenAI: All API keys failed. Check your keys in Settings.")
     }
@@ -229,7 +226,7 @@ class TranslationManagerOpenAI(
             })
             put("temperature", 0.3)
             put("top_p", 1.0)
-            put("stream", false) // В данном менеджере вы получаете текст целиком
+            put("stream", false)
         }.toString().toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -292,7 +289,7 @@ class TranslationManagerOpenAI(
                 currentIndex = numberMatch.groupValues[1].toIntOrNull() ?: (currentIndex + 1)
                 currentTranslation.append(line.substring(numberMatch.range.last + 1))
             } else {
-                if (currentTranslation.isNotEmpty()) currentTranslation.append(" ")
+                if (currentTranslation.isNotEmpty()) currentTranslation.append("\n")
                 currentTranslation.append(line.trim())
             }
         }
@@ -318,10 +315,6 @@ class TranslationManagerOpenAI(
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}
 
-    /**
-     * OpenAI-совместимый провайдер не имеет встроенного определения языка.
-     * Возвращает null — TranslationManagerComposite использует GoogleFree как fallback.
-     */
     override suspend fun detectLanguage(text: String): String? = null
 
     companion object {

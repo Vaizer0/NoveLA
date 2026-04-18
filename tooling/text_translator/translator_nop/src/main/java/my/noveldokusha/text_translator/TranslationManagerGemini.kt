@@ -99,7 +99,6 @@ class TranslationManagerGemini(
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
-        val prompt = buildGeminiUserPrompt(text, systemPrompt)
 
         val startIndex = keyIndex.getAndIncrement() % keys.size
         var lastException: Exception? = null
@@ -110,7 +109,11 @@ class TranslationManagerGemini(
             val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
 
             try {
-                val response = sendGeminiRequest(prompt, currentKey)
+                val response = sendGeminiRequest(
+                    systemPrompt = systemPrompt,
+                    userText = text,
+                    apiKey = currentKey
+                )
                 when (response.code) {
                     200 -> {
                         val body = response.body?.string() ?: ""
@@ -126,7 +129,6 @@ class TranslationManagerGemini(
                         Log.w(TAG, "Server error (${response.code}) on $keyLabel")
                         lastException =
                             kotlinx.io.IOException("Gemini: Server error (${response.code})")
-                        // При 5xx можно подождать чуть-чуть перед следующим ключом
                         kotlinx.coroutines.delay(500L * (attempt / keys.size + 1))
                     }
                     else -> {
@@ -163,10 +165,13 @@ class TranslationManagerGemini(
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
 
+        // "1. Chapter Title\n\n2. First paragraph\n\n3. ..."
         val numberedTexts = texts.mapIndexed { index, text -> "${index + 1}. $text" }
             .joinToString("\n\n")
 
-        val prompt = buildGeminiBatchUserPrompt(numberedTexts, systemPrompt)
+        val userText = "Translate the following ${texts.size} numbered paragraphs (item 1 is the chapter title). " +
+                "Return exactly ${texts.size} numbered items in the same order. " +
+                "Format: each item starts with its number and a dot (1., 2., etc.).\n\n$numberedTexts"
 
         var lastException: Exception? = null
         val retryCount = 3
@@ -177,7 +182,11 @@ class TranslationManagerGemini(
             val attemptWithinKey = attempt / availableKeys.size + 1
 
             try {
-                val response = sendGeminiRequest(prompt, currentApiKey)
+                val response = sendGeminiRequest(
+                    systemPrompt = systemPrompt,
+                    userText = userText,
+                    apiKey = currentApiKey
+                )
                 val code = response.code
 
                 when (code) {
@@ -233,16 +242,30 @@ class TranslationManagerGemini(
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun sendGeminiRequest(prompt: String, apiKey: String): okhttp3.Response {
+    /**
+     * Sends a request to Gemini API using proper systemInstruction + contents split.
+     * This gives the model clearer role separation than concatenating everything into one string.
+     */
+    private fun sendGeminiRequest(
+        systemPrompt: String,
+        userText: String,
+        apiKey: String
+    ): okhttp3.Response {
         val jsonBody = JSONObject().apply {
+            // systemInstruction is processed separately by Gemini — not mixed with user turn
+            put("systemInstruction", JSONObject().apply {
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply { put("text", systemPrompt) })
+                })
+            })
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
+                    put("role", "user")
                     put("parts", JSONArray().apply {
-                        put(JSONObject().apply { put("text", prompt) })
+                        put(JSONObject().apply { put("text", userText) })
                     })
                 })
             })
-            // Убрали thinkingConfig для совместимости со всеми моделями
         }
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
@@ -298,7 +321,7 @@ class TranslationManagerGemini(
                 currentIndex = numberMatch.groupValues[1].toIntOrNull() ?: (currentIndex + 1)
                 currentTranslation.append(line.substring(numberMatch.range.last + 1))
             } else {
-                if (currentTranslation.isNotEmpty()) currentTranslation.append(" ")
+                if (currentTranslation.isNotEmpty()) currentTranslation.append("\n")
                 currentTranslation.append(line.trim())
             }
         }
@@ -318,20 +341,6 @@ class TranslationManagerGemini(
 
         return translations
     }
-
-    /**
-     * Формирует итоговый промпт для одиночного перевода.
-     * Системный промпт уже содержит инструкции и названия языков —
-     * пользовательская часть содержит только исходный текст.
-     */
-    private fun buildGeminiUserPrompt(text: String, systemPrompt: String): String =
-        "$systemPrompt\n\nText to translate:\n$text"
-
-    /**
-     * Формирует итоговый промпт для батч-перевода с нумерацией.
-     */
-    private fun buildGeminiBatchUserPrompt(numberedTexts: String, systemPrompt: String): String =
-        "$systemPrompt\n\nTranslate the following numbered paragraphs. Keep the numbering format exactly (1., 2., etc.). Return ONLY the numbered translations:\n\n$numberedTexts"
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}

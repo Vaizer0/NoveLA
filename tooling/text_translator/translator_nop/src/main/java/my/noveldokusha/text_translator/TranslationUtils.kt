@@ -21,7 +21,13 @@ NAMES & TERMINOLOGY:
 STYLE:
 7. Produce fluent, natural {target_language} prose — prioritize readability over word-for-word accuracy
 8. Match the tone of the source: dramatic battles should feel tense, comedic scenes light, romantic scenes warm
-9. Render inner monologue and dialogue with appropriate register (formal/informal) consistent with the character"""
+9. Render inner monologue and dialogue with appropriate register (formal/informal) consistent with the character
+
+BATCH TRANSLATION RULES (when given numbered paragraphs):
+10. The FIRST item (1.) is always the chapter title — translate it as a title, do NOT repeat or echo it in subsequent items
+11. Each numbered item is an independent paragraph — translate each exactly once, in order
+12. Output MUST have the same count of numbered items as the input — never skip, merge, or duplicate items
+13. Never continue or complete a paragraph from a previous item — each number starts fresh"""
 
 /**
  * Возвращает отображаемое название языка для подстановки в промпт.
