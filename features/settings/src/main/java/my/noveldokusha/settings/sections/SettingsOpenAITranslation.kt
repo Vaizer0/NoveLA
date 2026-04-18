@@ -175,8 +175,9 @@ internal fun SettingsOpenAITranslation(
                         onExpandedChange = { expanded = it }
                     ) {
                         OutlinedTextField(
-                            value = modelText.ifEmpty { predefinedModels.first() },
+                            value = modelText,
                             onValueChange = { modelText = it; onModelChange(it) },
+                            placeholder = { Text(predefinedModels.first()) },
                             label = {
                                 Text(
                                     stringResource(R.string.openai_model_label),

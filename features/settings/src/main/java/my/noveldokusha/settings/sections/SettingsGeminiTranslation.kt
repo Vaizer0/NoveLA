@@ -236,8 +236,9 @@ internal fun SettingsGeminiTranslation(
                                 onExpandedChange = { expanded = it }
                             ) {
                                 OutlinedTextField(
-                                    value         = modelText.ifEmpty { predefinedGeminiModels.first() },
+                                    value         = modelText,
                                     onValueChange = { modelText = it; onGeminiModelChange(it) },
+                                    placeholder   = { Text(predefinedGeminiModels.first()) },
                                     label         = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
                                     trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                                     modifier      = Modifier
