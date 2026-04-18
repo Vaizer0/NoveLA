@@ -285,13 +285,13 @@ internal class ReaderChaptersLoader(
         readerViewHandlersActions.doForceUpdateListViewState()
 
         val insert: suspend (ReaderItem) -> Unit = {
-            withContext(Dispatchers.Main.immediate) { items.add(it); readerViewHandlersActions.doForceUpdateListViewState() }
+            withContext(Dispatchers.Main.immediate) { items.add(it) }
         }
         val insertAll: suspend (Collection<ReaderItem>) -> Unit = {
-            withContext(Dispatchers.Main.immediate) { items.addAll(it); readerViewHandlersActions.doForceUpdateListViewState() }
+            withContext(Dispatchers.Main.immediate) { items.addAll(it) }
         }
         val remove: suspend (ReaderItem) -> Unit = {
-            withContext(Dispatchers.Main.immediate) { items.remove(it); readerViewHandlersActions.doForceUpdateListViewState() }
+            withContext(Dispatchers.Main.immediate) { items.remove(it) }
         }
 
         val index = orderedChapters.indexOfFirst { it.url == chapterLastState.chapterUrl }
@@ -634,7 +634,7 @@ internal class ReaderChaptersLoader(
                                         val extraTranslations = withContext(Dispatchers.IO) {
                                             batchTranslator.invoke(missingFromDb)
                                         }
-                                        withContext(Dispatchers.IO) {
+                                        launch(Dispatchers.IO) {
                                             val entities = missingFromDb.map { original ->
                                                 ChapterTranslation(
                                                     chapterUrl = chapter.url,
