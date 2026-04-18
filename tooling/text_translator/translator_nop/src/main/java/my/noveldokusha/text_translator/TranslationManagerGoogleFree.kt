@@ -52,16 +52,15 @@ class TranslationManagerGoogleFree(
         return TranslatorState(
             source = source,
             target = target,
-            translate = { input -> translateWithGoogleFree(input, source, target) ?: input }
+            translate = { input ->
+                translateWithGoogleFree(input, source, target)
+                    ?: throw IllegalStateException("Google Translate: Failed to translate. Check your internet connection.")
+            }
         )
     }
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /**
-     * Определяет язык текста через Google Translate API.
-     * Возвращает BCP-47 код языка (например "zh", "en", "ru") или null при ошибке.
-     */
     override suspend fun detectLanguage(text: String): String? = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext null
 
@@ -86,7 +85,6 @@ class TranslationManagerGoogleFree(
                 val detectedLang = jsonArray.getOrNull(2)?.jsonPrimitive?.contentOrNull
 
                 if (detectedLang != null && detectedLang.length in 2..6) {
-                    // Нормализуем zh-CN, zh-TW → zh, pt-BR → pt и т.д.
                     detectedLang.substringBefore("-")
                 } else {
                     null
@@ -98,8 +96,7 @@ class TranslationManagerGoogleFree(
     }
 
     /**
-     * Возвращает null при ошибке (вместо строки с ошибкой).
-     * Вызывающий код сам решает что делать — fallback на оригинал или не добавлять в map.
+     * Returns null on failure — callers decide whether to throw or fallback.
      */
     private suspend fun translateWithGoogleFree(
         text: String,
@@ -172,6 +169,7 @@ class TranslationManagerGoogleFree(
         if (texts.isEmpty()) return@withContext emptyMap()
 
         val translations = mutableMapOf<String, String>()
+        var totalFailed = 0
 
         val chunks = mutableListOf<List<Pair<Int, String>>>()
         var currentChunk = mutableListOf<Pair<Int, String>>()
@@ -199,17 +197,22 @@ class TranslationManagerGoogleFree(
                     Log.d(TAG, "translateBatch: chunk size=${chunk.size}, response length=${translatedBody?.length ?: 0}")
 
                     if (translatedBody == null) {
-                        // Весь chunk не переведён — пробуем каждый параграф отдельно
+                        // Chunk failed — try each paragraph individually
                         Log.w(TAG, "translateBatch: chunk translation failed, falling back to single translations")
+                        var chunkFailed = 0
                         chunk.forEach { (_, original) ->
                             val result = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
-                            if (result != null) translations[original] = result
+                            if (result != null) {
+                                translations[original] = result
+                            } else {
+                                chunkFailed++
+                            }
                         }
+                        totalFailed += chunkFailed
                         return@async
                     }
 
                     chunk.forEach { (idx, original) ->
-                        // Мягкий regex: допускает пробелы и точку внутри маркера [N] или [N.]
                         val regex = Regex(
                             """^\[\s*$idx\s*\.?\]\s*\n?(.*?)(?=\n*\[\s*\d+\s*\.?\]|\z)""",
                             setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE)
@@ -223,23 +226,26 @@ class TranslationManagerGoogleFree(
                                 Log.w(TAG, "Marker [$idx] found but empty, falling back to single translation")
                                 val fallback = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
                                 if (fallback != null) translations[original] = fallback
+                                else totalFailed++
                             }
                         } else {
                             Log.w(TAG, "Marker [$idx] not found in response, falling back to single translation")
                             val fallback = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
                             if (fallback != null) translations[original] = fallback
+                            else totalFailed++
                         }
-                    }
-
-                    val missing = chunk.count { (_, original) -> !translations.containsKey(original) }
-                    if (missing > 0) {
-                        Log.w(TAG, "translateBatch: $missing/${chunk.size} paragraphs still missing after fallback")
                     }
                 }
             }.awaitAll()
         }
 
-        Log.d(TAG, "translateBatch: total=${texts.size}, translated=${translations.size}, missing=${texts.size - translations.size}")
+        Log.d(TAG, "translateBatch: total=${texts.size}, translated=${translations.size}, failed=$totalFailed")
+
+        // If everything failed — throw so the user sees an error instead of untranslated text
+        if (translations.isEmpty() && texts.isNotEmpty()) {
+            throw IllegalStateException("Google Translate: Failed to translate. Check your internet connection.")
+        }
+
         translations
     }
 

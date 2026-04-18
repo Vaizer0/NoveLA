@@ -71,6 +71,13 @@ fun SettingsScreen(
                     onGeminiModelChange = viewModel::onGeminiModelChange,
                     onTranslationProviderChange = viewModel::onTranslationProviderChange,
                     onGooglePaApiKeysChange = viewModel::onGooglePaApiKeysChange,
+                    onOpenAiBaseUrlChange = viewModel::onOpenAiBaseUrlChange,
+                    onOpenAiApiKeysChange = viewModel::onOpenAiApiKeysChange,
+                    onOpenAiModelChange = viewModel::onOpenAiModelChange,
+                    onActiveSystemPromptChange = viewModel::onActiveSystemPromptChange,
+                    onPromptUseEnglishLocaleChange = viewModel::onPromptUseEnglishLocaleChange,
+                    onSavePreset = viewModel::onSavePromptPreset,
+                    onDeletePreset = viewModel::onDeletePromptPreset,
                     onLanguageChange = viewModel::onLanguageChange,
                     onNavigateToRegexCleanup = {
                         currentScreen = "regex-cleanup"

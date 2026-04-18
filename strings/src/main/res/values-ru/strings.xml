@@ -321,6 +321,35 @@
     <string name="translate_already_target_lang">Текст уже на выбранном языке перевода</string>
     <string name="translate_failed">Ошибка перевода</string>
     <string name="clear_translation">Сбросить перевод</string>
+    <string name="apply">Применить</string>
 
+
+
+    <!-- ── OpenAI-compatible провайдер ──────────────────────────────────────── -->
+    <string name="provider_openai">OpenAI-совместимый API</string>
+    <string name="provider_openai_description">OpenAI, OpenRouter, Mistral, DeepSeek, Ollama и др.</string>
+
+    <string name="openai_base_url">Base URL</string>
+    <string name="openai_base_url_label">API endpoint</string>
+    <string name="openai_base_url_tip">По умолчанию: https://api.openai.com. Для OpenRouter: https://openrouter.ai/api, для Ollama: http://localhost:11434</string>
+
+    <string name="openai_api_keys">API ключи</string>
+    <string name="openai_api_keys_label">API ключи (по одному на строку)</string>
+    <string name="openai_api_keys_placeholder">sk-…\nsk-…</string>
+    <string name="openai_api_keys_tip">Несколько ключей чередуются по кругу при превышении лимита запросов.</string>
+
+    <string name="openai_model">Модель</string>
+    <string name="openai_model_label">Название модели</string>
+    <string name="openai_model_tip">Выберите из списка или введите название модели вручную.</string>
+
+    <!-- ── Единый менеджер промптов ──────────────────────────────────────────── -->
+    <string name="llm_prompt_section_title">Системный промпт</string>
+    <string name="llm_prompt_label">Инструкция для модели</string>
+    <string name="llm_prompt_placeholders_hint">Доступные плейсхолдеры: {source_language}, {target_language}</string>
+    <string name="llm_save_preset">Сохранить как пресет</string>
+    <string name="llm_preset_name">Название пресета</string>
+    <string name="llm_preset_default">Default</string>
+    <string name="llm_prompt_use_english_locale">Английские названия языков в промпте</string>
+    <string name="llm_prompt_use_english_locale_tip">{source_language} → "Chinese", {target_language} → "Russian" вместо локализованных названий</string>
 
 </resources>

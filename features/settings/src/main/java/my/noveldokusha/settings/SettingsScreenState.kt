@@ -29,6 +29,14 @@ data class SettingsScreenState(
     val scraperUserAgent: MutableState<String>,
     val cloudflareBypassEnabled: MutableState<Boolean>,
     val cloudflareChallengeTimeoutSeconds: MutableState<Int>,
+    // OpenAI-compatible
+    val openAiBaseUrl: State<String>,
+    val openAiApiKeys: State<String>,
+    val openAiModel: State<String>,
+    // Unified prompt manager (Gemini + OpenAI)
+    val activeSystemPrompt: State<String>,
+    val promptPresets: State<List<Pair<String, String>>>,
+    val promptUseEnglishLocale: State<Boolean>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

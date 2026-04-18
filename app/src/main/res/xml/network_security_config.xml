@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for scraper sources that don't support HTTPS -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">wuxia.blog</domain>
-        <domain includeSubdomains="true">1stkissnovel.org</domain>
-        <domain includeSubdomains="true">piaotia.com</domain>
-        <domain includeSubdomains="true">192.168.1.116</domain>
-    </domain-config>
+    <!-- Разрешаем HTTP (cleartext) для ВСЕХ соединений. -->
+    <!-- Это позволит подключаться к Ollama по любому локальному IP, -->
+    <!-- а также к сайтам вроде piaotia.com, если у них нет HTTPS. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>

@@ -81,6 +81,12 @@ internal class SettingsViewModel @Inject constructor(
         geminiModel = appPreferences.TRANSLATION_GEMINI_MODEL.state(viewModelScope),
         translationProvider = appPreferences.TRANSLATION_PROVIDER.state(viewModelScope),
         googlePaApiKeys = appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.state(viewModelScope),
+        openAiBaseUrl          = appPreferences.TRANSLATION_OPENAI_BASE_URL.state(viewModelScope),
+        openAiApiKeys          = appPreferences.TRANSLATION_OPENAI_API_KEYS.state(viewModelScope),
+        openAiModel            = appPreferences.TRANSLATION_OPENAI_MODEL.state(viewModelScope),
+        activeSystemPrompt     = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.state(viewModelScope),
+        promptPresets          = appPreferences.TRANSLATION_PROMPT_PRESETS.state(viewModelScope),
+        promptUseEnglishLocale = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.state(viewModelScope),
         scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
         cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
         cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
@@ -229,12 +235,50 @@ internal class SettingsViewModel @Inject constructor(
         appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value = 0L
     }
 
+
     fun onGeminiApiKeyChange(apiKey: String) {
         appPreferences.TRANSLATION_GEMINI_API_KEY.value = apiKey
     }
 
     fun onGeminiModelChange(model: String) {
         appPreferences.TRANSLATION_GEMINI_MODEL.value = model
+    }
+
+    fun onOpenAiBaseUrlChange(url: String) {
+        appPreferences.TRANSLATION_OPENAI_BASE_URL.value = url
+    }
+
+    fun onOpenAiApiKeysChange(keys: String) {
+        appPreferences.TRANSLATION_OPENAI_API_KEYS.value = keys
+    }
+
+    fun onOpenAiModelChange(model: String) {
+        appPreferences.TRANSLATION_OPENAI_MODEL.value = model
+    }
+
+    fun onActiveSystemPromptChange(prompt: String) {
+        appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value = prompt
+    }
+
+    fun onPromptUseEnglishLocaleChange(useEnglish: Boolean) {
+        appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value = useEnglish
+    }
+
+    fun onSavePromptPreset(name: String, prompt: String) {
+        val current = appPreferences.TRANSLATION_PROMPT_PRESETS.value.toMutableList()
+        val existingIndex = current.indexOfFirst { it.first == name }
+        if (existingIndex != -1) {
+            current[existingIndex] = name to prompt
+        } else {
+            current.add(name to prompt)
+        }
+        appPreferences.TRANSLATION_PROMPT_PRESETS.value = current
+    }
+
+    fun onDeletePromptPreset(name: String) {
+        val current = appPreferences.TRANSLATION_PROMPT_PRESETS.value.toMutableList()
+        current.removeAll { it.first == name }
+        appPreferences.TRANSLATION_PROMPT_PRESETS.value = current
     }
 
     fun onPreferOnlineTranslationChange(prefer: Boolean) {

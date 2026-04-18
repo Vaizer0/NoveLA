@@ -262,6 +262,66 @@ class AppPreferences @Inject constructor(
             )
         }
 
+    // ── OpenAI-compatible translation ─────────────────────────────────────────
+
+    val TRANSLATION_OPENAI_BASE_URL =
+        object : Preference<String>("TRANSLATION_OPENAI_BASE_URL") {
+            override var value by SharedPreference_String(name, preferences, "https://api.openai.com")
+        }
+
+    // Список API-ключей, каждый на новой строке (поддерживается ротация)
+    val TRANSLATION_OPENAI_API_KEYS =
+        object : Preference<String>("TRANSLATION_OPENAI_API_KEYS") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    val TRANSLATION_OPENAI_MODEL =
+        object : Preference<String>("TRANSLATION_OPENAI_MODEL") {
+            override var value by SharedPreference_String(name, preferences, "gpt-4o-mini")
+        }
+
+    // ── Unified prompt manager (shared by Gemini and OpenAI-compatible) ──────────
+
+    // Текущий активный системный промпт. Пустая строка = использовать DEFAULT_TRANSLATION_PROMPT
+    val TRANSLATION_ACTIVE_SYSTEM_PROMPT =
+        object : Preference<String>("TRANSLATION_ACTIVE_SYSTEM_PROMPT") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    // Пользовательские пресеты промптов: List<Pair<name, prompt>>.
+    // Намеренно хранится как Pair — core-модуль не зависит от text_translator.
+    // Конвертация в PromptPreset происходит в SettingsViewModel.
+    val TRANSLATION_PROMPT_PRESETS =
+        object : Preference<List<Pair<String, String>>>("TRANSLATION_PROMPT_PRESETS") {
+            override var value by SharedPreference_Serializable<List<Pair<String, String>>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = listOf(),
+                encode = { list ->
+                    val arr = org.json.JSONArray()
+                    list.forEach { (n, p) -> arr.put(org.json.JSONObject().put("n", n).put("p", p)) }
+                    arr.toString()
+                },
+                decode = { raw ->
+                    try {
+                        val arr = org.json.JSONArray(raw)
+                        (0 until arr.length()).map { i ->
+                            val obj = arr.getJSONObject(i)
+                            obj.getString("n") to obj.getString("p")
+                        }
+                    } catch (_: Exception) { listOf() }
+                }
+            )
+        }
+
+    // Использовать английские названия языков в плейсхолдерах промпта.
+    // true  → {source_language} = "Chinese", {target_language} = "Russian"
+    // false → названия на языке интерфейса устройства
+    val TRANSLATION_PROMPT_USE_ENGLISH_LOCALE =
+        object : Preference<Boolean>("TRANSLATION_PROMPT_USE_ENGLISH_LOCALE") {
+            override var value by SharedPreference_Boolean(name, preferences, true)
+        }
+
     val MASS_ADD_DELAY_MS = object : Preference<Long>("MASS_ADD_DELAY_MS") {
         override var value by SharedPreference_Serializable(
             name = name,

@@ -1,9 +1,13 @@
 package my.noveldokusha.text_translator
 
+import my.noveldokusha.text_translator.buildSystemPrompt
+import my.noveldokusha.text_translator.DEFAULT_TRANSLATION_PROMPT
+
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.io.IOException
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.text_translator.domain.TranslationManager
@@ -15,7 +19,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,9 +38,11 @@ class TranslationManagerGemini(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    private val keyIndex = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val apiKeys: List<String>
         get() = appPreferences.TRANSLATION_GEMINI_API_KEY.value
-            .split("\n", ";")
+            .split("\n", ";", ",")
             .map { it.trim() }
             .filter { it.isNotBlank() }
 
@@ -85,77 +90,57 @@ class TranslationManagerGemini(
         targetLanguage: String,
         retryCount: Int = 3
     ): String = withContext(Dispatchers.IO) {
-        val availableKeys = apiKeys
-
-        if (availableKeys.isEmpty()) {
-            Log.e(TAG, "translateWithGemini: No API keys configured!")
-            return@withContext "[Translation unavailable: Gemini API key not configured. Please add your API key in Settings → Gemini Translation]"
+        val keys = apiKeys
+        if (keys.isEmpty()) {
+            throw IllegalStateException("Gemini: No API keys configured.")
         }
 
-        val sourceLangName = Locale(sourceLanguage).displayLanguage
-        val targetLangName = Locale(targetLanguage).displayLanguage
+        val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
+        val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+        val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
+        val prompt = buildGeminiUserPrompt(text, systemPrompt)
 
-        val prompt = buildTranslationPrompt(text, sourceLangName, targetLangName)
-
+        val startIndex = keyIndex.getAndIncrement() % keys.size
         var lastException: Exception? = null
-        val totalAttempts = retryCount * availableKeys.size
+        val totalAttempts = retryCount * keys.size
 
-        repeat(totalAttempts) { attempt ->
-            val currentApiKey = availableKeys[attempt % availableKeys.size]
-            val attemptWithinKey = attempt / availableKeys.size + 1
+        for (attempt in 0 until totalAttempts) {
+            val currentKey = keys[(startIndex + attempt) % keys.size]
+            val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
 
             try {
-                val response = sendGeminiRequest(prompt, currentApiKey)
-                val code = response.code
-
-                when (code) {
+                val response = sendGeminiRequest(prompt, currentKey)
+                when (response.code) {
+                    200 -> {
+                        val body = response.body?.string() ?: ""
+                        val result = parseGeminiResponse(body)
+                        if (result.isNotBlank()) return@withContext result
+                    }
                     429 -> {
-                        Log.w(TAG, "translateWithGemini: Rate limit (429) on key ${(attempt % availableKeys.size) + 1}, rotating")
-                        if (attempt < totalAttempts - 1) {
-                            kotlinx.coroutines.delay(500)
-                            return@repeat
-                        } else {
-                            return@withContext "[Translation rate limit exceeded on all API keys. Please wait and try again.]"
-                        }
+                        Log.w(TAG, "Rate limit (429) on $keyLabel, rotating...")
+                        lastException = Exception("Gemini: Rate limit exceeded ($keyLabel)")
+                        continue
                     }
                     in 500..599 -> {
-                        val waitTime = 2000L * attemptWithinKey
-                        Log.w(TAG, "translateWithGemini: Server error ($code), waiting ${waitTime}ms")
-                        if (attempt < totalAttempts - 1) {
-                            kotlinx.coroutines.delay(waitTime)
-                            return@repeat
-                        } else {
-                            return@withContext "[Translation service temporarily unavailable ($code)]"
-                        }
+                        Log.w(TAG, "Server error (${response.code}) on $keyLabel")
+                        lastException =
+                            kotlinx.io.IOException("Gemini: Server error (${response.code})")
+                        // При 5xx можно подождать чуть-чуть перед следующим ключом
+                        kotlinx.coroutines.delay(500L * (attempt / keys.size + 1))
                     }
-                    !in 200..299 -> {
-                        Log.e(TAG, "translateWithGemini: API error $code")
-                        return@withContext "[Translation failed: $code]"
+                    else -> {
+                        val errorMsg = "API error ${response.code}"
+                        Log.e(TAG, errorMsg)
+                        throw kotlinx.io.IOException("Gemini: $errorMsg")
                     }
-                }
-
-                val responseBody = response.body?.string() ?: ""
-                val translatedText = parseGeminiResponse(responseBody)
-
-                if (translatedText.isNotEmpty()) {
-                    Log.d(TAG, "translateWithGemini: success, result length=${translatedText.length}")
-                    return@withContext translatedText
-                } else {
-                    Log.e(TAG, "translateWithGemini: empty response")
-                    return@withContext "[Translation failed: invalid response]"
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "translateWithGemini: error on attempt ${attempt + 1} - ${e.message}", e)
                 lastException = e
-                if (attempt < totalAttempts - 1) {
-                    kotlinx.coroutines.delay(1000L * attemptWithinKey)
-                } else {
-                    return@withContext "[Translation error: ${e.message?.take(50) ?: "unknown"}]"
-                }
+                if (e is IOException && attempt < totalAttempts - 1) continue
             }
         }
-
-        return@withContext "[Translation failed after $retryCount attempts]"
+        throw lastException ?: Exception("Gemini: All attempts failed")
     }
 
     override suspend fun translateBatch(
@@ -173,13 +158,15 @@ class TranslationManagerGemini(
             return@withContext texts.associateWith { "[API key not configured]" }
         }
 
-        val sourceLangName = Locale(sourceLanguage).displayLanguage
-        val targetLangName = Locale(targetLanguage).displayLanguage
+        val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
+        val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+        val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
 
         val numberedTexts = texts.mapIndexed { index, text -> "${index + 1}. $text" }
             .joinToString("\n\n")
 
-        val prompt = buildBatchTranslationPrompt(numberedTexts, sourceLangName, targetLangName)
+        val prompt = buildGeminiBatchUserPrompt(numberedTexts, systemPrompt)
 
         var lastException: Exception? = null
         val retryCount = 3
@@ -240,9 +227,9 @@ class TranslationManagerGemini(
             }
         }
 
-        Log.e(TAG, "translateBatch: failed after $retryCount attempts")
-        return@withContext texts.associateWith { "[Translation failed]" }
+        throw lastException ?: Exception("Gemini: Batch translation failed after $retryCount attempts")
     }
+
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -255,17 +242,12 @@ class TranslationManagerGemini(
                     })
                 })
             })
-            put("generationConfig", JSONObject().apply {
-                put("thinkingConfig", JSONObject().apply {
-                    put("thinkingBudget", 0)
-                })
-            })
+            // Убрали thinkingConfig для совместимости со всеми моделями
         }
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(getApiEndpoint(apiKey))
             .addHeader("Content-Type", "application/json")
-            .addHeader("x-goog-api-key", apiKey)
             .post(requestBody)
             .build()
         return client.newCall(request).execute()
@@ -337,49 +319,19 @@ class TranslationManagerGemini(
         return translations
     }
 
-    private fun buildTranslationPrompt(text: String, sourceLangName: String, targetLangName: String): String {
-        val isEnglish = targetLangName.equals("English", ignoreCase = true)
-        val terminologyRule = if (isEnglish) {
-            "2. TRANSLATE all terminology to English equivalents:\n   - Cultivation realms, technique names, sect names, artifact names"
-        } else {
-            "2. TRANSLATE all terminology to $targetLangName:\n   - Cultivation realms, technique names, sect names, artifact names\n   - Use natural $targetLangName translations for these terms"
-        }
-        
-        return """
-            You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate the following text from $sourceLangName to $targetLangName.
-            
-            CRITICAL TRANSLATION RULES:
-            1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
-            $terminologyRule
-            3. Produce natural, fluent $targetLangName. Remove ads or author notes.
-            4. Provide ONLY the translation, no explanations.
-            
-            Text to translate:
-            $text
-        """.trimIndent()
-    }
+    /**
+     * Формирует итоговый промпт для одиночного перевода.
+     * Системный промпт уже содержит инструкции и названия языков —
+     * пользовательская часть содержит только исходный текст.
+     */
+    private fun buildGeminiUserPrompt(text: String, systemPrompt: String): String =
+        "$systemPrompt\n\nText to translate:\n$text"
 
-    private fun buildBatchTranslationPrompt(numberedTexts: String, sourceLangName: String, targetLangName: String): String {
-        val isEnglish = targetLangName.equals("English", ignoreCase = true)
-        val terminologyRule = if (isEnglish) {
-            "2. TRANSLATE all terminology to English equivalents:\n   - Cultivation realms, technique names, sect names, artifact names"
-        } else {
-            "2. TRANSLATE all terminology to $targetLangName:\n   - Cultivation realms, technique names, sect names, artifact names\n   - Use natural $targetLangName translations for these terms"
-        }
-        
-        return """
-            You are an expert Chinese webnovel translator specializing in cultivation/xianxia novels. Translate these numbered paragraphs from $sourceLangName to $targetLangName.
-            
-            CRITICAL TRANSLATION RULES:
-            1. PRESERVE character names in pinyin (e.g., Chen Fei, Lin Xi, Zhang Wei, Wang Hao)
-            $terminologyRule
-            3. Produce natural, fluent $targetLangName. Remove ads or author notes.
-            4. Maintain exact numbering format (1., 2., 3., etc.). Provide ONLY translations.
-            
-            Paragraphs to translate:
-            $numberedTexts
-        """.trimIndent()
-    }
+    /**
+     * Формирует итоговый промпт для батч-перевода с нумерацией.
+     */
+    private fun buildGeminiBatchUserPrompt(numberedTexts: String, systemPrompt: String): String =
+        "$systemPrompt\n\nTranslate the following numbered paragraphs. Keep the numbering format exactly (1., 2., etc.). Return ONLY the numbered translations:\n\n$numberedTexts"
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}

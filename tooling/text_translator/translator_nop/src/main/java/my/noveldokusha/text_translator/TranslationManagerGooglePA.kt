@@ -30,20 +30,6 @@ import java.util.concurrent.TimeUnit
  * Translation manager using translate-pa.googleapis.com/v1/translateHtml —
  * the same API used by WtrLab plugin. Sends HTML-wrapped paragraphs which gives
  * significantly better quality than the plain-text translate.googleapis.com endpoint.
- *
- * Paragraph strategy (mirrors wtr-lab website exactly):
- *   - Join paragraphs with <br> (NOT <p> tags)
- *   - After translation split result back on <br>
- *   - No Html.fromHtml() needed — avoids tag stripping and paragraph misalignment
- *
- * Key management strategy:
- * 1. Use cached key if it was verified less than KEY_CACHE_DURATION_MS ago
- * 2. Otherwise try each key from TRANSLATION_GOOGLE_PA_API_KEYS (newline-separated)
- * 3. If none work — fetch a fresh key from wtr-lab.com and add it to the list
- * 4. If wtr-lab also fails — throw error
- *
- * Concurrency: parallel callers share a single in-flight Deferred<String> so only
- * one HTTP fetch runs at a time; all others await its result (Mutex + keyFetchJob).
  */
 class TranslationManagerGooglePA(
     private val coroutineScope: AppCoroutineScope,
@@ -57,21 +43,11 @@ class TranslationManagerGooglePA(
     override val isUsingOnlineTranslation = true
 
     private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
-
-    // How long a verified key is trusted without re-checking (24 hours)
     private val KEY_CACHE_DURATION_MS = 24 * 60 * 60 * 1000L
-
-    // Regex to find the key in wtr-lab JS bundle
     private val keyHeaderRegex = Regex(""""X-Goog-API-Key"\s*:\s*"([^"]+)"""")
 
-    // ─── Concurrency guard for key fetching ────────────────────────────────────
-
     private val keyFetchMutex = Mutex()
-
-    /** Non-null while a key fetch is in progress; all late arrivals await this. */
     private var keyFetchJob: Deferred<String>? = null
-
-    // ─── Models ────────────────────────────────────────────────────────────────
 
     override val models = mutableStateListOf<TranslationModelState>().apply {
         val supportedLanguages = listOf(
@@ -97,22 +73,13 @@ class TranslationManagerGooglePA(
         return TranslatorState(
             source = source,
             target = target,
-            translate = { input -> translateSingle(input, source, target) ?: input }
+            translate = { input -> translateSingle(input, source, target) }
         )
     }
 
     // ─── Key management ────────────────────────────────────────────────────────
 
-    /**
-     * Returns a working API key.
-     *
-     * Fast path: cache hit — no locking needed.
-     * Slow path: acquire [keyFetchMutex], re-check cache (another coroutine may have
-     * just refreshed it), then either join the existing [keyFetchJob] or start a new one.
-     * All concurrent callers share a single [Deferred] so only one HTTP round-trip happens.
-     */
     private suspend fun getApiKey(): String = coroutineScope {
-        // Fast path — no lock needed
         val cachedKey = appPreferences.TRANSLATION_GOOGLE_PA_CACHED_KEY.value
         val lastChecked = appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value
         val now = System.currentTimeMillis()
@@ -121,9 +88,7 @@ class TranslationManagerGooglePA(
             return@coroutineScope cachedKey
         }
 
-        // Slow path — one fetch at a time
         val deferred: Deferred<String> = keyFetchMutex.withLock {
-            // Double-checked: another coroutine may have refreshed the cache while we waited
             val freshKey = appPreferences.TRANSLATION_GOOGLE_PA_CACHED_KEY.value
             val freshChecked = appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value
             if (freshKey.isNotBlank() && (System.currentTimeMillis() - freshChecked) < KEY_CACHE_DURATION_MS) {
@@ -131,13 +96,11 @@ class TranslationManagerGooglePA(
                 return@coroutineScope freshKey
             }
 
-            // Re-use in-flight job if one already started
             keyFetchJob?.let { existing ->
                 Log.d(TAG, "getApiKey: joining existing fetch job")
                 return@withLock existing
             }
 
-            // We are first — launch the actual fetch
             Log.d(TAG, "getApiKey: starting new fetch job")
             val job = async(Dispatchers.IO) { fetchAndCacheKey() }
             keyFetchJob = job
@@ -147,21 +110,14 @@ class TranslationManagerGooglePA(
         try {
             deferred.await()
         } finally {
-            // Clear the shared job reference once all waiters have received the result
             keyFetchMutex.withLock {
                 if (keyFetchJob === deferred) keyFetchJob = null
             }
         }
     }
 
-    /**
-     * Validates keys from preferences, then falls back to wtr-lab.
-     * Called from exactly one coroutine at a time (enforced by [keyFetchMutex]).
-     */
     private suspend fun fetchAndCacheKey(): String {
         val now = System.currentTimeMillis()
-
-        // 1. Try each key from preferences
         val keys = appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value
             .split("\n")
             .map { it.trim() }
@@ -175,7 +131,6 @@ class TranslationManagerGooglePA(
             }
         }
 
-        // 2. Fetch from wtr-lab
         Log.d(TAG, "fetchAndCacheKey: no working key found, fetching from wtr-lab")
         val fetchedKey = fetchKeyFromWtrLab()
         if (fetchedKey != null) {
@@ -185,12 +140,9 @@ class TranslationManagerGooglePA(
             return fetchedKey
         }
 
-        error("No working Google PA API key found")
+        throw IllegalStateException("Google PA: No working API key found. Check your keys in Settings or try again later.")
     }
 
-    /**
-     * Checks if a key works by sending a minimal test request.
-     */
     private suspend fun checkKey(key: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val payload = listOf(listOf("<p>test</p>", "en", "en"), "wt_lib")
@@ -217,9 +169,6 @@ class TranslationManagerGooglePA(
         appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value = timestamp
     }
 
-    /**
-     * Adds a newly fetched key to the top of the user's key list (deduplicating).
-     */
     private fun addKeyToPreferences(key: String) {
         val existing = appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value
             .split("\n")
@@ -229,18 +178,6 @@ class TranslationManagerGooglePA(
             (listOf(key) + existing).joinToString("\n")
     }
 
-    /**
-     * Fetches a working key from wtr-lab.com.
-     *
-     * wtr-lab uses Turbopack, so JS bundles are NOT listed in _buildManifest.js.
-     * Instead we find them directly from <script src="..."> tags in the page HTML.
-     *
-     * Strategy:
-     * 1. Load main page HTML
-     * 2. Search for key directly in inline scripts (fast path)
-     * 3. Collect all <script src=".../_next/..."> URLs
-     * 4. Load those scripts IN PARALLEL and return the first key found
-     */
     private suspend fun fetchKeyFromWtrLab(): String? = withContext(Dispatchers.IO) {
         try {
             val rankingHtml = client.newCall(
@@ -253,20 +190,16 @@ class TranslationManagerGooglePA(
                 return@withContext null
             }
 
-            // ← НОВЫЕ ЛОГИ
             Log.d(TAG, "fetchKeyFromWtrLab: ranking page length=${rankingHtml.length}")
-            Log.d(TAG, "fetchKeyFromWtrLab: ranking page first 500 chars=${rankingHtml.take(500)}")
             val novelMatches = Regex("""href=["']([^"']*/novel/[^"']+)["']""").findAll(rankingHtml).toList()
             Log.d(TAG, "fetchKeyFromWtrLab: /novel/ matches found=${novelMatches.size}")
             if (novelMatches.isEmpty()) {
-                // Посмотрим какие href вообще есть
                 val allHrefs = Regex("""href=["']([^"']+)["']""").findAll(rankingHtml)
                     .map { it.groupValues[1] }
                     .take(20)
                     .toList()
                 Log.w(TAG, "fetchKeyFromWtrLab: no /novel/ links, all hrefs sample=$allHrefs")
             }
-            // ← КОНЕЦ НОВЫХ ЛОГОВ
 
             val novelUrl = novelMatches.map {
                 if (it.groupValues[1].startsWith("http")) it.groupValues[1]
@@ -276,7 +209,6 @@ class TranslationManagerGooglePA(
                 return@withContext null
             }
 
-            // Step 3: Navigate to chapter-1 — this page loads the Turbopack bundle with the key
             val chapterUrl = novelUrl.trimEnd('/') + "/chapter-1"
             Log.d(TAG, "fetchKeyFromWtrLab: loading chapter page: $chapterUrl")
 
@@ -287,13 +219,11 @@ class TranslationManagerGooglePA(
                     .build()
             ).execute().body?.string() ?: return@withContext null
 
-            // Step 4: Check inline first
             keyHeaderRegex.find(chapterHtml)?.groupValues?.get(1)?.let { key ->
                 Log.d(TAG, "fetchKeyFromWtrLab: found key inline in chapter HTML")
                 return@withContext key
             }
 
-            // Step 5: Extract _next script URLs from the chapter page
             val scriptUrls = Regex("""<script[^>]+src=["']([^"']*/_next/[^"']+\.js[^"']*)["']""")
                 .findAll(chapterHtml)
                 .map { it.groupValues[1] }
@@ -309,7 +239,6 @@ class TranslationManagerGooglePA(
                 return@withContext null
             }
 
-            // Step 6: Load all scripts in parallel, return first key found
             searchKeyInScripts(scriptUrls)
         } catch (e: Exception) {
             Log.e(TAG, "fetchKeyFromWtrLab failed: ${e.message}")
@@ -317,9 +246,6 @@ class TranslationManagerGooglePA(
         }
     }
 
-    /**
-     * Loads a list of JS URLs in parallel and returns the first API key found.
-     */
     private suspend fun searchKeyInScripts(urls: List<String>): String? = withContext(Dispatchers.IO) {
         Log.d(TAG, "searchKeyInScripts: searching ${urls.size} scripts (sequential)")
         for (url in urls) {
@@ -343,23 +269,16 @@ class TranslationManagerGooglePA(
     private suspend fun translateSingle(
         text: String,
         sourceLanguage: String,
-        targetLanguage: String
-    ): String? = withContext(Dispatchers.IO) {
+        targetLanguage: String,
+    ): String = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext text
         val paragraphs = text.split("\n").filter { it.isNotBlank() }
         if (paragraphs.isEmpty()) return@withContext text
         val sourceLang = if (sourceLanguage == "auto") "auto" else sourceLanguage
-        try {
-            translateChunks(paragraphs, sourceLang, targetLanguage).joinToString("\n")
-        } catch (e: Exception) {
-            Log.e(TAG, "translateSingle failed: ${e.message}")
-            null
-        }
+        // Let exceptions propagate — caller (ReaderChaptersLoader) will show error to user
+        translateChunks(paragraphs, sourceLang, targetLanguage).joinToString("\n")
     }
 
-    /**
-     * Mirrors wtr-lab website's v() function — unescapes HTML entities in translated text.
-     */
     private fun unescapeHtmlEntities(text: String): String {
         return text
             .replace("&quot;", "\"")
@@ -375,15 +294,6 @@ class TranslationManagerGooglePA(
             }
     }
 
-    /**
-     * Splits paragraphs into chunks and translates each chunk.
-     *
-     * Mirrors wtr-lab website strategy exactly:
-     *   - Join paragraphs with <br> instead of wrapping in <p> tags
-     *   - Split translated result back on <br>
-     *   - Unescape HTML entities via unescapeHtmlEntities() instead of Html.fromHtml()
-     *   - No Html.fromHtml() — avoids stripping tags and paragraph misalignment
-     */
     private suspend fun translateChunks(
         paragraphs: List<String>,
         sourceLang: String,
@@ -400,7 +310,6 @@ class TranslationManagerGooglePA(
         var currentLen = 0
 
         for ((i, para) in paragraphs.withIndex()) {
-            // +4 accounts for "<br>" separator length
             if (currentLen > 0 && currentLen + para.length + 4 > maxChunkChars) {
                 chunks.add(Chunk(currentIndices.toList(), currentParts.joinToString("<br>")))
                 currentIndices.clear()
@@ -418,6 +327,7 @@ class TranslationManagerGooglePA(
         Log.d(TAG, "translateChunks: ${paragraphs.size} paragraphs → ${chunks.size} chunks, $sourceLang→$targetLang")
 
         val apiKey = getApiKey()
+        var failedChunks = 0
 
         for ((idx, chunk) in chunks.withIndex()) {
             if (idx > 0) delay(400L)
@@ -425,7 +335,8 @@ class TranslationManagerGooglePA(
             val translated = try {
                 translateHtml(chunk.html, sourceLang, targetLang, apiKey)
             } catch (e: Exception) {
-                Log.e(TAG, "Chunk ${idx + 1}/${chunks.size} failed: ${e.message}, keeping original")
+                Log.e(TAG, "Chunk ${idx + 1}/${chunks.size} failed: ${e.message}")
+                failedChunks++
                 continue
             }
 
@@ -434,7 +345,6 @@ class TranslationManagerGooglePA(
                 continue
             }
 
-            // Mirror wtr-lab: replace <br> back to newline, split, unescape entities
             val translatedParas = translated
                 .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
                 .split("\n")
@@ -447,11 +357,13 @@ class TranslationManagerGooglePA(
             }
 
             if (translatedParas.size != chunk.indices.size) {
-                Log.w(
-                    TAG,
-                    "Chunk ${idx + 1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}"
-                )
+                Log.w(TAG, "Chunk ${idx + 1}: expected ${chunk.indices.size} paragraphs, got ${translatedParas.size}")
             }
+        }
+
+        // If ALL chunks failed — throw so the caller can show an error to the user
+        if (failedChunks == chunks.size && chunks.isNotEmpty()) {
+            throw IllegalStateException("Google PA: All translation chunks failed. Check your internet connection.")
         }
 
         return result
@@ -479,16 +391,16 @@ class TranslationManagerGooglePA(
             val code = response.code
             response.body?.close()
             Log.e(TAG, "translateHtml: HTTP $code")
-            return@withContext html
+            throw IllegalStateException("Google PA: HTTP error $code")
         }
 
-        val body = response.body?.string() ?: return@withContext html
+        val body = response.body?.string() ?: throw IllegalStateException("Google PA: Empty response body")
         try {
             val arr = JsonParser.parseString(body).asJsonArray
             arr.get(0).asJsonArray.get(0).asString
         } catch (e: Exception) {
             Log.e(TAG, "translateHtml: parse error — ${e.message}")
-            html
+            throw IllegalStateException("Google PA: Failed to parse response — ${e.message}")
         }
     }
 
@@ -510,12 +422,8 @@ class TranslationManagerGooglePA(
             boundaries.add(start until start + lines.size)
         }
 
-        val translatedAll = try {
-            translateChunks(allParagraphs, sourceLang, targetLanguage)
-        } catch (e: Exception) {
-            Log.e(TAG, "translateBatch failed: ${e.message}")
-            return@withContext emptyMap()
-        }
+        // Let exceptions propagate — caller (ReaderChaptersLoader) will show error to user
+        val translatedAll = translateChunks(allParagraphs, sourceLang, targetLanguage)
 
         val result = mutableMapOf<String, String>()
         for ((i, text) in texts.withIndex()) {

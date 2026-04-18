@@ -47,20 +47,34 @@ internal fun SettingsGeminiTranslation(
     geminiApiKey: String,
     geminiModel: String,
     googlePaApiKeys: String,
+    openAiBaseUrl: String,
+    openAiApiKeys: String,
+    openAiModel: String,
+    activeSystemPrompt: String,
+    promptPresets: List<Pair<String, String>>,
+    promptUseEnglishLocale: Boolean,
     onTranslationProviderChange: (String) -> Unit,
     onGeminiApiKeyChange: (String) -> Unit,
     onGeminiModelChange: (String) -> Unit,
     onGooglePaApiKeysChange: (String) -> Unit,
+    onOpenAiBaseUrlChange: (String) -> Unit,
+    onOpenAiApiKeysChange: (String) -> Unit,
+    onOpenAiModelChange: (String) -> Unit,
+    onActiveSystemPromptChange: (String) -> Unit,
+    onPromptUseEnglishLocaleChange: (Boolean) -> Unit,
+    onSavePreset: (name: String, prompt: String) -> Unit,
+    onDeletePreset: (name: String) -> Unit,
 ) {
-    val predefinedModels = listOf(
+    val predefinedGeminiModels = listOf(
         "gemini-2.5-flash-lite",
         "gemini-2.0-flash-exp",
         "gemini-1.5-flash",
         "gemini-1.5-pro",
         "gemini-1.0-pro"
     )
-    var apiKeyText by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
-    var modelText  by remember(geminiModel)  { mutableStateOf(geminiModel) }
+
+    var apiKeyText by remember(geminiApiKey)    { mutableStateOf(geminiApiKey) }
+    var modelText  by remember(geminiModel)     { mutableStateOf(geminiModel) }
     var paKeysText by remember(googlePaApiKeys) { mutableStateOf(googlePaApiKeys) }
 
     Column {
@@ -71,7 +85,7 @@ internal fun SettingsGeminiTranslation(
             color    = ColorAccent
         )
 
-        // ── Provider picker ───────────────────────────────────────────────
+        // ── Provider picker ───────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -98,9 +112,16 @@ internal fun SettingsGeminiTranslation(
                 selected    = translationProvider == "GEMINI",
                 onClick     = { onTranslationProviderChange("GEMINI") }
             )
+            Spacer(Modifier.height(4.dp))
+            ProviderRadioOption(
+                label       = stringResource(R.string.provider_openai),
+                description = stringResource(R.string.provider_openai_description),
+                selected    = translationProvider == "OPENAI",
+                onClick     = { onTranslationProviderChange("OPENAI") }
+            )
         }
 
-        // ── Google PA config — visible only when GOOGLE_PA selected ──────────
+        // ── Google PA config ──────────────────────────────────────────────────
         AnimatedVisibility(
             visible = translationProvider == "GOOGLE_PA",
             enter   = expandVertically(),
@@ -149,7 +170,7 @@ internal fun SettingsGeminiTranslation(
             }
         }
 
-        // ── Gemini config — visible only when GEMINI selected ─────────────
+        // ── Gemini config ─────────────────────────────────────────────────────
         AnimatedVisibility(
             visible = translationProvider == "GEMINI",
             enter   = expandVertically(),
@@ -157,8 +178,7 @@ internal fun SettingsGeminiTranslation(
         ) {
             Column {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-
-                // API key
+                // API Key
                 ListItem(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -205,55 +225,97 @@ internal fun SettingsGeminiTranslation(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = stringResource(R.string.gemini_model),
+                                text  = stringResource(R.string.gemini_model),
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             Spacer(Modifier.height(8.dp))
-                            
+
                             var expanded by remember { mutableStateOf(false) }
                             ExposedDropdownMenuBox(
-                                expanded = expanded,
+                                expanded         = expanded,
                                 onExpandedChange = { expanded = it }
                             ) {
                                 OutlinedTextField(
-                                    value = modelText.ifEmpty { predefinedModels.first() },
+                                    value         = modelText.ifEmpty { predefinedGeminiModels.first() },
                                     onValueChange = { modelText = it; onGeminiModelChange(it) },
-                                    label = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                    singleLine = true,
-                                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                    label         = { Text(stringResource(R.string.model_name), color = MaterialTheme.colorScheme.onSurface) },
+                                    trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                    modifier      = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    singleLine    = true,
+                                    colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
                                         unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                        cursorColor = MaterialTheme.colorScheme.onSurface
+                                        cursorColor          = MaterialTheme.colorScheme.onSurface
                                     )
                                 )
                                 ExposedDropdownMenu(
-                                    expanded = expanded,
+                                    expanded         = expanded,
                                     onDismissRequest = { expanded = false }
                                 ) {
-                                    predefinedModels.forEach { model ->
+                                    predefinedGeminiModels.forEach { m ->
                                         DropdownMenuItem(
-                                            text = { Text(model) },
+                                            text    = { Text(m) },
                                             onClick = {
-                                                modelText = model
-                                                onGeminiModelChange(model)
+                                                modelText = m
+                                                onGeminiModelChange(m)
                                                 expanded = false
                                             }
                                         )
                                     }
                                 }
                             }
-                            
+
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = stringResource(R.string.default_gemini_model) + "\n" +
+                                text  = stringResource(R.string.default_gemini_model) + "\n" +
                                         stringResource(R.string.model_examples),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
+                )
+
+                // Prompt manager для Gemini
+                SettingsPromptManager(
+                    activeSystemPrompt             = activeSystemPrompt,
+                    promptPresets                  = promptPresets,
+                    promptUseEnglishLocale         = promptUseEnglishLocale,
+                    onActiveSystemPromptChange     = onActiveSystemPromptChange,
+                    onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
+                    onSavePreset                   = onSavePreset,
+                    onDeletePreset                 = onDeletePreset,
+                )
+            }
+        }
+
+        // ── OpenAI-compatible config ──────────────────────────────────────────
+        AnimatedVisibility(
+            visible = translationProvider == "OPENAI",
+            enter   = expandVertically(),
+            exit    = shrinkVertically()
+        ) {
+            // Оба composable обёрнуты в Column — иначе AnimatedVisibility
+            // показывает только первый дочерний элемент
+            Column {
+                SettingsOpenAITranslation(
+                    baseUrl         = openAiBaseUrl,
+                    apiKeys         = openAiApiKeys,
+                    model           = openAiModel,
+                    onBaseUrlChange = onOpenAiBaseUrlChange,
+                    onApiKeysChange = onOpenAiApiKeysChange,
+                    onModelChange   = onOpenAiModelChange,
+                )
+                SettingsPromptManager(
+                    activeSystemPrompt             = activeSystemPrompt,
+                    promptPresets                  = promptPresets,
+                    promptUseEnglishLocale         = promptUseEnglishLocale,
+                    onActiveSystemPromptChange     = onActiveSystemPromptChange,
+                    onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
+                    onSavePreset                   = onSavePreset,
+                    onDeletePreset                 = onDeletePreset,
                 )
             }
         }
@@ -276,8 +338,8 @@ private fun ProviderRadioOption(
     ) {
         RadioButton(
             selected = selected,
-            onClick = null,
-            colors = RadioButtonDefaults.colors(
+            onClick  = null,
+            colors   = RadioButtonDefaults.colors(
                 selectedColor   = ColorAccent,
                 unselectedColor = MaterialTheme.colorScheme.onSurface,
             )
