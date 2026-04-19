@@ -14,7 +14,7 @@ data class ExtensionsScreenState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val showRepositoryDialog: Boolean = false,
-    val repositoryUrl: String = "https://cdn.jsdelivr.net/gh/HnDK0/external-sources@main/index.yaml",
+    val repositoryUrl: String = "https://raw.githubusercontent.com/HnDK0/external-sources/refs/heads/main/index.yaml",
     val sortOrder: SortOrder = SortOrder.ASCENDING
 )
 
