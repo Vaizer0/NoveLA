@@ -52,6 +52,7 @@ Open in Android Studio and run on a device or emulator.
 - Translate chapters directly while reading — no copy-paste needed
 - Free translation via Google Translate API
 - Optional Gemini AI integration for higher-quality output
+- Optional OpenAi Compatible integration for higher-quality output
 - Instant language switching without reloading the chapter
 
 > **Note:** Free Gemini API keys are rate-limited. Limits depend on model and Google's quota policy.
@@ -218,6 +219,7 @@ git clone https://github.com/HnDK0/NoveLA
 - Перевод прямо во время чтения — без копирования
 - Бесплатный перевод через Google API
 - Опциональный Gemini для более качественного перевода
+- Опциональный OpenAi Compatible для более качественного перевода
 - Мгновенное переключение языка без перезагрузки главы
 
 > **Примечание:** бесплатные ключи Gemini API имеют ограничения по запросам и скорости.
