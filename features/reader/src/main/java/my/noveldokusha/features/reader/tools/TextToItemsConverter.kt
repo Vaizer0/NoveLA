@@ -75,7 +75,7 @@ private fun processTextIntoLogicalBlocks(text: String): List<String> {
 }
 
 private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<String> {
-    if (paragraph.length <= 600 || paragraph.contains("imgEntry")) {
+    if (paragraph.length <= 800 || paragraph.contains("imgEntry")) {
         return listOf(paragraph)
     }
 
@@ -110,8 +110,8 @@ private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<Strin
             }
         }
 
-        // Если превысили 600 с точкой или жесткий предел 2000
-        if ((currentChunk.length >= 600 && safeSplitIndexInChunk != -1) || currentChunk.length >= 2000) {
+        // Если превысили 800 с точкой или жесткий предел 2000
+        if ((currentChunk.length >= 800 && safeSplitIndexInChunk != -1) || currentChunk.length >= 2000) {
 
             // Если безопасного индекса нет, ищем ближайший пробел с конца, чтобы не рвать слово
             val splitAt = if (safeSplitIndexInChunk != -1) {
