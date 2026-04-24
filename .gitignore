@@ -49,3 +49,5 @@ keychain/
 key.properties
 /.history
 app/release/output-metadata.json
+
+*.md
