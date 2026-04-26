@@ -36,6 +36,45 @@ private val CLOUDFLARE_WHITELIST = listOf(
     "raw.githubusercontent.com"
 )
 
+/**
+ * Настройки CF-байпаса для конкретного домена.
+ * Устанавливается плагином через LuaCfOptionsRegistry.
+ *
+ * @param whitelist полностью отключить CF-детект для домена
+ * @param ignoreMarkers конкретные маркеры которые игнорировать (например listOf("turnstile"))
+ */
+data class CfDomainOptions(
+    val whitelist: Boolean = false,
+    val ignoreMarkers: Set<String> = emptySet()
+)
+
+/**
+ * Реестр CF-настроек от Lua плагинов.
+ * Плагин при загрузке регистрирует свой домен и опции.
+ */
+object LuaCfOptionsRegistry {
+    private val options = ConcurrentHashMap<String, CfDomainOptions>()
+
+    fun register(domain: String, cfOptions: CfDomainOptions) {
+        // Нормализуем домен — убираем www. и слеши
+        val key = domain.removePrefix("https://").removePrefix("http://")
+            .removePrefix("www.").trimEnd('/')
+        options[key] = cfOptions
+        Log.d(TAG, "CF options registered for $key: $cfOptions")
+    }
+
+    fun getForHost(host: String): CfDomainOptions? {
+        val key = host.removePrefix("www.")
+        return options[key]
+    }
+
+    fun clear(domain: String) {
+        val key = domain.removePrefix("https://").removePrefix("http://")
+            .removePrefix("www.").trimEnd('/')
+        options.remove(key)
+    }
+}
+
 object CloudflareBypassSignal {
     val channel = Channel<Unit>(Channel.CONFLATED)
 
@@ -55,12 +94,20 @@ internal class CloudFareVerificationInterceptor(
     private val resolvedDomains = mutableSetOf<String>()
     private val manualAttempts = ConcurrentHashMap<String, Int>()
 
+    // Все возможные маркеры CF
+    private val ALL_CF_MARKERS = listOf(
+        "cf-challenge",
+        "turnstile",
+        "requireTurnstile",
+        "Security Check Required",
+        "__cf_chl_",
+        "Ray ID",
+        "but-captcha"
+    )
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        // Буферизуем тело запроса ДО первого proceed.
-        // RequestBody одноразовый — после первого chain.proceed тело вычитано
-        // и повторный запрос уйдёт пустым (POST без тела → сервер вернёт ошибку).
         val bufferedRequest = if (originalRequest.body != null) {
             val buffer = Buffer()
             originalRequest.body!!.writeTo(buffer)
@@ -129,7 +176,6 @@ internal class CloudFareVerificationInterceptor(
             else -> siteUrl
         }
 
-        // 1. АВТОМАТИКА
         runBlocking(Dispatchers.Main) {
             withTimeoutOrNull(15_000) {
                 resolveWithWebViewAutomatic(webViewUrl, cookieManager)
@@ -151,7 +197,6 @@ internal class CloudFareVerificationInterceptor(
             return firstRetryResponse
         }
 
-        // 2. РУЧНОЙ ВВОД
         firstRetryResponse.close()
 
         val attempts = manualAttempts.getOrDefault(host, 0)
@@ -190,22 +235,33 @@ internal class CloudFareVerificationInterceptor(
         return finalResponse
     }
 
-    // Оригинальная логика без изменений
     private fun isNotCloudflare(response: Response, body: String): Boolean {
         val host = response.request.url.host
+
+        // Глобальный whitelist
         if (CLOUDFLARE_WHITELIST.any { host.contains(it) }) return true
 
-        val hasMarkers = body.contains("cf-challenge", true) ||
-                body.contains("turnstile", true) ||
-                body.contains("requireTurnstile", true) ||
-                body.contains("Security Check Required", true) ||
-                body.contains("__cf_chl_", true) ||
-                body.contains("Ray ID", true) ||
-                body.contains("but-captcha", true)
+        // Настройки от Lua плагина для этого домена
+        val domainOptions = LuaCfOptionsRegistry.getForHost(host)
 
+        // Плагин полностью отключил CF-детект для домена
+        if (domainOptions?.whitelist == true) return true
+
+        // Маркеры которые игнорируем для этого домена
+        val ignoredMarkers = domainOptions?.ignoreMarkers ?: emptySet()
+
+        val activeMarkers = ALL_CF_MARKERS.filter { it !in ignoredMarkers }
+
+        val hasMarkers = activeMarkers.any { body.contains(it, ignoreCase = true) }
         val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
         val isCfServer = response.header("Server")?.contains("cloudflare", true) == true
-        return !(isError && (isCfServer || hasMarkers))
+
+        val result = !(isError && (isCfServer || hasMarkers))
+        if (!result) {
+            val foundMarkers = activeMarkers.filter { body.contains(it, ignoreCase = true) }
+            Log.e(TAG, "CF triggered: code=${response.code} isCfServer=$isCfServer foundMarkers=$foundMarkers")
+        }
+        return result
     }
 
     private fun clearCookiesForDomain(url: String, cm: CookieManager) {

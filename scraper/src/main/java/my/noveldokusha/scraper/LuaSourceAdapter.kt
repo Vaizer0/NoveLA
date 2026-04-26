@@ -97,6 +97,37 @@ open class LuaSourceAdapter(
 
     init {
         validateLuaScript()
+        registerCfOptions()
+    }
+
+    private fun registerCfOptions() {
+        if (baseUrl.isEmpty()) return
+        val cfTable = try { luaScript.get("cf_options") } catch (_: Exception) { return }
+        if (cfTable.isnil() || !cfTable.istable()) return
+        val t = cfTable.checktable()
+
+        val whitelist = t.get("whitelist").optboolean(false)
+
+        val ignoreMarkers = mutableSetOf<String>()
+        val markersTable = t.get("ignore_markers").opttable(null)
+        if (markersTable != null) {
+            for (i in 1..markersTable.length()) {
+                val m = markersTable.get(org.luaj.vm2.LuaValue.valueOf(i)).optjstring(null)
+                if (!m.isNullOrBlank()) ignoreMarkers.add(m)
+            }
+        }
+
+        val host = try {
+            java.net.URI(baseUrl).host ?: return
+        } catch (_: Exception) { return }
+
+        my.noveldokusha.network.interceptors.LuaCfOptionsRegistry.register(
+            host,
+            my.noveldokusha.network.interceptors.CfDomainOptions(
+                whitelist = whitelist,
+                ignoreMarkers = ignoreMarkers
+            )
+        )
     }
 
     // ── Метаданные ────────────────────────────────────────────────────────────
