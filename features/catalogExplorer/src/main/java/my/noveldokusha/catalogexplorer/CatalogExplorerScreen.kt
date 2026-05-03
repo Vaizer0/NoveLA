@@ -338,7 +338,7 @@ fun CatalogExplorerScreen(
                         viewModel.sourcesList
                     } else {
                         viewModel.sourcesList.filter {
-                            it.catalog.language?.iso639_1 in viewModel.selectedLanguages
+                            it.catalog.languageTag in viewModel.selectedLanguages
                         }
                     }
                     CatalogList(
@@ -379,7 +379,7 @@ fun CatalogExplorerScreen(
                         viewModel.sourcesList
                     } else {
                         viewModel.sourcesList.filter {
-                            it.catalog.language?.iso639_1 in viewModel.selectedLanguages
+                            it.catalog.languageTag in viewModel.selectedLanguages
                         }
                     }
                     CatalogList(

@@ -45,7 +45,7 @@ internal class CatalogExplorerViewModel @Inject constructor(
     // Список языков динамически из реальных источников — реактивно через derivedStateOf
     val availableLanguages: List<SourceLanguage> by derivedStateOf {
         sourcesList
-            .mapNotNull { it.catalog.language?.iso639_1 }
+            .mapNotNull { it.catalog.languageTag }
             .distinct()
             .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
             .sortedBy { it.name }

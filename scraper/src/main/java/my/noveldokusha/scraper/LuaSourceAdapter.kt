@@ -87,6 +87,7 @@ open class LuaSourceAdapter(
         else -> fromIso639_1(metadata.language)
     }
 
+    override val languageTag: String? = metadata.language.takeIf { it.isNotBlank() }
     override val iconResId: Int? = null
 
     override val iconUrl: String? = iconUrlFromYaml
