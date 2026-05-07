@@ -154,7 +154,7 @@ internal fun CatalogList(
                     )
                 },
                 supportingContent = {
-                    val languageCode = it.catalog.language?.iso639_1
+                    val languageCode = it.catalog.languageTag
                     if (languageCode != null) Text(
                         text = getLanguageDisplayName(languageCode),
                         style = MaterialTheme.typography.bodySmall,

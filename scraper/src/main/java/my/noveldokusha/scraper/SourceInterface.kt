@@ -37,7 +37,7 @@ sealed interface SourceInterface {
     interface Catalog : SourceInterface {
         val catalogUrl: String
         val language: LanguageCode?
-
+        val languageTag: String? get() = language?.iso639_1
         // String? — иконка всегда URL-строка (из YAML) или null
         val iconUrl: String? get() = null
         val iconResId: Int? get() = null
