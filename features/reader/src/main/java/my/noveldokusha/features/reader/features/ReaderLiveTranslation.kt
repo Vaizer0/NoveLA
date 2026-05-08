@@ -51,8 +51,8 @@ internal class ReaderLiveTranslation(
         onEnable = ::onEnable,
         onSourceChange = ::onSourceChange,
         onTargetChange = ::onTargetChange,
-        onDownloadTranslationModel = translationManager::downloadModel
-        , onRedoTranslation = ::onRedoTranslation
+        onDownloadTranslationModel = translationManager::downloadModel,
+        onRedoTranslation = ::onRedoTranslation
     )
 
     var translatorState: TranslatorState? = null
@@ -121,7 +121,6 @@ internal class ReaderLiveTranslation(
             }
         }.also { this.translatorState = it }
 
-
         return when {
             old == null && new == null -> false
             old != null && new != null -> when {
@@ -182,7 +181,7 @@ internal class ReaderLiveTranslation(
         }
     }
 
-    fun isUsingGemini(): Boolean {
+    fun isUsingOnlineTranslation(): Boolean {
         return translationManager.isUsingOnlineTranslation
     }
 
@@ -201,9 +200,6 @@ internal class ReaderLiveTranslation(
 
                 Log.d(TAG, "onRedoTranslation: invalidating cache for source=$source, target=$target")
 
-
-                // 2. Clear ALL database cached translations (not just current language pair)
-                // This ensures translations from previous sessions are also cleared
                 chapterTranslationDao?.let { dao ->
                     try {
                         Log.d(TAG, "onRedoTranslation: clearing ALL database cached translations")
@@ -216,19 +212,15 @@ internal class ReaderLiveTranslation(
                     }
                 } ?: Log.w(TAG, "onRedoTranslation: chapterTranslationDao is null, skipping database clear")
 
-                // 3. Clear ReaderChaptersLoader in-memory pre-translation cache
                 onClearChapterCache?.invoke()
                     ?.also { Log.d(TAG, "onRedoTranslation: chapter cache cleared") }
                     ?: Log.w(TAG, "onRedoTranslation: no chapter cache clear callback")
 
-                // 4. Force recreate translator state to trigger full reload
-                // This mimics what happens when user changes source/target language
                 Log.d(TAG, "onRedoTranslation: forcing translator state update")
                 translatorState = null
                 val update = updateTranslatorState()
                 Log.d(TAG, "onRedoTranslation: translator state updated, triggering reload")
 
-                // Emit change event to trigger reader reload (same as language change)
                 if (update) {
                     _onTranslatorChanged.emit(Unit)
                 }
@@ -240,17 +232,26 @@ internal class ReaderLiveTranslation(
     }
 
     /**
-     * Get batch translator if available (Gemini, Composite, or GoogleFree)
-     * Returns null for MLKit which doesn't support batch translation
+     * Get batch translator if available (Gemini, OpenAI, Composite, or GoogleFree).
+     * Returns null for MLKit which doesn't support batch translation.
+     * For online providers (Gemini/OpenAI), null means init() hasn't completed yet —
+     * ReaderChaptersLoader will throw an error instead of falling back to per-paragraph.
      */
     fun getBatchTranslator(): (suspend (List<String>) -> Map<String, String>)? {
-        if (!translationManager.isUsingOnlineTranslation) return null
-        val currentState = translatorState ?: return null
+        if (!translationManager.isUsingOnlineTranslation) {
+            Log.d(TAG, "getBatchTranslator: offline provider (MLKit), batch not available")
+            return null
+        }
+        val currentState = translatorState
+        if (currentState == null) {
+            Log.w(TAG, "getBatchTranslator: translatorState is null — init() may not have completed yet!")
+            return null
+        }
         val source = currentState.source
         val target = currentState.target
-
+        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target)")
         return { texts ->
-            translationManager.translateBatch(texts, source, target) ?: emptyMap()
+            translationManager.translateBatch(texts, source, target)
         }
     }
 

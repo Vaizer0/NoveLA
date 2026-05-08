@@ -112,7 +112,16 @@ internal class ReaderSession(
         translatorIsActive = { readerLiveTranslation.translatorState != null },
         translatorSourceLanguageOrNull = { readerLiveTranslation.translatorState?.sourceLocale?.language },
         translatorTargetLanguageOrNull = { readerLiveTranslation.translatorState?.targetLocale?.language },
-        translatorProvider = { if (readerLiveTranslation.isUsingGemini()) "gemini" else "google" },
+        translatorProvider = {
+            // Определяем провайдер по настройке, а не по флагу isUsingOnlineTranslation
+            when (appPreferences.TRANSLATION_PROVIDER.value) {
+                "GEMINI" -> "gemini"
+                "OPENAI" -> "openai"
+                "GOOGLE_FREE" -> "google_free"
+                else -> "google"
+            }
+        },
+        translatorIsOnline = { readerLiveTranslation.isUsingOnlineTranslation() },
         translatorBatchTranslateOrNull = { readerLiveTranslation.getBatchTranslator() },
         bookUrl = bookUrl,
         orderedChapters = orderedChapters,
@@ -120,8 +129,7 @@ internal class ReaderSession(
         readerViewHandlersActions = readerViewHandlersActions,
         chapterTranslationDao = chapterTranslationDao,
         regexRulesProvider = { appPreferences.USER_REGEX_CLEANUP_RULES.value },
-    ).also {
-    }
+    )
 
     val items = readerChaptersLoader.getItems()
 
@@ -185,15 +193,20 @@ internal class ReaderSession(
         scope.launch {
             val book = async(Dispatchers.IO) { appRepository.libraryBooks.get(bookUrl) }
             val chapter = async(Dispatchers.IO) { appRepository.bookChapters.get(chapterUrl) }
-            val loadTranslator = async(Dispatchers.IO) { readerLiveTranslation.init() }
             val chaptersList = async(Dispatchers.Default) {
                 orderedChapters.also { it.addAll(appRepository.bookChapters.chapters(bookUrl)) }
             }
             val chapterIndex = async(Dispatchers.Default) {
                 chaptersList.await().indexOfFirst { it.url == chapterUrl }
             }
+
             chaptersList.await()
-            loadTranslator.await()
+
+            // ВАЖНО: translator должен быть готов ДО первой загрузки главы.
+            // Иначе getBatchTranslator() вернёт null (translatorState ещё не создан)
+            // и онлайн-провайдер (Gemini/OpenAI) упадёт в поабзацный перевод или ошибку.
+            readerLiveTranslation.init()
+
             bookCoverUrl = book.await()?.coverImageUrl
             bookTitle = book.await()?.title
             currentChapter = ChapterState(
@@ -201,6 +214,8 @@ internal class ReaderSession(
                 chapterItemPosition = chapter.await()?.lastReadPosition ?: 0,
                 offset = chapter.await()?.lastReadOffset ?: 0,
             )
+
+            // Загружаем главу только после того как translatorState готов
             readerChaptersLoader.tryLoadInitial(chapterIndex = chapterIndex.await())
         }
     }
@@ -339,16 +354,12 @@ internal class ReaderSession(
         val progress = stats.chapterReadPercentage()
         val chapterIndex = stats.chapterIndex
 
-        // Принудительный сброс ошибки при смене главы
         if (chapterIndex != lastChapterIndex) {
             if (lastChapterIndex != -1 && readerChaptersLoader.hasLoadingError) {
                 readerChaptersLoader.hasLoadingError = false
                 android.util.Log.d("ReaderSession", "Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
             }
             lastChapterIndex = chapterIndex
-            // Всегда сбрасываем триггер предзагрузки при смене главы.
-            // Это гарантирует корректную работу после retry: старая глава могла быть
-            // загружена/удалена, и флаг должен быть сброшен независимо от состояния следующей главы.
             preloadTriggeredForChapter = -1
         }
 

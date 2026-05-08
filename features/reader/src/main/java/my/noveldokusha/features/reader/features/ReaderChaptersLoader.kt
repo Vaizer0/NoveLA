@@ -34,6 +34,8 @@ internal class ReaderChaptersLoader(
     private val translatorSourceLanguageOrNull: () -> String?,
     private val translatorTargetLanguageOrNull: () -> String?,
     private val translatorProvider: () -> String,
+    // true = Gemini/OpenAI/online — поабзацный перевод недопустим, только батч
+    private val translatorIsOnline: () -> Boolean,
     private val translatorBatchTranslateOrNull: () -> (suspend (List<String>) -> Map<String, String>)?,
     private val bookUrl: String,
     val orderedChapters: List<Chapter>,
@@ -75,15 +77,12 @@ internal class ReaderChaptersLoader(
                     _hasLoadingError = false
                     autoResetJob = null
                     android.util.Log.d(TAG, "Auto-reset hasLoadingError after 30s timeout, resuming preload")
-                    // После автосброса ошибки автоматически пробуем загрузить следующую главу
                     tryLoadNext()
                 }
             } else {
-                // При сбросе ошибки очищаем очередь — разблокируем tryLoadNext()
                 loaderQueue.remove(LoadChapter.Type.Next)
             }
         }
-
 
     init {
         startChapterLoaderWatcher()
@@ -165,12 +164,7 @@ internal class ReaderChaptersLoader(
         tryLoadNext()
     }
 
-    /**
-     * Удаляет все items главы с ошибкой, чистит кэш тела в БД и перезагружает её заново.
-     * Без удаления из БД fetchBody вернёт кэшированную пустую строку и до сети не дойдёт.
-     */
     fun retryChapter(chapterIndex: Int) {
-        // Валидация индекса — предотвращаем некорректные операции
         if (chapterIndex < 0 || chapterIndex >= orderedChapters.size) {
             android.util.Log.e(TAG, "retryChapter: invalid chapterIndex $chapterIndex, size ${orderedChapters.size}")
             return
@@ -179,28 +173,20 @@ internal class ReaderChaptersLoader(
         launch(Dispatchers.Main.immediate) {
             val chapterUrl = orderedChapters[chapterIndex].url
 
-            // Сначала сбрасываем флаги — до любых IO-операций
             hasLoadingError = false
             chaptersStats.remove(chapterUrl)
             loadedChapters.remove(chapterUrl)
-            // Очищаем очередь — разблокируем tryLoadNext() для последующей предзагрузки
             loaderQueue.remove(LoadChapter.Type.Next)
 
-            // Удаляем ВСЕ items этой главы (Error, Title, Divider, Body и т.д.)
             items.removeAll { it.chapterIndex == chapterIndex }
             readerViewHandlersActions.doForceUpdateListViewState()
 
-            // Чистим кэш тела в БД (IO после очистки UI-стейта)
             withContext(Dispatchers.IO) {
                 readerRepository.deleteChapterBody(chapterUrl)
             }
 
-            // Перезагружаем главу
             readerState = ReaderState.LOADING
 
-            // Вставляем на правильное место: перед первым итемом следующей главы.
-            // Без этого items.add() кладёт главу в конец списка, и она оказывается после уже загруженных следующих глав.
-            // Индекс вычисляется заново при каждой вставке — items может измениться между вызовами (IO, перевод).
             fun findInsertIndex(): Int {
                 val idx = items.indexOfFirst { it.chapterIndex > chapterIndex }
                 return if (idx == -1) items.size else idx
@@ -227,7 +213,6 @@ internal class ReaderChaptersLoader(
             val success = addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove)
             readerState = ReaderState.IDLE
 
-            // После успешного retry автоматически возобновляем предзагрузку следующей главы
             if (success == true && !hasLoadingError) {
                 android.util.Log.d(TAG, "retryChapter: auto-resuming preload for next chapter")
                 tryLoadNext()
@@ -405,7 +390,6 @@ internal class ReaderChaptersLoader(
     private suspend fun loadNextChapter() = withContext(Dispatchers.Main.immediate) {
         readerState = ReaderState.LOADING
 
-        // ✅ Правильный способ определить последнюю загруженную главу
         val lastChapterIndex = items.maxOfOrNull { it.chapterIndex }
 
         if (lastChapterIndex == null) {
@@ -432,7 +416,6 @@ internal class ReaderChaptersLoader(
             return@withContext
         }
 
-        // ✅ Всегда грузим только следующую по порядку главу
         val nextIndex = lastChapterIndex + 1
 
         addChapter(chapterIndex = nextIndex, insert = insert, insertAll = insertAll, remove = remove)
@@ -449,7 +432,6 @@ internal class ReaderChaptersLoader(
     ): Boolean? = withContext(Dispatchers.Default) {
         val chapter = orderedChapters.getOrNull(chapterIndex) ?: return@withContext null
 
-        // Защита от двойной загрузки: блокируем сразу при входе в функцию
         synchronized(loadedChapters) {
             if (loadedChapters.contains(chapter.url)) {
                 android.util.Log.d(TAG, "addChapter: chapter ${chapter.url} already loaded or loading, skipping")
@@ -458,7 +440,6 @@ internal class ReaderChaptersLoader(
             loadedChapters.add(chapter.url)
         }
 
-        // При отмене/исключении гарантированно очищаем блокировку
         try {
             _addChapterInternal(chapter, chapterIndex, insert, insertAll, remove, maintainPosition)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -488,8 +469,6 @@ internal class ReaderChaptersLoader(
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
         val titleOriginal = chapter.title
-        // Title is now translated together with body paragraphs in a single batch request.
-        // This placeholder will be replaced after translation completes.
         var titleTranslated: String = titleOriginal
 
         val itemTitle = ReaderItem.Title(
@@ -516,9 +495,6 @@ internal class ReaderChaptersLoader(
                     }
                     maintainPosition {
                         remove(itemProgressBar)
-                        // Откатываем Divider и Title, вставленные до загрузки контента.
-                        // Без этого скролл до Error-item'а обновляет currentChapter на следующую главу,
-                        // что приводит к сохранению неверной позиции и пропуску главы при retry.
                         remove(itemTitle)
                         items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
                         val preview = res.data.take(300).ifBlank { "<null>" }
@@ -576,7 +552,6 @@ internal class ReaderChaptersLoader(
                                     ).associate { it.originalText to it.translatedText }
                                 }
 
-                                // Include title in the batch so it costs only 1 LLM request per chapter.
                                 val bodyTexts = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
                                 val allTextsToTranslate = buildList {
                                     if (!dbTranslations.containsKey(titleOriginal)) add(titleOriginal)
@@ -584,10 +559,8 @@ internal class ReaderChaptersLoader(
                                 }
 
                                 val result = if (dbTranslations.isNotEmpty()) {
-                                    // Кэш есть — проверяем полноту (title + body)
                                     val missingFromDb = allTextsToTranslate.filter { !dbTranslations.containsKey(it) }
 
-                                    // ✅ Если всё уже переведено — пропускаем запрос полностью
                                     if (missingFromDb.isEmpty()) {
                                         android.util.Log.d(TAG, "Using full DB cache for chapter ${chapter.title} (${dbTranslations.size} translations)")
                                         titleTranslated = dbTranslations[titleOriginal] ?: titleOriginal
@@ -596,7 +569,7 @@ internal class ReaderChaptersLoader(
                                             else it
                                         }
                                     } else {
-                                        android.util.Log.d(TAG, "DB cache partial: ${dbTranslations.size}/${allTextsToTranslate.size}, translating ${missingFromDb.size} missing (incl. title if needed)")
+                                        android.util.Log.d(TAG, "DB cache partial: ${dbTranslations.size}/${allTextsToTranslate.size}, translating ${missingFromDb.size} missing")
                                         val extraTranslations = withContext(Dispatchers.IO) {
                                             batchTranslator.invoke(missingFromDb)
                                         }
@@ -620,7 +593,6 @@ internal class ReaderChaptersLoader(
                                         }
                                     }
                                 } else {
-                                    // Кэша нет — переводим всё (title + body) одним батчем и сохраняем
                                     val allTranslations = translateAndCacheWithTitle(
                                         itemsOriginal, titleOriginal, batchTranslator,
                                         chapter.url, sourceLang, targetLang
@@ -630,8 +602,21 @@ internal class ReaderChaptersLoader(
                                 }
                                 result
                             } else {
-                                android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (batch not available)")
-                                // For non-batch (MLKit): translate title alongside body, no extra overhead
+                                // Батч недоступен
+                                if (translatorIsOnline()) {
+                                    // Для онлайн-провайдеров (Gemini/OpenAI) поабзацный перевод недопустим:
+                                    // сожрёт лимиты и токены. Бросаем ошибку — пользователь увидит
+                                    // ReaderItem.Error и сможет сделать retry когда translator готов.
+                                    android.util.Log.e(TAG, "Batch translator unavailable for online provider — refusing per-paragraph fallback")
+                                    throw IllegalStateException(
+                                        if (java.util.Locale.getDefault().language == "ru")
+                                            "Переводчик ещё не готов. Попробуйте ещё раз."
+                                        else
+                                            "Translator not ready yet. Please retry."
+                                    )
+                                }
+                                // MLKit — поабзацный перевод допустим
+                                android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (MLKit offline)")
                                 titleTranslated = try {
                                     translatorTranslateOrNull(titleOriginal) ?: titleOriginal
                                 } catch (e: Exception) {
@@ -679,9 +664,7 @@ internal class ReaderChaptersLoader(
                     )
                 }
 
-                // Update title item with translation result (resolved in batch above)
                 val finalItemTitle = itemTitle.copy(textTranslated = titleTranslated)
-                // Save translated title to DB so chapter list can display it
                 if (translatorIsActive() && titleTranslated != titleOriginal) {
                     val sourceLang = translatorSourceLanguageOrNull()
                     val targetLang = translatorTargetLanguageOrNull()
@@ -703,7 +686,6 @@ internal class ReaderChaptersLoader(
                 maintainPosition {
                     remove(itemProgressBar)
                     itemTranslating?.let { remove(it) }
-                    // Replace the preliminary title item (original text) with the translated one
                     withContext(Dispatchers.Main.immediate) {
                         val idx = this@ReaderChaptersLoader.items.indexOf(itemTitle)
                         if (idx != -1) this@ReaderChaptersLoader.items[idx] = finalItemTitle
@@ -713,7 +695,7 @@ internal class ReaderChaptersLoader(
                     insert(ReaderItem.Divider(chapterIndex = chapterIndex))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
-                return@_addChapterInternal true // успех
+                return@_addChapterInternal true
             }
             is Response.Error -> {
                 withContext(Dispatchers.Main.immediate) {
@@ -723,20 +705,13 @@ internal class ReaderChaptersLoader(
                         orderedChaptersIndex = chapterIndex
                     )
                     hasLoadingError = true
-                    // Блокировка очищается в try-finally обёртке addChapter
                     android.util.Log.w(TAG, "Chapter load error: ${res.message}, stopping further auto-loading")
                 }
                 maintainPosition {
                     remove(itemProgressBar)
-                    // Откатываем Divider и Title, вставленные до загрузки контента.
-                    // Без этого скролл до Error-item'а обновляет currentChapter на следующую главу,
-                    // что приводит к сохранению неверной позиции и пропуску главы при retry.
                     remove(itemTitle)
                     items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
                     val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
-                    // LuaError dumps the entire plugin source into the message after ":N " —
-                    // extract only the short error part that follows the last colon+space pattern
-                    // e.g. "...script...:301 [1401] You are not logged in!" → "[1401] You are not logged in!"
                     val detail = Regex(""":\d+\s+(\[?\w.*?)$""", RegexOption.DOT_MATCHES_ALL)
                         .find(rawDetail)?.groupValues?.get(1)?.trim()
                         ?: rawDetail.lines().lastOrNull { it.isNotBlank() }?.trim()
@@ -748,15 +723,11 @@ internal class ReaderChaptersLoader(
                     insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }
-                return@_addChapterInternal false // ошибка
+                return@_addChapterInternal false
             }
         }
     }
 
-    /**
-     * Translates title + body paragraphs in a single batch request, caches all results.
-     * Returns Pair(translated items list, translated title string).
-     */
     private suspend fun translateAndCacheWithTitle(
         itemsOriginal: List<ReaderItem>,
         titleOriginal: String,
@@ -766,7 +737,6 @@ internal class ReaderChaptersLoader(
         targetLang: String,
     ): Pair<List<ReaderItem>, String> {
         val bodyTexts = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
-        // Put title first so it's item #1 in the numbered list sent to LLM
         val allTexts = buildList {
             add(titleOriginal)
             addAll(bodyTexts)
