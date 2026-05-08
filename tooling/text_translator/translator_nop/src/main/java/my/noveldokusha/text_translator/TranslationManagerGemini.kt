@@ -16,6 +16,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -42,7 +43,7 @@ class TranslationManagerGemini(
             .filter { it.isNotBlank() }
 
     private fun getApiEndpoint(key: String): String {
-        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-3.1-flash-lite" }
+        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-2.5-flash-lite" }
         return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
     }
 
@@ -112,6 +113,10 @@ class TranslationManagerGemini(
                         val responseBody = response.body?.string() ?: ""
                         val result = parseGeminiResponse(responseBody)
                         val totalTime = System.currentTimeMillis() - startTime
+                        if (result == BLOCKED_MARKER) {
+                            Log.w(TAG, "translateWithGemini: content blocked by Gemini filter")
+                            throw IOException("Gemini: Content blocked (PROHIBITED_CONTENT). Try a different prompt or model.")
+                        }
                         Log.d(TAG, "✅ Success: total=${totalTime}ms, resultLen=${result.length}")
                         if (result.isNotBlank()) return@withContext result
                         Log.w(TAG, "translateWithGemini: empty response after parsing, retrying...")
@@ -213,6 +218,12 @@ class TranslationManagerGemini(
                 val responseBody = response.body?.string() ?: ""
                 val translatedText = parseGeminiResponse(responseBody)
                 val totalTime = System.currentTimeMillis() - startTime
+
+                if (translatedText == BLOCKED_MARKER) {
+                    Log.w(TAG, "translateBatch: content blocked by Gemini filter")
+                    throw IOException("Gemini: Content blocked (PROHIBITED_CONTENT). Try a different prompt or model.")
+                }
+
                 Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
 
                 if (translatedText.isNotEmpty()) {
@@ -227,6 +238,7 @@ class TranslationManagerGemini(
             } catch (e: Exception) {
                 Log.e(TAG, "translateBatch: error on attempt ${attempt + 1} - ${e.message}", e)
                 lastException = e
+                if (e is IOException && e.message?.contains("Content blocked") == true) throw e
                 if (attempt < totalAttempts - 1) kotlinx.coroutines.delay(1000L * attemptWithinKey)
             }
         }
@@ -245,7 +257,7 @@ class TranslationManagerGemini(
             put("topP", 0.95)
         }
 
-        // ✅ safetySettings = BLOCK_NONE (как вы просили)
+        // ✅ safetySettings = BLOCK_NONE
         val safetySettings = JSONArray().apply {
             val categories = listOf(
                 "HARM_CATEGORY_HARASSMENT",
@@ -277,6 +289,8 @@ class TranslationManagerGemini(
             })
             put("generationConfig", generationConfig)
             put("safetySettings", safetySettings)
+            // Явно отключаем googleSearch (по умолчанию включён в Gemini 3.1 Flash Lite)
+            put("tools", JSONArray())
         }
 
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
@@ -286,15 +300,23 @@ class TranslationManagerGemini(
             .post(requestBody)
             .build()
 
-        return client.newCall(request).execute()
+        val response = client.newCall(request).execute()
+        // Логируем сырой ответ для диагностики
+        val bodyString = response.body?.string() ?: ""
+        Log.d(TAG, "sendGeminiRequest: status=${response.code}, bodyPreview=${bodyString.take(300)}")
+        // Восстанавливаем body, т.к. string() его вычитывает
+        val newBody = bodyString.toResponseBody("application/json".toMediaType())
+        return response.newBuilder().body(newBody).build()
     }
 
     private fun parseGeminiResponse(responseBody: String): String {
         val trimmed = responseBody.trim()
+        Log.d(TAG, "parseGeminiResponse: start length=${responseBody.length}, firstChar='${responseBody.firstOrNull() ?: "EMPTY"}', lastChar='${responseBody.lastOrNull() ?: "EMPTY"}'")
 
         // 1. Попытка распарсить как массив (редкий формат)
         if (trimmed.startsWith("[")) {
             try {
+                Log.d(TAG, "parseGeminiResponse: trying array format")
                 val jsonArray = JSONArray(trimmed)
                 return buildString {
                     for (i in 0 until jsonArray.length()) {
@@ -302,7 +324,8 @@ class TranslationManagerGemini(
                         val candidates = chunk.getJSONArray("candidates")
                         if (candidates.length() > 0) {
                             val candidate = candidates.getJSONObject(0)
-                            if (candidate.optString("finishReason") == "SAFETY") continue
+                            if (candidate.optString("finishReason") == "SAFETY" ||
+                                candidate.optString("finishReason") == "PROHIBITED_CONTENT") continue
                             val parts = candidate.getJSONObject("content").getJSONArray("parts")
                             if (parts.length() > 0) append(parts.getJSONObject(0).getString("text"))
                         }
@@ -310,13 +333,13 @@ class TranslationManagerGemini(
                 }.trim()
             } catch (e: Exception) {
                 Log.w(TAG, "parseGeminiResponse: array parse failed", e)
-                // Не падаем, пробуем следующий формат
             }
         }
 
         // 2. Попытка распарсить как объект (стандартный формат Gemini)
         if (trimmed.startsWith("{")) {
             try {
+                Log.d(TAG, "parseGeminiResponse: trying object format")
                 val jsonResponse = JSONObject(trimmed)
 
                 // Проверка блокировки промпта
@@ -324,32 +347,51 @@ class TranslationManagerGemini(
                 val blockReason = promptFeedback?.optString("blockReason")
                 if (!blockReason.isNullOrEmpty() && blockReason != "BLOCK_REASON_UNSPECIFIED") {
                     Log.w(TAG, "Prompt blocked: $blockReason")
-                    return ""
+                    return BLOCKED_MARKER
                 }
 
-                val candidates = jsonResponse.optJSONArray("candidates") ?: return ""
-                if (candidates.length() == 0) return ""
+                val candidates = jsonResponse.optJSONArray("candidates")
+                if (candidates == null) {
+                    Log.w(TAG, "parseGeminiResponse: no candidates array in response")
+                    return ""
+                }
+                if (candidates.length() == 0) {
+                    Log.w(TAG, "parseGeminiResponse: candidates array is empty")
+                    return ""
+                }
 
                 val candidate = candidates.getJSONObject(0)
-                if (candidate.optString("finishReason") == "SAFETY") {
-                    Log.w(TAG, "Response blocked by safety filters")
+                val finishReason = candidate.optString("finishReason", "UNKNOWN")
+                Log.d(TAG, "parseGeminiResponse: finishReason=$finishReason")
+                if (finishReason == "SAFETY" || finishReason == "PROHIBITED_CONTENT") {
+                    val finishMessage = candidate.optString("finishMessage", "")
+                    Log.w(TAG, "Response blocked by content filter: $finishReason — $finishMessage")
+                    return BLOCKED_MARKER
+                }
+
+                val content = candidate.optJSONObject("content")
+                if (content == null) {
+                    Log.w(TAG, "parseGeminiResponse: no content in candidate")
+                    return ""
+                }
+                val parts = content.optJSONArray("parts")
+                if (parts == null || parts.length() == 0) {
+                    Log.w(TAG, "parseGeminiResponse: no parts in content")
                     return ""
                 }
 
-                val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: return ""
-                return if (parts.length() > 0) parts.getJSONObject(0).getString("text").trim() else ""
+                val resultText = parts.getJSONObject(0).getString("text").trim()
+                Log.d(TAG, "parseGeminiResponse: parsed from JSON, len=${resultText.length}")
+                return resultText
 
             } catch (e: Exception) {
                 Log.w(TAG, "parseGeminiResponse: object parse failed", e)
-                // Не падаем, идём к финальному возврату
             }
         }
 
-        // 3. ❌ УБРАНО: return trimmed
-
-        // 4. Если ничего не подошло — логируем и возвращаем пустоту для триггера ретрая
-        Log.e(TAG, "parseGeminiResponse: unknown format. Length: ${trimmed.length}, Start: ${trimmed.take(50)}")
-        return ""
+        // 3. Если ни один парсер не сработал — возвращаем как есть (plain text)
+        Log.d(TAG, "parseGeminiResponse: returning raw trimmed, length=${trimmed.length}, preview=${trimmed.take(200)}")
+        return trimmed
     }
 
     private fun parseNumberedTranslations(translatedText: String, originalTexts: List<String>): Map<String, String> {
@@ -394,5 +436,6 @@ class TranslationManagerGemini(
 
     companion object {
         private const val TAG = "TranslationGemini"
+        private const val BLOCKED_MARKER = "__GEMINI_BLOCKED__"
     }
 }
