@@ -21,21 +21,16 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/**
- * Translation manager using Google Gemini API
- * Requires API key configuration
- * FOSS version - API-only, no MLKit
- * Note: No in-memory cache — DB (ChapterTranslationDao) is the single source of truth.
- */
 class TranslationManagerGemini(
     private val coroutineScope: AppCoroutineScope,
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(120, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val keyIndex = java.util.concurrent.atomic.AtomicInteger(0)
@@ -91,9 +86,7 @@ class TranslationManagerGemini(
         retryCount: Int = 3
     ): String = withContext(Dispatchers.IO) {
         val keys = apiKeys
-        if (keys.isEmpty()) {
-            throw IllegalStateException("Gemini: No API keys configured.")
-        }
+        if (keys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
@@ -109,31 +102,32 @@ class TranslationManagerGemini(
             val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
 
             try {
-                val response = sendGeminiRequest(
-                    systemPrompt = systemPrompt,
-                    userText = text,
-                    apiKey = currentKey
-                )
+                val startTime = System.currentTimeMillis()
+                Log.d(TAG, "🚀 Request start: attempt=${attempt + 1}, textLen=${text.length}, key=$keyLabel")
+
+                val response = sendGeminiRequest(systemPrompt, text, currentKey)
+
                 when (response.code) {
                     200 -> {
-                        val body = response.body?.string() ?: ""
-                        val result = parseGeminiResponse(body)
+                        val responseBody = response.body?.string() ?: ""
+                        val result = parseGeminiResponse(responseBody)
+                        val totalTime = System.currentTimeMillis() - startTime
+                        Log.d(TAG, "✅ Success: total=${totalTime}ms, resultLen=${result.length}")
                         if (result.isNotBlank()) return@withContext result
-                        // Пустой ответ — retry, не падаем молча
-                        Log.w(TAG, "translateWithGemini: empty response on attempt $attempt, retrying...")
-                        lastException = IOException("Gemini: Empty response")
+                        Log.w(TAG, "translateWithGemini: empty response after parsing, retrying...")
+                        lastException = IOException("Gemini: Empty response after parsing")
                         continue
                     }
                     400 -> {
                         val errorBody = response.body?.string() ?: ""
-                        Log.w(TAG, "translateWithGemini: 400 on $keyLabel (attempt $attempt): $errorBody")
+                        Log.w(TAG, "translateWithGemini: 400 on $keyLabel: $errorBody")
                         lastException = IOException("Gemini: Bad request (400): $errorBody")
                         kotlinx.coroutines.delay(500L * (attempt / keys.size + 1))
                         continue
                     }
                     429 -> {
-                        Log.w(TAG, "translateWithGemini: rate limit (429) on $keyLabel, rotating...")
-                        lastException = IOException("Gemini: Rate limit exceeded ($keyLabel)")
+                        Log.w(TAG, "translateWithGemini: rate limit (429) on $keyLabel")
+                        lastException = IOException("Gemini: Rate limit exceeded")
                         continue
                     }
                     in 500..599 -> {
@@ -165,20 +159,15 @@ class TranslationManagerGemini(
         if (texts.isEmpty()) return@withContext emptyMap()
 
         Log.d(TAG, "translateBatch: translating ${texts.size} paragraphs")
-
         val availableKeys = apiKeys
-        if (availableKeys.isEmpty()) {
-            Log.e(TAG, "translateBatch: No API keys configured!")
-            throw IllegalStateException("Gemini: No API keys configured.")
-        }
+        if (availableKeys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
 
-        val userText = texts.mapIndexed { index, text -> "${index + 1}. $text" }
-            .joinToString("\n\n")
+        val userText = texts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
 
         var lastException: Exception? = null
         val retryCount = 3
@@ -190,82 +179,57 @@ class TranslationManagerGemini(
             val attemptWithinKey = attempt / availableKeys.size + 1
 
             try {
-                val response = sendGeminiRequest(
-                    systemPrompt = systemPrompt,
-                    userText = userText,
-                    apiKey = currentApiKey
-                )
+                val startTime = System.currentTimeMillis()
+                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${texts.size}")
+
+                val response = sendGeminiRequest(systemPrompt, userText, currentApiKey)
                 val code = response.code
 
                 when (code) {
                     400 -> {
                         val errorBody = response.body?.string() ?: ""
-                        Log.w(TAG, "translateBatch: 400 on $keyLabel (attempt $attempt): $errorBody")
-                        lastException = IOException("Gemini: Bad request (400): $errorBody")
-                        if (attempt < totalAttempts - 1) {
-                            kotlinx.coroutines.delay(1000L * attemptWithinKey)
-                            return@repeat
-                        } else {
-                            throw lastException!!
-                        }
+                        Log.w(TAG, "translateBatch: 400 on $keyLabel: $errorBody")
+                        lastException = IOException("Gemini: Bad request (400)")
+                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(1000L * attemptWithinKey); return@repeat } else throw lastException!!
                     }
                     429 -> {
-                        Log.w(TAG, "translateBatch: rate limit (429) on $keyLabel, rotating")
-                        lastException = IOException("Gemini: Rate limit exceeded ($keyLabel)")
-                        if (attempt < totalAttempts - 1) {
-                            kotlinx.coroutines.delay(500)
-                            return@repeat
-                        } else {
-                            throw lastException!!
-                        }
+                        Log.w(TAG, "translateBatch: rate limit (429) on $keyLabel")
+                        lastException = IOException("Gemini: Rate limit exceeded")
+                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500); return@repeat } else throw lastException!!
                     }
                     in 500..599 -> {
                         val errorBody = response.body?.string() ?: ""
-                        val waitTime = 2000L * attemptWithinKey
-                        Log.w(TAG, "translateBatch: server error ($code) on $keyLabel, waiting ${waitTime}ms: $errorBody")
+                        Log.w(TAG, "translateBatch: server error ($code) on $keyLabel")
                         lastException = IOException("Gemini: Server error ($code)")
-                        if (attempt < totalAttempts - 1) {
-                            kotlinx.coroutines.delay(waitTime)
-                            return@repeat
-                        } else {
-                            throw lastException!!
-                        }
+                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(2000L * attemptWithinKey); return@repeat } else throw lastException!!
                     }
                     !in 200..299 -> {
                         val errorBody = response.body?.string() ?: ""
                         Log.e(TAG, "translateBatch: API error $code on $keyLabel: $errorBody")
-                        throw IOException("Gemini: API error $code: $errorBody")
+                        throw IOException("Gemini: API error $code")
                     }
                 }
 
                 val responseBody = response.body?.string() ?: ""
                 val translatedText = parseGeminiResponse(responseBody)
+                val totalTime = System.currentTimeMillis() - startTime
+                Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
 
                 if (translatedText.isNotEmpty()) {
-                    Log.d(TAG, "translateBatch: success, parsing ${texts.size} translations")
                     val translations = parseNumberedTranslations(translatedText, texts)
                     Log.d(TAG, "translateBatch: parsed ${translations.size}/${texts.size} translations")
                     return@withContext translations
                 } else {
-                    // Пустой ответ — retry
-                    Log.w(TAG, "translateBatch: empty response on attempt $attempt, retrying...")
-                    lastException = IOException("Gemini: Empty response")
-                    if (attempt < totalAttempts - 1) {
-                        kotlinx.coroutines.delay(500L * attemptWithinKey)
-                        return@repeat
-                    } else {
-                        throw lastException!!
-                    }
+                    Log.w(TAG, "translateBatch: empty response after parsing, retrying...")
+                    lastException = IOException("Gemini: Empty response after parsing")
+                    if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500L * attemptWithinKey); return@repeat } else throw lastException!!
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "translateBatch: error on attempt ${attempt + 1} - ${e.message}", e)
                 lastException = e
-                if (attempt < totalAttempts - 1) {
-                    kotlinx.coroutines.delay(1000L * attemptWithinKey)
-                }
+                if (attempt < totalAttempts - 1) kotlinx.coroutines.delay(1000L * attemptWithinKey)
             }
         }
-
         throw lastException ?: IOException("Gemini: Batch translation failed after $retryCount attempts")
     }
 
@@ -276,6 +240,27 @@ class TranslationManagerGemini(
         userText: String,
         apiKey: String
     ): okhttp3.Response {
+        val generationConfig = JSONObject().apply {
+            put("temperature", 0.2)
+            put("topP", 0.95)
+        }
+
+        // ✅ safetySettings = BLOCK_NONE (как вы просили)
+        val safetySettings = JSONArray().apply {
+            val categories = listOf(
+                "HARM_CATEGORY_HARASSMENT",
+                "HARM_CATEGORY_HATE_SPEECH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "HARM_CATEGORY_DANGEROUS_CONTENT"
+            )
+            for (cat in categories) {
+                put(JSONObject().apply {
+                    put("category", cat)
+                    put("threshold", "BLOCK_NONE")
+                })
+            }
+        }
+
         val jsonBody = JSONObject().apply {
             put("systemInstruction", JSONObject().apply {
                 put("parts", JSONArray().apply {
@@ -290,65 +275,86 @@ class TranslationManagerGemini(
                     })
                 })
             })
+            put("generationConfig", generationConfig)
+            put("safetySettings", safetySettings)
         }
+
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(getApiEndpoint(apiKey))
             .addHeader("Content-Type", "application/json")
             .post(requestBody)
             .build()
+
         return client.newCall(request).execute()
     }
 
     private fun parseGeminiResponse(responseBody: String): String {
-        return if (responseBody.trimStart().startsWith("[")) {
-            val jsonArray = JSONArray(responseBody)
-            buildString {
-                for (i in 0 until jsonArray.length()) {
-                    val chunk = jsonArray.getJSONObject(i)
-                    val candidates = chunk.getJSONArray("candidates")
-                    if (candidates.length() > 0) {
-                        val candidate = candidates.getJSONObject(0)
-                        val finishReason = candidate.optString("finishReason")
-                        if (finishReason == "SAFETY") {
-                            Log.w(TAG, "parseGeminiResponse: chunk blocked by safety filters")
-                            continue
+        val trimmed = responseBody.trim()
+
+        // 1. Попытка распарсить как массив (редкий формат)
+        if (trimmed.startsWith("[")) {
+            try {
+                val jsonArray = JSONArray(trimmed)
+                return buildString {
+                    for (i in 0 until jsonArray.length()) {
+                        val chunk = jsonArray.getJSONObject(i)
+                        val candidates = chunk.getJSONArray("candidates")
+                        if (candidates.length() > 0) {
+                            val candidate = candidates.getJSONObject(0)
+                            if (candidate.optString("finishReason") == "SAFETY") continue
+                            val parts = candidate.getJSONObject("content").getJSONArray("parts")
+                            if (parts.length() > 0) append(parts.getJSONObject(0).getString("text"))
                         }
-                        val parts = candidate.getJSONObject("content").getJSONArray("parts")
-                        if (parts.length() > 0) append(parts.getJSONObject(0).getString("text"))
                     }
-                }
-            }.trim()
-        } else {
-            val jsonResponse = JSONObject(responseBody)
-
-            // Проверяем блокировку на уровне запроса
-            val promptFeedback = jsonResponse.optJSONObject("promptFeedback")
-            val blockReason = promptFeedback?.optString("blockReason")
-            if (!blockReason.isNullOrEmpty() && blockReason != "BLOCK_REASON_UNSPECIFIED") {
-                Log.w(TAG, "parseGeminiResponse: prompt blocked: $blockReason")
-                return ""
+                }.trim()
+            } catch (e: Exception) {
+                Log.w(TAG, "parseGeminiResponse: array parse failed", e)
+                // Не падаем, пробуем следующий формат
             }
-
-            val candidates = jsonResponse.optJSONArray("candidates") ?: return ""
-            if (candidates.length() == 0) return ""
-
-            val candidate = candidates.getJSONObject(0)
-            val finishReason = candidate.optString("finishReason")
-            if (finishReason == "SAFETY") {
-                Log.w(TAG, "parseGeminiResponse: response blocked by safety filters (finishReason=SAFETY)")
-                return ""
-            }
-
-            val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: return ""
-            if (parts.length() > 0) parts.getJSONObject(0).getString("text").trim() else ""
         }
+
+        // 2. Попытка распарсить как объект (стандартный формат Gemini)
+        if (trimmed.startsWith("{")) {
+            try {
+                val jsonResponse = JSONObject(trimmed)
+
+                // Проверка блокировки промпта
+                val promptFeedback = jsonResponse.optJSONObject("promptFeedback")
+                val blockReason = promptFeedback?.optString("blockReason")
+                if (!blockReason.isNullOrEmpty() && blockReason != "BLOCK_REASON_UNSPECIFIED") {
+                    Log.w(TAG, "Prompt blocked: $blockReason")
+                    return ""
+                }
+
+                val candidates = jsonResponse.optJSONArray("candidates") ?: return ""
+                if (candidates.length() == 0) return ""
+
+                val candidate = candidates.getJSONObject(0)
+                if (candidate.optString("finishReason") == "SAFETY") {
+                    Log.w(TAG, "Response blocked by safety filters")
+                    return ""
+                }
+
+                val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: return ""
+                return if (parts.length() > 0) parts.getJSONObject(0).getString("text").trim() else ""
+
+            } catch (e: Exception) {
+                Log.w(TAG, "parseGeminiResponse: object parse failed", e)
+                // Не падаем, идём к финальному возврату
+            }
+        }
+
+        // 3. ❌ УБРАНО: return trimmed
+
+        // 4. Если ничего не подошло — логируем и возвращаем пустоту для триггера ретрая
+        Log.e(TAG, "parseGeminiResponse: unknown format. Length: ${trimmed.length}, Start: ${trimmed.take(50)}")
+        return ""
     }
 
     private fun parseNumberedTranslations(translatedText: String, originalTexts: List<String>): Map<String, String> {
         val byIndex = mutableMapOf<Int, String>()
         val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
-
         val lines = translatedText.split("\n")
         var currentIndex = -1
         var currentText = StringBuilder()
@@ -370,26 +376,17 @@ class TranslationManagerGemini(
                 if (rest.isNotBlank()) currentText.append(rest)
             } else {
                 if (currentIndex == -1) continue
-                val trimmed = line.trim()
                 if (currentText.isNotEmpty()) currentText.append("\n")
-                currentText.append(trimmed)
+                currentText.append(line.trim())
             }
         }
         flush()
 
-        val result = mutableMapOf<String, String>()
-        originalTexts.forEachIndexed { index, originalText ->
-            val translation = byIndex[index]
-            if (translation != null) {
-                result[originalText] = translation
-            } else {
-                Log.w(TAG, "parseNumberedTranslations: missing index $index, using original")
-                result[originalText] = originalText
-            }
+        return originalTexts.mapIndexedNotNull { index, originalText ->
+            byIndex[index]?.let { originalText to it }
+        }.toMap().also {
+            Log.d(TAG, "parseNumberedTranslations: ${it.size}/${originalTexts.size} parsed")
         }
-
-        Log.d(TAG, "parseNumberedTranslations: ${byIndex.size}/${originalTexts.size} parsed")
-        return result
     }
 
     override fun downloadModel(language: String) {}
