@@ -221,7 +221,7 @@ class AppPreferences @Inject constructor(
 
     val TRANSLATION_GEMINI_MODEL =
         object : Preference<String>("TRANSLATION_GEMINI_MODEL") {
-            override var value by SharedPreference_String(name, preferences, "gemini-2.5-flash-lite")
+            override var value by SharedPreference_String(name, preferences, "gemini-3.1-flash-lite")
         }
 
     val TRANSLATION_PREFER_ONLINE =

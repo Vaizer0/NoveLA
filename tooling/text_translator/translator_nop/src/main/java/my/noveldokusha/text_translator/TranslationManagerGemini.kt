@@ -33,9 +33,9 @@ class TranslationManagerGemini(
 ) : TranslationManager {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
     private val keyIndex = java.util.concurrent.atomic.AtomicInteger(0)
@@ -47,7 +47,7 @@ class TranslationManagerGemini(
             .filter { it.isNotBlank() }
 
     private fun getApiEndpoint(key: String): String {
-        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-2.5-flash-lite" }
+        val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-3.1-flash-lite" }
         return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
     }
 

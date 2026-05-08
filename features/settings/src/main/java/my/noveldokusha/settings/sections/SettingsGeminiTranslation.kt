@@ -71,6 +71,7 @@ internal fun SettingsGeminiTranslation(
     onDeletePreset: (name: String) -> Unit,
 ) {
     val predefinedGeminiModels = listOf(
+        "gemini-3.1-flash-lite",
         "gemini-2.5-flash-lite",
         "gemini-2.0-flash-exp",
         "gemini-1.5-flash",
