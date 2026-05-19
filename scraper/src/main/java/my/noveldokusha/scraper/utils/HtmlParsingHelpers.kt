@@ -202,7 +202,7 @@ private fun applyRegularTransforms(text: String, rule: SelectorRule): String {
 /**
  * Apply regular transformations to extracted text
  */
-private fun applyTransforms(element: Element, text: String, rule: SelectorRule): String {
+private fun applyTransforms(@Suppress("UNUSED_PARAMETER") element: Element, text: String, rule: SelectorRule): String {
     var result = text
 
     // Apply regular transforms

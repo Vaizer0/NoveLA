@@ -180,7 +180,7 @@ fun createSearchPaginationProvider(
     titleSelector: String,
     urlSelector: String,
     coverSelector: String,
-    urlBuilder: (String, Int, String) -> String,
+    @Suppress("UNUSED_PARAMETER") urlBuilder: (String, Int, String) -> String,
     transformUrl: (String) -> String = { it },
     transformCoverUrl: (String, String) -> String = { cover, _ -> cover }
 ): SearchPaginationProvider = { query, index, networkClient ->
@@ -189,6 +189,7 @@ fun createSearchPaginationProvider(
             // First page: POST search and extract searchid
             val postData = mapOf("search" to query) // Customize based on site
             val doc = POST("search-url", postData, networkClient = networkClient) // Customize URL
+            @Suppress("UNUSED_VARIABLE")
             val searchId = searchIdExtractor(doc) ?: ""
 
             // Parse first page results

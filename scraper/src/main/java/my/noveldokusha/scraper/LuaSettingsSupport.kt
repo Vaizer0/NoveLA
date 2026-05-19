@@ -127,7 +127,7 @@ fun parseLuaSettingsSchema(luaScript: LuaValue): List<LuaSetting>? {
 fun LuaSettingsScreen(
     context: android.content.Context,
     schema: List<LuaSetting>,
-    luaScript: LuaValue
+    @Suppress("UNUSED_PARAMETER") luaScript: LuaValue
 ) {
     val prefs = remember {
         context.getSharedPreferences("lua_preferences", android.content.Context.MODE_PRIVATE)
