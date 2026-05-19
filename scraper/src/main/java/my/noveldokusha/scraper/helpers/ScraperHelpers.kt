@@ -58,11 +58,11 @@ suspend fun getCatalogList(
         val books = items.map { item ->
             Timber.d("ScraperHelpers: Processing catalog item: ${item.text().take(100)}...")
             val title = item.extractValue(config.catalog.title) ?: ""
-            val url = item.extractValue(config.catalog.url) ?: ""
+            val itemUrl = item.extractValue(config.catalog.url) ?: ""
             val cover = item.extractValue(config.catalog.cover) ?: ""
 
-            Timber.d("ScraperHelpers: Extracted title: '$title', url: '$url', cover: '$cover'")
-            BookResult(title = title, url = url, coverImageUrl = cover)
+            Timber.d("ScraperHelpers: Extracted title: '$title', url: '$itemUrl', cover: '$cover'")
+            BookResult(title = title, url = itemUrl, coverImageUrl = cover)
         }
 
         Timber.d("ScraperHelpers: Final catalog items count: ${books.size}")

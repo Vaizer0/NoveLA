@@ -21,7 +21,7 @@ import javax.inject.Singleton
 class Scraper @Inject constructor(
     networkClient: NetworkClient,
     localSource: LocalSource,
-    appPreferences: AppPreferences,
+    @Suppress("UNUSED_PARAMETER") appPreferences: AppPreferences,
     // Интерфейс вместо LuaSourceLoader — нет зависимости от Android Context
     private val luaSourceProvider: LuaSourceProvider
 ) {

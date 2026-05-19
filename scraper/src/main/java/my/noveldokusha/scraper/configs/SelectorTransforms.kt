@@ -141,7 +141,7 @@ fun SelectorRule.Clean(): SelectorRule =
 /**
  * Advanced CSS analysis for content cleaning
  */
-fun SelectorRule.analyzeCss(): SelectorRule = withContext { element, doc, text ->
+fun SelectorRule.analyzeCss(): SelectorRule = withContext { _, doc, text ->
     var result = text
 
     // Find all CSS rules that could hide content
@@ -174,7 +174,7 @@ fun SelectorRule.analyzeCss(): SelectorRule = withContext { element, doc, text -
 /**
  * Extract metadata from HTML structure
  */
-fun SelectorRule.extractMetadata(): SelectorRule = withContext { element, doc, text ->
+fun SelectorRule.extractMetadata(): SelectorRule = withContext { _, doc, text ->
     val metadata = mutableMapOf<String, String>()
 
     // Try to extract common metadata
@@ -187,7 +187,7 @@ fun SelectorRule.extractMetadata(): SelectorRule = withContext { element, doc, t
     }
 
     // Extract structured data from JSON-LD
-    doc.select("script[type='application/ld+json']").forEach { script ->
+    doc.select("script[type='application/ld+json']").forEach { _ ->
         try {
             // Basic JSON-LD parsing could be added here
         } catch (e: Exception) {
