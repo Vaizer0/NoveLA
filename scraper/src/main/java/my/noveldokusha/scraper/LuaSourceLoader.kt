@@ -548,7 +548,7 @@ class LuaEngine @Inject constructor(
     // ── Misc ──────────────────────────────────────────────────────────────────
 
     private inner class DetectPaginationFunction : TwoArgFunction() {
-        override fun call(a1: LuaValue, a2: LuaValue): LuaValue = try {
+        override fun call(a1: LuaValue, @Suppress("UNUSED_PARAMETER") a2: LuaValue): LuaValue = try {
             val html = htmlFromValue(a1)
             val next = Jsoup.parse(html).select("a[href]:contains(next), a[href]:contains(›), a[href]:contains(»)")
             LuaTable().also { t ->
