@@ -252,7 +252,8 @@ class TranslationManagerGooglePA(
             try {
                 val js = client.newCall(
                     Request.Builder().url(url).build()
-                ).execute().body.string().ifBlank { continue }
+                ).execute().body.string()
+                if (js.isBlank()) continue
                 val key = keyHeaderRegex.find(js)?.groupValues?.get(1) ?: continue
                 Log.d(TAG, "searchKeyInScripts: found key in $url")
                 return@withContext key
