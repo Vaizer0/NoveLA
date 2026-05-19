@@ -1,5 +1,6 @@
 package my.noveldokusha.text_translator
 
+import okhttp3.Response
 import java.util.Locale
 
 /**
@@ -192,4 +193,12 @@ fun buildSystemPrompt(
     return template
         .replace("{source_language}", src)
         .replace("{target_language}", tgt)
+}
+
+internal fun readBodyOrThrow(response: Response, context: String): String {
+    val body = response.body.string()
+    if (body.isBlank()) {
+        throw IllegalStateException("$context: Empty response body")
+    }
+    return body
 }

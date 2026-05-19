@@ -82,24 +82,10 @@ class TranslationManagerComposite(
      */
     private fun buildGeminiTranslator(source: String, target: String): TranslatorState {
         val geminiTranslator = geminiManager.getTranslator(source, target)
-
         return TranslatorState(
             source = source,
             target = target,
-            translate = { input ->
-                var lastException: Exception? = null
-                repeat(2) { attempt ->
-                    try {
-                        Log.d(TAG, "Gemini attempt ${attempt + 1}/2")
-                        return@TranslatorState geminiTranslator.translate(input)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Gemini attempt ${attempt + 1} failed: ${e.message}")
-                        lastException = e
-                        if (attempt < 1) kotlinx.coroutines.delay(1000L)
-                    }
-                }
-                throw lastException ?: IllegalStateException("Gemini: Translation failed.")
-            }
+            translate = { input -> geminiTranslator.translate(input) }
         )
     }
 

@@ -155,8 +155,8 @@ class TranslationManagerOpenAI(
         val startIndex = keyIndex.getAndIncrement() % keys.size
         var lastException: Exception? = null
 
-        // Try each key once, starting from current round-robin position
-        for (attempt in keys.indices) {
+        val retryPolicy = RetryPolicy(maxAttempts = keys.size, baseDelayMs = 250L, maxDelayMs = 1500L)
+        for (attempt in 0 until retryPolicy.maxAttempts) {
             val currentKey = keys[(startIndex + attempt) % keys.size]
             val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
 
@@ -167,30 +167,29 @@ class TranslationManagerOpenAI(
                 when {
                     code == 401 -> {
                         Log.w(TAG, "sendWithKeyRotation: 401 on $keyLabel, trying next")
-                        response.body.close()
+                        response.close()
                         lastException = IllegalStateException("OpenAI: Invalid API key ($keyLabel). Check your key in Settings.")
+                        retryPolicy.backoff(attempt)
                         continue
                     }
                     code == 429 -> {
                         Log.w(TAG, "sendWithKeyRotation: 429 on $keyLabel, trying next")
-                        response.body.close()
+                        response.close()
                         lastException = IllegalStateException("OpenAI: Rate limit exceeded ($keyLabel).")
+                        retryPolicy.backoff(attempt)
                         continue
                     }
                     code in 500..599 -> {
-                        response.body.close()
+                        response.close()
                         throw IOException("OpenAI: Server error ($code). Try again later.")
                     }
                     !response.isSuccessful -> {
                         val errorBody = response.body.string().take(200)
-                        response.body.close()
                         throw IllegalStateException("OpenAI: Unexpected error ($code): $errorBody")
                     }
                     else -> {
                         keyIndex.set((startIndex + attempt + 1) % keys.size)
-                        val body = response.body.string().ifBlank {
-                            throw IllegalStateException("OpenAI: Empty response body")
-                        }
+                        val body = readBodyOrThrow(response, "OpenAI")
                         return@withContext parseResponse(body)
                     }
                 }
