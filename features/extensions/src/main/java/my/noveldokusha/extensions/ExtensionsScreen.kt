@@ -103,13 +103,11 @@ private fun UnifiedExtensionsScreen(
     innerPadding: PaddingValues,
     state: ExtensionsScreenState,
     viewModel: ExtensionsManagerViewModel,
-    onBackPressed: (() -> Unit)?,
-    showExtensionsLanguageFilter: Boolean = false,
-    onExtensionsLanguageFilterDismiss: () -> Unit = {},
-    onRefresh: (() -> Unit)? = null
+    @Suppress("UNUSED_PARAMETER") onBackPressed: (() -> Unit)?,
+    @Suppress("UNUSED_PARAMETER") showExtensionsLanguageFilter: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") onExtensionsLanguageFilterDismiss: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onRefresh: (() -> Unit)? = null
 ) {
-    var languageFilterExpanded by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()

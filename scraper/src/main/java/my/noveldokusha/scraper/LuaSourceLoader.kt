@@ -202,7 +202,7 @@ class LuaEngine @Inject constructor(
                     async(Dispatchers.IO) {
                         try {
                             networkClient.getWithHeaders(url, emptyMap()).use { r ->
-                                val body = r.body?.string() ?: ""
+                                val body = r.body.string()
                                 Triple(r.isSuccessful, body, r.code)
                             }
                         } catch (e: Exception) {
@@ -335,7 +335,7 @@ class LuaEngine @Inject constructor(
     private inner class HtmlSelectFirstFunction : TwoArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue): LuaValue = try {
             val html = htmlFromValue(a1)
-            val el   = Jsoup.parse(html).selectFirst(a2.checkjstring())
+            val el = Jsoup.parse(html).selectFirst(a2.checkjstring())
             if (el != null) elementToTable(el) else LuaValue.NIL
         } catch (e: Exception) { Timber.e(e, "html_select_first"); LuaValue.NIL }
     }
@@ -553,7 +553,8 @@ class LuaEngine @Inject constructor(
             val next = Jsoup.parse(html).select("a[href]:contains(next), a[href]:contains(›), a[href]:contains(»)")
             LuaTable().also { t ->
                 t.set("hasNext",  LuaValue.valueOf(next.isNotEmpty()))
-                t.set("next_url", if (next.isNotEmpty()) LuaValue.valueOf(next.first().attr("abs:href")) else LuaValue.NIL)
+                val nextUrl = next.firstOrNull()?.attr("abs:href")
+                t.set("next_url", if (!nextUrl.isNullOrBlank()) LuaValue.valueOf(nextUrl) else LuaValue.NIL)
             }
         } catch (_: Exception) { LuaValue.NIL }
     }
@@ -645,7 +646,7 @@ class LuaSourceLoader @Inject constructor(
                 Timber.e("Download failed $id: HTTP ${response.code}")
                 return@withContext false
             }
-            val code = response.body?.string() ?: run {
+            val code = response.body.string().ifBlank {
                 Timber.e("Empty body for $id")
                 return@withContext false
             }

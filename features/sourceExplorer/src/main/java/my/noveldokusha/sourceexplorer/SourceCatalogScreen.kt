@@ -62,6 +62,8 @@ internal fun SourceCatalogScreen(
     onOpenFilterSheet: () -> Unit,
     onApplyFilters: (ActiveFilters) -> Unit,
 ) {
+    @Suppress("UNUSED_VARIABLE")
+    val _unusedOnListLayoutModeChange = onListLayoutModeChange
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
     val focusManager by rememberUpdatedState(newValue = LocalFocusManager.current)

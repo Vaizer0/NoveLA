@@ -31,12 +31,12 @@ import my.noveldokusha.settings.R
 
 @Composable
 internal fun SettingsNetwork(
-    scraperUserAgent: MutableState<String>,
+    @Suppress("UNUSED_PARAMETER") scraperUserAgent: MutableState<String>,
     cloudflareBypassEnabled: MutableState<Boolean>,
-    cloudflareChallengeTimeoutSeconds: MutableState<Int>,
+    @Suppress("UNUSED_PARAMETER") cloudflareChallengeTimeoutSeconds: MutableState<Int>,
     massAddDelayMs: State<Long>,
     onMassAddDelayChange: (Long) -> Unit,
-    onCloudflareBypassChanged: (() -> Unit)? = null
+    @Suppress("UNUSED_PARAMETER") onCloudflareBypassChanged: (() -> Unit)? = null
 ) {
     Column {
         Text(
