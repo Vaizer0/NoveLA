@@ -53,7 +53,7 @@ internal fun SourceCatalogScreen(
     onSearchTextInputChange: (String) -> Unit,
     onSearchTextInputSubmit: (String) -> Unit,
     onSearchCatalogSubmit: () -> Unit,
-    onListLayoutModeChange: (my.noveldokusha.core.appPreferences.ListLayoutMode) -> Unit,
+    @Suppress("UNUSED_PARAMETER") onListLayoutModeChange: (my.noveldokusha.core.appPreferences.ListLayoutMode) -> Unit,
     onToolbarModeChange: (ToolbarMode) -> Unit,
     onOpenSourceWebPage: () -> Unit,
     onBookClicked: (BookMetadata) -> Unit,
@@ -62,8 +62,6 @@ internal fun SourceCatalogScreen(
     onOpenFilterSheet: () -> Unit,
     onApplyFilters: (ActiveFilters) -> Unit,
 ) {
-    @Suppress("UNUSED_VARIABLE")
-    val _unusedOnListLayoutModeChange = onListLayoutModeChange
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
     val focusManager by rememberUpdatedState(newValue = LocalFocusManager.current)

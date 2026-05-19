@@ -188,8 +188,9 @@ class TranslationManagerOpenAI(
                     }
                     else -> {
                         keyIndex.set((startIndex + attempt + 1) % keys.size)
-                        val body = response.body?.string()
-                            ?: throw IllegalStateException("OpenAI: Empty response body")
+                        val body = response.body.string().ifBlank {
+                            throw IllegalStateException("OpenAI: Empty response body")
+                        }
                         return@withContext parseResponse(body)
                     }
                 }

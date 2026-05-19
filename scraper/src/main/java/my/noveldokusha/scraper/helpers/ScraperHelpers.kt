@@ -380,7 +380,7 @@ suspend fun getBookCover(
                     element.tagName() == "link" -> element.attr("href")
                     else -> element.attr("src") ?: element.attr("content") ?: element.attr("href")
                 }
-                if (coverUrl?.isNotBlank() == true) break
+                if (!coverUrl.isNullOrBlank()) break
             }
         }
 
