@@ -136,7 +136,7 @@ class ReaderActivity : BaseActivity() {
         }
     }
 
-    private val fontsLoader = FontsLoader()
+    private val fontsLoader by lazy { FontsLoader(this) }
 
     private val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {

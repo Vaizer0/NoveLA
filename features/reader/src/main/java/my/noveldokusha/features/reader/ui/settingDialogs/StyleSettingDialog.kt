@@ -75,7 +75,7 @@ internal fun StyleSettingDialog(
         // Text font
         Box {
             var showFontsDropdown by rememberSaveable { mutableStateOf(false) }
-            val fontLoader = remember { FontsLoader() }
+            val fontLoader = remember(context) { FontsLoader(context) }
             var rowSize by remember { mutableStateOf(Size.Zero) }
             ListItem(
                 modifier = Modifier
