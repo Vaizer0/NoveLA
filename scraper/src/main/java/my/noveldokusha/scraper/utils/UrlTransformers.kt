@@ -73,13 +73,13 @@ object UrlTransformers {
      * NovelBin-style cover URL transformer
      * Uses NovelBin image service for full covers when source provides only thumbnails
      */
-    fun novelBinCoverUrl(): (String, String) -> String = { coverUrl, bookUrl ->
+    fun novelBinCoverUrl(): (String, String) -> String = { _, bookUrl ->
         // Extract slug from book URL (e.g., "/cultivation-online-novel.html" -> "cultivation-online-novel")
         val slug = bookUrl.substringAfterLast("/").removeSuffix(".html")
         "https://images.novelbin.me/novel/$slug.jpg"
     }
 
-    fun ttkanCoverUrl(): (String, String) -> String = { coverUrl, bookUrl ->
+    fun ttkanCoverUrl(): (String, String) -> String = { _, bookUrl ->
         // bookUrl = "/novel/chapters/qingshan-huishuohuadezhouzi"
         // Извлекаем то, что после последнего слэша: "qingshan-huishuohuadezhouzi"
         val slug = bookUrl.substringAfterLast("/")
