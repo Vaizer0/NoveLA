@@ -185,7 +185,7 @@ class TranslationManagerGooglePA(
                     .url("https://wtr-lab.com/en/ranking/monthly")
                     .header("User-Agent", GLOBAL_USER_AGENT)
                     .build()
-            ).execute().body?.string() ?: run {
+            ).execute().body.string().ifBlank {
                 Log.w(TAG, "fetchKeyFromWtrLab: ranking page returned null body")
                 return@withContext null
             }
@@ -217,7 +217,7 @@ class TranslationManagerGooglePA(
                     .url(chapterUrl)
                     .header("User-Agent", GLOBAL_USER_AGENT)
                     .build()
-            ).execute().body?.string() ?: return@withContext null
+            ).execute().body.string().ifBlank { return@withContext null }
 
             keyHeaderRegex.find(chapterHtml)?.groupValues?.get(1)?.let { key ->
                 Log.d(TAG, "fetchKeyFromWtrLab: found key inline in chapter HTML")
@@ -252,7 +252,7 @@ class TranslationManagerGooglePA(
             try {
                 val js = client.newCall(
                     Request.Builder().url(url).build()
-                ).execute().body?.string() ?: continue
+                ).execute().body.string().ifBlank { continue }
                 val key = keyHeaderRegex.find(js)?.groupValues?.get(1) ?: continue
                 Log.d(TAG, "searchKeyInScripts: found key in $url")
                 return@withContext key
@@ -394,7 +394,9 @@ class TranslationManagerGooglePA(
             throw IllegalStateException("Google PA: HTTP error $code")
         }
 
-        val body = response.body?.string() ?: throw IllegalStateException("Google PA: Empty response body")
+        val body = response.body.string().ifBlank {
+            throw IllegalStateException("Google PA: Empty response body")
+        }
         try {
             val arr = JsonParser.parseString(body).asJsonArray
             arr.get(0).asJsonArray.get(0).asString

@@ -79,7 +79,7 @@ class TranslationManagerGoogleFree(
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
 
-                val body = response.body?.string() ?: return@withContext null
+                val body = response.body.string().ifBlank { return@withContext null }
                 val jsonArray = json.parseToJsonElement(body).jsonArray
 
                 val detectedLang = jsonArray.getOrNull(2)?.jsonPrimitive?.contentOrNull
