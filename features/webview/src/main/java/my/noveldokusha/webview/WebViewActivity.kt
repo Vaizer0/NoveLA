@@ -25,14 +25,15 @@ class WebViewActivity : ComponentActivity() {
     @Inject lateinit var toasty: Toasty
     @Inject lateinit var themeProvider: ThemeProvider
 
-    private val urlExtra by lazy { intent.getStringExtra("url") ?: "" }
-    private val isBypassMode by lazy { intent.getBooleanExtra("isBypassMode", false) }
-    private val oldCfClearance by lazy { intent.getStringExtra("oldCfClearance") ?: "" }
+    private var currentTargetUrl: String = ""
+    private var isBypassMode: Boolean = false
+    private var oldCfClearance: String = ""
     private lateinit var webView: WebView
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        readIntentExtras(intent)
 
         webView = WebView(this).apply {
             settings.apply {
@@ -46,7 +47,7 @@ class WebViewActivity : ComponentActivity() {
 
         setContent {
             var isReady by remember { mutableStateOf(false) }
-            var currentUrl by remember { mutableStateOf(urlExtra) }
+            var currentUrl by remember { mutableStateOf(currentTargetUrl) }
             var pageLoadedOnce by remember { mutableStateOf(false) }
 
             webView.webViewClient = object : WebViewClient() {
@@ -59,8 +60,9 @@ class WebViewActivity : ComponentActivity() {
                     handler: SslErrorHandler?,
                     error: SslError?
                 ) {
-                    Log.w("WebViewActivity", "SSL error: ${error?.primaryError}, proceeding anyway")
-                    handler?.proceed()
+                    Log.e("WebViewActivity", "SSL error: ${error?.primaryError}, cancelling request")
+                    handler?.cancel()
+                    toasty.show("Secure connection failed")
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -68,8 +70,14 @@ class WebViewActivity : ComponentActivity() {
                     request: WebResourceRequest?
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
-                    view?.loadUrl(url)
-                    return true
+                    val scheme = request.url.scheme?.lowercase()
+                    return when (scheme) {
+                        "http", "https" -> false
+                        else -> {
+                            Log.d("WebViewActivity", "Ignoring unsupported scheme: $url")
+                            true
+                        }
+                    }
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -111,7 +119,7 @@ class WebViewActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 while (true) {
-                    val cookies = CookieManager.getInstance().getCookie(urlExtra) ?: ""
+                    val cookies = CookieManager.getInstance().getCookie(currentTargetUrl) ?: ""
                     val currentCfClearance = cookies.split(";")
                         .map { it.trim() }
                         .firstOrNull { it.startsWith("cf_clearance=") }
@@ -123,7 +131,7 @@ class WebViewActivity : ComponentActivity() {
                             delay(500)
                             CookieManager.getInstance().flush()
                             CloudflareBypassSignal.channel.trySend(Unit)
-                            val host = Uri.parse(urlExtra).host ?: ""
+                            val host = Uri.parse(currentTargetUrl).host ?: ""
                             if (host.isNotEmpty()) {
                                 CloudflareBypassSignal.notifyBypassCompleted(host)
                             }
@@ -146,7 +154,7 @@ class WebViewActivity : ComponentActivity() {
                     onDoneClicked = {
                         CookieManager.getInstance().flush()
                         CloudflareBypassSignal.channel.trySend(Unit)
-                        val host = Uri.parse(urlExtra).host ?: ""
+                        val host = Uri.parse(currentTargetUrl).host ?: ""
                         if (host.isNotEmpty()) {
                             CloudflareBypassSignal.notifyBypassCompleted(host)
                         }
@@ -159,23 +167,32 @@ class WebViewActivity : ComponentActivity() {
             }
         }
 
-        webView.loadUrl(urlExtra)
+        webView.loadUrl(currentTargetUrl)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        readIntentExtras(intent)
         val url = intent.data?.toString()
             ?: intent.getStringExtra("url")
             ?: return
         Log.d("WebViewActivity", "onNewIntent: loading $url")
+        currentTargetUrl = url
         webView.loadUrl(url)
+    }
+
+    private fun readIntentExtras(intent: Intent) {
+        currentTargetUrl = intent.getStringExtra("url") ?: intent.data?.toString().orEmpty()
+        isBypassMode = intent.getBooleanExtra("isBypassMode", false)
+        oldCfClearance = intent.getStringExtra("oldCfClearance") ?: ""
     }
 
     private fun hardResetSession() {
         CookieManager.getInstance().removeAllCookies {
             webView.clearCache(true)
             WebStorage.getInstance().deleteAllData()
-            webView.loadUrl(urlExtra)
+            webView.loadUrl(currentTargetUrl)
             toasty.show("Session cleared")
         }
     }
