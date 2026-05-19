@@ -182,7 +182,7 @@ class TranslationManagerOpenAI(
                         throw IOException("OpenAI: Server error ($code). Try again later.")
                     }
                     !response.isSuccessful -> {
-                        val errorBody = response.body?.string()?.take(200) ?: ""
+                        val errorBody = response.body.string().take(200)
                         response.body.close()
                         throw IllegalStateException("OpenAI: Unexpected error ($code): $errorBody")
                     }
