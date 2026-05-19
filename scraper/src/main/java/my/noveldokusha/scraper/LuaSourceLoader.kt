@@ -135,7 +135,7 @@ class LuaEngine @Inject constructor(
             val charset = config.get("charset").optjstring("UTF-8")
             try {
                 networkClient.getWithHeaders(url, headers).use { r ->
-                    val bytes = r.body?.bytes() ?: byteArrayOf()
+                    val bytes = r.body.bytes()
                     val body  = String(bytes, java.nio.charset.Charset.forName(charset))
                     responseTable(r.isSuccessful, body, r.code)
                 }
@@ -162,7 +162,7 @@ class LuaEngine @Inject constructor(
                 val mediaType = (headers["Content-Type"] ?: "application/x-www-form-urlencoded").toMediaType()
                 val body = bodyStr.toRequestBody(mediaType)
                 networkClient.call(postRequest(url, body = body, headers = headers.toHeaders())).use { r ->
-                    val bytes = r.body?.bytes() ?: byteArrayOf()
+                    val bytes = r.body.bytes()
                     val s     = String(bytes, java.nio.charset.Charset.forName(charset))
                     responseTable(r.isSuccessful, s, r.code)
                 }
@@ -312,7 +312,7 @@ class LuaEngine @Inject constructor(
                 t.set("text",  LuaValue.valueOf(doc.text()))
                 t.set("html",  LuaValue.valueOf(doc.html()))
                 t.set("title", LuaValue.valueOf(doc.title()))
-                doc.body()?.let { t.set("body", elementToTable(it)) }
+                t.set("body", elementToTable(doc.body()))
             }
         } catch (e: Exception) { Timber.e(e, "html_parse"); LuaValue.NIL }
     }
@@ -388,7 +388,7 @@ class LuaEngine @Inject constructor(
                     val selector = args.arg(i).optjstring(null) ?: continue
                     if (selector.isNotBlank()) doc.select(selector).remove()
                 }
-                LuaValue.valueOf(doc.body()?.html() ?: doc.html())
+                LuaValue.valueOf(doc.body().html())
             } catch (e: Exception) {
                 Timber.e(e, "html_remove")
                 args.arg(1)
