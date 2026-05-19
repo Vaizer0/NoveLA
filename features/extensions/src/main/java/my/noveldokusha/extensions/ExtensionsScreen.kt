@@ -365,7 +365,7 @@ private fun ExtensionListItem(
                     .size(28.dp)
                     .clip(RoundedCornerShape(4.dp))
             ) {
-                if (extension.iconUrl?.isNotBlank() == true) {
+                if (extension.iconUrl.isNotBlank()) {
                     GlideImage(
                         imageModel = { "${extension.iconUrl}" },
                         modifier = Modifier.fillMaxSize(),

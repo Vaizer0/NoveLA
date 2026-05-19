@@ -191,9 +191,9 @@ class ExtensionsManagerViewModel @Inject constructor(
     }
 
     private fun loadCachedExtensions() {
-        val cached = appPreferences.EXTENSIONS_AVAILABLE_CACHE.value
-        if (cached.isNotEmpty()) {
-            val extensions = cached.map { cached ->
+        val cachedEntries = appPreferences.EXTENSIONS_AVAILABLE_CACHE.value
+        if (cachedEntries.isNotEmpty()) {
+            val extensions = cachedEntries.map { cached ->
                 ExtensionInfo(
                     id = cached.id,
                     name = cached.name,

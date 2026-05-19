@@ -914,8 +914,8 @@ private data class ChapterPath(
 )
 
 suspend fun getChapterTitleJson(
-    config: JsonApiScraperConfig,
-    doc: Document
+    @Suppress("UNUSED_PARAMETER") config: JsonApiScraperConfig,
+    @Suppress("UNUSED_PARAMETER") doc: Document
 ): String? = null // Usually comes from API
 
 /**
