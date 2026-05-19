@@ -395,9 +395,7 @@ class TranslationManagerGooglePA(
             throw IllegalStateException("Google PA: HTTP error $code")
         }
 
-        val body = response.body.string().ifBlank {
-            throw IllegalStateException("Google PA: Empty response body")
-        }
+        val body = readBodyOrThrow(response, "Google PA")
         try {
             val arr = JsonParser.parseString(body).asJsonArray
             arr.get(0).asJsonArray.get(0).asString

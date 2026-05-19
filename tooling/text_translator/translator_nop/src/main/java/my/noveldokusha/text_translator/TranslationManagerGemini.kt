@@ -110,7 +110,7 @@ class TranslationManagerGemini(
 
                 when (response.code) {
                     200 -> {
-                        val responseBody = response.body.string()
+                        val responseBody = readBodyOrThrow(response, "Gemini")
                         val result = parseGeminiResponse(responseBody)
                         val totalTime = System.currentTimeMillis() - startTime
                         if (result == BLOCKED_MARKER) {
@@ -215,7 +215,7 @@ class TranslationManagerGemini(
                     }
                 }
 
-                val responseBody = response.body.string()
+                val responseBody = readBodyOrThrow(response, "Gemini")
                 val translatedText = parseGeminiResponse(responseBody)
                 val totalTime = System.currentTimeMillis() - startTime
 
