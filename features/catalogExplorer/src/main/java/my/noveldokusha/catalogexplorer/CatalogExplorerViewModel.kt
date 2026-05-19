@@ -90,7 +90,7 @@ internal class CatalogExplorerViewModel @Inject constructor(
                 scraperRepository.scraper.getCompatibleSource(url)?.id ?: "unknown"
             }
 
-            for ((source, sourceUrls) in urlsBySource) {
+            for ((_, sourceUrls) in urlsBySource) {
                 val shouldAddDelay = sourceUrls.size >= 5
 
                 for ((index, url) in sourceUrls.withIndex()) {

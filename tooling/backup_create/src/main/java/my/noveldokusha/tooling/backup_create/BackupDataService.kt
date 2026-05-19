@@ -188,7 +188,6 @@ internal class BackupDataService : Service() {
                     .filter { file ->
                         // Only include images from library book folders
                         val relativePath = basePath.relativize(file.toPath()).toString()
-                        val folderName = relativePath.split("/", "\\").firstOrNull() ?: ""
                         // "books" is the root folder, second segment is the book folder
                         val bookFolder = relativePath.split("/", "\\").getOrNull(1) ?: ""
                         bookFolder in libraryFolderNames || libraryFolderNames.isEmpty()
