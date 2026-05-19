@@ -100,7 +100,7 @@ class ExtensionsManagerViewModel @Inject constructor(
                 val yaml     = Yaml()
                 @Suppress("UNCHECKED_CAST")
                 val repoIndex = yaml.loadAs(
-                    response.body?.string() ?: error("Empty response"),
+                    response.body.string(),
                     Map::class.java
                 ) as Map<String, Any>
 
@@ -114,7 +114,7 @@ class ExtensionsManagerViewModel @Inject constructor(
                         val langResp = httpClient.get(langUrl)
                         @Suppress("UNCHECKED_CAST")
                         val langData = yaml.loadAs(
-                            langResp.body?.string() ?: return@forEach,
+                            langResp.body.string(),
                             Map::class.java
                         ) as Map<String, Any>
 
@@ -131,7 +131,7 @@ class ExtensionsManagerViewModel @Inject constructor(
                                     name             = src["name"] as? String ?: "Unknown",
                                     description      = src.get("description") as? String ?: "",
                                     author           = src.get("author") as? String ?: "",
-                                    version          = installedVer ?: remoteVer ?: "1.0.0",
+                                    version          = installedVer ?: remoteVer,
                                     remoteVersion    = remoteVer, // Удаленная версия из YAML
                                     codeUrl          = src["url"] as String, // Поле называется "url" в YAML
                                     iconUrl          = src["icon"] as String,

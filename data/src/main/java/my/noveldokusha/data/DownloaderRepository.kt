@@ -152,11 +152,8 @@ class DownloaderRepository @Inject constructor(
 
                 scraper.getCompatibleSource(realUrl)?.also { source ->
                     // FIX: .use{} закрывает response после парсинга документа
-                    val doc = if (source.charset != null) {
-                        networkClient.get(source.transformChapterUrl(realUrl)).use { it.toDocument(source.charset) }
-                    } else {
-                        networkClient.get(source.transformChapterUrl(realUrl)).use { it.toDocument() }
-                    }
+                    val doc = networkClient.get(source.transformChapterUrl(realUrl))
+                        .use { it.toDocument(source.charset) }
                     val data = my.noveldokusha.scraper.ChapterDownload(
                         body = source.getChapterText(doc) ?: return@also,
                         title = null

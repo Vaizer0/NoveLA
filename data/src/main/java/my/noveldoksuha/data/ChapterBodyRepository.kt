@@ -34,7 +34,7 @@ class ChapterBodyRepository @Inject constructor(
         }
     }
 
-    private suspend fun insertWithTitle(chapterBody: ChapterBody, title: String?) = appDatabase.transaction {
+    private suspend fun insertWithTitle(chapterBody: ChapterBody, @Suppress("UNUSED_PARAMETER") title: String?) = appDatabase.transaction {
         insertReplace(chapterBody)
     }
 

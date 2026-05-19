@@ -176,7 +176,7 @@ suspend fun getCatalogSearch(
                 val resultDoc = conn.post()
                 Timber.d("ScraperHelpers: POST response URL: ${resultDoc.location()}")
                 Timber.d("ScraperHelpers: POST response title: ${resultDoc.title()}")
-                Timber.d("ScraperHelpers: POST response body preview: ${resultDoc.body()?.text()?.take(500)}")
+                Timber.d("ScraperHelpers: POST response body preview: ${resultDoc.body().text().take(500)}")
                 resultDoc
             } else {
                 // Standard POST request
