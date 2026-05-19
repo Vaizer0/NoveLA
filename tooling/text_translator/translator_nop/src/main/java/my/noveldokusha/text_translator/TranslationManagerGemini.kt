@@ -110,7 +110,7 @@ class TranslationManagerGemini(
 
                 when (response.code) {
                     200 -> {
-                        val responseBody = response.body?.string() ?: ""
+                        val responseBody = response.body.string()
                         val result = parseGeminiResponse(responseBody)
                         val totalTime = System.currentTimeMillis() - startTime
                         if (result == BLOCKED_MARKER) {
@@ -124,7 +124,7 @@ class TranslationManagerGemini(
                         continue
                     }
                     400 -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.w(TAG, "translateWithGemini: 400 on $keyLabel: $errorBody")
                         lastException = IOException("Gemini: Bad request (400): $errorBody")
                         kotlinx.coroutines.delay(500L * (attempt / keys.size + 1))
@@ -136,13 +136,13 @@ class TranslationManagerGemini(
                         continue
                     }
                     in 500..599 -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.w(TAG, "translateWithGemini: server error (${response.code}) on $keyLabel: $errorBody")
                         lastException = IOException("Gemini: Server error (${response.code})")
                         kotlinx.coroutines.delay(500L * (attempt / keys.size + 1))
                     }
                     else -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.e(TAG, "translateWithGemini: API error ${response.code} on $keyLabel: $errorBody")
                         throw IOException("Gemini: API error ${response.code}: $errorBody")
                     }
@@ -192,7 +192,7 @@ class TranslationManagerGemini(
 
                 when (code) {
                     400 -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.w(TAG, "translateBatch: 400 on $keyLabel: $errorBody")
                         lastException = IOException("Gemini: Bad request (400)")
                         if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(1000L * attemptWithinKey); return@repeat } else throw lastException!!
@@ -203,19 +203,19 @@ class TranslationManagerGemini(
                         if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500); return@repeat } else throw lastException!!
                     }
                     in 500..599 -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.w(TAG, "translateBatch: server error ($code) on $keyLabel")
                         lastException = IOException("Gemini: Server error ($code)")
                         if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(2000L * attemptWithinKey); return@repeat } else throw lastException!!
                     }
                     !in 200..299 -> {
-                        val errorBody = response.body?.string() ?: ""
+                        val errorBody = response.body.string()
                         Log.e(TAG, "translateBatch: API error $code on $keyLabel: $errorBody")
                         throw IOException("Gemini: API error $code")
                     }
                 }
 
-                val responseBody = response.body?.string() ?: ""
+                val responseBody = response.body.string()
                 val translatedText = parseGeminiResponse(responseBody)
                 val totalTime = System.currentTimeMillis() - startTime
 
@@ -302,7 +302,7 @@ class TranslationManagerGemini(
 
         val response = client.newCall(request).execute()
         // Логируем сырой ответ для диагностики
-        val bodyString = response.body?.string() ?: ""
+        val bodyString = response.body.string()
         Log.d(TAG, "sendGeminiRequest: status=${response.code}, bodyPreview=${bodyString.take(300)}")
         // Восстанавливаем body, т.к. string() его вычитывает
         val newBody = bodyString.toResponseBody("application/json".toMediaType())

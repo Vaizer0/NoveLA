@@ -46,7 +46,7 @@ class ScraperNetworkClient @Inject constructor(
     val client: OkHttpClient = OkHttpClient.Builder()
         .apply {
             if (appInternalState.isDebugMode) addInterceptor(okhttpLoggingInterceptor)
-            addInterceptor(UserAgentInterceptor(appContext)) // UA из WebView
+            addInterceptor(UserAgentInterceptor()) // UA из WebView
             addInterceptor(DecodeResponseInterceptor())
             if (appPreferences.CLOUDFLARE_BYPASS_ENABLED.value) {
                 addInterceptor(CloudFareVerificationInterceptor(appContext))

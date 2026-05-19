@@ -2,9 +2,9 @@ package my.noveldokusha.libraryexplorer
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -46,7 +46,7 @@ internal fun LibraryDropDown(
             Column {
                 DropdownMenuItem(
                     leadingIcon = {
-                        Icon(Icons.Filled.Sort, stringResource(R.string.filter))
+                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
                     },
                     text = { Text(stringResource(R.string.filter)) },
                     onClick = {

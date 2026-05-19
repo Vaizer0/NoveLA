@@ -137,7 +137,7 @@ class TranslationManagerGoogleFree(
 
                 val startTime = System.currentTimeMillis()
                 val response = client.newCall(request).execute()
-                val responseBody = response.body?.string() ?: ""
+                val responseBody = response.body.string()
 
                 if (response.isSuccessful && responseBody.isNotEmpty()) {
                     val jsonElement = json.parseToJsonElement(responseBody)

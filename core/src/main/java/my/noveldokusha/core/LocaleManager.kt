@@ -26,7 +26,12 @@ object LocaleManager {
     }
 
     fun getCurrentLocale(context: Context): Locale {
-        return context.resources.configuration.locale
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale
+        }
     }
 
     fun getSystemLocale(context: Context): AppLanguage {

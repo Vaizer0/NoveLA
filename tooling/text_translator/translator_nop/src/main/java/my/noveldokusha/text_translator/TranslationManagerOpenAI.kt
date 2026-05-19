@@ -167,23 +167,23 @@ class TranslationManagerOpenAI(
                 when {
                     code == 401 -> {
                         Log.w(TAG, "sendWithKeyRotation: 401 on $keyLabel, trying next")
-                        response.body?.close()
+                        response.body.close()
                         lastException = IllegalStateException("OpenAI: Invalid API key ($keyLabel). Check your key in Settings.")
                         continue
                     }
                     code == 429 -> {
                         Log.w(TAG, "sendWithKeyRotation: 429 on $keyLabel, trying next")
-                        response.body?.close()
+                        response.body.close()
                         lastException = IllegalStateException("OpenAI: Rate limit exceeded ($keyLabel).")
                         continue
                     }
                     code in 500..599 -> {
-                        response.body?.close()
+                        response.body.close()
                         throw IOException("OpenAI: Server error ($code). Try again later.")
                     }
                     !response.isSuccessful -> {
                         val errorBody = response.body?.string()?.take(200) ?: ""
-                        response.body?.close()
+                        response.body.close()
                         throw IllegalStateException("OpenAI: Unexpected error ($code): $errorBody")
                     }
                     else -> {

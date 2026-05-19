@@ -10,7 +10,7 @@ enum class LibrarySortOption(val displayName: String) {
     LAST_UPDATE("last_update"),
     ADDED("date_added");
 
-    fun getNextSortOption(currentDirection: SortDirection): LibrarySortOption {
+    fun getNextSortOption(): LibrarySortOption {
         return when (this) {
             TITLE -> UNREAD_CHAPTERS
             UNREAD_CHAPTERS -> LAST_READ
@@ -42,7 +42,7 @@ data class SortConfig(
 ) {
     fun toggleDirection(): SortConfig = copy(direction = direction.toggle())
 
-    fun nextOption(): SortConfig = copy(option = option.getNextSortOption(direction))
+    fun nextOption(): SortConfig = copy(option = option.getNextSortOption())
 
     companion object {
         val DEFAULT = SortConfig(LibrarySortOption.LAST_READ, SortDirection.DESC)

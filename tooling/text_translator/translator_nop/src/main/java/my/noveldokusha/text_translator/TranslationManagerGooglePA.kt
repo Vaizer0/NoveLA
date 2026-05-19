@@ -155,7 +155,7 @@ class TranslationManagerGooglePA(
                 .build()
             val response = client.newCall(request).execute()
             val ok = response.isSuccessful
-            response.body?.close()
+            response.body.close()
             Log.d(TAG, "checkKey: ${key.take(12)}… → HTTP ${response.code}")
             ok
         } catch (e: Exception) {
@@ -389,7 +389,7 @@ class TranslationManagerGooglePA(
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
             val code = response.code
-            response.body?.close()
+            response.body.close()
             Log.e(TAG, "translateHtml: HTTP $code")
             throw IllegalStateException("Google PA: HTTP error $code")
         }
