@@ -181,7 +181,7 @@ suspend fun getCatalogSearch(
             } else {
                 // Standard POST request
                 val data = config.postSearchDataBuilder.invoke(input)
-                val headers = (config.searchHeaders ?: emptyMap()).toMutableMap()
+                val headers = config.searchHeaders.toMutableMap()
                 POST(config.postSearchUrl, data, headers = headers, networkClient = networkClient)
             }
         } else {
@@ -295,7 +295,7 @@ suspend fun getCatalogSearchPost(
             } else {
                 // Standard POST request
                 val data = config.postSearchDataBuilder.invoke(input)
-                val headers = (config.searchHeaders ?: emptyMap()).toMutableMap()
+                val headers = config.searchHeaders.toMutableMap()
 
                 // Add Cloudflare config to headers if present
                 config.cloudflareConfig?.let { cfConfig ->

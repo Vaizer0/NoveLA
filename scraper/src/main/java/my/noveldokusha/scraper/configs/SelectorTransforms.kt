@@ -220,7 +220,7 @@ fun SelectorRule.whenContext(
  */
 fun SelectorRule.batchTransform(
     batchProcessor: (List<Element>, String) -> String
-): SelectorRule = withContext { element, doc, text ->
+): SelectorRule = withContext { element, _, text ->
     // This would need access to all matched elements, not just the first one
     // For now, just pass the current element
     batchProcessor(listOf(element), text)
