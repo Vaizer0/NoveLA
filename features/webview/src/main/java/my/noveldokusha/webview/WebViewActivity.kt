@@ -45,6 +45,11 @@ class WebViewActivity : ComponentActivity() {
             }
         }
 
+        // Cloudflare commonly relies on cookies set during challenge flows, so we must
+        // explicitly accept them in this WebView instance.
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+
         setContent {
             var isReady by remember { mutableStateOf(false) }
             var currentUrl by remember { mutableStateOf(currentTargetUrl) }

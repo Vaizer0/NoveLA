@@ -273,6 +273,9 @@ internal class CloudFareVerificationInterceptor(
     private suspend fun resolveWithWebViewAutomatic(webViewUrl: String, cm: CookieManager) {
         withContext(Dispatchers.Main) {
             val webView = WebView(appContext)
+            // Cloudflare challenge cookies must be accepted by the bypass WebView too.
+            cm.setAcceptCookie(true)
+            cm.setAcceptThirdPartyCookies(webView, true)
             webView.settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
