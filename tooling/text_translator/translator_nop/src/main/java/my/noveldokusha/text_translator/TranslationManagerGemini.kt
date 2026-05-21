@@ -27,6 +27,10 @@ class TranslationManagerGemini(
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 
+    // Ultra-minimal prompt used as fallback when the main prompt triggers a content block.
+    // No genre keywords, no register/style hints — pure translation instruction only.
+    private val fallbackSystemPrompt = "Translate each numbered item from {source_language} to {target_language}. Output \"N. Text\" only. No notes, no preamble."
+
     // Keep Gemini translations short, deterministic, and cheap by default.
     private val defaultTemperature = 0.15
     private val defaultTopP = 0.9
@@ -99,20 +103,23 @@ class TranslationManagerGemini(
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
+        val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
         val startIndex = keyIndex.getAndIncrement() % keys.size
         var lastException: Exception? = null
+        var usesFallback = false
         val totalAttempts = retryCount * keys.size
 
         for (attempt in 0 until totalAttempts) {
             val currentKey = keys[(startIndex + attempt) % keys.size]
             val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
+            val activePrompt = if (usesFallback) builtFallbackPrompt else systemPrompt
 
             try {
                 val startTime = System.currentTimeMillis()
-                Log.d(TAG, "🚀 Request start: attempt=${attempt + 1}, textLen=${text.length}, key=$keyLabel")
+                Log.d(TAG, "🚀 Request start: attempt=${attempt + 1}, textLen=${text.length}, key=$keyLabel, fallback=$usesFallback")
 
-                val response = sendGeminiRequest(systemPrompt, text, currentKey)
+                val response = sendGeminiRequest(activePrompt, text, currentKey)
 
                 when (response.code) {
                     200 -> {
@@ -120,8 +127,14 @@ class TranslationManagerGemini(
                         val result = parseGeminiResponse(responseBody)
                         val totalTime = System.currentTimeMillis() - startTime
                         if (result == BLOCKED_MARKER) {
-                            Log.w(TAG, "translateWithGemini: content blocked by Gemini filter")
-                            throw IOException("Gemini: Content blocked (PROHIBITED_CONTENT). Try a different prompt or model.")
+                            if (!usesFallback) {
+                                Log.w(TAG, "translateWithGemini: blocked — switching to fallback prompt")
+                                usesFallback = true
+                            } else {
+                                Log.w(TAG, "translateWithGemini: blocked even on fallback prompt, returning original")
+                            }
+                            lastException = IOException("Gemini: Content blocked")
+                            continue
                         }
                         Log.d(TAG, "✅ Success: total=${totalTime}ms, resultLen=${result.length}")
                         if (result.isNotBlank()) return@withContext result
@@ -159,6 +172,11 @@ class TranslationManagerGemini(
                 throw e
             }
         }
+        // All attempts exhausted — if blocked, return original text to avoid breaking the reader.
+        if (lastException?.message?.contains("blocked", ignoreCase = true) == true) {
+            Log.w(TAG, "translateWithGemini: all retries blocked, returning original text")
+            return@withContext text
+        }
         throw lastException ?: IOException("Gemini: All attempts failed")
     }
 
@@ -188,11 +206,13 @@ class TranslationManagerGemini(
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
+        val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
         // Numbered input keeps Gemini aligned to the existing batch parser with minimal overhead.
         val userText = normalizedTexts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n")
 
         var lastException: Exception? = null
+        var usesFallback = false
         val retryCount = 3
         val totalAttempts = retryCount * availableKeys.size
 
@@ -200,12 +220,13 @@ class TranslationManagerGemini(
             val currentApiKey = availableKeys[attempt % availableKeys.size]
             val keyLabel = "key #${attempt % availableKeys.size + 1}"
             val attemptWithinKey = attempt / availableKeys.size + 1
+            val activePrompt = if (usesFallback) builtFallbackPrompt else systemPrompt
 
             try {
                 val startTime = System.currentTimeMillis()
-                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${normalizedTexts.size}")
+                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${normalizedTexts.size}, fallback=$usesFallback")
 
-                val response = sendGeminiRequest(systemPrompt, userText, currentApiKey)
+                val response = sendGeminiRequest(activePrompt, userText, currentApiKey)
                 val code = response.code
 
                 when (code) {
@@ -238,8 +259,17 @@ class TranslationManagerGemini(
                 val totalTime = System.currentTimeMillis() - startTime
 
                 if (translatedText == BLOCKED_MARKER) {
-                    Log.w(TAG, "translateBatch: content blocked by Gemini filter")
-                    throw IOException("Gemini: Content blocked (PROHIBITED_CONTENT). Try a different prompt or model.")
+                    if (!usesFallback) {
+                        Log.w(TAG, "translateBatch: blocked — switching to fallback prompt")
+                        usesFallback = true
+                    } else {
+                        Log.w(TAG, "translateBatch: blocked even on fallback prompt")
+                    }
+                    lastException = IOException("Gemini: Content blocked")
+                    if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500L * attemptWithinKey); return@repeat }
+                    // All retries blocked — return empty map, caller falls back to original text
+                    Log.w(TAG, "translateBatch: all retries blocked, returning emptyMap")
+                    return@withContext emptyMap()
                 }
 
                 Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
@@ -256,7 +286,6 @@ class TranslationManagerGemini(
             } catch (e: Exception) {
                 Log.e(TAG, "translateBatch: error on attempt ${attempt + 1} - ${e.message}", e)
                 lastException = e
-                if (e is IOException && e.message?.contains("Content blocked") == true) throw e
                 if (attempt < totalAttempts - 1) kotlinx.coroutines.delay(1000L * attemptWithinKey)
             }
         }
@@ -276,15 +305,18 @@ class TranslationManagerGemini(
             put("topP", defaultTopP)
             // Cap the response so the model cannot spend extra tokens on verbose output.
             put("maxOutputTokens", defaultMaxOutputTokens)
+            // Plain text output reduces content-filter sensitivity.
+            put("responseMimeType", "text/plain")
         }
 
-        // ✅ safetySettings = BLOCK_NONE
+        // ✅ safetySettings = BLOCK_NONE for all known categories, including CIVIC_INTEGRITY (added in Gemini 2.x)
         val safetySettings = JSONArray().apply {
             val categories = listOf(
                 "HARM_CATEGORY_HARASSMENT",
                 "HARM_CATEGORY_HATE_SPEECH",
                 "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "HARM_CATEGORY_DANGEROUS_CONTENT"
+                "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "HARM_CATEGORY_CIVIC_INTEGRITY"
             )
             for (cat in categories) {
                 put(JSONObject().apply {
