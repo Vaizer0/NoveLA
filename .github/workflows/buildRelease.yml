@@ -3,6 +3,9 @@ name: Publish Release
 on:
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
 
+permissions:
+  contents: write
+
 jobs:
   buildRelease:
     name: Build Release APK
@@ -39,9 +42,15 @@ jobs:
         run: |
           gradle assembleRelease -PlocalPropertiesFilePath=custom.properties
 
-      - name: Create apk env info entries, move APK
+      - name: Set release version
         run: |
-          python .github/build_scripts/extract_info.py
+          echo "APP_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\(.*\)"$/\1/p' app/build.gradle.kts | head -n 1)" >> "$GITHUB_ENV"
+
+      - name: Collect release APK
+        run: |
+          mkdir -p release-artifacts
+          find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -exec cp {} release-artifacts/ \;
+          ls -lah release-artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -49,5 +58,4 @@ jobs:
           name: NovelDokusha v${{ env.APP_VERSION }}
           tag_name: v${{ env.APP_VERSION }}
           files: |
-            ${{ env.APK_FILE_PATH_full }}
-            ${{ env.APK_FILE_PATH_foss }}
+            release-artifacts/*.apk
