@@ -41,6 +41,11 @@ class TranslationManagerOpenAI(
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 
+    // Keep responses short and deterministic so translation requests spend fewer tokens.
+    private val defaultTemperature = 0.2
+    private val defaultMaxOutputTokens = 1024
+    private val maxBatchItemsPerRequest = 20
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(120, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -124,16 +129,27 @@ class TranslationManagerOpenAI(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
-        Log.d(TAG, "translateBatch: ${texts.size} paragraphs, $sourceLanguage→$targetLanguage")
+        // Chunk large batches so the prompt stays compact and the model does not waste output tokens.
+        val normalizedTexts = texts.filter { it.isNotBlank() }
+        if (normalizedTexts.isEmpty()) return@withContext emptyMap()
+        if (normalizedTexts.size > maxBatchItemsPerRequest) {
+            val merged = mutableMapOf<String, String>()
+            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
+                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
+            }
+            return@withContext merged
+        }
+
+        Log.d(TAG, "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage")
 
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
 
         // All format instructions are in the system prompt.
         // User message contains only the numbered text — clean and simple.
-        val userMessage = texts.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n\n")
+        val userMessage = normalizedTexts.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n")
 
         val responseText = sendWithKeyRotation(systemPrompt, userMessage)
-        parseNumberedTranslations(responseText, texts)
+        parseNumberedTranslations(responseText, normalizedTexts)
     }
 
     // ─── Key rotation + HTTP ───────────────────────────────────────────────────
@@ -220,7 +236,10 @@ class TranslationManagerOpenAI(
                     put("content", userMessage)
                 })
             })
-            put("temperature", 0.3)
+            // Lower temperature keeps translation output stable and avoids extra phrasing.
+            put("temperature", defaultTemperature)
+            // Cap output length to reduce token spend on verbose completions.
+            put("max_tokens", defaultMaxOutputTokens)
             put("top_p", 1.0)
             put("stream", false)
         }.toString().toRequestBody("application/json".toMediaType())

@@ -37,6 +37,9 @@ class TranslationManagerGooglePA(
     private val networkClient: ScraperNetworkClient
 ) : TranslationManager {
 
+    // Keep batches compact so the HTML endpoint gets fewer oversized requests.
+    private val maxBatchItemsPerRequest = 20
+
     private val client get() = networkClient.client
 
     override val available = true
@@ -414,9 +417,20 @@ class TranslationManagerGooglePA(
 
         val sourceLang = if (sourceLanguage == "auto") "auto" else sourceLanguage
 
+        // Remove blank entries first and split very large requests into smaller chunks.
+        val normalizedTexts = texts.filter { it.isNotBlank() }
+        if (normalizedTexts.isEmpty()) return@withContext emptyMap()
+        if (normalizedTexts.size > maxBatchItemsPerRequest) {
+            val merged = mutableMapOf<String, String>()
+            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
+                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
+            }
+            return@withContext merged
+        }
+
         val boundaries = mutableListOf<IntRange>()
         val allParagraphs = mutableListOf<String>()
-        for (text in texts) {
+        for (text in normalizedTexts) {
             val lines = text.split("\n").filter { it.isNotBlank() }
             val start = allParagraphs.size
             allParagraphs.addAll(lines)
@@ -427,7 +441,7 @@ class TranslationManagerGooglePA(
         val translatedAll = translateChunks(allParagraphs, sourceLang, targetLanguage)
 
         val result = mutableMapOf<String, String>()
-        for ((i, text) in texts.withIndex()) {
+        for ((i, text) in normalizedTexts.withIndex()) {
             val range = boundaries[i]
             if (range.isEmpty()) {
                 result[text] = text
@@ -442,7 +456,7 @@ class TranslationManagerGooglePA(
             result[text] = if (translatedLines.isNotEmpty()) translatedLines.joinToString("\n") else text
         }
 
-        Log.d(TAG, "translateBatch: total=${texts.size}, translated=${result.size}")
+        Log.d(TAG, "translateBatch: total=${normalizedTexts.size}, translated=${result.size}")
         result
     }
 

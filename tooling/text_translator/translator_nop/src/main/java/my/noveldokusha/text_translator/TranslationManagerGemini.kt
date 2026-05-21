@@ -27,6 +27,12 @@ class TranslationManagerGemini(
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 
+    // Keep Gemini translations short, deterministic, and cheap by default.
+    private val defaultTemperature = 0.15
+    private val defaultTopP = 0.9
+    private val defaultMaxOutputTokens = 1024
+    private val maxBatchItemsPerRequest = 20
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -163,7 +169,18 @@ class TranslationManagerGemini(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
-        Log.d(TAG, "translateBatch: translating ${texts.size} paragraphs")
+        // Split large batches so the request stays compact and does not waste output tokens.
+        val normalizedTexts = texts.filter { it.isNotBlank() }
+        if (normalizedTexts.isEmpty()) return@withContext emptyMap()
+        if (normalizedTexts.size > maxBatchItemsPerRequest) {
+            val merged = mutableMapOf<String, String>()
+            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
+                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
+            }
+            return@withContext merged
+        }
+
+        Log.d(TAG, "translateBatch: translating ${normalizedTexts.size} paragraphs")
         val availableKeys = apiKeys
         if (availableKeys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
@@ -172,7 +189,8 @@ class TranslationManagerGemini(
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
 
-        val userText = texts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
+        // Numbered input keeps Gemini aligned to the existing batch parser with minimal overhead.
+        val userText = normalizedTexts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n")
 
         var lastException: Exception? = null
         val retryCount = 3
@@ -185,7 +203,7 @@ class TranslationManagerGemini(
 
             try {
                 val startTime = System.currentTimeMillis()
-                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${texts.size}")
+                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${normalizedTexts.size}")
 
                 val response = sendGeminiRequest(systemPrompt, userText, currentApiKey)
                 val code = response.code
@@ -227,8 +245,8 @@ class TranslationManagerGemini(
                 Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
 
                 if (translatedText.isNotEmpty()) {
-                    val translations = parseNumberedTranslations(translatedText, texts)
-                    Log.d(TAG, "translateBatch: parsed ${translations.size}/${texts.size} translations")
+                    val translations = parseNumberedTranslations(translatedText, normalizedTexts)
+                    Log.d(TAG, "translateBatch: parsed ${translations.size}/${normalizedTexts.size} translations")
                     return@withContext translations
                 } else {
                     Log.w(TAG, "translateBatch: empty response after parsing, retrying...")
@@ -253,8 +271,11 @@ class TranslationManagerGemini(
         apiKey: String
     ): okhttp3.Response {
         val generationConfig = JSONObject().apply {
-            put("temperature", 0.2)
-            put("topP", 0.95)
+            // Lower randomness keeps translations stable and reduces unnecessary wording.
+            put("temperature", defaultTemperature)
+            put("topP", defaultTopP)
+            // Cap the response so the model cannot spend extra tokens on verbose output.
+            put("maxOutputTokens", defaultMaxOutputTokens)
         }
 
         // ✅ safetySettings = BLOCK_NONE
@@ -289,7 +310,7 @@ class TranslationManagerGemini(
             })
             put("generationConfig", generationConfig)
             put("safetySettings", safetySettings)
-            // Явно отключаем googleSearch (по умолчанию включён в Gemini 3.1 Flash Lite)
+            // Disable tool use so Gemini only returns translation text.
             put("tools", JSONArray())
         }
 
@@ -301,19 +322,19 @@ class TranslationManagerGemini(
             .build()
 
         val response = client.newCall(request).execute()
-        // Логируем сырой ответ для диагностики
+        // Read the body once for lightweight diagnostics, then restore it for downstream parsing.
         val bodyString = response.body.string()
-        Log.d(TAG, "sendGeminiRequest: status=${response.code}, bodyPreview=${bodyString.take(300)}")
-        // Восстанавливаем body, т.к. string() его вычитывает
+        Log.d(TAG, "sendGeminiRequest: status=${response.code}, bodyPreview=${bodyString.take(160)}")
         val newBody = bodyString.toResponseBody("application/json".toMediaType())
         return response.newBuilder().body(newBody).build()
     }
 
     private fun parseGeminiResponse(responseBody: String): String {
         val trimmed = responseBody.trim()
-        Log.d(TAG, "parseGeminiResponse: start length=${responseBody.length}, firstChar='${responseBody.firstOrNull() ?: "EMPTY"}', lastChar='${responseBody.lastOrNull() ?: "EMPTY"}'")
+        // Gemini usually returns JSON, but the parser keeps a plain-text fallback for resilience.
+        Log.d(TAG, "parseGeminiResponse: start length=${responseBody.length}")
 
-        // 1. Попытка распарсить как массив (редкий формат)
+        // Try the rare array form first.
         if (trimmed.startsWith("[")) {
             try {
                 Log.d(TAG, "parseGeminiResponse: trying array format")
@@ -336,7 +357,7 @@ class TranslationManagerGemini(
             }
         }
 
-        // 2. Попытка распарсить как объект (стандартный формат Gemini)
+        // Then try the standard object form.
         if (trimmed.startsWith("{")) {
             try {
                 Log.d(TAG, "parseGeminiResponse: trying object format")
@@ -389,7 +410,7 @@ class TranslationManagerGemini(
             }
         }
 
-        // 3. Если ни один парсер не сработал — возвращаем как есть (plain text)
+        // Fall back to the raw body if the API returned plain text.
         Log.d(TAG, "parseGeminiResponse: returning raw trimmed, length=${trimmed.length}, preview=${trimmed.take(200)}")
         return trimmed
     }

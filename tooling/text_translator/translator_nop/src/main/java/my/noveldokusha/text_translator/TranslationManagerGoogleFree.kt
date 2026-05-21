@@ -24,6 +24,9 @@ class TranslationManagerGoogleFree(
     private val coroutineScope: AppCoroutineScope
 ) : TranslationManager {
 
+    // Keep Google Free requests small so the endpoint stays responsive and avoids unnecessary retries.
+    private val maxBatchItemsPerRequest = 20
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
@@ -168,6 +171,17 @@ class TranslationManagerGoogleFree(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
+        // Remove blank entries early so the batch parser only handles real content.
+        val normalizedTexts = texts.filter { it.isNotBlank() }
+        if (normalizedTexts.isEmpty()) return@withContext emptyMap()
+        if (normalizedTexts.size > maxBatchItemsPerRequest) {
+            val merged = mutableMapOf<String, String>()
+            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
+                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
+            }
+            return@withContext merged
+        }
+
         val translations = mutableMapOf<String, String>()
         var totalFailed = 0
 
@@ -176,7 +190,7 @@ class TranslationManagerGoogleFree(
         var currentLen = 0
         val maxChunkChars = 8000
 
-        for ((index, text) in texts.withIndex()) {
+        for ((index, text) in normalizedTexts.withIndex()) {
             val estimatedLen = text.length + 10
             if (currentLen + estimatedLen > maxChunkChars && currentChunk.isNotEmpty()) {
                 chunks.add(currentChunk)
@@ -239,10 +253,10 @@ class TranslationManagerGoogleFree(
             }.awaitAll()
         }
 
-        Log.d(TAG, "translateBatch: total=${texts.size}, translated=${translations.size}, failed=$totalFailed")
+        Log.d(TAG, "translateBatch: total=${normalizedTexts.size}, translated=${translations.size}, failed=$totalFailed")
 
         // If everything failed — throw so the user sees an error instead of untranslated text
-        if (translations.isEmpty() && texts.isNotEmpty()) {
+        if (translations.isEmpty() && normalizedTexts.isNotEmpty()) {
             throw IllegalStateException("Google Translate: Failed to translate. Check your internet connection.")
         }
 
