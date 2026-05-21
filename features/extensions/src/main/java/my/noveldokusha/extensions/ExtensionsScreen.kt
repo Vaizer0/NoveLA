@@ -125,6 +125,7 @@ private fun UnifiedExtensionsScreen(
                 }
             }
             state.error != null -> {
+                val errorText = state.error
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -134,7 +135,7 @@ private fun UnifiedExtensionsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = state.error ?: "Unknown error",
+                            text = errorText,
                             style = MaterialTheme.typography.bodyLarge,
                             textAlign = TextAlign.Center
                         )
