@@ -4,7 +4,7 @@ import com.android.build.api.dsl.CommonExtension
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 internal fun Project.configureAndroid(
     commonExtension: CommonExtension<*, *, *, *, *, *>
@@ -44,7 +44,7 @@ internal fun Project.configureAndroid(
 
 private fun Project.configureKotlin() {
     // Use withType to workaround https://youtrack.jetbrains.com/issue/KT-55947
-    tasks.withType<KotlinCompile>().configureEach {
+    tasks.withType<KotlinJvmCompile>().configureEach {
         compilerOptions {
             // Set JVM target to 17
             jvmTarget.set(JvmTarget.JVM_17)

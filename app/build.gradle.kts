@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-inner class CLICustomSettings {
+class CLICustomSettings(private val project: Project) {
     val splitByAbi = propExist(key = "splitByAbi")
     val splitByAbiDoUniversal = splitByAbi && propExist(key = "splitByAbiDoUniversal")
     val localPropertiesFilePath = propString(
@@ -23,7 +23,7 @@ inner class CLICustomSettings {
         project.properties[key]?.toString()?.ifBlank { default } ?: default
 }
 
-val cliCustomSettings = CLICustomSettings()
+val cliCustomSettings = CLICustomSettings(project)
 
 android {
 
@@ -48,7 +48,7 @@ android {
         applicationId = "my.novela"
         versionCode = 28
         versionName = "1.2.7"
-        setProperty("archivesBaseName", "NoveLA_v$versionName")
+        base.archivesName.set("NoveLA_v$versionName")
     }
 
     signingConfigs {
