@@ -14,16 +14,11 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@v6
 
-      - name: Set up JDK enviroment
+      - name: Set up JDK environment
         uses: actions/setup-java@v5
         with:
-          distribution: 'temurin' 
+          distribution: 'temurin'
           java-version: 21
-
-      - name: Setup Python enviroment
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.11
 
       - name: Setup Gradle version to 8.13
         uses: gradle/actions/setup-gradle@v4
@@ -55,7 +50,27 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: NovelDokusha v${{ env.APP_VERSION }}
+          name: NoveLA v${{ env.APP_VERSION }}
           tag_name: v${{ env.APP_VERSION }}
+          draft: true
+          body: |
+            # <img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.png" width="36" valign="middle"> NoveLA — Light Novel Reader & Parser
+
+            <details>
+            <summary><b>🇷🇺 Russian Version</b></summary>
+
+            ### [КАТЕГОРИЯ]
+            - [ОПИСАНИЕ ИЗМЕНЕНИЯ]
+            </details>
+
+            <details open>
+            <summary><b>🇺🇸 English Version</b></summary>
+
+            ### [CATEGORY]
+            - [CHANGE DESCRIPTION]
+            </details>
+
+            ## Screenshots
+            [ССЫЛКИ НА ИЗОБРАЖЕНИЯ]
           files: |
             release-artifacts/*.apk
