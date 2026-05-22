@@ -37,9 +37,6 @@ class TranslationManagerGooglePA(
     private val networkClient: ScraperNetworkClient
 ) : TranslationManager {
 
-    // Keep batches compact so the HTML endpoint gets fewer oversized requests.
-    private val maxBatchItemsPerRequest = 20
-
     private val client get() = networkClient.client
 
     override val available = true
@@ -417,16 +414,9 @@ class TranslationManagerGooglePA(
 
         val sourceLang = if (sourceLanguage == "auto") "auto" else sourceLanguage
 
-        // Remove blank entries first and split very large requests into smaller chunks.
+        // PA chunks by character count (8 000-char limit) inside translateChunks — no item-count limit needed.
         val normalizedTexts = texts.filter { it.isNotBlank() }
         if (normalizedTexts.isEmpty()) return@withContext emptyMap()
-        if (normalizedTexts.size > maxBatchItemsPerRequest) {
-            val merged = mutableMapOf<String, String>()
-            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
-                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
-            }
-            return@withContext merged
-        }
 
         val boundaries = mutableListOf<IntRange>()
         val allParagraphs = mutableListOf<String>()

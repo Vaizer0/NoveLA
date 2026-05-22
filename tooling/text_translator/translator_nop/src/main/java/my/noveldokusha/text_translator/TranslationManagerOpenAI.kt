@@ -41,10 +41,16 @@ class TranslationManagerOpenAI(
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 
-    // Keep responses short and deterministic so translation requests spend fewer tokens.
+    // Keep responses deterministic.
     private val defaultTemperature = 0.2
-    private val defaultMaxOutputTokens = 1024
-    private val maxBatchItemsPerRequest = 20
+
+    /** 0 = let the model decide (no max_tokens in request). */
+    private val maxOutputTokens: Int
+        get() = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.value
+
+    /** Paragraphs per OpenAI batch request. */
+    private val maxBatchItemsPerRequest: Int
+        get() = appPreferences.TRANSLATION_BATCH_SIZE.value.coerceAtLeast(1)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(120, TimeUnit.SECONDS)
@@ -236,10 +242,10 @@ class TranslationManagerOpenAI(
                     put("content", userMessage)
                 })
             })
-            // Lower temperature keeps translation output stable and avoids extra phrasing.
             put("temperature", defaultTemperature)
-            // Cap output length to reduce token spend on verbose completions.
-            put("max_tokens", defaultMaxOutputTokens)
+            // 0 = let the model decide; only send the field when the user set a cap.
+            val cap = maxOutputTokens
+            if (cap > 0) put("max_tokens", cap)
             put("top_p", 1.0)
             put("stream", false)
         }.toString().toRequestBody("application/json".toMediaType())

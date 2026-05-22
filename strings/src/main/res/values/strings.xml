@@ -374,4 +374,12 @@
     <string name="llm_prompt_use_english_locale">English language names in prompt</string>
     <string name="llm_prompt_use_english_locale_tip">{source_language} → "Chinese", {target_language} → "Russian" instead of localised names</string>
 
+    <!-- ── LLM batch / token settings ──────────────────────────────────────── -->
+    <string name="llm_batch_size">Batch size</string>
+    <string name="llm_batch_size_label">Paragraphs per request</string>
+    <string name="llm_batch_size_tip">How many paragraphs are sent in a single LLM request. Higher = fewer API calls but larger prompts. Default: 60.</string>
+    <string name="llm_max_output_tokens">Max output tokens</string>
+    <string name="llm_max_output_tokens_label">Token limit (0 = auto)</string>
+    <string name="llm_max_output_tokens_tip">Hard cap on response length. 0 = let the model decide (recommended). Set a value only if you need to limit costs on verbose models.</string>
+    <string name="llm_tokens_auto">Auto</string>
 </resources>

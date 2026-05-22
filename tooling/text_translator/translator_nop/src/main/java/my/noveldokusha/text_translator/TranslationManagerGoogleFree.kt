@@ -3,10 +3,7 @@ package my.noveldokusha.text_translator
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.coroutineScope
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
@@ -23,9 +20,6 @@ import java.util.concurrent.TimeUnit
 class TranslationManagerGoogleFree(
     private val coroutineScope: AppCoroutineScope
 ) : TranslationManager {
-
-    // Keep Google Free requests small so the endpoint stays responsive and avoids unnecessary retries.
-    private val maxBatchItemsPerRequest = 20
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -107,9 +101,6 @@ class TranslationManagerGoogleFree(
         targetLanguage: String,
         retryCount: Int = 2
     ): String? = withContext(Dispatchers.IO) {
-        if (text.length > 13000) {
-            return@withContext translateLongText(text, sourceLanguage, targetLanguage)
-        }
 
         var lastException: Exception? = null
         repeat(retryCount) { attempt ->
@@ -171,117 +162,110 @@ class TranslationManagerGoogleFree(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
-        // Remove blank entries early so the batch parser only handles real content.
         val normalizedTexts = texts.filter { it.isNotBlank() }
         if (normalizedTexts.isEmpty()) return@withContext emptyMap()
-        if (normalizedTexts.size > maxBatchItemsPerRequest) {
-            val merged = mutableMapOf<String, String>()
-            normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
-                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
-            }
-            return@withContext merged
+
+        // Flatten all texts into a single paragraph list, tracking which original text each belongs to.
+        // This mirrors PA's approach: one translateChunks call handles everything sequentially.
+        val boundaries = mutableListOf<IntRange>()
+        val allParagraphs = mutableListOf<String>()
+        for (text in normalizedTexts) {
+            val lines = text.split("\n").filter { it.isNotBlank() }
+            val start = allParagraphs.size
+            allParagraphs.addAll(lines)
+            boundaries.add(start until start + lines.size)
         }
 
-        val translations = mutableMapOf<String, String>()
-        var totalFailed = 0
+        val translatedAll = translateChunks(allParagraphs, sourceLanguage, targetLanguage)
 
-        val chunks = mutableListOf<List<Pair<Int, String>>>()
-        var currentChunk = mutableListOf<Pair<Int, String>>()
-        var currentLen = 0
-        val maxChunkChars = 8000
-
-        for ((index, text) in normalizedTexts.withIndex()) {
-            val estimatedLen = text.length + 10
-            if (currentLen + estimatedLen > maxChunkChars && currentChunk.isNotEmpty()) {
-                chunks.add(currentChunk)
-                currentChunk = mutableListOf()
-                currentLen = 0
-            }
-            currentChunk.add(index to text)
-            currentLen += estimatedLen
-        }
-        if (currentChunk.isNotEmpty()) chunks.add(currentChunk)
-
-        coroutineScope {
-            chunks.map { chunk ->
-                async {
-                    val wrappedRequest = chunk.joinToString("\n\n") { (idx, text) -> "[$idx]\n$text" }
-                    val translatedBody = translateWithGoogleFree(wrappedRequest, sourceLanguage, targetLanguage)
-
-                    Log.d(TAG, "translateBatch: chunk size=${chunk.size}, response length=${translatedBody?.length ?: 0}")
-
-                    if (translatedBody == null) {
-                        // Chunk failed — try each paragraph individually
-                        Log.w(TAG, "translateBatch: chunk translation failed, falling back to single translations")
-                        var chunkFailed = 0
-                        chunk.forEach { (_, original) ->
-                            val result = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
-                            if (result != null) {
-                                translations[original] = result
-                            } else {
-                                chunkFailed++
-                            }
-                        }
-                        totalFailed += chunkFailed
-                        return@async
-                    }
-
-                    chunk.forEach { (idx, original) ->
-                        val regex = Regex(
-                            """^\[\s*$idx\s*\.?\]\s*\n?(.*?)(?=\n*\[\s*\d+\s*\.?\]|\z)""",
-                            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE)
-                        )
-                        val match = regex.find(translatedBody)
-                        if (match != null) {
-                            val result = match.groupValues[1].trim()
-                            if (result.isNotEmpty()) {
-                                translations[original] = result
-                            } else {
-                                Log.w(TAG, "Marker [$idx] found but empty, falling back to single translation")
-                                val fallback = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
-                                if (fallback != null) translations[original] = fallback
-                                else totalFailed++
-                            }
-                        } else {
-                            Log.w(TAG, "Marker [$idx] not found in response, falling back to single translation")
-                            val fallback = translateWithGoogleFree(original, sourceLanguage, targetLanguage)
-                            if (fallback != null) translations[original] = fallback
-                            else totalFailed++
-                        }
-                    }
-                }
-            }.awaitAll()
+        val result = mutableMapOf<String, String>()
+        for ((i, text) in normalizedTexts.withIndex()) {
+            val range = boundaries[i]
+            if (range.isEmpty()) { result[text] = text; continue }
+            val safeEnd = range.last.coerceAtMost(translatedAll.size - 1)
+            if (safeEnd < range.first) { result[text] = text; continue }
+            val translatedLines = translatedAll.subList(range.first, safeEnd + 1)
+            result[text] = if (translatedLines.isNotEmpty()) translatedLines.joinToString("\n") else text
         }
 
-        Log.d(TAG, "translateBatch: total=${normalizedTexts.size}, translated=${translations.size}, failed=$totalFailed")
+        Log.d(TAG, "translateBatch: total=${normalizedTexts.size}, translated=${result.size}")
 
-        // If everything failed — throw so the user sees an error instead of untranslated text
-        if (translations.isEmpty() && normalizedTexts.isNotEmpty()) {
+        if (result.isEmpty() && normalizedTexts.isNotEmpty()) {
             throw IllegalStateException("Google Translate: Failed to translate. Check your internet connection.")
         }
 
-        translations
+        result
     }
 
-    private suspend fun translateLongText(
-        text: String,
+    /**
+     * Splits paragraphs into 8 000-char chunks and translates them sequentially
+     * with a short delay between requests to avoid rate-limiting the public endpoint.
+     * Each chunk is sent as a single plain-text request with \n separators.
+     */
+    private suspend fun translateChunks(
+        paragraphs: List<String>,
         sourceLanguage: String,
         targetLanguage: String
-    ): String? = withContext(Dispatchers.IO) {
-        val sentences = text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotEmpty() }
-        if (sentences.size <= 1) return@withContext null
+    ): List<String> {
+        val maxChunkChars = 8_000
+        val result = paragraphs.toMutableList()
 
-        val mid = sentences.size / 2
-        val firstPart = sentences.take(mid).joinToString(" ")
-        val secondPart = sentences.drop(mid).joinToString(" ")
+        data class Chunk(val indices: List<Int>, val text: String)
 
-        coroutineScope {
-            val d1 = async { translateWithGoogleFree(firstPart, sourceLanguage, targetLanguage) }
-            val d2 = async { translateWithGoogleFree(secondPart, sourceLanguage, targetLanguage) }
-            val r1 = d1.await()
-            val r2 = d2.await()
-            if (r1 != null && r2 != null) "$r1 $r2" else null
+        val chunks = mutableListOf<Chunk>()
+        val currentIndices = mutableListOf<Int>()
+        val currentParts = mutableListOf<String>()
+        var currentLen = 0
+
+        for ((i, para) in paragraphs.withIndex()) {
+            if (currentLen > 0 && currentLen + para.length + 1 > maxChunkChars) {
+                chunks.add(Chunk(currentIndices.toList(), currentParts.joinToString("\n")))
+                currentIndices.clear()
+                currentParts.clear()
+                currentLen = 0
+            }
+            currentIndices.add(i)
+            currentParts.add(para)
+            currentLen += para.length + 1
         }
+        if (currentParts.isNotEmpty()) {
+            chunks.add(Chunk(currentIndices.toList(), currentParts.joinToString("\n")))
+        }
+
+        Log.d(TAG, "translateChunks: ${paragraphs.size} paragraphs → ${chunks.size} chunks, $sourceLanguage→$targetLanguage")
+
+        var failedChunks = 0
+
+        for ((idx, chunk) in chunks.withIndex()) {
+            if (idx > 0) kotlinx.coroutines.delay(300L)
+
+            val translated = translateWithGoogleFree(chunk.text, sourceLanguage, targetLanguage)
+
+            if (translated == null) {
+                Log.e(TAG, "Chunk ${idx + 1}/${chunks.size} failed")
+                failedChunks++
+                continue
+            }
+
+            val translatedLines = translated.split("\n")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+
+            val minSize = minOf(translatedLines.size, chunk.indices.size)
+            for (pos in 0 until minSize) {
+                result[chunk.indices[pos]] = translatedLines[pos]
+            }
+
+            if (translatedLines.size != chunk.indices.size) {
+                Log.w(TAG, "Chunk ${idx + 1}: expected ${chunk.indices.size} paragraphs, got ${translatedLines.size}")
+            }
+        }
+
+        if (failedChunks == chunks.size && chunks.isNotEmpty()) {
+            throw IllegalStateException("Google Translate: Failed to translate. Check your internet connection.")
+        }
+
+        return result
     }
 
     override fun downloadModel(language: String) {}

@@ -78,6 +78,8 @@ fun SettingsScreen(
                     onPromptUseEnglishLocaleChange = viewModel::onPromptUseEnglishLocaleChange,
                     onSavePreset = viewModel::onSavePromptPreset,
                     onDeletePreset = viewModel::onDeletePromptPreset,
+                    onLlmBatchSizeChange = viewModel::onLlmBatchSizeChange,
+                    onLlmMaxOutputTokensChange = viewModel::onLlmMaxOutputTokensChange,
                     onLanguageChange = viewModel::onLanguageChange,
                     onNavigateToRegexCleanup = {
                         currentScreen = "regex-cleanup"

@@ -322,6 +322,19 @@ class AppPreferences @Inject constructor(
             override var value by SharedPreference_Boolean(name, preferences, true)
         }
 
+    // Количество параграфов в одном LLM-запросе (только Gemini и OpenAI).
+    // Google PA и Free используют символьный лимит и не читают это значение.
+    val TRANSLATION_BATCH_SIZE =
+        object : Preference<Int>("TRANSLATION_BATCH_SIZE") {
+            override var value by SharedPreference_Int(name, preferences, 60)
+        }
+
+    // Жёсткий лимит токенов в ответе LLM. 0 = не передавать поле, модель решает сама.
+    val TRANSLATION_MAX_OUTPUT_TOKENS =
+        object : Preference<Int>("TRANSLATION_MAX_OUTPUT_TOKENS") {
+            override var value by SharedPreference_Int(name, preferences, 0)
+        }
+
     val MASS_ADD_DELAY_MS = object : Preference<Long>("MASS_ADD_DELAY_MS") {
         override var value by SharedPreference_Serializable(
             name = name,

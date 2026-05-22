@@ -63,6 +63,8 @@ internal fun SettingsScreenBody(
     onPromptUseEnglishLocaleChange: (Boolean) -> Unit,
     onSavePreset: (name: String, prompt: String) -> Unit,
     onDeletePreset: (name: String) -> Unit,
+    onLlmBatchSizeChange: (Int) -> Unit,
+    onLlmMaxOutputTokensChange: (Int) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onNavigateToRegexCleanup: () -> Unit,
 ) {
@@ -132,6 +134,10 @@ internal fun SettingsScreenBody(
                 onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
                 onSavePreset                   = onSavePreset,
                 onDeletePreset                 = onDeletePreset,
+                llmBatchSize                   = state.llmBatchSize.value,
+                llmMaxOutputTokens             = state.llmMaxOutputTokens.value,
+                onLlmBatchSizeChange           = onLlmBatchSizeChange,
+                onLlmMaxOutputTokensChange     = onLlmMaxOutputTokensChange,
             )
         }
         HorizontalDivider()
@@ -203,6 +209,8 @@ private fun Preview() {
                     activeSystemPrompt = remember { derivedStateOf { "" } },
                     promptPresets = remember { derivedStateOf { emptyList<Pair<String, String>>() } },
                     promptUseEnglishLocale = remember { derivedStateOf { true } },
+                    llmBatchSize = remember { derivedStateOf { 60 } },
+                    llmMaxOutputTokens = remember { derivedStateOf { 0 } },
                 ),
                 onFollowSystem = { },
                 onThemeSelected = { },
@@ -225,6 +233,8 @@ private fun Preview() {
                 onPromptUseEnglishLocaleChange = { },
                 onSavePreset = { _, _ -> },
                 onDeletePreset = { },
+                onLlmBatchSizeChange = { },
+                onLlmMaxOutputTokensChange = { },
                 onLanguageChange = { },
                 onNavigateToRegexCleanup = { },
             )

@@ -352,4 +352,14 @@
     <string name="llm_prompt_use_english_locale">Английские названия языков в промпте</string>
     <string name="llm_prompt_use_english_locale_tip">{source_language} → "Chinese", {target_language} → "Russian" вместо локализованных названий</string>
 
+    <!-- ── Настройки batch / токенов LLM ───────────────────────────────────── -->
+    <string name="llm_batch_size">Размер пакета</string>
+    <string name="llm_batch_size_label">Абзацев за запрос</string>
+    <string name="llm_batch_size_tip">Сколько абзацев отправляется в одном запросе к LLM. Больше значение = меньше API-вызовов, но более крупные промпты. По умолчанию: 60.</string>
+
+    <string name="llm_max_output_tokens">Максимум выходных токенов</string>
+    <string name="llm_max_output_tokens_label">Лимит токенов (0 = авто)</string>
+    <string name="llm_max_output_tokens_tip">Жёсткий лимит длины ответа. 0 = модель сама определяет оптимальный размер (рекомендуется). Указывайте значение только если нужно ограничить расходы для многословных моделей.</string>
+
+    <string name="llm_tokens_auto">Авто</string>
 </resources>

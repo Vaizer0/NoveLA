@@ -31,11 +31,17 @@ class TranslationManagerGemini(
     // No genre keywords, no register/style hints — pure translation instruction only.
     private val fallbackSystemPrompt = "Translate each numbered item from {source_language} to {target_language}. Output \"N. Text\" only. No notes, no preamble."
 
-    // Keep Gemini translations short, deterministic, and cheap by default.
+    // Keep Gemini translations deterministic.
     private val defaultTemperature = 0.15
     private val defaultTopP = 0.9
-    private val defaultMaxOutputTokens = 1024
-    private val maxBatchItemsPerRequest = 20
+
+    /** 0 = let the model decide (no maxOutputTokens in request). */
+    private val maxOutputTokens: Int
+        get() = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.value
+
+    /** Paragraphs per Gemini batch request. */
+    private val maxBatchItemsPerRequest: Int
+        get() = appPreferences.TRANSLATION_BATCH_SIZE.value.coerceAtLeast(1)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -187,7 +193,7 @@ class TranslationManagerGemini(
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
-        // Split large batches so the request stays compact and does not waste output tokens.
+        // Filter blank entries before sending — empty strings waste output tokens.
         val normalizedTexts = texts.filter { it.isNotBlank() }
         if (normalizedTexts.isEmpty()) return@withContext emptyMap()
         if (normalizedTexts.size > maxBatchItemsPerRequest) {
@@ -206,90 +212,96 @@ class TranslationManagerGemini(
         val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
-        val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
         // Numbered input keeps Gemini aligned to the existing batch parser with minimal overhead.
         val userText = normalizedTexts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n")
 
-        var lastException: Exception? = null
-        var usesFallback = false
+        // Iterate keys sequentially. Switch to next key only on 429 (rate limit) or 401/403 (dead key).
+        // Server errors (5xx) retry the same key. Content blocks fail immediately — no retry,
+        // no key switch: the content is the problem, not the key.
+        var keyIdx = keyIndex.getAndIncrement() % availableKeys.size
         val retryCount = 3
-        val totalAttempts = retryCount * availableKeys.size
+        var lastException: Exception? = null
 
-        repeat(totalAttempts) { attempt ->
-            val currentApiKey = availableKeys[attempt % availableKeys.size]
-            val keyLabel = "key #${attempt % availableKeys.size + 1}"
-            val attemptWithinKey = attempt / availableKeys.size + 1
-            val activePrompt = if (usesFallback) builtFallbackPrompt else systemPrompt
+        for (keyAttempt in 0 until availableKeys.size) {
+            val currentApiKey = availableKeys[(keyIdx + keyAttempt) % availableKeys.size]
+            val keyLabel = "key #${(keyIdx + keyAttempt) % availableKeys.size + 1}"
 
-            try {
-                val startTime = System.currentTimeMillis()
-                Log.d(TAG, "🚀 Batch request: attempt=${attempt + 1}, paragraphs=${normalizedTexts.size}, fallback=$usesFallback")
+            for (retry in 0 until retryCount) {
+                try {
+                    val startTime = System.currentTimeMillis()
+                    Log.d(TAG, "🚀 Batch request: key=$keyLabel, retry=${retry + 1}, paragraphs=${normalizedTexts.size}")
 
-                val response = sendGeminiRequest(activePrompt, userText, currentApiKey)
-                val code = response.code
+                    val response = sendGeminiRequest(systemPrompt, userText, currentApiKey)
+                    val code = response.code
 
-                when (code) {
-                    400 -> {
-                        val errorBody = response.body.string()
-                        Log.w(TAG, "translateBatch: 400 on $keyLabel: $errorBody")
-                        lastException = IOException("Gemini: Bad request (400)")
-                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(1000L * attemptWithinKey); return@repeat } else throw lastException!!
+                    when (code) {
+                        429 -> {
+                            // Rate limit — move to next key immediately, no point retrying this one.
+                            Log.w(TAG, "translateBatch: rate limit (429) on $keyLabel, switching key")
+                            lastException = IOException("Gemini: Rate limit exceeded on $keyLabel")
+                            break
+                        }
+                        401, 403 -> {
+                            // Dead/invalid key — move to next key.
+                            val errorBody = response.body.string()
+                            Log.w(TAG, "translateBatch: auth error ($code) on $keyLabel, switching key: $errorBody")
+                            lastException = IOException("Gemini: Auth error ($code) on $keyLabel")
+                            break
+                        }
+                        in 500..599 -> {
+                            // Server error — retry same key with backoff.
+                            val errorBody = response.body.string()
+                            Log.w(TAG, "translateBatch: server error ($code) on $keyLabel, retry ${retry + 1}")
+                            lastException = IOException("Gemini: Server error ($code)")
+                            kotlinx.coroutines.delay(2000L * (retry + 1))
+                            continue
+                        }
+                        400 -> {
+                            val errorBody = response.body.string()
+                            Log.w(TAG, "translateBatch: bad request (400) on $keyLabel: $errorBody")
+                            lastException = IOException("Gemini: Bad request (400): $errorBody")
+                            kotlinx.coroutines.delay(1000L * (retry + 1))
+                            continue
+                        }
+                        !in 200..299 -> {
+                            val errorBody = response.body.string()
+                            Log.e(TAG, "translateBatch: API error $code on $keyLabel: $errorBody")
+                            throw IOException("Gemini: API error $code")
+                        }
                     }
-                    429 -> {
-                        Log.w(TAG, "translateBatch: rate limit (429) on $keyLabel")
-                        lastException = IOException("Gemini: Rate limit exceeded")
-                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500); return@repeat } else throw lastException!!
-                    }
-                    in 500..599 -> {
-                        val errorBody = response.body.string()
-                        Log.w(TAG, "translateBatch: server error ($code) on $keyLabel")
-                        lastException = IOException("Gemini: Server error ($code)")
-                        if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(2000L * attemptWithinKey); return@repeat } else throw lastException!!
-                    }
-                    !in 200..299 -> {
-                        val errorBody = response.body.string()
-                        Log.e(TAG, "translateBatch: API error $code on $keyLabel: $errorBody")
-                        throw IOException("Gemini: API error $code")
-                    }
-                }
 
-                val responseBody = readBodyOrThrow(response, "Gemini")
-                val translatedText = parseGeminiResponse(responseBody)
-                val totalTime = System.currentTimeMillis() - startTime
+                    val responseBody = readBodyOrThrow(response, "Gemini")
+                    val translatedText = parseGeminiResponse(responseBody)
+                    val totalTime = System.currentTimeMillis() - startTime
 
-                if (translatedText == BLOCKED_MARKER) {
-                    if (!usesFallback) {
-                        Log.w(TAG, "translateBatch: blocked — switching to fallback prompt")
-                        usesFallback = true
-                    } else {
-                        Log.w(TAG, "translateBatch: blocked even on fallback prompt")
+                    if (translatedText == BLOCKED_MARKER) {
+                        // Content itself is blocked — no retry, no key switch, fail the chapter cleanly.
+                        Log.w(TAG, "translateBatch: PROHIBITED_CONTENT — failing chapter immediately")
+                        throw ContentBlockedException("Gemini: chapter blocked by content filter (PROHIBITED_CONTENT)")
                     }
-                    lastException = IOException("Gemini: Content blocked")
-                    if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500L * attemptWithinKey); return@repeat }
-                    // All retries blocked — return empty map, caller falls back to original text
-                    Log.w(TAG, "translateBatch: all retries blocked, returning emptyMap")
-                    return@withContext emptyMap()
-                }
 
-                Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
+                    if (translatedText.isNotEmpty()) {
+                        Log.d(TAG, "✅ Batch success: total=${totalTime}ms, resultLen=${translatedText.length}")
+                        val translations = parseNumberedTranslations(translatedText, normalizedTexts)
+                        Log.d(TAG, "translateBatch: parsed ${translations.size}/${normalizedTexts.size} translations")
+                        return@withContext translations
+                    }
 
-                if (translatedText.isNotEmpty()) {
-                    val translations = parseNumberedTranslations(translatedText, normalizedTexts)
-                    Log.d(TAG, "translateBatch: parsed ${translations.size}/${normalizedTexts.size} translations")
-                    return@withContext translations
-                } else {
-                    Log.w(TAG, "translateBatch: empty response after parsing, retrying...")
+                    Log.w(TAG, "translateBatch: empty response, retry ${retry + 1}")
                     lastException = IOException("Gemini: Empty response after parsing")
-                    if (attempt < totalAttempts - 1) { kotlinx.coroutines.delay(500L * attemptWithinKey); return@repeat } else throw lastException!!
+                    kotlinx.coroutines.delay(500L * (retry + 1))
+
+                } catch (e: ContentBlockedException) {
+                    throw e  // Never swallow content blocks
+                } catch (e: Exception) {
+                    Log.e(TAG, "translateBatch: exception on $keyLabel retry ${retry + 1}: ${e.message}", e)
+                    lastException = e
+                    kotlinx.coroutines.delay(1000L * (retry + 1))
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "translateBatch: error on attempt ${attempt + 1} - ${e.message}", e)
-                lastException = e
-                if (attempt < totalAttempts - 1) kotlinx.coroutines.delay(1000L * attemptWithinKey)
             }
         }
-        throw lastException ?: IOException("Gemini: Batch translation failed after $retryCount attempts")
+        throw lastException ?: IOException("Gemini: Batch translation failed")
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -300,13 +312,12 @@ class TranslationManagerGemini(
         apiKey: String
     ): okhttp3.Response {
         val generationConfig = JSONObject().apply {
-            // Lower randomness keeps translations stable and reduces unnecessary wording.
             put("temperature", defaultTemperature)
             put("topP", defaultTopP)
-            // Cap the response so the model cannot spend extra tokens on verbose output.
-            put("maxOutputTokens", defaultMaxOutputTokens)
-            // Plain text output reduces content-filter sensitivity.
             put("responseMimeType", "text/plain")
+            // 0 = let the model decide; only send the field when the user set a cap.
+            val cap = maxOutputTokens
+            if (cap > 0) put("maxOutputTokens", cap)
         }
 
         // ✅ safetySettings = BLOCK_NONE for all known categories, including CIVIC_INTEGRITY (added in Gemini 2.x)
@@ -486,6 +497,8 @@ class TranslationManagerGemini(
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}
+
+    class ContentBlockedException(message: String) : IOException(message)
 
     companion object {
         private const val TAG = "TranslationGemini"

@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
@@ -69,6 +70,11 @@ internal fun SettingsGeminiTranslation(
     onPromptUseEnglishLocaleChange: (Boolean) -> Unit,
     onSavePreset: (name: String, prompt: String) -> Unit,
     onDeletePreset: (name: String) -> Unit,
+    // LLM batch / token settings (shown only for Gemini and OpenAI)
+    llmBatchSize: Int,
+    llmMaxOutputTokens: Int,
+    onLlmBatchSizeChange: (Int) -> Unit,
+    onLlmMaxOutputTokensChange: (Int) -> Unit,
 ) {
     val predefinedGeminiModels = listOf(
         "gemini-3.1-flash-lite",
@@ -330,6 +336,20 @@ internal fun SettingsGeminiTranslation(
                 )
             }
         }
+
+        // ── LLM batch / token settings — Gemini and OpenAI only ──────────────
+        AnimatedVisibility(
+            visible = translationProvider == "GEMINI" || translationProvider == "OPENAI",
+            enter   = expandVertically(),
+            exit    = shrinkVertically()
+        ) {
+            SettingsLlmBatchOptions(
+                batchSize         = llmBatchSize,
+                maxOutputTokens   = llmMaxOutputTokens,
+                onBatchSizeChange = onLlmBatchSizeChange,
+                onMaxTokensChange = onLlmMaxOutputTokensChange,
+            )
+        }
     }
 }
 
@@ -361,5 +381,128 @@ private fun ProviderRadioOption(
             Text(text = description, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/**
+ * Batch size and max output tokens — shown only for Gemini and OpenAI providers.
+ * Google PA and Free use character-based chunking and ignore these settings.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SettingsLlmBatchOptions(
+    batchSize: Int,
+    maxOutputTokens: Int,
+    onBatchSizeChange: (Int) -> Unit,
+    onMaxTokensChange: (Int) -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor   = MaterialTheme.colorScheme.onSurface,
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+        cursorColor          = MaterialTheme.colorScheme.onSurface
+    )
+
+    var batchText  by rememberSaveable(batchSize)       { mutableStateOf(batchSize.toString()) }
+    var tokensText by rememberSaveable(maxOutputTokens) { mutableStateOf(maxOutputTokens.toString()) }
+
+    val batchPresets  = listOf(20, 40, 60, 80, 100, 120)
+    val tokensPresets = listOf(0, 1024, 2048, 4096, 8192, 16384, 32768)
+
+    Column {
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+
+        // ── Batch size ────────────────────────────────────────────────────────
+        ListItem(
+            headlineContent = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text  = stringResource(R.string.llm_batch_size),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value         = batchText,
+                        onValueChange = { raw ->
+                            batchText = raw
+                            raw.toIntOrNull()?.coerceAtLeast(1)?.let(onBatchSizeChange)
+                        },
+                        label           = { Text(stringResource(R.string.llm_batch_size_label), color = MaterialTheme.colorScheme.onSurface) },
+                        modifier        = Modifier.fillMaxWidth(),
+                        singleLine      = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        colors          = textFieldColors
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement   = Arrangement.spacedBy(4.dp)
+                    ) {
+                        batchPresets.forEach { preset ->
+                            FilterChip(
+                                selected = batchText == preset.toString(),
+                                onClick  = { batchText = preset.toString(); onBatchSizeChange(preset); focusManager.clearFocus() },
+                                label    = { Text(preset.toString(), style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text  = stringResource(R.string.llm_batch_size_tip),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
+
+        // ── Max output tokens ─────────────────────────────────────────────────
+        ListItem(
+            headlineContent = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text  = stringResource(R.string.llm_max_output_tokens),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value         = tokensText,
+                        onValueChange = { raw ->
+                            tokensText = raw
+                            raw.toIntOrNull()?.coerceAtLeast(0)?.let(onMaxTokensChange)
+                        },
+                        label           = { Text(stringResource(R.string.llm_max_output_tokens_label), color = MaterialTheme.colorScheme.onSurface) },
+                        modifier        = Modifier.fillMaxWidth(),
+                        singleLine      = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        colors          = textFieldColors
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement   = Arrangement.spacedBy(4.dp)
+                    ) {
+                        tokensPresets.forEach { preset ->
+                            val label = if (preset == 0) stringResource(R.string.llm_tokens_auto) else preset.toString()
+                            FilterChip(
+                                selected = tokensText == preset.toString(),
+                                onClick  = { tokensText = preset.toString(); onMaxTokensChange(preset); focusManager.clearFocus() },
+                                label    = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text  = stringResource(R.string.llm_max_output_tokens_tip),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 }

@@ -37,6 +37,9 @@ data class SettingsScreenState(
     val activeSystemPrompt: State<String>,
     val promptPresets: State<List<Pair<String, String>>>,
     val promptUseEnglishLocale: State<Boolean>,
+    // LLM batch / token settings (Gemini + OpenAI only)
+    val llmBatchSize: State<Int>,
+    val llmMaxOutputTokens: State<Int>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

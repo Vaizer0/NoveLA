@@ -87,6 +87,8 @@ internal class SettingsViewModel @Inject constructor(
         activeSystemPrompt     = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.state(viewModelScope),
         promptPresets          = appPreferences.TRANSLATION_PROMPT_PRESETS.state(viewModelScope),
         promptUseEnglishLocale = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.state(viewModelScope),
+        llmBatchSize           = appPreferences.TRANSLATION_BATCH_SIZE.state(viewModelScope),
+        llmMaxOutputTokens     = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.state(viewModelScope),
         scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
         cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
         cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
@@ -262,6 +264,14 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onPromptUseEnglishLocaleChange(useEnglish: Boolean) {
         appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value = useEnglish
+    }
+
+    fun onLlmBatchSizeChange(size: Int) {
+        appPreferences.TRANSLATION_BATCH_SIZE.value = size.coerceAtLeast(1)
+    }
+
+    fun onLlmMaxOutputTokensChange(tokens: Int) {
+        appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.value = tokens.coerceAtLeast(0)
     }
 
     fun onSavePromptPreset(name: String, prompt: String) {
