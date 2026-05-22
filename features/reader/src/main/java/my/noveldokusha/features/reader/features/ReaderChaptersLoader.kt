@@ -37,6 +37,11 @@ internal class ReaderChaptersLoader(
     // true = Gemini/OpenAI/online — поабзацный перевод недопустим, только батч
     private val translatorIsOnline: () -> Boolean,
     private val translatorBatchTranslateOrNull: () -> (suspend (List<String>) -> Map<String, String>)?,
+    /**
+     * Переводит заголовок главы через Google PA → Free, не тратя токены Gemini/OpenAI.
+     * Возвращает null если перевод не удался — в этом случае остаётся оригинал.
+     */
+    private val translatorTranslateTitleOrNull: suspend (title: String, sourceLang: String, targetLang: String) -> String?,
     private val bookUrl: String,
     val orderedChapters: List<Chapter>,
     @Volatile var readerState: ReaderState,
@@ -469,6 +474,7 @@ internal class ReaderChaptersLoader(
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
         var chapterItemPosition = 0
         val titleOriginal = chapter.title
+        var titleTranslated: String = titleOriginal
 
         val itemTitle = ReaderItem.Title(
             chapterUrl = chapter.url,
@@ -543,7 +549,6 @@ internal class ReaderChaptersLoader(
                             val batchTranslator = translatorBatchTranslateOrNull()
 
                             if (batchTranslator != null) {
-                                // Only load and translate body paragraphs so the title never enters the translation pipeline.
                                 val dbTranslations = withContext(Dispatchers.IO) {
                                     chapterTranslationDao.getTranslations(
                                         chapterUrl = chapter.url,
@@ -552,6 +557,7 @@ internal class ReaderChaptersLoader(
                                     ).associate { it.originalText to it.translatedText }
                                 }
 
+                                // Тело главы переводится основным переводчиком (батчами)
                                 val bodyTexts = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
                                 val allTextsToTranslate = bodyTexts
 
@@ -560,6 +566,8 @@ internal class ReaderChaptersLoader(
 
                                     if (missingFromDb.isEmpty()) {
                                         android.util.Log.d(TAG, "Using full DB cache for chapter ${chapter.title} (${dbTranslations.size} body translations)")
+                                        // Заголовок тоже проверяем в кэше
+                                        titleTranslated = dbTranslations[titleOriginal] ?: titleOriginal
                                         itemsOriginal.map {
                                             if (it is ReaderItem.Body) it.copy(textTranslated = dbTranslations[it.text] ?: it.text)
                                             else it
@@ -582,25 +590,35 @@ internal class ReaderChaptersLoader(
                                             chapterTranslationDao.insertReplace(entities)
                                         }
                                         val fullTranslations = dbTranslations + extraTranslations
+                                        // Заголовок тоже проверяем в полном кэше
+                                        titleTranslated = fullTranslations[titleOriginal] ?: titleOriginal
                                         itemsOriginal.map {
                                             if (it is ReaderItem.Body) it.copy(textTranslated = fullTranslations[it.text] ?: it.text)
                                             else it
                                         }
                                     }
                                 } else {
-                                    val translatedItems = translateAndCacheBodiesOnly(
+                                    translateAndCacheBodiesOnly(
                                         itemsOriginal, batchTranslator,
                                         chapter.url, sourceLang, targetLang
                                     )
-                                    translatedItems
                                 }
+
+                                // Заголовок переводим через Google PA → Free (без токенов Gemini/OpenAI).
+                                // Если в кэше БД уже был — используем его, иначе запрашиваем.
+                                if (titleTranslated == titleOriginal) {
+                                    val translated = withContext(Dispatchers.IO) {
+                                        translatorTranslateTitleOrNull(titleOriginal, sourceLang, targetLang)
+                                    }
+                                    if (translated != null) {
+                                        titleTranslated = translated
+                                    }
+                                }
+
                                 translatedItems
                             } else {
                                 // Батч недоступен
                                 if (translatorIsOnline()) {
-                                    // Для онлайн-провайдеров (Gemini/OpenAI) поабзацный перевод недопустим:
-                                    // сожрёт лимиты и токены. Бросаем ошибку — пользователь увидит
-                                    // ReaderItem.Error и сможет сделать retry когда translator готов.
                                     android.util.Log.e(TAG, "Batch translator unavailable for online provider — refusing per-paragraph fallback")
                                     throw IllegalStateException(
                                         if (java.util.Locale.getDefault().language == "ru")
@@ -609,7 +627,7 @@ internal class ReaderChaptersLoader(
                                             "Translator not ready yet. Please retry."
                                     )
                                 }
-                                // MLKit — поабзацный перевод допустим
+                                // MLKit — поабзацный перевод допустим, заголовок не трогаем
                                 android.util.Log.d(TAG, "Using paragraph-by-paragraph translation (MLKit offline)")
                                 itemsOriginal.map {
                                     if (it is ReaderItem.Body) it.copy(textTranslated = translatorTranslateOrNull(it.text))
@@ -652,12 +670,32 @@ internal class ReaderChaptersLoader(
                     )
                 }
 
+                // Сохраняем переведённый заголовок в БД (асинхронно)
+                val finalItemTitle = itemTitle.copy(textTranslated = titleTranslated)
+                if (translatorIsActive() && titleTranslated != titleOriginal) {
+                    val sourceLang = translatorSourceLanguageOrNull()
+                    val targetLang = translatorTargetLanguageOrNull()
+                    if (sourceLang != null && targetLang != null) {
+                        launch(Dispatchers.IO) {
+                            chapterTranslationDao.insertReplace(listOf(
+                                ChapterTranslation(
+                                    chapterUrl = chapter.url,
+                                    sourceLang = sourceLang,
+                                    targetLang = targetLang,
+                                    originalText = titleOriginal,
+                                    translatedText = titleTranslated,
+                                )
+                            ))
+                        }
+                    }
+                }
+
                 maintainPosition {
                     remove(itemProgressBar)
                     itemTranslating?.let { remove(it) }
                     withContext(Dispatchers.Main.immediate) {
                         val idx = this@ReaderChaptersLoader.items.indexOf(itemTitle)
-                        if (idx != -1) this@ReaderChaptersLoader.items[idx] = itemTitle
+                        if (idx != -1) this@ReaderChaptersLoader.items[idx] = finalItemTitle
                     }
                     itemTranslationAttribution?.let { insert(it) }
                     insertAll(items)
@@ -705,7 +743,6 @@ internal class ReaderChaptersLoader(
         targetLang: String,
     ): List<ReaderItem> {
         val bodyTexts = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
-        // Batch only the chapter body paragraphs to reduce token usage and keep the title as-is.
         android.util.Log.d(TAG, "translateAndCacheBodiesOnly: ${bodyTexts.size} body paragraphs")
         val translations = batchTranslator.invoke(bodyTexts)
 
@@ -729,7 +766,7 @@ internal class ReaderChaptersLoader(
         }
     }
 
-    @Deprecated("Use translateAndCacheBodiesOnly so the chapter title stays untouched")
+    @Deprecated("Use translateAndCacheBodiesOnly for body and translatorTranslateTitleOrNull for title")
     private suspend fun translateAndCache(
         itemsOriginal: List<ReaderItem>,
         textsToTranslate: List<String>,

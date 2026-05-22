@@ -20,6 +20,9 @@ import my.noveldokusha.text_translator.domain.TranslatorState
  *
  * No silent fallback for any provider — errors are thrown with descriptive messages
  * so the user always knows what went wrong.
+ *
+ * Exception: translateTitle() always uses Google PA → Free fallback,
+ * regardless of the active provider, to avoid spending Gemini/OpenAI tokens on titles.
  */
 class TranslationManagerComposite(
     private val coroutineScope: AppCoroutineScope,
@@ -124,6 +127,53 @@ class TranslationManagerComposite(
                 googlePAManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
         }
+    }
+
+    /**
+     * Translates a single chapter title using free Google endpoints only.
+     * Tries Google PA first (better quality), falls back to Google Free.
+     * Never touches Gemini or OpenAI — no tokens spent on a title.
+     */
+    override suspend fun translateTitle(
+        title: String,
+        sourceLanguage: String,
+        targetLanguage: String
+    ): String? = withContext(Dispatchers.IO) {
+        if (title.isBlank()) return@withContext null
+
+        val resolvedSource = if (sourceLanguage == "auto") {
+            googleFreeManager.detectLanguage(title.take(200)) ?: sourceLanguage
+        } else {
+            sourceLanguage
+        }
+
+        // Try Google PA first
+        try {
+            val result = googlePAManager.translateBatch(
+                listOf(title), resolvedSource, targetLanguage
+            )[title]
+            if (!result.isNullOrBlank() && result != title) {
+                Log.d(TAG, "translateTitle: PA succeeded")
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "translateTitle: PA failed (${e.message}), trying Free")
+        }
+
+        // Fallback to Google Free
+        try {
+            val result = googleFreeManager.translateBatch(
+                listOf(title), resolvedSource, targetLanguage
+            )[title]
+            if (!result.isNullOrBlank() && result != title) {
+                Log.d(TAG, "translateTitle: Free succeeded")
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "translateTitle: Free also failed (${e.message})")
+        }
+
+        null
     }
 
     override suspend fun detectLanguage(text: String): String? {

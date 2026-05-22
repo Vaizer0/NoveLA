@@ -54,4 +54,15 @@ interface TranslationManager {
      * Default implementation returns null — override in online managers.
      */
     suspend fun detectLanguage(text: String): String? = null
+
+    /**
+     * Translate a single chapter title using free Google endpoints (PA → Free fallback).
+     * Never uses token-based providers (Gemini/OpenAI) to avoid wasting quota.
+     * Returns null if translation is not supported or both endpoints fail.
+     */
+    suspend fun translateTitle(
+        title: String,
+        sourceLanguage: String,
+        targetLanguage: String
+    ): String? = null
 }

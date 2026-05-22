@@ -123,6 +123,9 @@ internal class ReaderSession(
         },
         translatorIsOnline = { readerLiveTranslation.isUsingOnlineTranslation() },
         translatorBatchTranslateOrNull = { readerLiveTranslation.getBatchTranslator() },
+        translatorTranslateTitleOrNull = { title, sourceLang, targetLang ->
+            translationManager.translateTitle(title, sourceLang, targetLang)
+        },
         bookUrl = bookUrl,
         orderedChapters = orderedChapters,
         readerState = ReaderState.INITIAL_LOAD,
