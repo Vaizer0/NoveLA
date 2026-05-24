@@ -36,10 +36,10 @@ class NovelUpdates(
             add("sort", "2")
             add("order", "2")
             add("status", "1")
-            if (page > 1) appendPath("pg").appendPath(page.toString())
+            if (page > 1) add("pg", page)
         }
 
-        getSearchList(page, url)
+        getSearchList(index, page, url)
     }
 
     override suspend fun getSearchFilters() = withContext(Dispatchers.Default) {
@@ -73,7 +73,7 @@ class NovelUpdates(
             if (page > 1) add("pg", page)
         }
 
-        getSearchList(page, url)
+        getSearchList(index, page, url)
     }
 
     override suspend fun searchByFilters(
@@ -99,7 +99,7 @@ class NovelUpdates(
             if (page > 1) add("pg", page)
         }
 
-        getSearchList(index, url)
+        getSearchList(index, page, url)
     }
 
 
@@ -134,9 +134,10 @@ class NovelUpdates(
 
     private suspend fun getSearchList(
         index: Int,
+        page: Int,
         url: Uri.Builder
     ) = withContext(Dispatchers.Default) {
-        tryFlatConnect(extraErrorInfo = "index: $index\n\nurl: $url") {
+        tryFlatConnect(extraErrorInfo = "index: $index\npage: $page\n\nurl: $url") {
             val doc = networkClient.get(url).toDocument()
             doc.select(".search_main_box_nu")
                 .mapNotNull {
@@ -149,7 +150,7 @@ class NovelUpdates(
                         coverImageUrl = image
                     )
                 }
-                .let { Success(PagedList(list = it, index = index, isLastPage = isLastPage(doc))) }
+                .let { Success(PagedList(list = it, index = index, isLastPage = isLastPage(doc, page))) }
         }
     }
 
@@ -216,9 +217,28 @@ class NovelUpdates(
         )
     }
 
-    private fun isLastPage(doc: Document) =
-        when (val nav = doc.selectFirst("div.digg_pagination")) {
-            null -> true
-            else -> nav.children().last()?.`is`(".current") ?: true
+    private fun isLastPage(doc: Document, page: Int): Boolean {
+        val pageNumbers = doc
+            .select("a[href*='pg='], a[href*='/pg/']")
+            .mapNotNull { extractPageNumber(it.attr("href")) }
+
+        return pageNumbers.maxOrNull()?.let { page >= it } ?: true
+    }
+
+    private fun extractPageNumber(href: String): Int? {
+        val uri = runCatching { Uri.parse(href) }.getOrNull() ?: return null
+
+        uri.getQueryParameter("pg")?.toIntOrNull()?.let { return it }
+
+        val segments = uri.pathSegments
+        val pageIndex = segments.indexOf("pg")
+        if (pageIndex >= 0) {
+            segments.getOrNull(pageIndex + 1)?.toIntOrNull()?.let { return it }
         }
+
+        return href
+            .substringAfter("pg=", "")
+            .takeWhile { it.isDigit() }
+            .toIntOrNull()
+    }
 }
