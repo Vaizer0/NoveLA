@@ -235,8 +235,15 @@ internal class CloudFareVerificationInterceptor(
         return finalResponse
     }
 
+    private val STATIC_EXTENSIONS = setOf("js", "css", "png", "jpg", "svg", "woff", "woff2", "ttf", "ico", "webp", "json", "txt", "lua")
+
     private fun isNotCloudflare(response: Response, body: String): Boolean {
         val host = response.request.url.host
+
+        // Статические файлы — никогда не CF-челлендж
+        val pathExt = response.request.url.pathSegments.lastOrNull()
+            ?.substringAfterLast('.', "")?.lowercase()
+        if (pathExt != null && pathExt in STATIC_EXTENSIONS) return true
 
         // Глобальный whitelist
         if (CLOUDFLARE_WHITELIST.any { host.contains(it) }) return true
