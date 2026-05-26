@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.png" width="96" height="96" alt="Иконка приложения NoveLA — читалка новелл для Android"/>
+<img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.jpg" width="96" height="96" alt="Иконка приложения NoveLA — читалка новелл для Android"/>
 
 # NoveLA
 
@@ -28,7 +28,7 @@
 
 <br/>
 
-<img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/banner.png" alt="NoveLA — Android читалка веб-новелл со встроенным переводчиком, 25+ источниками, TTS и поддержкой EPUB" width="100%"/>
+<img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/banner.jpg" alt="NoveLA — Android читалка веб-новелл со встроенным переводчиком, 25+ источниками, TTS и поддержкой EPUB" width="100%"/>
 
 <br/><br/>
 
@@ -137,16 +137,16 @@ NoveLA поддерживает внешние Lua-плагины — источ
 <div align="center">
 <table>
   <tr>
-    <td align="center"><b>Библиотека</b><br/><img src="screenshots/library_white.png" width="180" alt="Библиотека NoveLA — список читаемых новелл с обложками"/></td>
-    <td align="center"><b>Каталог</b><br/><img src="screenshots/catalog.png" width="180" alt="Каталог NoveLA — список новелл из источника NovelFire"/></td>
-    <td align="center"><b>Книга</b><br/><img src="screenshots/book_info.png" width="180" alt="NoveLA — страница книги Shadow Slave со списком глав"/></td>
-    <td align="center"><b>Глава</b><br/><img src="screenshots/chapter.png" width="180" alt="NoveLA ридер — просмотр главы с чистой типографикой"/></td>
+    <td align="center"><b>Библиотека</b><br/><img src="screenshots/library_white.jpg" width="180" alt="Библиотека NoveLA — список читаемых новелл с обложками"/></td>
+    <td align="center"><b>Каталог</b><br/><img src="screenshots/catalog.jpg" width="180" alt="Каталог NoveLA — список новелл из источника NovelFire"/></td>
+    <td align="center"><b>Книга</b><br/><img src="screenshots/book_info.jpg" width="180" alt="NoveLA — страница книги Shadow Slave со списком глав"/></td>
+    <td align="center"><b>Глава</b><br/><img src="screenshots/chapter.jpg" width="180" alt="NoveLA ридер — просмотр главы с чистой типографикой"/></td>
   </tr>
   <tr>
-    <td align="center"><b>Перевод</b><br/><img src="screenshots/translate_chapter.png" width="180" alt="NoveLA переводчик — глава переведена на русский через Google Translate"/></td>
-    <td align="center"><b>Настройки перевода</b><br/><img src="screenshots/translate_settings.png" width="180" alt="Настройки переводчика NoveLA — Google, Gemini, OpenAI"/></td>
-    <td align="center"><b>Добавить по URL</b><br/><img src="screenshots/add_novel_by_URLs.png" width="180" alt="NoveLA — добавление новеллы по ссылке"/></td>
-    <td align="center"><b>Плагины</b><br/><img src="screenshots/plugins_repo.png" width="180" alt="Репозиторий плагинов NoveLA — установка источников от сообщества"/></td>
+    <td align="center"><b>Перевод</b><br/><img src="screenshots/translate_chapter.jpg" width="180" alt="NoveLA переводчик — глава переведена на русский через Google Translate"/></td>
+    <td align="center"><b>Настройки перевода</b><br/><img src="screenshots/translate_settings.jpg" width="180" alt="Настройки переводчика NoveLA — Google, Gemini, OpenAI"/></td>
+    <td align="center"><b>Добавить по URL</b><br/><img src="screenshots/add_novel_by_URLs.jpg" width="180" alt="NoveLA — добавление новеллы по ссылке"/></td>
+    <td align="center"><b>Плагины</b><br/><img src="screenshots/plugins_repo.jpg" width="180" alt="Репозиторий плагинов NoveLA — установка источников от сообщества"/></td>
   </tr>
 </table>
 </div>
