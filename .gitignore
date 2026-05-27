@@ -50,5 +50,4 @@ key.properties
 /.history
 app/release/output-metadata.json
 
-*.md
 keystore_base64.txt
