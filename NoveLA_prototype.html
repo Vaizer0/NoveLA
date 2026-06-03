@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoveLA — UI Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── THEME VARIABLES ─── */
+:root {
+  --bg: #F7F9FA;
+  --sub-bg: #FFFFFF;
+  --highlight: #0470E6;
+  --text: #1E1715;
+  --sub-text: #8C8C8C;
+  --stroke: rgba(140,140,140,0.15);
+  --popup: #FFFFFF;
+  --on-highlight: #FFFFFF;
+  --danger: #E53935;
+  --success: #2E7D32;
+  --radius: 14px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --pad: 16px;
+  --font: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+[data-theme="dark"] {
+  --bg: #0C0C0C;
+  --sub-bg: #191919;
+  --highlight: #0088FF;
+  --text: #EBEEF1;
+  --sub-text: rgba(225,230,235,0.75);
+  --stroke: rgba(225,230,235,0.10);
+  --popup: #1E1E1E;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+}
+[data-theme="black"] {
+  --bg: #000000;
+  --sub-bg: #0A0A0A;
+  --highlight: #0088FF;
+  --text: #EBEEF1;
+  --sub-text: rgba(225,230,235,0.75);
+  --stroke: rgba(225,230,235,0.08);
+  --popup: #111111;
+  --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.7);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font);background:#111;color:var(--text)}
+button{font-family:var(--font);cursor:pointer;border:none;background:none}
+input{font-family:var(--font)}
+svg{display:block;flex-shrink:0}
+
+/* ─── LAYOUT ─── */
+.workspace { display:flex; flex-direction:column; height:100vh; background:#0d0d0d; }
+.toolbar { display:flex; align-items:center; gap:12px; padding:12px 20px; background:#161616; border-bottom:1px solid #2a2a2a; flex-shrink:0; flex-wrap:wrap; }
+.toolbar-title { font-size:13px; font-weight:600; color:#fff; letter-spacing:0.05em; text-transform:uppercase; margin-right:8px; }
+.theme-btns { display:flex; gap:4px; background:#222; border-radius:8px; padding:3px; }
+.theme-btn { padding:5px 12px; border-radius:6px; font-size:12px; font-weight:500; color:#888; transition:var(--transition); }
+.theme-btn.active { background:#333; color:#fff; }
+.toolbar-sep { width:1px; height:20px; background:#2a2a2a; }
+.nav-btns { display:flex; gap:4px; flex-wrap:wrap; }
+.nav-btn { padding:5px 11px; border-radius:6px; font-size:12px; font-weight:500; color:#888; transition:var(--transition); }
+.nav-btn.active { background:#0088FF22; color:#0088FF; }
+.nav-btn:hover:not(.active) { background:#222; color:#ccc; }
+.state-btns { display:flex; gap:4px; margin-left:auto; }
+.state-btn { padding:5px 10px; border-radius:6px; font-size:11px; font-weight:500; color:#666; border:1px solid #2a2a2a; transition:var(--transition); }
+.state-btn.active { border-color:#0088FF44; color:#0088FF; background:#0088FF11; }
+.state-btn:hover:not(.active) { border-color:#3a3a3a; color:#aaa; }
+.main { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:20px; }
+
+/* ─── PHONE FRAME ─── */
+.phone-wrap { position:relative; display:flex; align-items:center; justify-content:center; }
+.phone-frame { width:390px; height:720px; background:var(--sub-bg); border-radius:44px; overflow:hidden; position:relative; box-shadow:0 0 0 8px #1a1a1a, 0 0 0 10px #2a2a2a, 0 30px 80px rgba(0,0,0,0.8); display:flex; flex-direction:column; transition:background var(--transition); }
+.phone-notch { position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:30px; background:#1a1a1a; border-radius:0 0 20px 20px; z-index:100; }
+.screen { display:none; flex-direction:column; height:100%; background:var(--bg); transition:background var(--transition); overflow:hidden; }
+.screen.active { display:flex; }
+
+/* ─── COMMON COMPONENTS ─── */
+.topbar { background:var(--sub-bg); border-bottom:1px solid var(--stroke); flex-shrink:0; padding-top:34px; transition:background var(--transition), border-color var(--transition); }
+.topbar-inner { display:flex; align-items:center; padding:0 8px 0 4px; height:52px; gap:2px; }
+.topbar-title { font-size:18px; font-weight:600; color:var(--text); flex:1; padding:0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.icon-btn { width:44px; height:44px; border-radius:22px; display:flex; align-items:center; justify-content:center; color:var(--text); transition:background var(--transition); flex-shrink:0; }
+.icon-btn:hover { background:var(--stroke); }
+.icon-btn.active { color:var(--highlight); background:color-mix(in srgb, var(--highlight) 10%, transparent); }
+.icon-btn svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.scroll-area { flex:1; overflow-y:auto; overflow-x:hidden; }
+.scroll-area::-webkit-scrollbar { width:3px; }
+.scroll-area::-webkit-scrollbar-thumb { background:var(--stroke); border-radius:2px; }
+.bottombar { background:var(--sub-bg); border-top:1px solid var(--stroke); display:flex; align-items:center; padding:6px 0 20px; flex-shrink:0; transition:background var(--transition), border-color var(--transition); }
+.bottombar-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; color:var(--sub-text); font-size:10px; font-weight:500; transition:color var(--transition); cursor:pointer; }
+.bottombar-item.active { color:var(--highlight); }
+.bottombar-item svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.bottombar-item.active svg { stroke:var(--highlight); }
+
+/* ─── ROUNDED COLUMN ─── */
+.rounded-col { background:var(--sub-bg); border:1px solid var(--stroke); border-radius:var(--radius); overflow:hidden; margin:0 var(--pad); transition:background var(--transition), border-color var(--transition); }
+.rounded-col + .rounded-col { margin-top:8px; }
+
+/* ─── ITEM ─── */
+.item { display:flex; align-items:center; min-height:52px; padding:10px 16px; gap:14px; cursor:pointer; transition:background var(--transition); position:relative; }
+.item:hover { background:color-mix(in srgb, var(--highlight) 5%, transparent); }
+.item + .item::before { content:''; position:absolute; top:0; left:16px; right:0; height:1px; background:var(--stroke); }
+.item-icon { color:var(--sub-text); flex-shrink:0; }
+.item-icon svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.item-content { flex:1; min-width:0; }
+.item-text { font-size:15px; font-weight:400; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.item-sub { font-size:12px; color:var(--sub-text); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.item-trail { color:var(--sub-text); flex-shrink:0; }
+.item-trail svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.outer-title { font-size:12px; font-weight:600; color:var(--highlight); letter-spacing:0.06em; text-transform:uppercase; padding:16px var(--pad) 6px; }
+.outer-title:first-child { padding-top:8px; }
+
+/* ─── SWITCHER ─── */
+.switcher { width:44px; height:26px; background:var(--stroke); border-radius:13px; position:relative; cursor:pointer; transition:background 0.25s; flex-shrink:0; }
+.switcher.on { background:var(--highlight); }
+.switcher::after { content:''; position:absolute; width:20px; height:20px; background:white; border-radius:10px; top:3px; left:3px; transition:transform 0.25s cubic-bezier(0.4,0,0.2,1); box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+.switcher.on::after { transform:translateX(18px); }
+
+/* ─── PILL TABS ─── */
+.tabs { display:flex; background:var(--bg); padding:6px; gap:4px; transition:background var(--transition); }
+.tab { flex:1; text-align:center; padding:8px 4px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; color:var(--sub-text); cursor:pointer; transition:all var(--transition); }
+.tab.active { background:var(--sub-bg); color:var(--text); box-shadow:var(--shadow); }
+
+/* ─── BOOK GRID ─── */
+.book-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:10px var(--pad); }
+.book-card { border-radius:var(--radius-sm); overflow:hidden; position:relative; cursor:pointer; transition:transform var(--transition), box-shadow var(--transition); aspect-ratio:2/3; background:var(--sub-bg); border:1px solid var(--stroke); }
+.book-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+.book-cover { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:28px; position:relative; }
+.book-cover-img { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:32px; }
+.book-gradient { position:absolute; bottom:0; left:0; right:0; height:80%; background:linear-gradient(to top, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.7) 35%, transparent 100%); }
+.book-titlebar { position:absolute; bottom:0; left:0; right:0; padding:0 7px 0; }
+.book-title { font-size:9.5px; font-weight:600; color:#fff; line-height:1.3; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; text-shadow:0 1px 4px rgba(0,0,0,1); padding:4px 0 4px; }
+.book-source { display:block; font-size:8px; font-weight:500; color:rgba(255,255,255,0.9); line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:color-mix(in srgb, var(--highlight) 80%, rgba(0,0,0,0.7)); margin:0 -7px; padding:3px 7px 4px; }
+.book-badge { position:absolute; top:6px; right:6px; background:var(--highlight); color:white; font-size:9px; font-weight:700; padding:2px 5px; border-radius:8px; min-width:18px; text-align:center; }
+.book-source-badge { position:absolute; top:6px; left:6px; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); color:#fff; font-size:8px; font-weight:500; padding:2px 6px; border-radius:6px; max-width:70px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ─── CHIP ─── */
+.chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:500; border:1px solid var(--stroke); color:var(--sub-text); cursor:pointer; transition:all var(--transition); }
+.chip.active { background:color-mix(in srgb, var(--highlight) 12%, transparent); border-color:var(--highlight); color:var(--highlight); }
+
+/* ─── SEARCH BAR ─── */
+.search-bar { display:flex; align-items:center; gap:8px; margin:0 var(--pad) 8px; background:var(--sub-bg); border:1px solid var(--stroke); border-radius:var(--radius-sm); padding:8px 12px; }
+.search-bar svg { width:18px; height:18px; stroke:var(--sub-text); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0;}
+.search-bar input { flex:1; background:none; border:none; outline:none; font-size:14px; color:var(--text); font-family:var(--font); }
+.search-bar input::placeholder { color:var(--sub-text); }
+
+/* ─── READER SPECIFIC ─── */
+.reader-chapter-nav { display:flex; gap:10px; padding:32px 0 48px; }
+.reader-nav-btn { flex:1; padding:12px; border:1px solid var(--stroke); border-radius:var(--radius-sm); text-align:center; font-size:13px; color:var(--sub-text); cursor:pointer; transition:all var(--transition); }
+.reader-nav-btn:hover { border-color:var(--highlight); color:var(--highlight); }
+.reader-nav-btn.next { text-align:right; }
+.reader-content { flex:1; overflow-y:auto; padding:20px var(--pad); background:var(--bg); font-size:16px; line-height:1.85; color:var(--text); }
+.reader-chapter-title { font-size:18px; font-weight:600; color:var(--highlight); margin-bottom:20px; text-align:center; }
+.reader-topbar { position:absolute; top:0; left:0; right:0; background:color-mix(in srgb, var(--sub-bg) 90%, transparent); backdrop-filter:blur(12px); border-bottom:1px solid var(--stroke); padding-top:34px; transform:translateY(-100%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1); z-index:10; }
+.reader-bottombar { position:absolute; bottom:0; left:0; right:0; background:color-mix(in srgb, var(--sub-bg) 90%, transparent); backdrop-filter:blur(12px); border-top:1px solid var(--stroke); transform:translateY(100%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1); z-index:10; }
+.reader-ui-visible .reader-topbar, .reader-ui-visible .reader-bottombar { transform:translateY(0); }
+.reader-progress { font-size:11px; color:var(--sub-text); padding:4px 16px 10px; display:flex; gap:12px; }
+.reader-tabs { display:flex; border-top:1px solid var(--stroke); }
+.reader-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 4px 16px; font-size:10px; color:var(--sub-text); cursor:pointer; transition:color var(--transition); }
+.reader-tab.active { color:var(--highlight); }
+.reader-tab svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.reader-panel { display:none; padding:8px var(--pad) 4px; }
+.reader-panel.active { display:block; }
+
+/* ─── SLIDER ─── */
+.slider-wrap { padding:12px 0 6px; }
+.slider-label { font-size:12px; color:var(--sub-text); margin-bottom:8px; display:flex; justify-content:space-between; }
+.slider-label span { color:var(--highlight); font-weight:600; }
+input[type=range] { width:100%; height:4px; border-radius:2px; background:var(--stroke); outline:none; -webkit-appearance:none; cursor:pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:9px; background:var(--highlight); box-shadow:0 1px 4px rgba(0,0,0,0.3); }
+
+/* ─── CHAPTER ITEM ─── */
+.chapter-item { padding:12px var(--pad); border-bottom:1px solid var(--stroke); cursor:pointer; transition:background var(--transition); }
+.chapter-item:hover { background:color-mix(in srgb, var(--highlight) 4%, transparent); }
+.chapter-item.read .chapter-name { color:var(--sub-text); }
+.chapter-name { font-size:14px; font-weight:400; color:var(--text); }
+.chapter-meta { font-size:11px; color:var(--sub-text); margin-top:2px; }
+.chapter-item.highlighted { background:color-mix(in srgb, #E6A817 15%, transparent); }
+
+/* ─── BOOK HEADER ─── */
+.book-header { padding:var(--pad); display:flex; gap:14px; align-items:flex-start; }
+.book-cover-large { width:90px; height:135px; border-radius:var(--radius-sm); background:var(--sub-bg); border:1px solid var(--stroke); display:flex; align-items:center; justify-content:center; font-size:36px; flex-shrink:0; overflow:hidden; }
+.book-info { flex:1; min-width:0; }
+.book-info-title { font-size:16px; font-weight:600; color:var(--text); line-height:1.3; margin-bottom:4px; }
+.book-info-meta { font-size:12px; color:var(--sub-text); margin-bottom:3px; }
+.book-genres { display:flex; flex-wrap:wrap; gap:5px; padding:0 var(--pad) 10px; }
+.genre-chip { padding:3px 9px; background:color-mix(in srgb, var(--highlight) 10%, transparent); color:var(--highlight); border-radius:12px; font-size:11px; font-weight:500; }
+.book-desc { padding:0 var(--pad) 12px; font-size:13px; color:var(--sub-text); line-height:1.6; }
+.read-btn { margin:0 var(--pad) 8px; background:var(--highlight); color:white; border-radius:var(--radius-sm); padding:13px; text-align:center; font-size:15px; font-weight:600; cursor:pointer; transition:opacity var(--transition); }
+.read-btn:hover { opacity:0.9; }
+.read-btn.secondary { background:color-mix(in srgb, var(--highlight) 12%, transparent); color:var(--highlight); font-weight:500; }
+
+/* ─── EXTENSION CARD ─── */
+.ext-card { margin:6px var(--pad); background:var(--sub-bg); border:1px solid var(--stroke); border-radius:var(--radius); padding:14px; display:flex; gap:12px; align-items:center; transition:background var(--transition), border-color var(--transition); }
+.ext-icon { width:42px; height:42px; border-radius:var(--radius-sm); background:color-mix(in srgb, var(--highlight) 15%, transparent); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.ext-info { flex:1; min-width:0; }
+.ext-name { font-size:14px; font-weight:500; color:var(--text); }
+.ext-meta { font-size:11px; color:var(--sub-text); }
+.ext-btn { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; transition:all var(--transition); flex-shrink:0; }
+.ext-btn.installed { background:color-mix(in srgb, var(--success) 15%, transparent); color:var(--success); }
+.ext-btn.install { background:var(--highlight); color:white; }
+.ext-btn.update { background:color-mix(in srgb, #E6A817 15%, transparent); color:#C68A00; }
+.ext-btn.remove { background:color-mix(in srgb, var(--danger) 15%, transparent); color:var(--danger); }
+
+/* ─── PROGRESS BAR ─── */
+.progress-bar { height:2px; background:var(--stroke); position:relative; overflow:hidden; }
+.progress-bar-fill { height:100%; background:var(--highlight); border-radius:1px; transition:width 0.3s; }
+
+/* ─── DROPDOWN ─── */
+.dropdown { position:absolute; right:8px; top:100%; background:var(--popup); border:1px solid var(--stroke); border-radius:var(--radius); box-shadow:var(--shadow-lg); min-width:180px; z-index:50; overflow:hidden; display:none; }
+.dropdown.open { display:block; }
+.dropdown-item { display:flex; align-items:center; gap:10px; padding:12px 14px; font-size:14px; color:var(--text); cursor:pointer; transition:background var(--transition); }
+.dropdown-item:hover { background:color-mix(in srgb, var(--highlight) 8%, transparent); }
+.dropdown-item svg { width:18px; height:18px; stroke:var(--sub-text); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.dropdown-item.danger { color:var(--danger); }
+.dropdown-item.danger svg { stroke:var(--danger); }
+
+/* ─── SELECTION MODE ─── */
+.select-topbar { background:var(--highlight); color:white; display:flex; align-items:center; padding:0 4px; height:52px; gap:2px; }
+.select-topbar .topbar-title { color:white; }
+.select-topbar .icon-btn { color:white; }
+
+/* ─── ACCENT COLORS ─── */
+.accent-row { padding:6px 16px 12px; display:flex; gap:10px; flex-wrap:wrap; }
+.accent-dot { width:34px; height:34px; border-radius:50%; cursor:pointer; transition:transform var(--transition), box-shadow var(--transition); border:2px solid transparent; flex-shrink:0; }
+.accent-dot:hover { transform:scale(1.15); }
+.accent-dot.active { border-color:var(--text); box-shadow:0 0 0 2px var(--sub-bg), 0 0 0 4px var(--text); }
+
+/* ─── REGEX CLEANUP ─── */
+.regex-rule { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--stroke); }
+.regex-rule:last-child { border-bottom:none; }
+.regex-pattern { font-family:var(--font-mono); font-size:13px; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.regex-replacement { font-size:12px; color:var(--sub-text); max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.regex-desc { font-size:11px; color:var(--sub-text); margin-top:2px; }
+.regex-del-btn { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--danger); flex-shrink:0; transition:background var(--transition); cursor:pointer; }
+.regex-del-btn:hover { background:color-mix(in srgb, var(--danger) 12%, transparent); }
+.regex-del-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.regex-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:12px; color:var(--highlight); font-size:13px; font-weight:500; cursor:pointer; transition:background var(--transition); }
+.regex-add-btn:hover { background:color-mix(in srgb, var(--highlight) 5%, transparent); }
+.regex-add-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── TRANSLATION SECTION ─── */
+.translation-field { display:flex; align-items:center; padding:10px 16px; gap:12px; border-bottom:1px solid var(--stroke); }
+.translation-field:last-child { border-bottom:none; }
+.translation-field .item-content { flex:1; }
+.translation-field input[type="text"], .translation-field input[type="password"] { background:var(--bg); border:1px solid var(--stroke); border-radius:var(--radius-xs); padding:6px 10px; font-size:13px; color:var(--text); font-family:var(--font); width:100%; outline:none; }
+.translation-field input::placeholder { color:var(--sub-text); }
+.translation-label { font-size:11px; font-weight:600; color:var(--sub-text); text-transform:uppercase; letter-spacing:0.04em; padding:10px 16px 4px; border-bottom:1px solid var(--stroke); }
+
+/* ─── PLUGIN FILTER TABS ─── */
+.plugin-filters { display:flex; gap:6px; padding:6px var(--pad); }
+
+/* ─── MODAL / DIALOG / BOTTOMSHEET ─── */
+.overlay { position:absolute; inset:0; background:rgba(0,0,0,0.5); z-index:200; display:none; backdrop-filter:blur(2px); }
+.overlay.open { display:block; }
+.dialog { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:var(--popup); border:1px solid var(--stroke); border-radius:var(--radius); box-shadow:var(--shadow-lg); z-index:210; display:none; width:calc(100% - 32px); max-width:340px; overflow:hidden; }
+.dialog.open { display:block; }
+.dialog-header { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid var(--stroke); }
+.dialog-title { flex:1; font-size:15px; font-weight:600; color:var(--text); }
+.dialog-body { padding:12px 16px; max-height:300px; overflow-y:auto; }
+.dialog-body input[type="text"], .dialog-body input[type="number"] { width:100%; padding:10px 12px; background:var(--bg); border:1px solid var(--stroke); border-radius:var(--radius-xs); font-size:14px; color:var(--text); font-family:var(--font); outline:none; box-sizing:border-box; }
+.dialog-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--stroke); }
+.dialog-item:last-child { border-bottom:none; }
+.dialog-item label { flex:1; font-size:14px; color:var(--text); cursor:pointer; }
+.dialog-footer { display:flex; border-top:1px solid var(--stroke); }
+.dialog-btn { flex:1; padding:12px; text-align:center; font-size:14px; font-weight:600; cursor:pointer; transition:background var(--transition); }
+.dialog-btn:hover { background:color-mix(in srgb, var(--highlight) 5%, transparent); }
+.dialog-btn.primary { color:var(--highlight); }
+.dialog-btn.danger { color:var(--danger); }
+
+/* ─── BOTTOMSHEET ─── */
+.bottomsheet-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.4); z-index:200; display:none; }
+.bottomsheet-overlay.open { display:block; }
+.bottomsheet { position:absolute; bottom:0; left:0; right:0; background:var(--popup); border-radius:var(--radius) var(--radius) 0 0; z-index:210; display:none; max-height:80%; overflow:hidden; box-shadow:0 -8px 32px rgba(0,0,0,0.2); }
+.bottomsheet.open { display:flex; flex-direction:column; }
+.bottomsheet-handle { width:36px; height:4px; background:var(--sub-text); border-radius:2px; margin:10px auto 4px; flex-shrink:0; }
+.bottomsheet-title { font-size:16px; font-weight:600; color:var(--text); padding:8px 16px 12px; flex-shrink:0; }
+.bottomsheet-scroll { overflow-y:auto; padding-bottom:40px; }
+.bottomsheet-scroll::-webkit-scrollbar { width:3px; }
+.bottomsheet-scroll::-webkit-scrollbar-thumb { background:var(--stroke); border-radius:2px; }
+.bs-item { display:flex; align-items:center; min-height:44px; padding:8px 16px; gap:12px; cursor:pointer; transition:background var(--transition); }
+.bs-item:hover { background:color-mix(in srgb, var(--highlight) 5%, transparent); }
+.bs-item-icon { color:var(--sub-text); flex-shrink:0; }
+.bs-item-icon svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.bs-item-text { flex:1; font-size:14px; color:var(--text); }
+.bs-item-sub { font-size:11px; color:var(--sub-text); margin-top:1px; }
+.bs-item-trail { color:var(--sub-text); font-size:13px; }
+.bs-item-radio { width:20px; height:20px; border-radius:10px; border:2px solid var(--stroke); flex-shrink:0; display:flex; align-items:center; justify-content:center; transition:all var(--transition); }
+.bs-item-radio.selected { border-color:var(--highlight); }
+.bs-item-radio.selected::after { content:''; width:10px; height:10px; border-radius:5px; background:var(--highlight); }
+.bs-filter-chip { padding:4px 10px; border-radius:16px; font-size:12px; font-weight:500; border:1px solid var(--stroke); color:var(--sub-text); cursor:pointer; transition:all var(--transition); }
+.bs-filter-chip.active { background:color-mix(in srgb, var(--highlight) 12%, transparent); border-color:var(--highlight); color:var(--highlight); }
+.bs-slider-row { display:flex; align-items:center; gap:12px; padding:4px 16px 8px; }
+.bs-slider-row input[type=range] { flex:1; }
+.bs-slider-label { font-size:14px; font-weight:600; color:var(--highlight); min-width:24px; text-align:center; }
+.bs-section-title { font-size:11px; font-weight:600; color:var(--highlight); text-transform:uppercase; letter-spacing:0.04em; padding:12px 16px 4px; }
+
+/* ─── LIBRARY SEARCH BAR (inline in topbar) ─── */
+.lib-topbar-search { display:flex; align-items:center; gap:8px; padding:6px 12px 8px; }
+.lib-search-input { flex:1; display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--stroke); border-radius:var(--radius-sm); padding:7px 12px; transition:border-color var(--transition); }
+.lib-search-input:focus-within { border-color:var(--highlight); }
+.lib-search-input svg { width:16px; height:16px; stroke:var(--sub-text); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+.lib-search-input input { flex:1; background:none; border:none; outline:none; font-size:14px; color:var(--text); font-family:var(--font); }
+.lib-search-input input::placeholder { color:var(--sub-text); }
+
+/* ─── SORT DIRECTION BUTTON ─── */
+.sort-dir-btn { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--sub-text); flex-shrink:0; transition:all var(--transition); cursor:pointer; }
+.sort-dir-btn:hover { background:color-mix(in srgb, var(--highlight) 8%, transparent); color:var(--highlight); }
+.sort-dir-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── POSNEG CHECKBOX ─── */
+.posneg-row { display:flex; align-items:center; min-height:44px; padding:6px 16px; gap:10px; }
+.posneg-label { flex:1; font-size:14px; color:var(--text); }
+.posneg-btn { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; cursor:pointer; border:1.5px solid var(--stroke); color:var(--sub-text); background:none; transition:all var(--transition); flex-shrink:0; font-family:var(--font); }
+.posneg-btn.pos { border-color:var(--success); color:var(--success); background:color-mix(in srgb, var(--success) 12%, transparent); }
+.posneg-btn.neg { border-color:var(--danger); color:var(--danger); background:color-mix(in srgb, var(--danger) 12%, transparent); }
+
+/* ─── FINDER SPECIFIC ─── */
+.finder-source-item { display:flex; align-items:center; min-height:56px; padding:8px 16px; gap:12px; cursor:pointer; transition:background var(--transition); position:relative; }
+.finder-source-item:hover { background:color-mix(in srgb, var(--highlight) 5%, transparent); }
+.finder-source-item + .finder-source-item::before { content:''; position:absolute; top:0; left:16px; right:0; height:1px; background:var(--stroke); }
+.finder-source-icon { width:32px; height:32px; border-radius:8px; background:color-mix(in srgb, var(--highlight) 12%, transparent); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; overflow:hidden; }
+.finder-source-icon img { width:100%; height:100%; object-fit:cover; }
+.finder-source-info { flex:1; min-width:0; }
+.finder-source-name { font-size:14px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.finder-source-lang { font-size:12px; color:var(--sub-text); margin-top:1px; }
+.finder-source-actions { display:flex; align-items:center; gap:2px; flex-shrink:0; }
+.finder-pin-btn { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--sub-text); transition:all var(--transition); cursor:pointer; }
+.finder-pin-btn:hover { background:color-mix(in srgb, var(--highlight) 8%, transparent); color:var(--highlight); }
+.finder-pin-btn.pinned { color:var(--highlight); }
+.finder-pin-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.finder-pin-btn.pinned svg { fill:var(--highlight); }
+.finder-cfg-btn { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--sub-text); transition:all var(--transition); cursor:pointer; }
+.finder-cfg-btn:hover { background:color-mix(in srgb, var(--stroke) 50%, transparent); color:var(--text); }
+.finder-cfg-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.finder-section-label { font-size:12px; font-weight:600; color:var(--highlight); letter-spacing:0.06em; text-transform:uppercase; padding:14px 16px 6px; }
+
+/* ─── SETTINGS SPECIFIC ─── */
+.settings-page-content { padding-bottom:40px; }
+.chip-group { display:flex; gap:6px; flex-wrap:wrap; padding:8px 0 4px; }
+
+/* ─── EMPTY STATE ─── */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px var(--pad); gap:12px; color:var(--sub-text); }
+.empty-state svg { width:48px; height:48px; stroke:var(--sub-text); fill:none; stroke-width:1.2; stroke-linecap:round; stroke-linejoin:round; opacity:0.5; }
+.empty-state-text { font-size:14px; text-align:center; line-height:1.5; }
+
+/* ─── GLOBAL SEARCH ─── */
+.source-group-title { font-size:12px; font-weight:600; color:var(--sub-text); padding:12px var(--pad) 6px; text-transform:uppercase; letter-spacing:0.05em; }
+.source-scroll { display:flex; gap:10px; padding:0 var(--pad) 12px; overflow-x:auto; }
+.source-scroll::-webkit-scrollbar { height:0; }
+.source-book-card { flex-shrink:0; width:80px; cursor:pointer; }
+.source-book-cover { width:80px; height:120px; border-radius:var(--radius-xs); background:var(--sub-bg); border:1px solid var(--stroke); display:flex; align-items:center; justify-content:center; font-size:24px; overflow:hidden; }
+.source-book-title { font-size:10px; color:var(--text); margin-top:4px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* ─── TAB BADGE ─── */
+.tab-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:16px; height:16px; border-radius:8px;
+  background:var(--danger); color:#fff;
+  font-size:10px; font-weight:700; padding:0 4px;
+  margin-left:4px; vertical-align:middle;
+}
+
+/* ─── ANIMATION ─── */
+@keyframes shimmer { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+.skeleton { background:linear-gradient(90deg, var(--stroke) 25%, color-mix(in srgb, var(--stroke) 50%, transparent) 50%, var(--stroke) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="workspace">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <span class="toolbar-title">NoveLA</span>
+    <div class="theme-btns">
+      <button class="theme-btn active" onclick="setTheme('light',this)">Light</button>
+      <button class="theme-btn" onclick="setTheme('dark',this)">Dark</button>
+      <button class="theme-btn" onclick="setTheme('black',this)">Black</button>
+    </div>
+    <div class="toolbar-sep"></div>
+    <div class="nav-btns">
+      <button class="nav-btn active" onclick="showScreen('library',this)">Library</button>
+      <button class="nav-btn" onclick="showScreen('chapters',this)">Chapters</button>
+      <button class="nav-btn" onclick="showScreen('reader',this)">Reader</button>
+      <button class="nav-btn" onclick="showScreen('settings',this)">Settings</button>
+      <button class="nav-btn" onclick="showScreen('catalog',this)">Catalog</button>
+      <button class="nav-btn" onclick="showScreen('globalsearch',this)">Global Search</button>
+      <button class="nav-btn" onclick="showScreen('sourcecatalog',this)">Source Catalog</button>
+    </div>
+    <div class="state-btns">
+      <button class="state-btn active" id="stateNormal" onclick="setState('normal')">Normal</button>
+      <button class="state-btn" id="stateEmpty" onclick="setState('empty')">Empty</button>
+      <button class="state-btn" id="stateLoading" onclick="setState('loading')">Loading</button>
+      <button class="state-btn" id="stateSelect" onclick="setState('select')">Select mode</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="phone-wrap">
+      <div class="phone-frame" id="phoneFrame">
+        <div class="phone-notch"></div>
+
+        <!-- ═══ LIBRARY SCREEN ═══ -->
+        <div class="screen active" id="screen-library">
+          <div class="topbar" id="lib-topbar-normal">
+            <div class="topbar-inner">
+              <div class="topbar-title">NoveLA</div>
+              <button class="icon-btn" id="libBtnFilter" onclick="event.stopPropagation();libToggleFilter()" title="Фильтр / Сортировка">
+                <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              </button>
+              <div style="position:relative">
+                <button class="icon-btn" id="libBtnMenu" onclick="event.stopPropagation();toggleDropdown('libMenuDropdown')" title="Меню">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+                </button>
+                <div class="dropdown" id="libMenuDropdown">
+                  <div class="dropdown-item" onclick="setState('select');closeAllDropdowns()">
+                    <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    Выбрать книги
+                  </div>
+                  <div class="dropdown-item" onclick="openDialog('epubDialog');closeAllDropdowns()">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Импорт EPUB
+                  </div>
+                  <div class="dropdown-item" onclick="openDialog('addByUrlDialog');closeAllDropdowns()">
+                    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    Добавить по URL
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="lib-topbar-search">
+              <div class="lib-search-input">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" placeholder="Search library...">
+              </div>
+            </div>
+            <div class="tabs" id="lib-tabs">
+              <div class="tab active" onclick="switchTab(0)">Reading (12)</div>
+              <div class="tab" onclick="switchTab(1)">Completed (5)</div>
+            </div>
+          </div>
+
+          <div class="topbar" id="lib-topbar-select" style="display:none">
+            <div class="topbar-inner select-topbar" style="padding-top:0">
+              <div class="topbar-title" style="color:white">Выбрано: 3</div>
+              <button class="icon-btn" title="Выбрать все"><svg viewBox="0 0 24 24" style="stroke:white"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+              <button class="icon-btn" title="Удалить"><svg viewBox="0 0 24 24" style="stroke:#ff6b6b"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+              <button class="icon-btn" onclick="setState('normal')" title="Отмена"><svg viewBox="0 0 24 24" style="stroke:white"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+          <div class="scroll-area" id="lib-content">
+            <div id="lib-grid">
+              <div class="book-grid">
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1a1a2e,#16213e)"><div class="book-cover-img">📖</div><div class="book-gradient"></div><div class="book-badge">3</div><div class="book-titlebar"><div class="book-title">Overlord Vol. 14</div><div class="book-source">light-novels.ru</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#2d1b69,#11998e)"><div class="book-cover-img">⚔️</div><div class="book-gradient"></div><div class="book-badge">1</div><div class="book-titlebar"><div class="book-title">Re:Zero Starting Life in Another World</div><div class="book-source">ranobes.net</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#0f0c29,#302b63)"><div class="book-cover-img">🗡️</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Sword Art Online</div><div class="book-source">fanfiction.me</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1f4037,#99f2c8)"><div class="book-cover-img">🌿</div><div class="book-gradient"></div><div class="book-badge">7</div><div class="book-titlebar"><div class="book-title">Mushoku Tensei: Jobless Reincarnation</div><div class="book-source">novelupdates.com</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#4b1248,#f10711)"><div class="book-cover-img">🧙</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Mahou Shoujo of the End</div><div class="book-source">scribblehub.com</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#232526,#414345)"><div class="book-cover-img">🏰</div><div class="book-gradient"></div><div class="book-badge">2</div><div class="book-titlebar"><div class="book-title">Shield Hero Rising</div><div class="book-source">royalroad.com</div></div></div></div>
+              </div>
+            </div>
+            <div id="lib-empty" style="display:none">
+              <div class="empty-state"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><div class="empty-state-text">Библиотека пуста.<br>Добавьте книги через Каталог.</div></div>
+            </div>
+            <div id="lib-loading" style="display:none">
+              <div class="book-grid"><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div><div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div></div>
+            </div>
+            <div id="lib-grid-completed" style="display:none">
+              <div class="book-grid">
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1b4332,#40916c)"><div class="book-cover-img">📗</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">No Game No Life</div><div class="book-source">novelupdates.com</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#370617,#6a040f)"><div class="book-cover-img">🐉</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">That Time I Got Reincarnated as a Slime</div><div class="book-source">ranobes.net</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#03045e,#0077b6)"><div class="book-cover-img">🌊</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">The Rising of the Shield Hero</div><div class="book-source">royalroad.com</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#3d2b1f,#8b5e3c)"><div class="book-cover-img">⚗️</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Spice and Wolf</div><div class="book-source">light-novels.ru</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#2d1b69,#c0a0ff)"><div class="book-cover-img">✨</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">KonoSuba: God's Blessing on This Wonderful World</div><div class="book-source">fanfiction.me</div></div></div></div>
+              </div>
+            </div>
+            <div id="lib-select" style="display:none">
+              <div class="book-grid">
+                <div class="book-card" style="outline:2px solid var(--highlight);outline-offset:2px"><div class="book-cover" style="background:linear-gradient(135deg,#1a1a2e,#16213e)"><div class="book-cover-img">📖</div><div class="book-gradient"></div><div class="book-title">Overlord Vol. 14</div><div style="position:absolute;inset:0;background:rgba(4,112,230,0.15);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px"><div style="width:20px;height:20px;background:var(--highlight);border-radius:10px;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div></div></div>
+                <div class="book-card" style="opacity:0.5"><div class="book-cover" style="background:linear-gradient(135deg,#2d1b69,#11998e)"><div class="book-cover-img">⚔️</div><div class="book-gradient"></div><div class="book-title">Re:Zero</div></div></div>
+                <div class="book-card" style="outline:2px solid var(--highlight);outline-offset:2px"><div class="book-cover" style="background:linear-gradient(135deg,#0f0c29,#302b63)"><div class="book-cover-img">🗡️</div><div class="book-gradient"></div><div class="book-title">Sword Art Online</div><div style="position:absolute;inset:0;background:rgba(4,112,230,0.15);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px"><div style="width:20px;height:20px;background:var(--highlight);border-radius:10px;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottombar">
+            <div class="bottombar-item active"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</div>
+            <div class="bottombar-item" onclick="showScreen('catalog', document.querySelector('.nav-btn:nth-child(5)'))"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Sources</div>
+            <div class="bottombar-item" onclick="showScreen('settings', document.querySelector('.nav-btn:nth-child(4)'))"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+          </div>
+        </div>
+
+        <!-- ═══ CHAPTERS SCREEN ═══ -->
+        <div class="screen" id="screen-chapters">
+          <div class="topbar">
+            <div class="topbar-inner">
+              <button class="icon-btn" onclick="showScreen('library',document.querySelector('.nav-btn'))"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <div class="topbar-title">Overlord Vol. 14</div>
+              <button class="icon-btn" id="chapHeartBtn" onclick="this.classList.toggle('in-library');this.querySelector('svg').style.fill=this.classList.contains('in-library')?'#E53935':'none';this.querySelector('svg').style.stroke=this.classList.contains('in-library')?'#E53935':'currentColor'" title="В библиотеку">
+                <svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <div style="position:relative">
+                <button class="icon-btn" onclick="event.stopPropagation();toggleDropdown('chapDropdown')"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg></button>
+                <div class="dropdown" id="chapDropdown">
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Поиск в базе</div>
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть в браузере</div>
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>Скачать все главы</div>
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Сменить обложку</div>
+                  <div style="height:1px;background:var(--stroke);margin:4px 0"></div>
+                  <div class="dropdown-item" onclick="openDialog('goToChapterDialog')"><svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>Перейти к главе</div>
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Все прочитаны</div>
+                  <div class="dropdown-item"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Все непрочитаны</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="scroll-area">
+            <div class="book-header">
+              <div class="book-cover-large">📖</div>
+              <div class="book-info">
+                <div class="book-info-title">Overlord, Vol. 14: Unlikely Meeting</div>
+                <div class="book-info-meta">Kugane Maruyama</div>
+                <div class="book-info-meta">light-novels.ru</div>
+                <div class="book-info-meta" style="margin-top:6px">215 глав</div>
+              </div>
+            </div>
+            <div class="book-genres"><span class="genre-chip">Fantasy</span><span class="genre-chip">Action</span><span class="genre-chip">Adventure</span><span class="genre-chip">Isekai</span></div>
+            <div class="book-desc">Ainz Ooal Gown продолжает укреплять Великую Гробницу Назарик...</div>
+            <div class="read-btn">▶ Читать — Глава 143</div>
+            <div class="read-btn secondary" style="margin-bottom:12px">↓ К последней прочитанной</div>
+            <div style="padding:0 0 4px;border-top:1px solid var(--stroke)">
+              <div class="chapter-item highlighted"><div class="chapter-name">Глава 143 — The Disturbance Begins</div><div class="chapter-meta">2 дня назад · Прогресс: 67%</div></div>
+              <div class="chapter-item"><div class="chapter-name">Глава 144 — Dark Clouds Gather</div><div class="chapter-meta">1 день назад</div></div>
+              <div class="chapter-item"><div class="chapter-name">Глава 145 — Shadows of War</div><div class="chapter-meta">Сегодня</div></div>
+              <div class="chapter-item read"><div class="chapter-name">Глава 142 — The Empire's Decision</div><div class="chapter-meta">3 дня назад · Прочитана</div></div>
+              <div class="chapter-item read"><div class="chapter-name">Глава 141 — Preparations</div><div class="chapter-meta">4 дня назад · Прочитана</div></div>
+              <div class="chapter-item read"><div class="chapter-name">Глава 140 — The Floor Guardians</div><div class="chapter-meta">5 дней назад · Прочитана</div></div>
+              <div class="chapter-item read"><div class="chapter-name">Глава 139 — Reunion</div><div class="chapter-meta">6 дней назад · Прочитана</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ READER SCREEN ═══ -->
+        <div class="screen" id="screen-reader" style="position:relative;cursor:pointer" onclick="toggleReaderUI()">
+          <div class="reader-topbar" id="readerTopbar">
+            <div class="topbar-inner" style="padding-top:0">
+              <button class="icon-btn" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'));event.stopPropagation()"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <div style="flex:1;padding:0 8px"><div style="font-size:14px;font-weight:600;color:var(--text)">Глава 143 — The Disturbance Begins</div><div class="reader-progress" style="padding:2px 0 0"><span>Глава 143 из 215</span><span>67%</span></div></div>
+              <button class="icon-btn" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></button>
+            </div>
+            <div style="height:1px;background:var(--stroke)"></div>
+          </div>
+          <div class="reader-content">
+            <div class="reader-chapter-title">Глава 143 — The Disturbance Begins</div>
+            <p>Тёмная ночь окутала Великую Гробницу Назарик. Айнз Оал Гоун стоял в тронном зале, его пустые глазницы медленно обводили великолепие зала — золотые орнаменты, мерцающие в неверном свете магических кристаллов, колонны из чёрного мрамора, уходящие ввысь до невидимого потолка. Тишина здесь была особой — живой, почти осязаемой.</p><br>
+            <p>«Господин Айнз», — произнесла Альбедо, её голос был мягок, как шёлк, но в нём чувствовалась сдержанная тревога. Верховный страж медленно приблизилась, её белые крылья слегка сложились. — «Разведчики сообщают о движении войск у северной границы. Это не патруль — слишком большой отряд».</p><br>
+            <p>Айнз не ответил сразу. Он давно заметил, что молчание действовало на подчинённых лучше любых слов — они сами наполняли паузы смыслом, который им было угодно видеть. Мудрость, расчёт, непроницаемость. Пусть думают то, что хотят думать.</p><br>
+            <p>— Пошлите Коциту на рекогносцировку, — произнёс он наконец. — Только наблюдение. Никаких столкновений без моего приказа.<br>
+            Альбедо поклонилась, кончики пальцев коснулись груди. В её глазах вспыхнуло что-то — преданность, обожание, почти болезненная привязанность. Айнз снова отвернулся.</p><br>
+            <p>В коридорах Назарика воцарилась привычная деятельность. Скелеты-стражи несли вахту на каждом перекрёстке, маги Восьмого Яруса колдовали над своими экспериментами, а в кухне — чудо архитектуры подземного мира — повара готовили блюда, которые в принципе не мог оценить ни один из обитателей гробницы. И всё же ритуал соблюдался.</p><br>
+            <p>Айнз задержался у окна-иллюзии — одного из немногих мест, где можно было увидеть небо Нового Мира. Зарево на горизонте казалось слишком ярким для рассвета. Он прищурился — хотя лишённое зрачков лицо не меняло выражения — и активировал заклинание дальнего видения.</p><br>
+            <p>Огонь. Деревня в нескольких лигах к северу горела. Не сама по себе — он различил силуэты всадников, слышал на пределе заклинания крики, от которых стыла кровь. Где-то там, в дыму и хаосе, обычные люди переживали то, что он сам когда-то называл историей — незначительный эпизод на краю чьей-то карты.</p><br>
+            <p>— Альбедо, — позвал он тихо, но голос разнёсся по залу. — Измените приказ. Коциту — вмешаться. Деревня должна уцелеть. Мне нужны живые свидетели того, кто это сделал.</p><br>
+            <div class="reader-chapter-nav">
+              <div class="reader-nav-btn prev" onclick="alert('Глава 142')">← Глава 142</div>
+              <div class="reader-nav-btn next" onclick="alert('Глава 144')">Глава 144 →</div>
+            </div>
+          </div>
+          <div class="reader-bottombar" id="readerBottombar">
+            <div id="reader-panel-style" class="reader-panel active" style="padding:8px var(--pad) 0">
+              <div class="rounded-col" style="margin:0 0 4px">
+                <div class="item"><div class="item-content"><div class="item-text">Размер текста</div><div class="slider-wrap" style="padding:6px 0 2px"><div class="slider-label"><span>16px</span></div><input type="range" min="8" max="32" value="16" oninput="this.previousElementSibling.querySelector('span').textContent=this.value+'px'"></div></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Шрифт</div><div class="item-sub">DM Sans</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                <div class="item" style="flex-wrap:wrap;gap:8px"><div class="item-content"><div class="item-text">Следовать системной теме</div></div><div class="switcher" id="readerFollowSystem" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item" style="flex-wrap:wrap;gap:8px"><div class="item-content"><div class="item-text">Тема</div></div><div class="chip-group"><span class="chip active" onclick="setReaderTheme('dark',this)">Dark</span><span class="chip" onclick="setReaderTheme('light',this)">Light</span><span class="chip" onclick="setReaderTheme('black',this)">Black</span></div></div>
+              </div>
+            </div>
+            <div id="reader-panel-more" class="reader-panel" style="padding:8px var(--pad) 0">
+              <div class="rounded-col" style="margin:0 0 4px">
+                <div class="item" style="flex-wrap:wrap;gap:8px">
+                  <div class="item-content"><div class="item-text">Режим чтения</div><div class="item-sub" id="reader-mode-sub">Бесконечная прокрутка</div></div>
+                  <div class="chip-group" style="width:100%;padding:2px 0 2px 0">
+                    <span class="chip active" onclick="setReaderMode(this,'Бесконечная прокрутка')">Прокрутка</span>
+                    <span class="chip" onclick="setReaderMode(this,'Постраничный')">Постраничный</span>
+                    <span class="chip" onclick="setReaderMode(this,'Горизонтальный')">Горизонт.</span>
+                  </div>
+                </div>
+                <div class="item"><div class="item-content"><div class="item-text">Выделение текста</div></div><div class="switcher" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Не гасить экран</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Полный экран</div></div><div class="switcher" onclick="this.classList.toggle('on')"></div></div>
+              </div>
+            </div>
+            <div id="reader-panel-tts" class="reader-panel" style="padding:8px var(--pad) 0">
+              <div class="rounded-col" style="margin:0 0 4px">
+                <div class="item"><div class="item-content"><div class="item-text">Воспроизведение</div></div><div class="switcher" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Скорость</div><div class="slider-wrap" style="padding:6px 0 2px"><div class="slider-label"><span>1.0×</span></div><input type="range" min="5" max="30" value="10" oninput="this.previousElementSibling.querySelector('span').textContent=(this.value/10).toFixed(1)+'×'"></div></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Голос</div><div class="item-sub">Google Russian</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+            </div>
+            <div id="reader-panel-translate" class="reader-panel" style="padding:8px var(--pad) 0">
+              <div class="rounded-col" style="margin:0 0 4px">
+                <div class="item"><div class="item-content"><div class="item-text">Перевод</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Источник</div><div class="item-sub">Английский</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                <div class="item"><div class="item-content"><div class="item-text">Перевод на</div><div class="item-sub">Русский</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+            </div>
+            <div class="reader-tabs">
+              <div class="reader-tab" onclick="switchReaderTab('translate',this)"><svg viewBox="0 0 24 24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>Перевод</div>
+              <div class="reader-tab" onclick="switchReaderTab('tts',this)"><svg viewBox="0 0 24 24"><path d="M12 6V18"/><path d="M8 9v6"/><path d="M16 7v10"/><path d="M4 11v2"/><path d="M20 11v2"/></svg>TTS</div>
+              <div class="reader-tab active" onclick="switchReaderTab('style',this)"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>Стиль</div>
+              <div class="reader-tab" onclick="switchReaderTab('more',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/><circle cx="5" cy="12" r="1" fill="currentColor"/></svg>Ещё</div>
+            </div>
+          </div>
+          <div style="position:absolute;bottom:100px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--sub-text);pointer-events:none;white-space:nowrap;opacity:0.6">Нажмите для показа/скрытия UI</div>
+        </div>
+
+        <!-- ═══ SETTINGS SCREEN ═══ -->
+        <div class="screen" id="screen-settings">
+          <div class="topbar">
+            <div class="topbar-inner">
+              <button class="icon-btn" onclick="showScreen('library',document.querySelector('.nav-btn'))"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <div class="topbar-title">Настройки</div>
+            </div>
+          </div>
+          <div class="scroll-area">
+            <div class="settings-page-content">
+
+              <div class="outer-title">Язык</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><div class="item-content"><div class="item-text">Язык приложения</div><div class="item-sub">English</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+
+              <div class="outer-title">Тема</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg></div><div class="item-content"><div class="item-text">Следовать системе</div></div><div class="switcher" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item" style="flex-wrap:wrap"><div class="item-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></div><div class="item-content"><div class="item-text">Тема оформления</div></div><div class="chip-group" style="width:100%;padding:4px 0 4px 34px"><span class="chip" onclick="setTheme('light',null);document.querySelectorAll('#screen-settings .chip-group .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Light</span><span class="chip active" onclick="setTheme('dark',null);document.querySelectorAll('#screen-settings .chip-group .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Dark</span><span class="chip" onclick="setTheme('black',null);document.querySelectorAll('#screen-settings .chip-group .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Black</span></div></div>
+              </div>
+
+              <!-- Accent Color -->
+              <div class="rounded-col">
+                <div class="item" style="flex-wrap:wrap;padding-bottom:6px"><div class="item-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z"/></svg></div><div class="item-content"><div class="item-text">Цвет акцента</div></div><div class="accent-row" style="width:100%;padding:4px 0 4px 34px">
+                  <div class="accent-dot active" style="background:#0088FF" onclick="setAccent('#0088FF',this)"></div>
+                  <div class="accent-dot" style="background:#E53935" onclick="setAccent('#E53935',this)"></div>
+                  <div class="accent-dot" style="background:#2E7D32" onclick="setAccent('#2E7D32',this)"></div>
+                  <div class="accent-dot" style="background:#E6A817" onclick="setAccent('#E6A817',this)"></div>
+                  <div class="accent-dot" style="background:#9C27B0" onclick="setAccent('#9C27B0',this)"></div>
+                  <div class="accent-dot" style="background:#FF6D00" onclick="setAccent('#FF6D00',this)"></div>
+                  <div class="accent-dot" style="background:#00BCD4" onclick="setAccent('#00BCD4',this)"></div>
+                  <div class="accent-dot" style="background:#607D8B" onclick="setAccent('#607D8B',this)"></div>
+                </div></div>
+              </div>
+
+              <div class="outer-title">Данные</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div><div class="item-content"><div class="item-text">Очистить базу данных</div><div class="item-sub">Размер: 24 MB</div></div></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><div class="item-content"><div class="item-text">Очистить изображения</div><div class="item-sub">Размер: 156 MB</div></div></div>
+                <div style="height:1px;background:var(--stroke);margin:0 16px"></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div class="item-content"><div class="item-text">Создать резервную копию</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div><div class="item-content"><div class="item-text">Восстановить из копии</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+
+              <div class="outer-title">Сеть</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M1 6s4-4 11-4 11 4 11 4"/><path d="M1 10s4-4 11-4 11 4 11 4"/><path d="M5 14s2.5-2 7-2 7 2 7 2"/><line x1="12" y1="20" x2="12" y2="20" stroke-width="3" stroke-linecap="round"/></svg></div><div class="item-content"><div class="item-text">Cloudflare bypass</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="item-content"><div class="item-text">Задержка массового добавления</div><div class="item-sub">2000 мс</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z"/><path d="M12 6v6l4 2"/></svg></div><div class="item-content"><div class="item-text">Таймаут Cloudflare challenge</div><div class="item-sub">120 сек</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+
+              <div class="outer-title">Перевод</div>
+              <div class="rounded-col">
+                <div class="translation-label">Провайдер</div>
+                <div class="item" style="flex-wrap:wrap"><div class="item-content" style="width:100%"><div class="chip-group">
+                  <span class="chip active">Google Free</span>
+                  <span class="chip">Google PA</span>
+                  <span class="chip">Gemini</span>
+                  <span class="chip">OpenAI</span>
+                </div></div></div>
+
+                <!-- Google Free: только сообщение -->
+                <div id="section-googlefree">
+                  <div class="translation-label" style="color:var(--success)">✓ Google Free — бесплатно, без API ключа</div>
+                </div>
+
+                <!-- Google PA: только API Keys -->
+                <div id="section-gpa" style="display:none">
+                  <div class="translation-label">Google PA</div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">API Keys (JSON)</div><input type="password" placeholder='[{"key":"..."}]'></div></div>
+                </div>
+
+                <!-- Gemini: API Key + Model + Batch -->
+                <div id="section-gemini" style="display:none">
+                  <div class="translation-label">Gemini</div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">API Key</div><input type="password" placeholder="••••••••" value="sk-xxxx"></div></div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">Модель</div><input type="text" value="gemini-2.0-flash"></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">English locale</div><div class="item-sub">Использовать английский для промптов</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">Batch size</div><div class="item-sub">60</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">Max output tokens</div><div class="item-sub">По умолчанию</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                </div>
+
+                <!-- OpenAI: Base URL + API Key + Model + Batch -->
+                <div id="section-openai" style="display:none">
+                  <div class="translation-label">OpenAI</div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">Base URL</div><input type="text" value="https://api.openai.com/v1"></div></div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">API Key</div><input type="password" placeholder="sk-..." value="sk-proj-xxx"></div></div>
+                  <div class="translation-field"><div class="item-content"><div class="item-text" style="font-size:13px">Модель</div><input type="text" value="gpt-4o-mini"></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">English locale</div><div class="item-sub">Использовать английский для промптов</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">Batch size</div><div class="item-sub">60</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                  <div class="item" style="flex-wrap:wrap"><div class="item-content"><div class="item-text">Max output tokens</div><div class="item-sub">По умолчанию</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                </div>
+              </div>
+
+              <!-- PromptManager — для Gemini и OpenAI -->
+              <div id="prompt-manager" style="display:none">
+                <div class="outer-title">Промпты</div>
+                <div class="rounded-col">
+                  <div class="item"><div class="item-icon" style="color:var(--highlight)"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><div class="item-content"><div class="item-text">Художественный перевод</div><div class="item-sub">Активный · 1 из 3</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                  <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="item-content"><div class="item-text">Технический текст</div><div class="item-sub">Пресет</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                  <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="item-content"><div class="item-text">Буквальный перевод</div><div class="item-sub">Пресет</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+                  <div class="item"><div class="item-icon" style="color:var(--highlight)"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="item-content"><div class="item-text" style="color:var(--highlight)">Добавить пресет</div></div></div>
+                </div>
+              </div>
+              <div class="outer-title">Очистка текста</div>
+              <div class="rounded-col">
+                <div class="item" onclick="showScreen('regexcleanup',null)"><div class="item-icon"><svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></div><div class="item-content"><div class="item-text">Правила regex</div><div class="item-sub">3 правила</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+
+              <div class="outer-title">Авто-обновление</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div><div class="item-content"><div class="item-text">Авто-обновление библиотеки</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="item-content"><div class="item-text">Интервал обновления</div><div class="item-sub">Каждые 12 часов</div></div><div class="item-trail"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div></div>
+              </div>
+
+              <div class="outer-title">Обновления приложения</div>
+              <div class="rounded-col">
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div><div class="item-content"><div class="item-text">Проверять обновления</div></div><div class="switcher on" onclick="this.classList.toggle('on')"></div></div>
+                <div class="item"><div class="item-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="item-content"><div class="item-text">Текущая версия</div><div class="item-sub">v2.9.0-beta</div></div><div style="padding:4px 10px;background:color-mix(in srgb,var(--highlight) 12%,transparent);color:var(--highlight);border-radius:16px;font-size:12px;font-weight:600;flex-shrink:0">Проверить</div></div>
+              </div>
+
+              <div style="padding: 80px var(--pad) 20px;text-align:center;font-family:var(--font-mono);font-size:16px;color:var(--sub-text);opacity:0.5">(°.°)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ FINDER SCREEN ═══ -->
+        <div class="screen" id="screen-catalog">
+          <!-- Shared language dropdown — used by both Browse and Extensions topbars -->
+          <div class="dropdown" id="finderLangDropdown" style="position:absolute;right:8px;top:90px;z-index:50;min-width:160px">
+            <div style="padding:8px 14px 4px;font-size:11px;font-weight:600;color:var(--sub-text);text-transform:uppercase;letter-spacing:0.05em">Язык</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)" style="gap:8px;color:var(--highlight)"><div style="width:16px;height:16px;border-radius:3px;background:var(--highlight);flex-shrink:0"></div>Все языки</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇬🇧 Английский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇷🇺 Русский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇯🇵 Японский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇨🇳 Китайский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇰🇷 Корейский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇧🇷 Португальский</div>
+            <div class="dropdown-item finder-lang-item" onclick="setFinderLang(this)">🇪🇸 Испанский</div>
+          </div>
+          <!-- TopBar Installed -->
+          <div class="topbar" id="finder-topbar-browse">
+            <div class="topbar-inner">
+              <div class="topbar-title">Sources</div>
+              <button class="icon-btn" onclick="openDialog('addByUrlDialog')" title="Добавить по URL">
+                <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              </button>
+              <button class="icon-btn" onclick="showScreen('globalsearch',document.querySelector('.nav-btn:nth-child(6)'))" title="Глобальный поиск">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              </button>
+              <button class="icon-btn" onclick="event.stopPropagation();toggleDropdown('finderLangDropdown')" title="Фильтр языков">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </button>
+            </div>
+            <div class="tabs" id="finder-tabs">
+              <div class="tab active" onclick="switchFinderTab('browse',this)">Installed</div>
+              <div class="tab" onclick="switchFinderTab('extensions',this)">Extensions <span class="tab-badge">1</span></div>
+            </div>
+          </div>
+
+          <!-- TopBar Extensions -->
+          <div class="topbar" id="finder-topbar-extensions" style="display:none">
+            <div class="topbar-inner">
+              <div class="topbar-title">Sources</div>
+              <button class="icon-btn" title="Обновить">
+                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              </button>
+              <button class="icon-btn" onclick="openDialog('repoUrlDialog')" title="Настройки репозитория">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </button>
+              <button class="icon-btn" onclick="event.stopPropagation();toggleDropdown('finderLangDropdown')" title="Фильтр языков">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </button>
+            </div>
+            <div class="tabs">
+              <div class="tab" onclick="switchFinderTab('browse',this)">Installed</div>
+              <div class="tab active" onclick="switchFinderTab('extensions',this)">Extensions <span class="tab-badge">1</span></div>
+            </div>
+          </div>
+
+          <div class="scroll-area">
+
+            <!-- ── BROWSE TAB ── -->
+            <div id="finder-browse">
+              <div class="lib-topbar-search" style="padding:8px 12px 4px">
+                <div class="lib-search-input">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" placeholder="Поиск источников...">
+                </div>
+              </div>
+
+              <!-- Databases -->
+              <div class="finder-section-label">Databases</div>
+              <div class="rounded-col">
+                <div class="finder-source-item">
+                  <div class="finder-source-icon" style="background:color-mix(in srgb,#0088FF 15%,transparent)">🌐</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Novel Updates</div>
+                    <div class="finder-source-lang">English</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn pinned" title="Закреплён" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="finder-source-item">
+                  <div class="finder-source-icon" style="background:color-mix(in srgb,#E53935 15%,transparent)">📚</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">MU (MangaUpdates)</div>
+                    <div class="finder-source-lang">English</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn" title="Закрепить" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sources (pinned first) -->
+              <div class="finder-section-label">Sources</div>
+              <div class="rounded-col">
+                <!-- Pinned -->
+                <div class="finder-source-item" onclick="showScreen('sourcecatalog',document.querySelector('.nav-btn:nth-child(7)'))">
+                  <div class="finder-source-icon">📕</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Ranobes</div>
+                    <div class="finder-source-lang">Русский</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn pinned" title="Закреплён" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="finder-source-item">
+                  <div class="finder-source-icon">📚</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Royal Road</div>
+                    <div class="finder-source-lang">English</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn pinned" title="Закреплён" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <!-- Regular with configurable -->
+                <div class="finder-source-item">
+                  <div class="finder-source-icon">🌐</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Scribble Hub</div>
+                    <div class="finder-source-lang">English</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-cfg-btn" title="Настройки источника">
+                      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </div>
+                    <div class="finder-pin-btn" title="Закрепить" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="finder-source-item">
+                  <div class="finder-source-icon">📖</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Novel Updates</div>
+                    <div class="finder-source-lang">English</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn" title="Закрепить" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="finder-source-item">
+                  <div class="finder-source-icon">🔖</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">RanobeHub</div>
+                    <div class="finder-source-lang">Русский</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn" title="Закрепить" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="finder-source-item">
+                  <div class="finder-source-icon">📗</div>
+                  <div class="finder-source-info">
+                    <div class="finder-source-name">Syosetsu</div>
+                    <div class="finder-source-lang">日本語</div>
+                  </div>
+                  <div class="finder-source-actions">
+                    <div class="finder-pin-btn" title="Закрепить" onclick="this.classList.toggle('pinned')">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4H21l-5.7 4.2 2.2 6.8L12 15.4l-5.5 4 2.2-6.8L3 8.4h6.6z"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="height:16px"></div>
+            </div>
+
+            <!-- ── EXTENSIONS TAB ── -->
+            <div id="finder-extensions" style="display:none">
+
+              <!-- Update Available -->
+              <div class="finder-section-label" style="color:var(--danger)">Update available</div>
+              <div class="rounded-col">
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--danger) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔖</div>
+                  <div class="item-content">
+                    <div class="item-text">RanobeHub</div>
+                    <div class="item-sub">ranobehub.org · RU · v1.2 → 1.3</div>
+                  </div>
+                  <div class="switcher on" onclick="this.classList.toggle('on');this.closest('.item').style.opacity=this.classList.contains('on')?'':'0.5'"></div>
+                  <button class="ext-btn update">Обновить</button>
+                </div>
+              </div>
+
+              <!-- Installed -->
+              <div class="finder-section-label">Installed</div>
+              <div class="rounded-col">
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📚</div>
+                  <div class="item-content">
+                    <div class="item-text">Royal Road</div>
+                    <div class="item-sub">royalroad.com · EN · v1.4</div>
+                  </div>
+                  <div class="switcher on" onclick="this.classList.toggle('on');this.closest('.item').style.opacity=this.classList.contains('on')?'':'0.5'"></div>
+                  <button class="ext-btn remove">Удалить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🌐</div>
+                  <div class="item-content">
+                    <div class="item-text">Scribble Hub</div>
+                    <div class="item-sub">scribblehub.com · EN · v2.1</div>
+                  </div>
+                  <div class="switcher on" onclick="this.classList.toggle('on');this.closest('.item').style.opacity=this.classList.contains('on')?'':'0.5'"></div>
+                  <button class="ext-btn remove">Удалить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📕</div>
+                  <div class="item-content">
+                    <div class="item-text">Ranobes</div>
+                    <div class="item-sub">ranobes.net · RU · v1.9</div>
+                  </div>
+                  <div class="switcher on" onclick="this.classList.toggle('on');this.closest('.item').style.opacity=this.classList.contains('on')?'':'0.5'"></div>
+                  <button class="ext-btn remove">Удалить</button>
+                </div>
+              </div>
+
+              <!-- Available -->
+              <div class="finder-section-label">Available</div>
+              <div class="rounded-col">
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📖</div>
+                  <div class="item-content"><div class="item-text">Novel Updates</div><div class="item-sub">novelupdates.com · EN</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🌏</div>
+                  <div class="item-content"><div class="item-text">Light Novels</div><div class="item-sub">lightnovels.lol · EN</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📘</div>
+                  <div class="item-content"><div class="item-text">Novel Buddy</div><div class="item-sub">novelbuddy.com · EN</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🗂️</div>
+                  <div class="item-content"><div class="item-text">LightNovels.ru</div><div class="item-sub">light-novels.ru · RU</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📗</div>
+                  <div class="item-content"><div class="item-text">Syosetsu</div><div class="item-sub">syosetsu.com · JA</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+                <div class="item">
+                  <div class="item-icon" style="width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,var(--highlight) 12%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📓</div>
+                  <div class="item-content"><div class="item-text">Kakuyomu</div><div class="item-sub">kakuyomu.jp · JA</div></div>
+                  <button class="ext-btn install">Добавить</button>
+                </div>
+              </div>
+              <div style="height:16px"></div>
+            </div>
+
+          </div>
+
+          <div class="bottombar">
+            <div class="bottombar-item" onclick="showScreen('library',document.querySelector('.nav-btn'))"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</div>
+            <div class="bottombar-item active"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Sources</div>
+            <div class="bottombar-item" onclick="showScreen('settings',document.querySelector('.nav-btn:nth-child(4)'))"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+          </div>
+        </div>
+
+        <!-- ═══ REGEX CLEANUP ═══ -->
+        <div class="screen" id="screen-regexcleanup">
+          <div class="topbar">
+            <div class="topbar-inner">
+              <button class="icon-btn" onclick="showScreen('settings',document.querySelector('.nav-btn:nth-child(4)'))"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <div class="topbar-title">Очистка текста</div>
+            </div>
+          </div>
+          <div class="scroll-area" style="padding-top:8px">
+            <div class="rounded-col">
+              <div class="regex-rule"><div class="item-content"><div class="regex-pattern">/\[[^\]]+\]/g</div><div class="regex-replacement">→ (удалить)</div><div class="regex-desc">BB-теги: [b], [i], [center]</div></div><div class="regex-del-btn"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div></div>
+              <div class="regex-rule"><div class="item-content"><div class="regex-pattern">/\n{3,}/g</div><div class="regex-replacement">→ \n\n</div><div class="regex-desc">Лишние переносы строк</div></div><div class="regex-del-btn"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div></div>
+              <div class="regex-rule"><div class="item-content"><div class="regex-pattern">/&[a-z]+;/g</div><div class="regex-replacement">→ (декодировать)</div><div class="regex-desc">HTML entities: & < ></div></div><div class="regex-del-btn"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div></div>
+              <div class="regex-add-btn"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Добавить правило</div>
+            </div>
+            <div style="padding: 40px var(--pad);text-align:center;color:var(--sub-text);font-size:12px;line-height:1.5">Правила применяются последовательно<br>к тексту глав при загрузке</div>
+          </div>
+        </div>
+
+        <!-- ═══ GLOBAL SEARCH ═══ -->
+        <div class="screen" id="screen-globalsearch">
+          <div class="topbar">
+            <div class="topbar-inner">
+              <button class="icon-btn" onclick="showScreen('library',document.querySelector('.nav-btn'))"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              <div style="flex:1;padding:0 4px"><div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--stroke);border-radius:var(--radius-xs);padding:8px 10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--sub-text)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="gs-input" type="text" style="flex:1;background:none;border:none;outline:none;font-size:14px;color:var(--text);font-family:var(--font)" placeholder="Поиск по всем источникам..." oninput="gsHandleInput(this.value)" onfocus="gsHandleInput(this.value)"></div></div>
+            </div>
+            <div class="progress-bar" id="gs-progress" style="display:none"><div class="progress-bar-fill" style="width:65%"></div></div>
+          </div>
+          <div class="scroll-area">
+            <div id="gs-empty" class="empty-state">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <div class="empty-state-text">Введите запрос для поиска<br>по всем источникам</div>
+            </div>
+            <div id="gs-results" style="display:none">
+              <div class="source-group-title">Royal Road</div>
+              <div class="source-scroll">
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#1a1a2e,#16213e)">📖</div><div class="source-book-title">Overlord: The Undead King</div></div>
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#2d1b69,#553c9a)">🏰</div><div class="source-book-title">Overlord Fan Continuation</div></div>
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#0f0c29,#302b63)">⚔️</div><div class="source-book-title">YGGDRASIL Legacy</div></div>
+              </div>
+              <div class="source-group-title">Ranobes</div>
+              <div class="source-scroll">
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#1f4037,#99f2c8)">📗</div><div class="source-book-title">Оверлорд Vol 1</div></div>
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#232526,#414345)">📕</div><div class="source-book-title">Оверлорд Vol 2</div></div>
+              </div>
+              <div class="source-group-title">Scribble Hub</div>
+              <div class="source-scroll">
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#4b1248,#f10711)">🔮</div><div class="source-book-title">Ainz Ooal Gown Reborn</div></div>
+                <div class="source-book-card"><div class="source-book-cover" style="background:linear-gradient(135deg,#0d324d,#7f5a83)">✨</div><div class="source-book-title">Shalltear's Story</div></div>
+                <div class="source-book-card"><div class="source-book-cover skeleton" style="height:120px"></div></div>
+              </div>
+              <div style="text-align:center;padding:16px;color:var(--sub-text);font-size:12px">Ищем в 8 из 12 источников...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ SOURCE CATALOG ═══ -->
+        <div class="screen" id="screen-sourcecatalog">
+          <div class="topbar">
+            <div class="topbar-inner">
+              <button class="icon-btn" onclick="showScreen('catalog',document.querySelector('.nav-btn:nth-child(5)'))"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <div class="topbar-title">NovelFire</div>
+              <button class="icon-btn" title="Язык"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></button>
+              <button class="icon-btn" title="Поиск"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>
+              <button class="icon-btn" title="Фильтр"><svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
+            </div>
+          </div>
+          <div class="scroll-area" id="sc-scroll">
+            <div id="sc-results">
+              <div class="book-grid">
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1a1a2e,#16213e)"><div class="book-cover-img">🔥</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Overlord: The Undead King</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#2d1b69,#553c9a)"><div class="book-cover-img">🏰</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">The Ancient Magus' Bride</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#0f0c29,#302b63)"><div class="book-cover-img">⚔️</div><div class="book-gradient"></div><div class="book-badge">NEW</div><div class="book-titlebar"><div class="book-title">Mushoku Tensei II</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1f4037,#99f2c8)"><div class="book-cover-img">🌿</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">That Time I Got Reincarnated as a Slime</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#4b1248,#f10711)"><div class="book-cover-img">🧙</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">KonoSuba: God's Blessing</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#232526,#414345)"><div class="book-cover-img">🐉</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Dragon Prince Randy</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#0d324d,#7f5a83)"><div class="book-cover-img">✨</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">I'm a Demon Lord</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#1b4332,#40916c)"><div class="book-cover-img">🌊</div><div class="book-gradient"></div><div class="book-badge">NEW</div><div class="book-titlebar"><div class="book-title">Rising of the Shield Hero III</div></div></div></div>
+                <div class="book-card" onclick="showScreen('chapters',document.querySelector('.nav-btn:nth-child(2)'))"><div class="book-cover" style="background:linear-gradient(135deg,#370617,#6a040f)"><div class="book-cover-img">🔮</div><div class="book-gradient"></div><div class="book-titlebar"><div class="book-title">Re:Zero Season 3</div></div></div></div>
+              </div>
+            </div>
+            <div id="sc-loading" style="display:none">
+              <div class="book-grid">
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+                <div class="book-card"><div class="book-cover skeleton" style="height:100%"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="bottombar">
+            <div class="bottombar-item" onclick="showScreen('library',document.querySelector('.nav-btn'))"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</div>
+            <div class="bottombar-item active"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Sources</div>
+            <div class="bottombar-item" onclick="showScreen('settings',document.querySelector('.nav-btn:nth-child(4)'))"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+          </div>
+        </div>
+
+      </div><!-- /phone-frame -->
+    </div><!-- /phone-wrap -->
+  </div><!-- /main -->
+</div><!-- /workspace -->
+
+<!-- ═══ OVERLAYS ═══ -->
+
+<!-- Go to Chapter Dialog -->
+<div class="overlay" id="goToChapterOverlay" onclick="closeDialog('goToChapterDialog')"></div>
+<div class="dialog" id="goToChapterDialog">
+  <div class="dialog-header"><div class="dialog-title">Перейти к главе</div><button class="icon-btn" onclick="closeDialog('goToChapterDialog')" style="color:var(--sub-text)"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+  <div class="dialog-body">
+    <div style="font-size:13px;color:var(--sub-text);margin-bottom:10px">Введите номер главы (1–215):</div>
+    <input type="number" min="1" max="215" value="143">
+  </div>
+  <div class="dialog-footer"><div class="dialog-btn" onclick="closeDialog('goToChapterDialog')">Отмена</div><div class="dialog-btn primary" onclick="closeDialog('goToChapterDialog')">Перейти</div></div>
+</div>
+
+<!-- Add by URL Dialog -->
+<div class="overlay" id="addByUrlOverlay" onclick="closeDialog('addByUrlDialog')"></div>
+<div class="dialog" id="addByUrlDialog">
+  <div class="dialog-header"><div class="dialog-title">Добавить по URL</div><button class="icon-btn" onclick="closeDialog('addByUrlDialog')" style="color:var(--sub-text)"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+  <div class="dialog-body">
+    <div style="font-size:13px;color:var(--sub-text);margin-bottom:10px">Вставьте ссылку на новеллу:</div>
+    <input type="text" placeholder="https://ranobes.net/..." value="https://ranobes.net/overlord">
+    <div style="font-size:11px;color:var(--sub-text);margin-top:8px">Поддерживаемые источники: Ranobes, RanobeHub, Royal Road, Scribble Hub и др.</div>
+  </div>
+  <div class="dialog-footer"><div class="dialog-btn" onclick="closeDialog('addByUrlDialog')">Отмена</div><div class="dialog-btn primary" onclick="closeDialog('addByUrlDialog')">Добавить</div></div>
+</div>
+
+<!-- EPUB Import Dialog -->
+<div class="overlay" id="epubOverlay" onclick="closeDialog('epubDialog')"></div>
+<div class="dialog" id="epubDialog">
+  <div class="dialog-header"><div class="dialog-title">Импорт EPUB</div><button class="icon-btn" onclick="closeDialog('epubDialog')" style="color:var(--sub-text)"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+  <div class="dialog-body">
+    <div style="font-size:13px;color:var(--sub-text);margin-bottom:10px">Выберите EPUB файл для импорта:</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border:1px dashed var(--stroke);border-radius:var(--radius-xs);cursor:pointer"><svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--highlight)" fill="none" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-size:13px;color:var(--highlight)">Выберите файл...</span></div>
+    <div style="font-size:11px;color:var(--sub-text);margin-top:8px">Поддерживаются файлы .epub</div>
+  </div>
+  <div class="dialog-footer"><div class="dialog-btn" onclick="closeDialog('epubDialog')">Отмена</div><div class="dialog-btn primary" onclick="closeDialog('epubDialog')">Импортировать</div></div>
+</div>
+
+<!-- Repository URL Dialog -->
+<div class="overlay" id="repoUrlOverlay" onclick="closeDialog('repoUrlDialog')"></div>
+<div class="dialog" id="repoUrlDialog">
+  <div class="dialog-header"><div class="dialog-title">Repository URL</div><button class="icon-btn" onclick="closeDialog('repoUrlDialog')" style="color:var(--sub-text)"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+  <div class="dialog-body">
+    <div style="font-size:13px;color:var(--sub-text);margin-bottom:10px">Extensions Repository URL</div>
+    <input type="text" value="https://raw.githubusercontent.com/org/repo/main/index.json" placeholder="https://...">
+    <div style="font-size:11px;color:var(--sub-text);margin-top:8px">Укажите URL файла index.json вашего репозитория расширений.</div>
+  </div>
+  <div class="dialog-footer"><div class="dialog-btn" onclick="closeDialog('repoUrlDialog')">Отмена</div><div class="dialog-btn primary" onclick="closeDialog('repoUrlDialog')">Сохранить</div></div>
+</div>
+
+
+<div class="bottomsheet-overlay" id="libSheetOverlay" onclick="closeSheet('libSheet')"></div>
+<div class="bottomsheet" id="libSheet">
+  <div class="bottomsheet-handle"></div>
+  <div class="bottomsheet-title">Сортировка и фильтры</div>
+  <div class="bottomsheet-scroll">
+
+    <!-- Grid Columns -->
+    <div class="bs-section-title">Колонки сетки</div>
+    <div class="bs-slider-row">
+      <span class="bs-slider-label" id="gridColLabel">3</span>
+      <input type="range" min="2" max="6" value="3" oninput="document.getElementById('gridColLabel').textContent=this.value">
+    </div>
+
+    <!-- Sort -->
+    <div class="bs-section-title">Сортировка</div>
+    <div class="bs-item" onclick="selectSort(this,'name')">
+      <div class="bs-item-text">Название</div>
+      <button class="sort-dir-btn" id="sortdir-name" onclick="event.stopPropagation();toggleSortDir('name')" title="Направление">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      </button>
+      <div class="bs-item-radio selected" id="sort-name"></div>
+    </div>
+    <div class="bs-item" onclick="selectSort(this,'unread')">
+      <div class="bs-item-text">Непрочитанные</div>
+      <button class="sort-dir-btn" id="sortdir-unread" onclick="event.stopPropagation();toggleSortDir('unread')" title="Направление">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      </button>
+      <div class="bs-item-radio" id="sort-unread"></div>
+    </div>
+    <div class="bs-item" onclick="selectSort(this,'lastread')">
+      <div class="bs-item-text">Последнее прочтение</div>
+      <button class="sort-dir-btn" id="sortdir-lastread" onclick="event.stopPropagation();toggleSortDir('lastread')" title="Направление">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      </button>
+      <div class="bs-item-radio" id="sort-lastread"></div>
+    </div>
+    <div class="bs-item" onclick="selectSort(this,'lastupdate')">
+      <div class="bs-item-text">Последнее обновление</div>
+      <button class="sort-dir-btn" id="sortdir-lastupdate" onclick="event.stopPropagation();toggleSortDir('lastupdate')" title="Направление">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      </button>
+      <div class="bs-item-radio" id="sort-lastupdate"></div>
+    </div>
+    <div class="bs-item" onclick="selectSort(this,'added')">
+      <div class="bs-item-text">Дата добавления</div>
+      <button class="sort-dir-btn" id="sortdir-added" onclick="event.stopPropagation();toggleSortDir('added')" title="Направление">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+      </button>
+      <div class="bs-item-radio" id="sort-added"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bs-section-title">Фильтры</div>
+    <div class="posneg-row">
+      <span class="posneg-label">Прочитанные</span>
+      <button class="posneg-btn" id="pn-read" onclick="cyclePosneg('pn-read')" title="Переключить">—</button>
+    </div>
+
+    <!-- Genre Filter (PosNeg) -->
+    <div class="bs-section-title">Жанры</div>
+    <div class="posneg-row">
+      <span class="posneg-label">Fantasy</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+    <div class="posneg-row">
+      <span class="posneg-label">Action</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+    <div class="posneg-row">
+      <span class="posneg-label">Adventure</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+    <div class="posneg-row">
+      <span class="posneg-label">Isekai</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+    <div class="posneg-row">
+      <span class="posneg-label">Romance</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+    <div class="posneg-row">
+      <span class="posneg-label">Comedy</span>
+      <button class="posneg-btn" onclick="cyclePosneg(this)" title="Переключить">—</button>
+    </div>
+
+    <div style="height:20px"></div>
+  </div>
+</div>
+
+<script>
+let currentTheme = 'light';
+let currentScreen = 'library';
+let currentState = 'normal';
+let readerUIVisible = false;
+
+function setTheme(theme, btn) {
+  currentTheme = theme;
+  const frame = document.getElementById('phoneFrame');
+  frame.style.background = '';
+  if (theme === 'light') frame.removeAttribute('data-theme');
+  else frame.setAttribute('data-theme', theme);
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function setAccent(color, el) {
+  const frame = document.getElementById('phoneFrame');
+  frame.style.setProperty('--highlight', color);
+  const lightAccents = ['#E6A817', '#99f2c8'];
+  frame.style.setProperty('--on-highlight', lightAccents.includes(color) ? '#000' : '#fff');
+  document.querySelectorAll('.accent-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function showScreen(id, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  currentScreen = id;
+  if (btn) {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  closeAllDropdowns();
+  setState('normal');
+}
+
+function setState(state) {
+  currentState = state;
+  document.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('state' + state.charAt(0).toUpperCase() + state.slice(1)).classList.add('active');
+  const grid = document.getElementById('lib-grid');
+  const empty = document.getElementById('lib-empty');
+  const loading = document.getElementById('lib-loading');
+  const selectGrid = document.getElementById('lib-select');
+  const normalBar = document.getElementById('lib-topbar-normal');
+  const selectBar = document.getElementById('lib-topbar-select');
+  const scResults = document.getElementById('sc-results');
+  const scLoading = document.getElementById('sc-loading');
+  if (grid) grid.style.display = 'none';
+  if (empty) empty.style.display = 'none';
+  if (loading) loading.style.display = 'none';
+  if (selectGrid) selectGrid.style.display = 'none';
+  if (normalBar) normalBar.style.display = '';
+  if (selectBar) selectBar.style.display = 'none';
+  switch(state) {
+    case 'normal':
+      if (grid) grid.style.display = '';
+      if (scResults) scResults.style.display = '';
+      if (scLoading) scLoading.style.display = 'none';
+      break;
+    case 'empty': if (empty) empty.style.display = ''; break;
+    case 'loading':
+      if (loading) loading.style.display = '';
+      if (scResults) scResults.style.display = 'none';
+      if (scLoading) scLoading.style.display = '';
+      break;
+    case 'select':
+      if (selectGrid) selectGrid.style.display = '';
+      if (normalBar) normalBar.style.display = 'none';
+      if (selectBar) selectBar.style.display = '';
+      break;
+  }
+}
+
+function toggleDropdown(id) {
+  const dd = document.getElementById(id);
+  const wasOpen = dd.classList.contains('open');
+  closeAllDropdowns();
+  if (!wasOpen) dd.classList.add('open');
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.icon-btn') && !e.target.closest('.dropdown')) closeAllDropdowns();
+});
+
+function switchTab(idx) {
+  document.querySelectorAll('#lib-tabs .tab').forEach((t,i) => t.classList.toggle('active', i === idx));
+  const grid = document.getElementById('lib-grid');
+  const completed = document.getElementById('lib-grid-completed');
+  if (grid) grid.style.display = idx === 0 ? '' : 'none';
+  if (completed) completed.style.display = idx === 1 ? '' : 'none';
+}
+
+function toggleReaderUI() {
+  readerUIVisible = !readerUIVisible;
+  document.getElementById('readerTopbar').style.transform = readerUIVisible ? 'translateY(0)' : 'translateY(-100%)';
+  document.getElementById('readerBottombar').style.transform = readerUIVisible ? 'translateY(0)' : 'translateY(100%)';
+}
+
+function switchReaderTab(panel, btn) {
+  document.querySelectorAll('.reader-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.reader-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('reader-panel-' + panel).classList.add('active');
+  btn.classList.add('active');
+}
+
+// Dialogs
+function openDialog(id) {
+  document.getElementById(id).classList.add('open');
+  if (document.getElementById(id + 'Overlay')) document.getElementById(id + 'Overlay').classList.add('open');
+  closeAllDropdowns();
+}
+function closeDialog(id) {
+  document.getElementById(id).classList.remove('open');
+  if (document.getElementById(id + 'Overlay')) document.getElementById(id + 'Overlay').classList.remove('open');
+}
+
+// BottomSheet
+function openLibBottomSheet() {
+  document.getElementById('libSheet').classList.add('open');
+  document.getElementById('libSheetOverlay').classList.add('open');
+  closeAllDropdowns();
+}
+function closeSheet(id) {
+  document.getElementById(id).classList.remove('open');
+  document.getElementById(id + 'Overlay').classList.remove('open');
+}
+
+// Sort selector
+function selectSort(el, id) {
+  document.querySelectorAll('.bs-item-radio').forEach(r => r.classList.remove('selected'));
+  document.getElementById('sort-' + id).classList.add('selected');
+}
+
+// Finder language filter
+function setFinderLang(el) {
+  document.querySelectorAll('.finder-lang-item').forEach(i => {
+    i.style.color = '';
+    i.style.fontWeight = '';
+  });
+  el.style.color = 'var(--highlight)';
+  el.style.fontWeight = '600';
+  closeAllDropdowns();
+}
+
+// Finder tabs
+function switchFinderTab(tab, btn) {
+  document.querySelectorAll('#screen-catalog .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#screen-catalog .tab').forEach(t => {
+    if (t.textContent.trim() === btn.textContent.trim()) t.classList.add('active');
+  });
+  const isBrowse = tab === 'browse';
+  document.getElementById('finder-browse').style.display = isBrowse ? '' : 'none';
+  document.getElementById('finder-extensions').style.display = isBrowse ? 'none' : '';
+  document.getElementById('finder-topbar-browse').style.display = isBrowse ? '' : 'none';
+  document.getElementById('finder-topbar-extensions').style.display = isBrowse ? 'none' : '';
+}
+
+// Translation provider switching
+document.addEventListener('click', function(e) {
+  const chip = e.target.closest('.chip-group .chip');
+  if (chip && chip.closest('#screen-settings')) {
+    const group = chip.closest('.chip-group');
+    group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const provider = chip.textContent.trim().toLowerCase().replace(/\s+/g, '');
+    // Hide all sections first
+    ['section-googlefree','section-gpa','section-gemini','section-openai'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    // Show selected section
+    const map = {'googlefree':'section-googlefree','googlepa':'section-gpa','gemini':'section-gemini','openai':'section-openai'};
+    const sec = document.getElementById(map[provider]);
+    if (sec) sec.style.display = '';
+    // Show/hide prompt-manager for Gemini and OpenAI only
+    const pm = document.getElementById('prompt-manager');
+    if (pm) pm.style.display = (provider === 'gemini' || provider === 'openai') ? '' : 'none';
+  }
+});
+
+// Library filter button
+function libToggleFilter() {
+  const btn = document.getElementById('libBtnFilter');
+  btn.classList.toggle('active');
+  if (btn.classList.contains('active')) openLibBottomSheet();
+  else closeSheet('libSheet');
+}
+// When sheet closes, deactivate filter btn
+document.addEventListener('click', function(e) {
+  if (e.target.closest('#libSheetOverlay')) {
+    document.getElementById('libBtnFilter').classList.remove('active');
+  }
+});
+
+// Sort direction toggle
+const sortDirs = {};
+function toggleSortDir(key) {
+  sortDirs[key] = sortDirs[key] === 'asc' ? 'desc' : 'asc';
+  const btn = document.getElementById('sortdir-' + key);
+  if (!btn) return;
+  const svg = btn.querySelector('svg path');
+  if (sortDirs[key] === 'desc') {
+    svg.setAttribute('d', 'M12 19V5M5 12l7 7 7-7');
+    btn.style.color = 'var(--highlight)';
+  } else {
+    svg.setAttribute('d', 'M12 5v14M5 12l7-7 7 7');
+    btn.style.color = '';
+  }
+}
+
+// PosNeg cycle: — → ✓ → ✗ → —
+function cyclePosneg(el) {
+  const btn = typeof el === 'string' ? document.getElementById(el) : el;
+  const state = btn.dataset.state || 'none';
+  if (state === 'none') {
+    btn.dataset.state = 'pos';
+    btn.textContent = '✓';
+    btn.className = 'posneg-btn pos';
+  } else if (state === 'pos') {
+    btn.dataset.state = 'neg';
+    btn.textContent = '✗';
+    btn.className = 'posneg-btn neg';
+  } else {
+    btn.dataset.state = 'none';
+    btn.textContent = '—';
+    btn.className = 'posneg-btn';
+  }
+}
+
+function gsHandleInput(val) {
+  const empty = document.getElementById('gs-empty');
+  const results = document.getElementById('gs-results');
+  const progress = document.getElementById('gs-progress');
+  const hasQuery = val && val.trim().length > 0;
+  if (empty) empty.style.display = hasQuery ? 'none' : '';
+  if (results) results.style.display = hasQuery ? '' : 'none';
+  if (progress) progress.style.display = hasQuery ? '' : 'none';
+}
+
+function setReaderMode(el, label) {
+  document.querySelectorAll('#reader-panel-more .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('reader-mode-sub').textContent = label;
+}
+
+function setReaderTheme(theme, el) {
+  const reader = document.getElementById('screen-reader');
+  if (theme === 'light') reader.removeAttribute('data-theme');
+  else reader.setAttribute('data-theme', theme);
+  document.querySelectorAll('#reader-panel-style .chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// Init dark theme by default
+setTheme('dark', document.querySelector('.theme-btn:nth-child(2)'));
+</script>
+</body>
+</html>
