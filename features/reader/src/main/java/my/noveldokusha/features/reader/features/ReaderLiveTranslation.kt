@@ -2,6 +2,7 @@ package my.noveldokusha.features.reader.features
 
 import android.util.Log
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import kotlinx.coroutines.CoroutineName
@@ -18,6 +19,7 @@ import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import my.noveldokusha.text_translator.domain.TranslatorState
 
+@Stable
 internal data class LiveTranslationSettingData(
     val isAvailable: Boolean,
     val enable: MutableState<Boolean>,

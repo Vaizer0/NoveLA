@@ -2,6 +2,7 @@ package my.noveldokusha.features.reader.features
 
 import android.content.Context
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,7 @@ import my.noveldokusha.text_to_speech.TextToSpeechManager
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
 
+@Stable
 internal data class TextToSpeechSettingData(
     val isPlaying: MutableState<Boolean>,
     val isLoadingChapter: MutableState<Boolean>,

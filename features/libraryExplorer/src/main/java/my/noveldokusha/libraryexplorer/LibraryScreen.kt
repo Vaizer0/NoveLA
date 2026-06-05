@@ -41,7 +41,7 @@ fun LibraryScreen(
     val libraryModel: LibraryViewModel = viewModel()
     val pageViewModel: LibraryPageViewModel = viewModel()
 
-    val context by rememberUpdatedState(LocalContext.current)
+    val context = LocalContext.current
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val showDropdownMenu = remember { mutableStateOf(false) }
     val lastClickTime = remember { mutableStateOf(0L) }
@@ -49,22 +49,32 @@ fun LibraryScreen(
     // Читаем количество колонок из общего preference
     val gridColumns by libraryModel.gridColumns
 
-    val handleBookClick = { book: BookWithContext ->
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastClickTime.value < 200L) {
-            // Debounce - ignore click
-        } else {
-            lastClickTime.value = currentTime
-            if (libraryModel.isSelectionMode) {
-                libraryModel.toggleBookSelection(book.book.url)
+    val handleBookClick = remember(context, libraryModel.isSelectionMode) {
+        { book: BookWithContext ->
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastClickTime.value >= 200L) {
+                lastClickTime.value = currentTime
+                if (libraryModel.isSelectionMode) {
+                    libraryModel.toggleBookSelection(book.book.url)
+                } else {
+                    navigationRouteViewModel.chapters(
+                        context = context,
+                        bookMetadata = BookMetadata(
+                            title = book.book.title,
+                            url = book.book.url
+                        )
+                    ).let(context::startActivity)
+                }
+            }
+        }
+    }
+
+    val handleBookLongClick = remember(libraryModel.isSelectionMode) {
+        { book: BookWithContext ->
+            if (!libraryModel.isSelectionMode) {
+                libraryModel.bookSettingsDialogState = BookSettingsDialogState.Show(book.book)
             } else {
-                navigationRouteViewModel.chapters(
-                    context = context,
-                    bookMetadata = BookMetadata(
-                        title = book.book.title,
-                        url = book.book.url
-                    )
-                ).let(context::startActivity)
+                libraryModel.toggleBookSelection(book.book.url)
             }
         }
     }
@@ -178,13 +188,7 @@ fun LibraryScreen(
                 innerPadding = innerPadding,
                 topAppBarState = scrollBehavior.state,
                 onBookClick = handleBookClick,
-                onBookLongClick = { book ->
-                    if (!libraryModel.isSelectionMode) {
-                        libraryModel.bookSettingsDialogState = BookSettingsDialogState.Show(book.book)
-                    } else {
-                        libraryModel.toggleBookSelection(book.book.url)
-                    }
-                },
+                onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
                 selectedBooks = libraryModel.selectedBooks,
                 isSelectionMode = libraryModel.isSelectionMode
