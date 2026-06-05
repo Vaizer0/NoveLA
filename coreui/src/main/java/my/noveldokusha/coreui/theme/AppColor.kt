@@ -19,33 +19,33 @@ data class AppColor(
 )
 
 val light_appColor = AppColor(
-    tabSurface = Grey75,
-    bookSurface = Grey75,
+    tabSurface = BgLight,
+    bookSurface = SubBgLight,
     checkboxPositive = Success500,
     checkboxNegative = Error500,
     checkboxNeutral = Grey900,
-    tintedSurface = Grey25.mix(ColorAccent, 0.65f),
-    tintedSelectedSurface = Grey25.mix(ColorAccent, 0.75f),
+    tintedSurface = SubBgLight.mix(HighlightLight, 0.65f),
+    tintedSelectedSurface = SubBgLight.mix(HighlightLight, 0.75f),
 )
 
 val dark_appColor = AppColor(
-    tabSurface = Grey800,
-    bookSurface = Grey800,
+    tabSurface = BgDark,
+    bookSurface = SubBgDark,
     checkboxPositive = Success500,
     checkboxNegative = Error500,
     checkboxNeutral = Grey900,
-    tintedSurface = Grey900.mix(ColorAccent, 0.65f),
-    tintedSelectedSurface = Grey900.mix(ColorAccent, 0.75f),
+    tintedSurface = SubBgDark.mix(HighlightDark, 0.65f),
+    tintedSelectedSurface = SubBgDark.mix(HighlightDark, 0.75f),
 )
 
 val black_appColor = AppColor(
-    tabSurface = Grey900,
-    bookSurface = Grey900,
+    tabSurface = BgBlack,
+    bookSurface = SubBgBlack,
     checkboxPositive = Success500,
     checkboxNegative = Error500,
     checkboxNeutral = Grey900,
-    tintedSurface = Grey1000.mix(ColorAccent, 0.65f),
-    tintedSelectedSurface = Grey1000.mix(ColorAccent, 0.75f),
+    tintedSurface = SubBgBlack.mix(HighlightDark, 0.65f),
+    tintedSelectedSurface = SubBgBlack.mix(HighlightDark, 0.75f),
 )
 
 val LocalAppColor = compositionLocalOf { light_appColor }

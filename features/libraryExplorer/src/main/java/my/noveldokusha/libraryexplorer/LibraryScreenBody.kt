@@ -87,11 +87,13 @@ internal fun LibraryScreenBody(
                         modifier = Modifier
                             .tabIndicatorOffset(tabPos)
                             .fillMaxSize()
-                            .padding(6.dp)
-                            .background(MaterialTheme.colorApp.tabSurface, CircleShape)
+                            .padding(4.dp)
+                            .background(MaterialTheme.colorScheme.surface, my.noveldokusha.coreui.theme.shapes.small)
                             .zIndex(-1f)
                     )
                 },
+                containerColor = MaterialTheme.colorScheme.background,
+                divider = {},
                 tabs = {
                     tabs.forEachIndexed { index, text ->
                         val selected by remember { derivedStateOf { pagerState.currentPage == index } }
@@ -104,15 +106,13 @@ internal fun LibraryScreenBody(
                             text = {
                                 Text(
                                     text = "$text ($count)",
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = if (selected) MaterialTheme.colorScheme.onBackground else my.noveldokusha.coreui.theme.SubTextLight,
+                                    style = MaterialTheme.typography.labelLarge
                                 )
                             },
                             onClick = { scope.launch { pagerState.animateScrollToPage(index) } }
                         )
                     }
-                },
-                divider = {
-                    CollapsibleDivider(topAppBarState)
                 }
             )
             HorizontalPager(

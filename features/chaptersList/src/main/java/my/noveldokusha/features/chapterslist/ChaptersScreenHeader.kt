@@ -179,7 +179,7 @@ internal fun ChaptersScreenHeader(
                 }
             }
 
-            // Описание с кнопкой перевода
+            // Описание
             Row(
                 verticalAlignment = Alignment.Top,
                 modifier = Modifier.fillMaxWidth()
@@ -191,32 +191,6 @@ internal fun ChaptersScreenHeader(
                         text = text,
                         linesForExpand = 4,
                     )
-                }
-
-                when {
-                    isTranslating -> CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(start = 4.dp, top = 2.dp)
-                            .size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = ColorAccent
-                    )
-                    translatedTitle != null || translatedDescription != null -> IconButton(
-                        onClick = onClearTranslationClick
-                    ) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = stringResource(R.string.clear_translation),
-                            tint = ColorAccent
-                        )
-                    }
-                    else -> IconButton(onClick = onTranslateClick) {
-                        Icon(
-                            Icons.Outlined.GTranslate,
-                            contentDescription = stringResource(R.string.translate),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             }
 
@@ -252,12 +226,12 @@ internal fun ChaptersScreenHeader(
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
-                                disabledContainerColor = ColorAccent.copy(alpha = 0.10f),
-                                disabledLabelColor = ColorAccent,
+                                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurface,
                             ),
                             border = AssistChipDefaults.assistChipBorder(
                                 enabled = false,
-                                borderColor = ColorAccent.copy(alpha = 0.3f),
+                                borderColor = MaterialTheme.colorScheme.outline,
                             ),
                         )
                     }
@@ -272,12 +246,12 @@ internal fun ChaptersScreenHeader(
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                 labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                             border = AssistChipDefaults.assistChipBorder(
                                 enabled = true,
-                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                borderColor = MaterialTheme.colorScheme.outline,
                             ),
                         )
                     }
@@ -291,45 +265,65 @@ internal fun ChaptersScreenHeader(
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min)
             ) {
-                // Кнопка "К последней читаемой" — только если есть прогресс
+                // Кнопка "К последней читаемой"
                 if (onScrollToLastRead != null) {
                     Button(
                         onClick = onScrollToLastRead,
+                        shape = my.noveldokusha.coreui.theme.shapes.large,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = ColorAccent.copy(alpha = 0.15f),
-                            contentColor = ColorAccent,
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                         ),
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.BookmarkAdded,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
                         Text(text = stringResource(id = R.string.scroll_to_last_read_chapter))
                     }
                 }
 
-                // Кнопка "Перейти к главе"
+                // Кнопка "Перевод"
                 Button(
-                    onClick = onScrollToChapter,
+                    onClick = {
+                        if (translatedTitle != null || translatedDescription != null) {
+                            onClearTranslationClick()
+                        } else {
+                            onTranslateClick()
+                        }
+                    },
+                    shape = my.noveldokusha.coreui.theme.shapes.large,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ColorAccent.copy(alpha = 0.15f),
-                        contentColor = ColorAccent,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                     ),
-                    modifier = if (onScrollToLastRead != null)
-                        Modifier.weight(1f).fillMaxHeight()
-                    else
-                        Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                ) {
+                    if (isTranslating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (translatedTitle != null || translatedDescription != null) Icons.Outlined.Close else Icons.Outlined.GTranslate,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                        Text(text = if (translatedTitle != null || translatedDescription != null) stringResource(R.string.clear_translation) else stringResource(R.string.translate))
+                    }
+                }
+                
+                // Кнопка "Перейти к главе"
+                IconButton(
+                    onClick = onScrollToChapter,
+                    modifier = Modifier.fillMaxHeight().background(MaterialTheme.colorScheme.surface, my.noveldokusha.coreui.theme.shapes.large)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 6.dp)
+                        contentDescription = stringResource(id = R.string.go_to_chapter),
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(text = stringResource(id = R.string.go_to_chapter))
                 }
             }
 

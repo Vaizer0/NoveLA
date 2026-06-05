@@ -29,10 +29,15 @@ import my.noveldokusha.coreui.components.BookSettingsDialog
 import my.noveldokusha.coreui.components.BookSettingsDialogState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
@@ -137,91 +142,65 @@ fun LibraryScreen(
                     }
                 )
             } else {
-                AnimatedTransition(targetState = uiState.toolbarMode) { target ->
-                    when (target) {
-                        ToolbarMode.MAIN -> {
-                            MediumTopAppBar(
-                                scrollBehavior = scrollBehavior,
-                                colors = TopAppBarDefaults.mediumTopAppBarColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                                ),
-                                title = {
-                                    Text(
-                                        text = stringResource(R.string.title_library),
-                                        style = MaterialTheme.typography.headlineMedium
-                                    )
-                                },
-                                actions = {
-                                    IconButton(onClick = { libraryModel.setToolbarMode(ToolbarMode.SEARCH) }) {
-                                        Icon(Icons.Default.Search, stringResource(R.string.search_here))
-                                    }
-                                    IconButton(onClick = { showDropdownMenu.value = true }) {
-                                        Icon(
-                                            Icons.Filled.MoreVert,
-                                            stringResource(R.string.options_panel)
-                                        )
-                                    }
-                                    androidx.compose.material3.DropdownMenu(
-                                        expanded = showDropdownMenu.value,
-                                        onDismissRequest = { showDropdownMenu.value = false }
-                                    ) {
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            leadingIcon = {
-                                                androidx.compose.material3.Icon(
-                                                    Icons.AutoMirrored.Filled.Sort,
-                                                    stringResource(R.string.filter)
-                                                )
-                                            },
-                                            text = { androidx.compose.material3.Text(stringResource(R.string.filter)) },
-                                            onClick = {
-                                                showDropdownMenu.value = false
-                                                libraryModel.setShowBottomSheet(true)
-                                            }
-                                        )
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            leadingIcon = {
-                                                androidx.compose.material3.Icon(
-                                                    Icons.Filled.Checklist,
-                                                    stringResource(R.string.select_books)
-                                                )
-                                            },
-                                            text = { androidx.compose.material3.Text(stringResource(R.string.select_books)) },
-                                            onClick = {
-                                                showDropdownMenu.value = false
-                                                libraryModel.toggleSelectionMode()
-                                            }
-                                        )
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            leadingIcon = {
-                                                androidx.compose.material3.Icon(
-                                                    Icons.Filled.FileOpen,
-                                                    stringResource(id = R.string.import_epub)
-                                                )
-                                            },
-                                            text = { androidx.compose.material3.Text(stringResource(id = R.string.import_epub)) },
-                                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
-                                        )
-                                    }
-                                }
+                Column(
+                    modifier = Modifier.background(MaterialTheme.colorScheme.background)
+                ) {
+                    TopAppBar(
+                        scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                            scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                        title = {
+                            Text(
+                                text = "NoveLA", // Replaced R.string.title_library with NoveLA as per prototype
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground
                             )
+                        },
+                        actions = {
+                            IconButton(onClick = { libraryModel.setShowBottomSheet(true) }) {
+                                Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
+                            }
+                            IconButton(onClick = { showDropdownMenu.value = true }) {
+                                Icon(Icons.Filled.MoreVert, stringResource(R.string.options_panel))
+                            }
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = showDropdownMenu.value,
+                                onDismissRequest = { showDropdownMenu.value = false }
+                            ) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Checklist, stringResource(R.string.select_books))
+                                    },
+                                    text = { Text(stringResource(R.string.select_books)) },
+                                    onClick = {
+                                        showDropdownMenu.value = false
+                                        libraryModel.toggleSelectionMode()
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.FileOpen, stringResource(id = R.string.import_epub))
+                                    },
+                                    text = { Text(stringResource(id = R.string.import_epub)) },
+                                    onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
+                                )
+                            }
                         }
-                        ToolbarMode.SEARCH -> {
-                            TopAppBarSearch(
-                                focusRequester = focusRequester,
-                                searchTextInput = pageViewModel.searchQuery,
-                                onSearchTextChange = { pageViewModel.updateSearchQuery(it) },
-                                onTextDone = { },
-                                onClose = {
-                                    pageViewModel.updateSearchQuery("")
-                                    libraryModel.setToolbarMode(ToolbarMode.MAIN)
-                                    focusRequester.freeFocus()
-                                },
-                                placeholderText = stringResource(R.string.search_here),
-                                scrollBehavior = scrollBehavior,
-                                modifier = Modifier,
-                            )
-                        }
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        my.noveldokusha.coreui.components.MyOutlinedTextField(
+                            value = pageViewModel.searchQuery,
+                            onValueChange = { pageViewModel.updateSearchQuery(it) },
+                            placeHolderText = stringResource(R.string.search_here),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }

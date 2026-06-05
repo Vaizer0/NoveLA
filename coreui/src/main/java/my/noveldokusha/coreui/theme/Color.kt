@@ -17,9 +17,30 @@ fun colorLike() = MaterialTheme.colorScheme.error
 fun colorNotice() = MaterialTheme.colorScheme.tertiary
 
 // Legacy aliases for backward compatibility - DEPRECATED, use theme-based functions above
-val ColorAccent = Color(0xFF2A59B6)
+val ColorAccent = Color(0xFF0088FF)
 val ColorLike = Color(0xFFF44336)
 val ColorNotice = Color(0xFFE48800)
+
+val BgLight = Color(0xFFF7F9FA)
+val BgDark = Color(0xFF0C0C0C)
+val BgBlack = Color(0xFF000000)
+
+val SubBgLight = Color(0xFFFFFFFF)
+val SubBgDark = Color(0xFF191919)
+val SubBgBlack = Color(0xFF0A0A0A)
+
+val HighlightLight = Color(0xFF0470E6)
+val HighlightDark = Color(0xFF0088FF)
+
+val TextLight = Color(0xFF1E1715)
+val TextDark = Color(0xFFEBEEF1)
+
+val SubTextLight = Color(0xFF8C8C8C)
+val SubTextDark = Color(0xFFA8ABB0)
+
+val StrokeLight = Color(0x268C8C8C) // rgba(140,140,140,0.15)
+val StrokeDark = Color(0x1AE1E6EB) // rgba(225,230,235,0.10)
+val StrokeBlack = Color(0x14E1E6EB) // rgba(225,230,235,0.08)
 
 val Grey0 = Color(0xFFFFFFFF)
 val Grey25 = Color(0xFFFEFEFE)

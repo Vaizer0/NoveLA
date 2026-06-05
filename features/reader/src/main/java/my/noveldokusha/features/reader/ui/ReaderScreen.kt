@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -109,6 +110,12 @@ internal fun ReaderScreen(
                         modifier = if (fullScreen) Modifier.displayCutoutPadding() else Modifier
                     ) {
                         val chapterTitle by state.readerInfo.chapterTitle
+                        val selectedSetting by state.settings.selectedSetting
+
+                        val toggleOrSet = { type: Type ->
+                            state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
+                        }
+
                         TopAppBar(
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = MaterialTheme.colorApp.tintedSurface,
@@ -118,7 +125,7 @@ internal fun ReaderScreen(
                                 Text(
                                     text = chapterTitle,
                                     style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 2,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.animateContentSize()
                                 )
@@ -129,36 +136,22 @@ internal fun ReaderScreen(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = onOpenChapterInWeb) {
-                                    Icon(Icons.Filled.Public, null)
+                                if (state.settings.liveTranslation.isAvailable) {
+                                    IconButton(onClick = { toggleOrSet(Type.LiveTranslation) }) {
+                                        Icon(Icons.Outlined.Translate, stringResource(R.string.translator), tint = if (selectedSetting == Type.LiveTranslation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.TextToSpeech) }) {
+                                    Icon(Icons.Filled.RecordVoiceOver, stringResource(R.string.voice_reader), tint = if (selectedSetting == Type.TextToSpeech) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.Style) }) {
+                                    Icon(Icons.Outlined.ColorLens, stringResource(R.string.style), tint = if (selectedSetting == Type.Style) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.More) }) {
+                                    Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.more), tint = if (selectedSetting == Type.More) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                                 }
                             }
                         )
-                        val chapterCurrentNumber by state.readerInfo.chapterCurrentNumber
-                        val chaptersCount by state.readerInfo.chaptersCount
-                        val chapterPercentageProgress by state.readerInfo.chapterPercentageProgress
-                        
-                        Column(
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .padding(horizontal = 16.dp),
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    id = R.string.chapter_x_over_n,
-                                    chapterCurrentNumber,
-                                    chaptersCount,
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                            Text(
-                                text = stringResource(
-                                    id = R.string.progress_x_percentage,
-                                    chapterPercentageProgress
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
                         HorizontalDivider()
                     }
                 }
@@ -167,10 +160,6 @@ internal fun ReaderScreen(
         content = readerContent,
         bottomBar = {
             val selectedSetting by state.settings.selectedSetting
-
-            val toggleOrSet = { type: Type ->
-                state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
-            }
             AnimatedVisibility(
                 visible = showReaderInfo,
                 enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
@@ -196,34 +185,32 @@ internal fun ReaderScreen(
                             .animateContentSize(),
                         containerColor = MaterialTheme.colorApp.tintedSurface,
                     ) {
-                        if (state.settings.liveTranslation.isAvailable) SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.LiveTranslation,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.Translate,
-                            textId = R.string.translator,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.TextToSpeech,
-                            onClick = toggleOrSet,
-                            icon = Icons.Filled.RecordVoiceOver,
-                            textId = R.string.voice_reader,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.Style,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.ColorLens,
-                            textId = R.string.style,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.More,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.MoreHoriz,
-                            textId = R.string.more,
-                        )
+                        val chapterCurrentNumber by state.readerInfo.chapterCurrentNumber
+                        val chaptersCount by state.readerInfo.chaptersCount
+                        val chapterPercentageProgress by state.readerInfo.chapterPercentageProgress
+                        
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    id = R.string.chapter_x_over_n,
+                                    chapterCurrentNumber,
+                                    chaptersCount,
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Text(
+                                text = stringResource(
+                                    id = R.string.progress_x_percentage,
+                                    chapterPercentageProgress
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
                     }
                 }
             }
