@@ -31,7 +31,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
@@ -67,6 +66,7 @@ import com.skydoves.landscapist.glide.GlideImage
 import my.noveldokusha.core.Extension
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
+import my.noveldokusha.coreui.components.SlimListItem
 import timber.log.Timber
 import java.util.Locale
 import my.noveldokusha.core.getLanguageDisplayName
@@ -307,7 +307,7 @@ private fun ExtensionListItem(
     extension: ExtensionInfo,
     viewModel: ExtensionsManagerViewModel
 ) {
-    ListItem(
+    SlimListItem(
         modifier = Modifier.fillMaxWidth(),
         headlineContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -340,25 +340,27 @@ private fun ExtensionListItem(
             }
         },
         supportingContent = {
-            Text(
-                text = "Language: ${getLanguageDisplayName(extension.language)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val versionText = if (extension.isUpdateAvailable) {
-                "v${extension.version} < v${extension.remoteVersion}"
-            } else {
-                "v${extension.version}"
+            Column {
+                Text(
+                    text = "Language: ${getLanguageDisplayName(extension.language)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val versionText = if (extension.isUpdateAvailable) {
+                    "v${extension.version} < v${extension.remoteVersion}"
+                } else {
+                    "v${extension.version}"
+                }
+                Timber.d("Extension UI: ${extension.name}, version: $versionText, isUpdateAvailable: ${extension.isUpdateAvailable}, remoteVersion: ${extension.remoteVersion}")
+                Text(
+                    text = versionText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (extension.isUpdateAvailable)
+                        MaterialTheme.colorScheme.tertiary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Timber.d("Extension UI: ${extension.name}, version: $versionText, isUpdateAvailable: ${extension.isUpdateAvailable}, remoteVersion: ${extension.remoteVersion}")
-            Text(
-                text = versionText,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (extension.isUpdateAvailable)
-                    MaterialTheme.colorScheme.tertiary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
-            )
         },
         leadingContent = {
             Box(

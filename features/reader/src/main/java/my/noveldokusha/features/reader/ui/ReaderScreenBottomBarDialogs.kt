@@ -20,6 +20,8 @@ internal fun ReaderScreenBottomBarDialogs(
     settings: ReaderScreenState.Settings,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
+    onLineHeightChanged: (Float) -> Unit,
+    onParagraphSpacingChanged: (Float) -> Unit,
     onSelectableTextChange: (Boolean) -> Unit,
     onFollowSystem: (Boolean) -> Unit,
     onThemeSelected: (Themes) -> Unit,
@@ -47,6 +49,8 @@ internal fun ReaderScreenBottomBarDialogs(
                             onThemeChange = onThemeSelected,
                             onTextFontChange = onTextFontChanged,
                             onTextSizeChange = onTextSizeChanged,
+                            onLineHeightChange = onLineHeightChanged,
+                            onParagraphSpacingChange = onParagraphSpacingChanged,
                         )
                     }
                     ReaderScreenState.Settings.Type.More -> MoreSettingDialog(

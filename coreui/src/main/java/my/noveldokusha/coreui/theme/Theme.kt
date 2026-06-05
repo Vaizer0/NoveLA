@@ -1,16 +1,21 @@
 package my.noveldokusha.coreui.theme
 
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import androidx.compose.ui.platform.LocalContext
 
 
 @Composable
@@ -53,11 +58,20 @@ fun InternalTheme(
         Themes.BLACK -> black_appColor
     }
 
-    val systemUiController = rememberSystemUiController()
-    systemUiController.setSystemBarsColor(
-        color = colorScheme.primary,
-        darkIcons = theme.isLight
-    )
+    val context = LocalContext.current
+    DisposableEffect(theme, colorScheme) {
+        (context as? ComponentActivity)?.enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ) { !theme.isLight },
+            navigationBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ) { !theme.isLight }
+        )
+        onDispose {}
+    }
     val textSelectionColors = remember {
         TextSelectionColors(
             handleColor = ColorAccent,
@@ -71,7 +85,7 @@ fun InternalTheme(
         shapes = shapes,
     ) {
         CompositionLocalProvider(
-            LocalContentColor provides colorScheme.onPrimary,
+            LocalContentColor provides MaterialTheme.colorScheme.onPrimary,
             LocalAppColor provides appColor,
             LocalTextSelectionColors provides textSelectionColors,
             content = content

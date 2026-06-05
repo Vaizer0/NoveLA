@@ -40,6 +40,8 @@ import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.utils.toToggleableState
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun LibraryBottomSheet(
@@ -50,10 +52,11 @@ internal fun LibraryBottomSheet(
 ) {
     if (!visible) return
 
+    val uiState by model.uiState.collectAsStateWithLifecycle()
     val availableGenres by pageModel.availableGenres
     val selectedGenres by pageModel.selectedGenres.collectAsState()
     // Читаем текущее значение из общего preference
-    val gridColumns by model.gridColumns
+    val gridColumns = uiState.gridColumns
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -138,7 +141,7 @@ internal fun LibraryBottomSheet(
             )
 
             sortOptions.forEach { (option, labelRes) ->
-                val isSelected = model.sortConfig.option == option
+                val isSelected = uiState.sortConfig.option == option
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -157,7 +160,7 @@ internal fun LibraryBottomSheet(
                     if (isSelected) {
                         IconButton(onClick = { model.sortConfigToggleDirection() }) {
                             Icon(
-                                imageVector = if (model.sortConfig.direction == SortDirection.ASC)
+                                imageVector = if (uiState.sortConfig.direction == SortDirection.ASC)
                                     Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                                 contentDescription = null,
                                 tint = ColorAccent
@@ -182,7 +185,7 @@ internal fun LibraryBottomSheet(
             )
             PosNegCheckbox(
                 text = stringResource(id = R.string.read),
-                state = model.readFilter.toToggleableState(),
+                state = uiState.readFilter.toToggleableState(),
                 onStateChange = { model.readFilterToggle() },
                 modifier = Modifier.fillMaxWidth()
             )

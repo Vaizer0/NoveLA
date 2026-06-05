@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -42,6 +41,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -150,7 +150,7 @@ internal fun SettingsGeminiTranslation(
         ) {
             Column {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                ListItem(
+                SlimListItem(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
@@ -197,7 +197,7 @@ internal fun SettingsGeminiTranslation(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
                 // API Key
-                ListItem(
+                SlimListItem(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
@@ -235,7 +235,7 @@ internal fun SettingsGeminiTranslation(
                 )
 
                 // Model
-                ListItem(
+                SlimListItem(
                     headlineContent = {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
@@ -413,7 +413,7 @@ internal fun SettingsLlmBatchOptions(
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
         // ── Batch size ────────────────────────────────────────────────────────
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -459,7 +459,7 @@ internal fun SettingsLlmBatchOptions(
         )
 
         // ── Max output tokens ─────────────────────────────────────────────────
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(

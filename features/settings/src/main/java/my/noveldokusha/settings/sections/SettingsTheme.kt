@@ -10,7 +10,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -19,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.coreui.theme.textPadding
@@ -40,7 +40,7 @@ internal fun SettingsTheme(
             color = ColorAccent
         )
         // Follow system theme
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onFollowSystemChange(!currentFollowSystem) },
             headlineContent = {
@@ -66,7 +66,7 @@ internal fun SettingsTheme(
             }
         )
         // Themes
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Themes.entries.forEach {

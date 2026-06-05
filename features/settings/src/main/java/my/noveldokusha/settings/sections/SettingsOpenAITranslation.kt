@@ -19,7 +19,6 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -36,6 +35,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.settings.R
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -81,7 +81,7 @@ internal fun SettingsOpenAITranslation(
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
         // ── Base URL ──────────────────────────────────────────────────────────
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -130,7 +130,7 @@ internal fun SettingsOpenAITranslation(
         )
 
         // ── API Keys ──────────────────────────────────────────────────────────
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -178,7 +178,7 @@ internal fun SettingsOpenAITranslation(
         )
 
         // ── Model ─────────────────────────────────────────────────────────────
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(

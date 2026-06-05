@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.R
+import androidx.compose.material3.ripple
 
 @Composable
 fun ErrorView(
@@ -33,8 +33,8 @@ fun ErrorView(
 ) {
     @Composable
     fun Modifier.click(onClick: () -> Unit) = clickable(
-        interactionSource = MutableInteractionSource(),
-        indication = rememberRipple(color = MaterialTheme.colorScheme.onError),
+        interactionSource = remember { MutableInteractionSource() },
+        indication = ripple(color = MaterialTheme.colorScheme.onError),
         onClick = onClick
     )
 

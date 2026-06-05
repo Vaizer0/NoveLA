@@ -9,14 +9,13 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -37,7 +36,7 @@ internal fun SettingsData(
             modifier = Modifier.textPadding(),
             color = ColorAccent
         )
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.clean_database))
             },
@@ -58,7 +57,7 @@ internal fun SettingsData(
             },
             modifier = Modifier.clickable(enabled = !isCleaningDatabase) { onCleanDatabase() }
         )
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.clean_images_folder))
             },

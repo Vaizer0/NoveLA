@@ -78,20 +78,24 @@ internal fun ReaderScreen(
     onThemeSelected: (Themes) -> Unit,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
+    onLineHeightChanged: (Float) -> Unit,
+    onParagraphSpacingChanged: (Float) -> Unit,
     onPressBack: () -> Unit,
     onOpenChapterInWeb: () -> Unit,
     readerContent: @Composable (paddingValues: PaddingValues) -> Unit,
 ) {
+    val showReaderInfo by state.showReaderInfo
+
     // Capture back action when viewing info
-    BackHandler(enabled = state.showReaderInfo.value) {
+    BackHandler(enabled = showReaderInfo) {
         state.showReaderInfo.value = false
     }
 
     Scaffold(
         topBar = {
-            val fullScreen by rememberUpdatedState(state.showReaderInfo.value)
+            val fullScreen by rememberUpdatedState(showReaderInfo)
             AnimatedVisibility(
-                visible = state.showReaderInfo.value,
+                visible = showReaderInfo,
                 enter = expandVertically(initialHeight = { 0 }, expandFrom = Alignment.Top)
                         + fadeIn(),
                 exit = shrinkVertically(targetHeight = { 0 }, shrinkTowards = Alignment.Top)
@@ -102,11 +106,9 @@ internal fun ReaderScreen(
                     modifier = Modifier.animateContentSize(),
                 ) {
                     Column(
-                        modifier = when (fullScreen) {
-                            true -> Modifier.displayCutoutPadding()
-                            false -> Modifier
-                        }
+                        modifier = if (fullScreen) Modifier.displayCutoutPadding() else Modifier
                     ) {
+                        val chapterTitle by state.readerInfo.chapterTitle
                         TopAppBar(
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = MaterialTheme.colorApp.tintedSurface,
@@ -114,7 +116,7 @@ internal fun ReaderScreen(
                             ),
                             title = {
                                 Text(
-                                    text = state.readerInfo.chapterTitle.value,
+                                    text = chapterTitle,
                                     style = MaterialTheme.typography.titleMedium,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
@@ -132,6 +134,10 @@ internal fun ReaderScreen(
                                 }
                             }
                         )
+                        val chapterCurrentNumber by state.readerInfo.chapterCurrentNumber
+                        val chaptersCount by state.readerInfo.chaptersCount
+                        val chapterPercentageProgress by state.readerInfo.chapterPercentageProgress
+                        
                         Column(
                             modifier = Modifier
                                 .padding(bottom = 8.dp)
@@ -140,15 +146,15 @@ internal fun ReaderScreen(
                             Text(
                                 text = stringResource(
                                     id = R.string.chapter_x_over_n,
-                                    state.readerInfo.chapterCurrentNumber.value,
-                                    state.readerInfo.chaptersCount.value,
+                                    chapterCurrentNumber,
+                                    chaptersCount,
                                 ),
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Text(
                                 text = stringResource(
                                     id = R.string.progress_x_percentage,
-                                    state.readerInfo.chapterPercentageProgress.value
+                                    chapterPercentageProgress
                                 ),
                                 style = MaterialTheme.typography.labelMedium,
                             )
@@ -160,15 +166,13 @@ internal fun ReaderScreen(
         },
         content = readerContent,
         bottomBar = {
+            val selectedSetting by state.settings.selectedSetting
 
             val toggleOrSet = { type: Type ->
-                state.settings.selectedSetting.value = when (state.settings.selectedSetting.value) {
-                    type -> Type.None
-                    else -> type
-                }
+                state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
             }
             AnimatedVisibility(
-                visible = state.showReaderInfo.value,
+                visible = showReaderInfo,
                 enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
                 exit = shrinkVertically(targetHeight = { 0 }) + fadeOut(),
             ) {
@@ -177,6 +181,8 @@ internal fun ReaderScreen(
                         settings = state.settings,
                         onTextFontChanged = onTextFontChanged,
                         onTextSizeChanged = onTextSizeChanged,
+                        onLineHeightChanged = onLineHeightChanged,
+                        onParagraphSpacingChanged = onParagraphSpacingChanged,
                         onSelectableTextChange = onSelectableTextChange,
                         onFollowSystem = onFollowSystem,
                         onThemeSelected = onThemeSelected,
@@ -191,28 +197,28 @@ internal fun ReaderScreen(
                         containerColor = MaterialTheme.colorApp.tintedSurface,
                     ) {
                         if (state.settings.liveTranslation.isAvailable) SettingIconItem(
-                            currentType = state.settings.selectedSetting.value,
+                            currentType = selectedSetting,
                             settingType = Type.LiveTranslation,
                             onClick = toggleOrSet,
                             icon = Icons.Outlined.Translate,
                             textId = R.string.translator,
                         )
                         SettingIconItem(
-                            currentType = state.settings.selectedSetting.value,
+                            currentType = selectedSetting,
                             settingType = Type.TextToSpeech,
                             onClick = toggleOrSet,
                             icon = Icons.Filled.RecordVoiceOver,
                             textId = R.string.voice_reader,
                         )
                         SettingIconItem(
-                            currentType = state.settings.selectedSetting.value,
+                            currentType = selectedSetting,
                             settingType = Type.Style,
                             onClick = toggleOrSet,
                             icon = Icons.Outlined.ColorLens,
                             textId = R.string.style,
                         )
                         SettingIconItem(
-                            currentType = state.settings.selectedSetting.value,
+                            currentType = selectedSetting,
                             settingType = Type.More,
                             onClick = toggleOrSet,
                             icon = Icons.Outlined.MoreHoriz,
@@ -329,6 +335,8 @@ private fun ViewsPreview(
         currentTheme = remember { mutableStateOf(Themes.DARK) },
         textFont = remember { mutableStateOf("Arial") },
         textSize = remember { mutableFloatStateOf(20f) },
+        lineHeight = remember { mutableFloatStateOf(1.35f) },
+        paragraphSpacing = remember { mutableFloatStateOf(8f) },
     )
 
     InternalTheme {
@@ -355,6 +363,8 @@ private fun ViewsPreview(
                     showInvalidChapterDialog = remember { mutableStateOf(false) }
                 ),
                 onTextSizeChanged = {},
+                onLineHeightChanged = {},
+                onParagraphSpacingChanged = {},
                 onTextFontChanged = {},
                 onSelectableTextChange = {},
                 onFollowSystem = {},

@@ -22,8 +22,6 @@ dependencies {
     implementation(libs.compose.material3.android)
     implementation(libs.compose.androidx.lifecycle.viewmodel)
     implementation(libs.compose.androidx.material.icons.extended)
-    implementation(libs.compose.accompanist.systemuicontroller)
-    implementation(libs.compose.accompanist.insets)
     implementation(libs.compose.landscapist.glide)
     implementation(libs.compose.coil)
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")

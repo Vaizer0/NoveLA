@@ -9,7 +9,6 @@ import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.DoubleArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -18,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.debouncedClickable
 import my.noveldokusha.coreui.theme.textPadding
@@ -37,7 +37,7 @@ internal fun AppUpdates(
             modifier = Modifier.textPadding(),
             color = ColorAccent
         )
-        ListItem(
+        SlimListItem(
             modifier = Modifier.clickable {
                 state.appUpdateCheckerEnabled.value = !state.appUpdateCheckerEnabled.value
             },
@@ -65,7 +65,7 @@ internal fun AppUpdates(
                 )
             }
         )
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.check_for_app_updates_now))
             },

@@ -37,6 +37,13 @@ val light_colorScheme = ColorScheme(
     outline = Grey800,
     outlineVariant = Grey200,
     scrim = Grey300,
+    surfaceBright = Grey25,
+    surfaceDim = Grey100,
+    surfaceContainerLowest = Grey0,
+    surfaceContainerLow = Grey25,
+    surfaceContainer = Grey50,
+    surfaceContainerHigh = Grey75,
+    surfaceContainerHighest = Grey100,
 )
 
 val dark_colorScheme = ColorScheme(
@@ -69,6 +76,13 @@ val dark_colorScheme = ColorScheme(
     outline = Grey25,
     outlineVariant = Grey700,
     scrim = Grey800,
+    surfaceBright = Grey700,
+    surfaceDim = Grey900,
+    surfaceContainerLowest = Grey1000,
+    surfaceContainerLow = Grey900,
+    surfaceContainer = Grey800,
+    surfaceContainerHigh = Grey700,
+    surfaceContainerHighest = Grey600,
 )
 
 val black_colorScheme = ColorScheme(
@@ -101,4 +115,11 @@ val black_colorScheme = ColorScheme(
     outline = Grey25,
     outlineVariant = Grey800,
     scrim = Grey900,
+    surfaceBright = Grey800,
+    surfaceDim = Grey1000,
+    surfaceContainerLowest = Grey1000,
+    surfaceContainerLow = Grey1000,
+    surfaceContainer = Grey900,
+    surfaceContainerHigh = Grey800,
+    surfaceContainerHighest = Grey700,
 )

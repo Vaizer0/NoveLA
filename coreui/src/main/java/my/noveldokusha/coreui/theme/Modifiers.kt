@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -19,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.ripple
 import my.noveldokusha.coreui.composableActions.debouncedAction
 
 @Composable
@@ -64,8 +64,8 @@ fun Modifier.blockInteraction() = this
 fun Modifier.clickableWithUnboundedIndicator(onClick: () -> Unit) = composed {
     then(
         clickable(
-            interactionSource = MutableInteractionSource(),
-            indication = rememberRipple(bounded = false),
+            interactionSource = remember { MutableInteractionSource() },
+            indication = ripple(bounded = false),
             onClick = onClick
         )
     )
@@ -74,7 +74,7 @@ fun Modifier.clickableWithUnboundedIndicator(onClick: () -> Unit) = composed {
 fun Modifier.clickableNoIndicator(onClick: () -> Unit) = composed {
     then(
         clickable(
-            interactionSource = MutableInteractionSource(),
+            interactionSource = remember { MutableInteractionSource() },
             indication = null,
             onClick = onClick
         )

@@ -17,7 +17,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ImageViewGlide
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
@@ -99,8 +99,11 @@ internal fun CatalogList(
             )
         }
 
-        items(databasesList) {
-            ListItem(
+        items(
+            items = databasesList,
+            key = { it.baseUrl }
+        ) {
+            SlimListItem(
                 modifier = Modifier.clickable { onDatabaseClick(it) },
                 headlineContent = {
                     Text(
@@ -141,10 +144,10 @@ internal fun CatalogList(
             items = sortedSourcesList,
             key = { it.catalog.id }
         ) {
-            ListItem(
+            SlimListItem(
                 modifier = Modifier
                     .clickable { onSourceClick(it.catalog) }
-                    .animateItemPlacement(),
+                    .animateItem(),
                 headlineContent = {
                     Text(
                         // displayName() безопасно возвращает name для Lua источников

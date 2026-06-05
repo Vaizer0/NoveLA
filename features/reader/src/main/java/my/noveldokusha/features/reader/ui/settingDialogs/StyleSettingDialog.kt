@@ -19,8 +19,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -43,6 +41,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import my.noveldokusha.coreui.components.MySlider
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.features.reader.tools.FontsLoader
@@ -54,6 +53,8 @@ import my.noveldokusha.reader.R
 internal fun StyleSettingDialog(
     state: ReaderScreenState.Settings.StyleSettingsData,
     onTextSizeChange: (Float) -> Unit,
+    onLineHeightChange: (Float) -> Unit,
+    onParagraphSpacingChange: (Float) -> Unit,
     onTextFontChange: (String) -> Unit,
     onFollowSystemChange: (Boolean) -> Unit,
     onThemeChange: (Themes) -> Unit,
@@ -72,14 +73,41 @@ internal fun StyleSettingDialog(
                 onTextSizeChange(currentTextSize)
             },
             text = stringResource(R.string.text_size) + ": %.2f".format(currentTextSize),
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
+        
+        // Line height
+        var currentLineHeight by remember { mutableFloatStateOf(state.lineHeight.value) }
+        MySlider(
+            value = currentLineHeight,
+            valueRange = 1.0f..2.5f,
+            onValueChange = {
+                currentLineHeight = it
+                onLineHeightChange(currentLineHeight)
+            },
+            text = stringResource(R.string.line_height) + ": %.2f".format(currentLineHeight),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        // Paragraph spacing
+        var currentParagraphSpacing by remember { mutableFloatStateOf(state.paragraphSpacing.value) }
+        MySlider(
+            value = currentParagraphSpacing,
+            valueRange = 0f..40f,
+            onValueChange = {
+                currentParagraphSpacing = it
+                onParagraphSpacingChange(currentParagraphSpacing)
+            },
+            text = stringResource(R.string.paragraph_spacing) + ": %.0f dp".format(currentParagraphSpacing),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
         // Text font
         Box {
             var showFontsDropdown by rememberSaveable { mutableStateOf(false) }
             val fontLoader = remember(context) { FontsLoader(context) }
             var rowSize by remember { mutableStateOf(Size.Zero) }
-            ListItem(
+            SlimListItem(
                 modifier = Modifier
                     .clickable { showFontsDropdown = !showFontsDropdown }
                     .onGloballyPositioned { rowSize = it.size.toSize() },
@@ -90,9 +118,6 @@ internal fun StyleSettingDialog(
                     )
                 },
                 leadingContent = { Icon(Icons.Filled.TextFields, null) },
-                colors = ListItemDefaults.colors(
-                    leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
             )
             DropdownMenu(
                 expanded = showFontsDropdown,
@@ -118,7 +143,7 @@ internal fun StyleSettingDialog(
             }
         }
         // Follow system theme
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onFollowSystemChange(!state.followSystem.value) },
             headlineContent = {
@@ -142,12 +167,9 @@ internal fun StyleSettingDialog(
                     )
                 )
             },
-            colors = ListItemDefaults.colors(
-                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
         )
         // Themes
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 FlowRow(
                     modifier = Modifier
@@ -171,9 +193,6 @@ internal fun StyleSettingDialog(
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
             },
-            colors = ListItemDefaults.colors(
-                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
         )
     }
 }

@@ -14,7 +14,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.Grey25
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.core.AppFileResolver
@@ -261,7 +262,7 @@ class AppLocalSources @Inject constructor(
             }
             for (it in list) {
                 val item = remember(it.toString()) { DocumentFile.fromTreeUri(context, it) }
-                ListItem(
+                SlimListItem(
                     headlineContent = {
                         Text(text = item?.name ?: "** Access denied **")
                     },

@@ -1,5 +1,6 @@
 package my.noveldokusha.catalogexplorer
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -7,6 +8,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.LanguageCode
 import my.noveldokusha.core.getLanguageDisplayName
@@ -18,8 +24,18 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.data.CatalogItem
 import javax.inject.Inject
 
+@Immutable
+internal data class CatalogExplorerUiState(
+    val selectedTabIndex: Int = 0,
+    val databaseList: List<my.noveldokusha.scraper.DatabaseInterface> = emptyList(),
+    val sourcesList: List<CatalogItem> = emptyList(),
+    val sortOrder: SortOrder = SortOrder.ASCENDING,
+    val selectedLanguages: Set<String> = emptySet(),
+    val showAddByUrlDialog: Boolean = false,
+)
 
 @HiltViewModel
 internal class CatalogExplorerViewModel @Inject constructor(
@@ -29,44 +45,66 @@ internal class CatalogExplorerViewModel @Inject constructor(
     val scraperRepository: ScraperRepository,
 ) : BaseViewModel() {
 
-    var selectedTabIndex by mutableStateOf(0)
-        private set
+    private val _uiState = MutableStateFlow(CatalogExplorerUiState(
+        databaseList = scraperRepository.databaseList(),
+        selectedLanguages = appPreferences.SOURCES_LANGUAGES_ISO639_1.value
+    ))
+    val uiState: StateFlow<CatalogExplorerUiState> = _uiState.asStateFlow()
 
-    fun setTabIndex(index: Int) {
-        selectedTabIndex = index
+    init {
+        // Sync with preferences and repository
+        viewModelScope.launch {
+            launch {
+                scraperRepository.sourcesCatalogListFlow().collectLatest { sources ->
+                    _uiState.update { it.copy(sourcesList = sources) }
+                }
+            }
+            launch {
+                appPreferences.SOURCE_SORT_ORDER.flow().collect { order ->
+                    _uiState.update { it.copy(sortOrder = order) }
+                }
+            }
+            launch {
+                appPreferences.SOURCES_LANGUAGES_ISO639_1.flow().collect { langs ->
+                    _uiState.update { it.copy(selectedLanguages = langs) }
+                }
+            }
+        }
     }
 
-    val databaseList = scraperRepository.databaseList()
-    val sourcesList by scraperRepository.sourcesCatalogListFlow()
-        .toState(viewModelScope, listOf())
-
-    val sortOrder by appPreferences.SOURCE_SORT_ORDER.state(viewModelScope)
-
+    // Proxy properties for backward compatibility where needed, but using uiState source
+    val selectedTabIndex get() = _uiState.value.selectedTabIndex
+    val databaseList get() = _uiState.value.databaseList
+    val sourcesList get() = _uiState.value.sourcesList
+    val sortOrder get() = _uiState.value.sortOrder
+    val selectedLanguages get() = _uiState.value.selectedLanguages
+    
     // Список языков динамически из реальных источников — реактивно через derivedStateOf
     val availableLanguages: List<SourceLanguage> by derivedStateOf {
-        sourcesList
+        _uiState.value.sourcesList
             .mapNotNull { it.catalog.languageTag }
             .distinct()
             .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
             .sortedBy { it.name }
     }
 
-    // Выбранные языки — Set<String> кодов, как в Extensions
-    var selectedLanguages by mutableStateOf(appPreferences.SOURCES_LANGUAGES_ISO639_1.value)
-        private set
+    fun setShowAddByUrlDialog(show: Boolean) {
+        _uiState.update { it.copy(showAddByUrlDialog = show) }
+    }
 
-    var showAddByUrlDialog by mutableStateOf(false)
+    fun setTabIndex(index: Int) {
+        _uiState.update { it.copy(selectedTabIndex = index) }
+    }
 
     fun toggleSourceLanguage(code: String) {
-        selectedLanguages = if (code in selectedLanguages)
-            selectedLanguages - code
+        val nextLangs = if (code in _uiState.value.selectedLanguages)
+            _uiState.value.selectedLanguages - code
         else
-            selectedLanguages + code
-        appPreferences.SOURCES_LANGUAGES_ISO639_1.value = selectedLanguages
+            _uiState.value.selectedLanguages + code
+        appPreferences.SOURCES_LANGUAGES_ISO639_1.value = nextLangs
     }
 
     fun clearLanguageFilter() {
-        selectedLanguages = emptySet()
         appPreferences.SOURCES_LANGUAGES_ISO639_1.value = emptySet()
     }
 
@@ -78,6 +116,7 @@ internal class CatalogExplorerViewModel @Inject constructor(
     fun onSortOrderChange(order: SortOrder) {
         appPreferences.SOURCE_SORT_ORDER.value = order
     }
+
 
     fun addNovelsByUrls(urls: List<String>) {
         viewModelScope.launch {
@@ -276,4 +315,5 @@ internal class CatalogExplorerViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class SourceLanguage(val code: String, val name: String)

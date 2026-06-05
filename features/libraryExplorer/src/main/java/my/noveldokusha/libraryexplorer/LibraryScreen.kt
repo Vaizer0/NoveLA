@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.BookSettingsDialog
 import my.noveldokusha.coreui.components.BookSettingsDialogState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
@@ -40,31 +41,43 @@ fun LibraryScreen(
 ) {
     val libraryModel: LibraryViewModel = viewModel()
     val pageViewModel: LibraryPageViewModel = viewModel()
+    
+    val uiState by libraryModel.uiState.collectAsStateWithLifecycle()
 
-    val context by rememberUpdatedState(LocalContext.current)
+    val context = LocalContext.current
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val showDropdownMenu = remember { mutableStateOf(false) }
     val lastClickTime = remember { mutableStateOf(0L) }
 
     // Читаем количество колонок из общего preference
-    val gridColumns by libraryModel.gridColumns
+    val gridColumns = uiState.gridColumns
 
-    val handleBookClick = { book: BookWithContext ->
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastClickTime.value < 200L) {
-            // Debounce - ignore click
-        } else {
-            lastClickTime.value = currentTime
-            if (libraryModel.isSelectionMode) {
-                libraryModel.toggleBookSelection(book.book.url)
+    val handleBookClick = remember(context, uiState.isSelectionMode) {
+        { book: BookWithContext ->
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastClickTime.value >= 200L) {
+                lastClickTime.value = currentTime
+                if (uiState.isSelectionMode) {
+                    libraryModel.toggleBookSelection(book.book.url)
+                } else {
+                    navigationRouteViewModel.chapters(
+                        context = context,
+                        bookMetadata = BookMetadata(
+                            title = book.book.title,
+                            url = book.book.url
+                        )
+                    ).let(context::startActivity)
+                }
+            }
+        }
+    }
+
+    val handleBookLongClick = remember(uiState.isSelectionMode) {
+        { book: BookWithContext ->
+            if (!uiState.isSelectionMode) {
+                libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Show(book.book))
             } else {
-                navigationRouteViewModel.chapters(
-                    context = context,
-                    bookMetadata = BookMetadata(
-                        title = book.book.title,
-                        url = book.book.url
-                    )
-                ).let(context::startActivity)
+                libraryModel.toggleBookSelection(book.book.url)
             }
         }
     }
@@ -77,7 +90,7 @@ fun LibraryScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            if (libraryModel.isSelectionMode) {
+            if (uiState.isSelectionMode) {
                 TopAppBar(
                     scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -86,7 +99,7 @@ fun LibraryScreen(
                     ),
                     title = {
                         Text(
-                            text = stringResource(R.string.selected_count, libraryModel.selectedBooks.size),
+                            text = stringResource(R.string.selected_count, uiState.selectedBooks.size),
                             style = MaterialTheme.typography.headlineSmall
                         )
                     },
@@ -101,12 +114,12 @@ fun LibraryScreen(
                         }
                         IconButton(
                             onClick = { libraryModel.deleteSelectedBooks() },
-                            enabled = libraryModel.selectedBooks.isNotEmpty()
+                            enabled = uiState.selectedBooks.isNotEmpty()
                         ) {
                             Icon(
                                 Icons.Filled.Delete,
                                 stringResource(R.string.delete),
-                                tint = if (libraryModel.selectedBooks.isNotEmpty())
+                                tint = if (uiState.selectedBooks.isNotEmpty())
                                     MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             )
@@ -142,7 +155,7 @@ fun LibraryScreen(
                             text = { androidx.compose.material3.Text(stringResource(R.string.filter)) },
                             onClick = {
                                 showDropdownMenu.value = false
-                                libraryModel.showBottomSheet = true
+                                libraryModel.setShowBottomSheet(true)
                             }
                         )
                         androidx.compose.material3.DropdownMenuItem(
@@ -178,31 +191,23 @@ fun LibraryScreen(
                 innerPadding = innerPadding,
                 topAppBarState = scrollBehavior.state,
                 onBookClick = handleBookClick,
-                onBookLongClick = { book ->
-                    if (!libraryModel.isSelectionMode) {
-                        libraryModel.bookSettingsDialogState = BookSettingsDialogState.Show(book.book)
-                    } else {
-                        libraryModel.toggleBookSelection(book.book.url)
-                    }
-                },
+                onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
-                selectedBooks = libraryModel.selectedBooks,
-                isSelectionMode = libraryModel.isSelectionMode
+                selectedBooks = uiState.selectedBooks,
+                isSelectionMode = uiState.isSelectionMode
             )
         }
     )
 
-    // Book selected options dialog
-    when (val state = libraryModel.bookSettingsDialogState) {
+    // Handle book settings dialog
+    when (val state = uiState.bookSettingsDialogState) {
         is BookSettingsDialogState.Show -> {
             BookSettingsDialog(
                 book = state.book,
-                categories = libraryModel.getCategories(),
-                onDismiss = { libraryModel.bookSettingsDialogState = BookSettingsDialogState.Hide },
-                onCategorySelected = { category ->
-                    libraryModel.updateBookCategory(state.book.url, category)
-                },
+                onDismiss = { libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Hide) },
                 onDeleteNovel = { libraryModel.deleteBook(state.book.url) },
+                onCategorySelected = { libraryModel.updateBookCategory(state.book.url, it) },
+                categories = libraryModel.getCategories(),
                 onMarkAllChaptersRead = { libraryModel.markAllChaptersAsRead(state.book.url) },
                 onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(state.book.url) }
             )
@@ -211,7 +216,7 @@ fun LibraryScreen(
     }
 
     LibraryBottomSheet(
-        visible = libraryModel.showBottomSheet,
-        onDismiss = { libraryModel.showBottomSheet = false }
+        visible = uiState.showBottomSheet,
+        onDismiss = { libraryModel.setShowBottomSheet(false) }
     )
 }

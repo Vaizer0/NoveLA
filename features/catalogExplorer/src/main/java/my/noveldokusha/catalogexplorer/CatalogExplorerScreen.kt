@@ -70,13 +70,41 @@ fun CatalogExplorerScreen(
     navigationRouteViewModel: NavigationRouteViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val viewModel: CatalogExplorerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val context by rememberUpdatedState(newValue = LocalContext.current)
+    val context = LocalContext.current
     var languagesOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         snapAnimationSpec = null,
         flingAnimationSpec = null
     )
+
+    val onDatabaseClick = remember(context) {
+        { database: my.noveldokusha.scraper.DatabaseInterface ->
+            navigationRouteViewModel.databaseSearch(
+                context,
+                databaseBaseUrl = database.baseUrl
+            ).let(context::startActivity)
+        }
+    }
+
+    val onSourceClick = remember(context) {
+        { source: my.noveldokusha.scraper.SourceInterface ->
+            navigationRouteViewModel.sourceCatalog(
+                context,
+                sourceBaseUrl = source.baseUrl
+            ).let(context::startActivity)
+        }
+    }
+
+    val onGlobalSearchClick = remember(context) {
+        {
+            navigationRouteViewModel.globalSearch(
+                context,
+                text = ""
+            ).let(context::startActivity)
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -96,204 +124,31 @@ fun CatalogExplorerScreen(
                     },
                     actions = {
                         // Show different actions based on selected tab
-                        if (viewModel.selectedTabIndex == 0) {
-                            // Browse tab actions
-                            Row {
-                                IconButton(onClick = { viewModel.showAddByUrlDialog = true }) {
-                                    Icon(
-                                        Icons.Filled.AddLink,
-                                        contentDescription = "Add by URL"
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    navigationRouteViewModel.globalSearch(
-                                        context,
-                                        text = ""
-                                    ).let(context::startActivity)
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Search,
-                                        contentDescription = "Search"
-                                    )
-                                }
-
-                                // Language filter button
-                                Box {
-                                    IconButton(onClick = {
-                                        languagesOptionsExpanded = !languagesOptionsExpanded
-                                    }) {
-                                        Icon(
-                                            painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                                            contentDescription = "Languages",
-                                            modifier = Modifier.size(24.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // Show dropdown for Browse tab
-                                    LanguagesDropDown(
-                                        expanded = languagesOptionsExpanded,
-                                        onDismiss = { languagesOptionsExpanded = false },
-                                        availableLanguages = viewModel.availableLanguages,
-                                        selectedLanguages = viewModel.selectedLanguages,
-                                        onLanguageToggle = { viewModel.toggleSourceLanguage(it) },
-                                        onClearAll = { viewModel.clearLanguageFilter() },
-                                        sortOrder = viewModel.sortOrder,
-                                        onSortOrderChange = viewModel::onSortOrderChange
-                                    )
-                                }
-                            }
+                        if (uiState.selectedTabIndex == 0) {
+                            BrowseTabActions(
+                                onAddByUrlClick = { viewModel.setShowAddByUrlDialog(true) },
+                                onGlobalSearchClick = onGlobalSearchClick,
+                                languagesOptionsExpanded = languagesOptionsExpanded,
+                                onToggleLanguagesOptions = { languagesOptionsExpanded = !languagesOptionsExpanded },
+                                availableLanguages = viewModel.availableLanguages,
+                                selectedLanguages = uiState.selectedLanguages,
+                                onLanguageToggle = viewModel::toggleSourceLanguage,
+                                onClearAll = viewModel::clearLanguageFilter,
+                                sortOrder = uiState.sortOrder,
+                                onSortOrderChange = viewModel::onSortOrderChange,
+                                onDismissLanguagesOptions = { languagesOptionsExpanded = false }
+                            )
                         } else {
-                            // Extensions tab actions
-                            val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
-                            val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
-                            var settingsExpanded by remember { mutableStateOf(false) }
-
-                            Row {
-                                // Refresh button
-                                IconButton(
-                                    onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnRefresh) }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = "Refresh",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                // Repository settings button
-                                IconButton(
-                                    onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Repository Settings",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                // Sort and language filter combined
-                                Box {
-                                    IconButton(
-                                        onClick = { settingsExpanded = !settingsExpanded }
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                                            contentDescription = "Sort and Filter",
-                                            modifier = Modifier.size(24.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // Combined dropdown with same design as LanguagesDropDown
-                                    DropdownMenu(
-                                        expanded = settingsExpanded,
-                                        onDismissRequest = { settingsExpanded = false },
-                                        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                                    ) {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .padding(8.dp)
-                                                .widthIn(min = 128.dp)
-                                        ) {
-                                            // Sort section
-                                            Text(
-                                                text = "Sort Order",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                modifier = Modifier.padding(bottom = 4.dp)
-                                            )
-                                            OutlinedCard {
-                                                MyButton(
-                                                    text = "Name (A-Z)",
-                                                    onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.ASCENDING)) },
-                                                    selected = extensionsState.sortOrder == SortOrder.ASCENDING,
-                                                    selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    borderWidth = Dp.Unspecified,
-                                                    textAlign = TextAlign.Center,
-                                                    outerPadding = 0.dp,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    shape = RoundedCornerShape(0.dp),
-                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    ),
-                                                )
-                                                MyButton(
-                                                    text = "Name (Z-A)",
-                                                    onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.DESCENDING)) },
-                                                    selected = extensionsState.sortOrder == SortOrder.DESCENDING,
-                                                    selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    borderWidth = Dp.Unspecified,
-                                                    textAlign = TextAlign.Center,
-                                                    outerPadding = 0.dp,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    shape = RoundedCornerShape(0.dp),
-                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    ),
-                                                )
-                                            }
-
-                                            // Language filter section
-                                            Text(
-                                                text = "Language Filter",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                modifier = Modifier.padding(bottom = 4.dp)
-                                            )
-                                            OutlinedCard {
-                                                // All languages option
-                                                MyButton(
-                                                    text = "All Languages",
-                                                    onClick = {
-                                                        extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterClear(null))
-                                                        settingsExpanded = false
-                                                    },
-                                                    selected = extensionsState.selectedLanguages.isEmpty(),
-                                                    selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    borderWidth = Dp.Unspecified,
-                                                    textAlign = TextAlign.Center,
-                                                    outerPadding = 0.dp,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    shape = RoundedCornerShape(0.dp),
-                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    ),
-                                                )
-
-                                                // Available languages
-                                                extensionsState.availableLanguages.forEach { language ->
-                                                    MyButton(
-                                                        text = language.name,
-                                                        onClick = {
-                                                            extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterToggle(language.code))
-                                                        },
-                                                        selected = language.code in extensionsState.selectedLanguages,
-                                                        selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                        borderWidth = Dp.Unspecified,
-                                                        textAlign = TextAlign.Center,
-                                                        outerPadding = 0.dp,
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        shape = RoundedCornerShape(0.dp),
-                                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        ),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            ExtensionsTabActions()
                         }
                     }
                 )
 
                 // Tab Row - Browse and Extensions tabs with library-style design
                 TabRow(
-                    selectedTabIndex = viewModel.selectedTabIndex,
+                    selectedTabIndex = uiState.selectedTabIndex,
                     indicator = {
-                        val tabPos = it[viewModel.selectedTabIndex]
+                        val tabPos = it[uiState.selectedTabIndex]
                         Box(
                             modifier = Modifier
                                 .tabIndicatorOffset(tabPos)
@@ -308,7 +163,7 @@ fun CatalogExplorerScreen(
                     }
                 ) {
                     Tab(
-                        selected = viewModel.selectedTabIndex == 0,
+                        selected = uiState.selectedTabIndex == 0,
                         onClick = { viewModel.setTabIndex(0) },
                         text = {
                             Text(
@@ -318,7 +173,7 @@ fun CatalogExplorerScreen(
                         }
                     )
                     Tab(
-                        selected = viewModel.selectedTabIndex == 1,
+                        selected = uiState.selectedTabIndex == 1,
                         onClick = { viewModel.setTabIndex(1) },
                         text = {
                             Text(
@@ -331,33 +186,25 @@ fun CatalogExplorerScreen(
             }
         },
         content = { innerPadding ->
-            when (viewModel.selectedTabIndex) {
+            when (uiState.selectedTabIndex) {
                 0 -> {
                     // Browse tab content
-                    val filteredSources = if (viewModel.selectedLanguages.isEmpty()) {
-                        viewModel.sourcesList
-                    } else {
-                        viewModel.sourcesList.filter {
-                            it.catalog.languageTag in viewModel.selectedLanguages
+                    val filteredSources = remember(uiState.sourcesList, uiState.selectedLanguages) {
+                        if (uiState.selectedLanguages.isEmpty()) {
+                            uiState.sourcesList
+                        } else {
+                            uiState.sourcesList.filter {
+                                it.catalog.languageTag in uiState.selectedLanguages
+                            }
                         }
                     }
                     CatalogList(
                         innerPadding = innerPadding,
-                        databasesList = viewModel.databaseList,
+                        databasesList = uiState.databaseList,
                         sourcesList = filteredSources,
-                        sortOrder = viewModel.sortOrder,
-                        onDatabaseClick = {
-                            navigationRouteViewModel.databaseSearch(
-                                context,
-                                databaseBaseUrl = it.baseUrl
-                            ).let(context::startActivity)
-                        },
-                        onSourceClick = {
-                            navigationRouteViewModel.sourceCatalog(
-                                context,
-                                sourceBaseUrl = it.baseUrl
-                            ).let(context::startActivity)
-                        },
+                        sortOrder = uiState.sortOrder,
+                        onDatabaseClick = onDatabaseClick,
+                        onSourceClick = onSourceClick,
                         onSourceSetPinned = viewModel::onSourceSetPinned
                     )
                 }
@@ -373,48 +220,217 @@ fun CatalogExplorerScreen(
                         }
                     )
                 }
-                else -> {
-                    // Default to Browse tab
-                    val filteredSourcesElse = if (viewModel.selectedLanguages.isEmpty()) {
-                        viewModel.sourcesList
-                    } else {
-                        viewModel.sourcesList.filter {
-                            it.catalog.languageTag in viewModel.selectedLanguages
-                        }
-                    }
-                    CatalogList(
-                        innerPadding = innerPadding,
-                        databasesList = viewModel.databaseList,
-                        sourcesList = filteredSourcesElse,
-                        sortOrder = viewModel.sortOrder,
-                        onDatabaseClick = {
-                            navigationRouteViewModel.databaseSearch(
-                                context,
-                                databaseBaseUrl = it.baseUrl
-                            ).let(context::startActivity)
-                        },
-                        onSourceClick = {
-                            navigationRouteViewModel.sourceCatalog(
-                                context,
-                                sourceBaseUrl = it.baseUrl
-                            ).let(context::startActivity)
-                        },
-                        onSourceSetPinned = viewModel::onSourceSetPinned
-                    )
-                }
             }
         }
     )
 
     // Add by URL dialog
-    if (viewModel.showAddByUrlDialog) {
+    if (uiState.showAddByUrlDialog) {
         AddByUrlDialog(
-            onDismiss = { viewModel.showAddByUrlDialog = false },
+            onDismiss = { viewModel.setShowAddByUrlDialog(false) },
             onConfirm = { urls ->
                 viewModel.addNovelsByUrls(urls)
-                viewModel.showAddByUrlDialog = false
+                viewModel.setShowAddByUrlDialog(false)
             },
             scraper = viewModel.scraperRepository.scraper
         )
+    }
+}
+
+@Composable
+private fun BrowseTabActions(
+    onAddByUrlClick: () -> Unit,
+    onGlobalSearchClick: () -> Unit,
+    languagesOptionsExpanded: Boolean,
+    onToggleLanguagesOptions: () -> Unit,
+    availableLanguages: List<SourceLanguage>,
+    selectedLanguages: Set<String>,
+    onLanguageToggle: (String) -> Unit,
+    onClearAll: () -> Unit,
+    sortOrder: SortOrder,
+    onSortOrderChange: (SortOrder) -> Unit,
+    onDismissLanguagesOptions: () -> Unit
+) {
+    Row {
+        IconButton(onClick = onAddByUrlClick) {
+            Icon(
+                Icons.Filled.AddLink,
+                contentDescription = "Add by URL"
+            )
+        }
+        IconButton(onClick = onGlobalSearchClick) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = "Search"
+            )
+        }
+
+        // Language filter button
+        Box {
+            IconButton(onClick = onToggleLanguagesOptions) {
+                Icon(
+                    painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
+                    contentDescription = "Languages",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Show dropdown for Browse tab
+            LanguagesDropDown(
+                expanded = languagesOptionsExpanded,
+                onDismiss = onDismissLanguagesOptions,
+                availableLanguages = availableLanguages,
+                selectedLanguages = selectedLanguages,
+                onLanguageToggle = onLanguageToggle,
+                onClearAll = onClearAll,
+                sortOrder = sortOrder,
+                onSortOrderChange = onSortOrderChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtensionsTabActions() {
+    val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
+    val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
+    var settingsExpanded by remember { mutableStateOf(false) }
+
+    Row {
+        // Refresh button
+        IconButton(
+            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnRefresh) }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = "Refresh",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        // Repository settings button
+        IconButton(
+            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Repository Settings",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        // Sort and language filter combined
+        Box {
+            IconButton(
+                onClick = { settingsExpanded = !settingsExpanded }
+            ) {
+                Icon(
+                    painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
+                    contentDescription = "Sort and Filter",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Combined dropdown with same design as LanguagesDropDown
+            DropdownMenu(
+                expanded = settingsExpanded,
+                onDismissRequest = { settingsExpanded = false },
+                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .widthIn(min = 128.dp)
+                ) {
+                    // Sort section
+                    Text(
+                        text = "Sort Order",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    OutlinedCard {
+                        MyButton(
+                            text = "Name (A-Z)",
+                            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.ASCENDING)) },
+                            selected = extensionsState.sortOrder == SortOrder.ASCENDING,
+                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                            borderWidth = Dp.Unspecified,
+                            textAlign = TextAlign.Center,
+                            outerPadding = 0.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(0.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                        )
+                        MyButton(
+                            text = "Name (Z-A)",
+                            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.DESCENDING)) },
+                            selected = extensionsState.sortOrder == SortOrder.DESCENDING,
+                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                            borderWidth = Dp.Unspecified,
+                            textAlign = TextAlign.Center,
+                            outerPadding = 0.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(0.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                        )
+                    }
+
+                    // Language filter section
+                    Text(
+                        text = "Language Filter",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    OutlinedCard {
+                        // All languages option
+                        MyButton(
+                            text = "All Languages",
+                            onClick = {
+                                extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterClear(null))
+                                settingsExpanded = false
+                            },
+                            selected = extensionsState.selectedLanguages.isEmpty(),
+                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                            borderWidth = Dp.Unspecified,
+                            textAlign = TextAlign.Center,
+                            outerPadding = 0.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(0.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                        )
+
+                        // Available languages
+                        extensionsState.availableLanguages.forEach { language ->
+                            MyButton(
+                                text = language.name,
+                                onClick = {
+                                    extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterToggle(language.code))
+                                },
+                                selected = language.code in extensionsState.selectedLanguages,
+                                selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                                borderWidth = Dp.Unspecified,
+                                textAlign = TextAlign.Center,
+                                outerPadding = 0.dp,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(0.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

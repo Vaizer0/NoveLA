@@ -14,6 +14,8 @@ import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -107,6 +109,8 @@ class ReaderActivity : BaseActivity() {
                 viewModel.bookUrl,
                 currentTextSelectability = { appPreferences.READER_SELECTABLE_TEXT.value },
                 currentFontSize = { appPreferences.READER_FONT_SIZE.value },
+                currentLineHeight = { appPreferences.READER_LINE_HEIGHT.value },
+                currentParagraphSpacing = { appPreferences.READER_PARAGRAPH_SPACING.value },
                 currentTypeface = { fontsLoader.getTypeFaceNORMAL(appPreferences.READER_FONT_FAMILY.value) },
                 currentTypefaceBold = { fontsLoader.getTypeFaceBOLD(appPreferences.READER_FONT_FAMILY.value) },
                 currentSpeakerActiveItem = { viewModel.readerSpeaker.currentTextPlaying.value },
@@ -273,6 +277,16 @@ class ReaderActivity : BaseActivity() {
             .asLiveData()
             .observe(this) { viewAdapter.listView.notifyDataSetChanged() }
 
+        // Notify manually line height changed for list view
+        snapshotFlow { viewModel.state.settings.style.lineHeight.value }.drop(1)
+            .asLiveData()
+            .observe(this) { viewAdapter.listView.notifyDataSetChanged() }
+
+        // Notify manually paragraph spacing changed for list view
+        snapshotFlow { viewModel.state.settings.style.paragraphSpacing.value }.drop(1)
+            .asLiveData()
+            .observe(this) { viewAdapter.listView.notifyDataSetChanged() }
+
         // Notify manually selectable text changed for list view
         snapshotFlow { viewModel.state.settings.isTextSelectable.value }.drop(1)
             .asLiveData()
@@ -295,6 +309,8 @@ class ReaderActivity : BaseActivity() {
                     state = viewModel.state,
                     onTextFontChanged = { appPreferences.READER_FONT_FAMILY.value = it },
                     onTextSizeChanged = { appPreferences.READER_FONT_SIZE.value = it },
+                    onLineHeightChanged = { appPreferences.READER_LINE_HEIGHT.value = it },
+                    onParagraphSpacingChanged = { appPreferences.READER_PARAGRAPH_SPACING.value = it },
                     onSelectableTextChange = { appPreferences.READER_SELECTABLE_TEXT.value = it },
                     onKeepScreenOn = { appPreferences.READER_KEEP_SCREEN_ON.value = it },
                     onFollowSystem = { appPreferences.THEME_FOLLOW_SYSTEM.value = it },
@@ -310,8 +326,11 @@ class ReaderActivity : BaseActivity() {
                             navigationRoutes.webView(this, url = url).let(::startActivity)
                         }
                     },
-                    readerContent = {
-                        AndroidView(factory = { viewBind.root })
+                    readerContent = { paddingValues ->
+                        AndroidView(
+                            factory = { viewBind.root },
+                            modifier = Modifier.padding(paddingValues)
+                        )
                     },
                 )
 
@@ -414,7 +433,6 @@ class ReaderActivity : BaseActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
     }
 
     private fun setupFullScreenMode() {
@@ -429,7 +447,6 @@ class ReaderActivity : BaseActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 

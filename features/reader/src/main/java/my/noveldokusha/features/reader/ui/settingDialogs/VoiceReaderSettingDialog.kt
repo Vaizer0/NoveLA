@@ -50,7 +50,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -86,6 +85,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.components.MyOutlinedTextField
 import my.noveldokusha.coreui.components.MySlider
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.composableActions.debouncedAction
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.colorApp
@@ -499,7 +499,7 @@ private fun DropdownCustomSavedVoices(
         expanded = expanded.value,
         onDismissRequest = { expanded.value = !expanded.value },
     ) {
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.save_current_voice))
             },
@@ -518,7 +518,7 @@ private fun DropdownCustomSavedVoices(
         }
         list.forEachIndexed { index, predefinedVoice ->
             var deleteEntryExpand by rememberMutableStateOf(false)
-            ListItem(
+            SlimListItem(
                 headlineContent = {
                     Text(text = predefinedVoice.savedName)
                 },

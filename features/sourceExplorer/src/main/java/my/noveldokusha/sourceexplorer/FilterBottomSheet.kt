@@ -133,7 +133,6 @@ internal fun FilterBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = null,
-        windowInsets = WindowInsets(0),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
 

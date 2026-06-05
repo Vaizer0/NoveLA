@@ -7,14 +7,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.ColorNotice
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -64,7 +64,7 @@ internal fun ChaptersScreenChapterItem(
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
 
-    ListItem(
+    SlimListItem(
         headlineContent = {
             Text(
                 text = translatedTitle ?: chapter.title,
@@ -102,11 +102,8 @@ internal fun ChaptersScreenChapterItem(
                 }
             }
         },
-        colors = ListItemDefaults.colors(
-            supportingColor = MaterialTheme.colorScheme.onTertiary,
-            containerColor = containerColor,
-        ),
         modifier = modifier
+            .background(containerColor)
             .combinedClickable(
                 onClick = stableOnClick,
                 onLongClick = stableOnLongClick,

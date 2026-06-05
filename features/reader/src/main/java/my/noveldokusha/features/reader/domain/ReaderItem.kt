@@ -1,5 +1,8 @@
 package my.noveldokusha.features.reader.domain
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 internal sealed interface ReaderItem {
     /**
      * Corresponds to index in the ordered chapter list.

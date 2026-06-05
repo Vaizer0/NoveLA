@@ -20,7 +20,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -79,7 +79,7 @@ internal fun SettingsPromptManager(
     )
 
     // ── System Prompt field ───────────────────────────────────────────────────
-    ListItem(
+    SlimListItem(
         headlineContent = {
             // Отступ сверху чтобы label OutlinedTextField не обрезался анимацией
             Column(
@@ -221,7 +221,7 @@ internal fun SettingsPromptManager(
     )
 
     // ── English locale toggle ─────────────────────────────────────────────────
-    ListItem(
+    SlimListItem(
         headlineContent = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(

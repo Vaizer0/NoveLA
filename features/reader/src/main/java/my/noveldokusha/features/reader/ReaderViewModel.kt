@@ -72,6 +72,8 @@ internal class ReaderViewModel @Inject constructor(
                 currentTheme = derivedStateOf { themeId.value.toTheme },
                 textFont = appPreferences.READER_FONT_FAMILY.state(viewModelScope),
                 textSize = appPreferences.READER_FONT_SIZE.state(viewModelScope),
+                lineHeight = appPreferences.READER_LINE_HEIGHT.state(viewModelScope),
+                paragraphSpacing = appPreferences.READER_PARAGRAPH_SPACING.state(viewModelScope),
             )
         ),
         showInvalidChapterDialog = mutableStateOf(false)
