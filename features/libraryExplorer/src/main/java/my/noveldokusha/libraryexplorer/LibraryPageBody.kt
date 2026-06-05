@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
@@ -24,28 +25,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.components.BookImageButtonView
 import my.noveldokusha.coreui.theme.ImageBorderShape
+import my.noveldokusha.coreui.theme.isLightTheme
+import my.noveldokusha.coreui.theme.Grey0
+import my.noveldokusha.coreui.theme.Grey75
+import my.noveldokusha.coreui.theme.Grey400
+import my.noveldokusha.coreui.theme.Grey1000
+import my.noveldokusha.coreui.theme.Error300
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.rememberResolvedBookImagePath
 import my.noveldokusha.feature.local_database.BookWithContext
-
-private fun extractDomainFromUrl(url: String): String {
-    return try {
-        val uri = android.net.Uri.parse(url)
-        val host = uri.host?.removePrefix("www.") ?: ""
-        host.lowercase()
-    } catch (e: Exception) {
-        "Unknown Source"
-    }
-}
 
 @Composable
 internal fun LibraryPageBody(
     list: List<BookWithContext>,
     onClick: (BookWithContext) -> Unit,
     onLongClick: (BookWithContext) -> Unit,
+    getSourceName: (String) -> String,
     // Количество колонок: от 2 до 6, дефолт 3
     gridColumns: Int = 3,
     selectedBooks: Set<String> = emptySet(),
@@ -78,7 +77,7 @@ internal fun LibraryPageBody(
                     ),
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
-                    sourceText = extractDomainFromUrl(it.book.url),
+                    sourceText = getSourceName(it.book.url),
                     forceCache = true
                 )
 
@@ -100,6 +99,7 @@ internal fun LibraryPageBody(
                     }
                 }
 
+                val isLight = MaterialTheme.colorScheme.isLightTheme()
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 AnimatedVisibility(
                     visible = notReadCount != 0,
@@ -108,22 +108,30 @@ internal fun LibraryPageBody(
                 ) {
                     Text(
                         text = notReadCount.toString(),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = if (isLight) Grey0 else Grey1000,
                         modifier = Modifier
-                            .padding(8.dp)
-                            .background(MaterialTheme.colorScheme.secondaryContainer, ImageBorderShape)
                             .padding(4.dp)
+                            .background(
+                                color = if (isLight) Error300 else Grey400,
+                                shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 12.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp
                     )
                 }
 
                 if (it.book.url.isLocalUri) Text(
                     text = stringResource(R.string.local),
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = if (isLight) Grey0 else Grey1000,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .background(MaterialTheme.colorScheme.secondaryContainer, ImageBorderShape)
                         .padding(4.dp)
+                        .background(
+                            color = if (isLight) Grey1000 else Grey75,
+                            shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    fontSize = 10.sp
                 )
             }
         }

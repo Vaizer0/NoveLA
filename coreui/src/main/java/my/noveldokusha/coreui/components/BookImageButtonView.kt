@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,12 +36,16 @@ import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.AppTestTags
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.Grey0
 import my.noveldokusha.coreui.theme.Grey25
+import my.noveldokusha.coreui.theme.Grey75
 import my.noveldokusha.coreui.theme.Grey800
+import my.noveldokusha.coreui.theme.Grey1000
 import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.coreui.theme.colorApp
+import my.noveldokusha.coreui.theme.isLightTheme
 
 enum class BookTitlePosition {
     Inside, Outside, Hidden
@@ -85,16 +90,20 @@ fun BookImageButtonView(
                 forceCache = forceCache,
             )
 
+            val isLight = MaterialTheme.colorScheme.isLightTheme()
+            
             // Source text in top-right corner
             sourceText?.let {
                 Text(
                     text = it,
-                    color = Grey25,
+                    color = if (isLight) Grey0 else Grey1000,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .background(ColorAccent, ImageBorderShape)
-                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                        .background(
+                            color = if (isLight) Grey1000 else Grey75,
+                            shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         fontSize = 8.sp

@@ -1,10 +1,12 @@
 package my.noveldokusha.libraryexplorer
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +28,7 @@ import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.scraper.Scraper
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,6 +38,8 @@ internal class LibraryPageViewModel @Inject constructor(
     private val toasty: Toasty,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
     private val bookGenreDao: BookGenreDao,
+    private val scraper: Scraper,
+    @ApplicationContext private val context: Context,
 ) : BaseViewModel() {
     var isPullRefreshing by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
@@ -196,5 +201,9 @@ internal class LibraryPageViewModel @Inject constructor(
                 e.printStackTrace()
             }
         }
+    }
+
+    fun getSourceName(url: String): String {
+        return scraper.getCompatibleSource(url)?.resolveName(context) ?: "Unknown Source"
     }
 }

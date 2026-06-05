@@ -137,6 +137,7 @@ internal fun LibraryScreenBody(
                     list = list,
                     onClick = onBookClick,
                     onLongClick = onBookLongClick,
+                    getSourceName = { viewModel.getSourceName(it) },
                     gridColumns = gridColumns,
                     selectedBooks = selectedBooks,
                     isSelectionMode = isSelectionMode,
