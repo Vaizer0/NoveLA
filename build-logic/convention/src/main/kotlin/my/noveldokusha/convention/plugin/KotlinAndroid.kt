@@ -46,8 +46,8 @@ private fun Project.configureKotlin() {
     // Use withType to workaround https://youtrack.jetbrains.com/issue/KT-55947
     tasks.withType<KotlinJvmCompile>().configureEach {
         compilerOptions {
-            // Set JVM target to 17
-            jvmTarget.set(JvmTarget.JVM_17)
+            // Set JVM target to 21
+            jvmTarget.set(JvmTarget.JVM_21)
             freeCompilerArgs.addAll(
                 "-opt-in=kotlin.RequiresOptIn",
                 "-Xjvm-default=all-compatibility",

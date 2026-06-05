@@ -25,7 +25,6 @@ dependencies {
     implementation(libs.compose.androidx.lifecycle.viewmodel)
     implementation(libs.compose.androidx.runtime.livedata)
     implementation(libs.compose.material3.android)
-    implementation(libs.compose.accompanist.insets)
     implementation(libs.compose.landscapist.glide)
     implementation(libs.okhttp)
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")

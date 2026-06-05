@@ -414,7 +414,6 @@ class ReaderActivity : BaseActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
     }
 
     private fun setupFullScreenMode() {
@@ -429,7 +428,6 @@ class ReaderActivity : BaseActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        window.statusBarColor = R.attr.colorSurface.colorAttrRes(this)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 

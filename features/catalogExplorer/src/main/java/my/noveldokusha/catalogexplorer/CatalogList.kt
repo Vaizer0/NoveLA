@@ -144,7 +144,7 @@ internal fun CatalogList(
             ListItem(
                 modifier = Modifier
                     .clickable { onSourceClick(it.catalog) }
-                    .animateItemPlacement(),
+                    .animateItem(),
                 headlineContent = {
                     Text(
                         // displayName() безопасно возвращает name для Lua источников

@@ -11,10 +11,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
@@ -22,8 +18,9 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarState
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,8 +39,7 @@ import my.noveldokusha.feature.local_database.BookWithContext
 
 @OptIn(
     ExperimentalFoundationApi::class,
-    ExperimentalMaterial3Api::class,
-    ExperimentalMaterialApi::class
+    ExperimentalMaterial3Api::class
 )
 @Composable
 internal fun LibraryScreenBody(
@@ -67,8 +63,10 @@ internal fun LibraryScreenBody(
     )
     val scope = rememberCoroutineScope()
     val updateCompleted = rememberUpdatedState(newValue = pagerState.currentPage)
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = viewModel.isPullRefreshing,
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    PullToRefreshBox(
+        isRefreshing = viewModel.isPullRefreshing,
         onRefresh = {
             viewModel.onLibraryCategoryRefresh(
                 libraryCategory = when (updateCompleted.value) {
@@ -76,13 +74,9 @@ internal fun LibraryScreenBody(
                     else -> LibraryCategory.COMPLETED
                 }
             )
-        }
-    )
-
-    Box(
-        modifier = Modifier
-            .pullRefresh(state = pullRefreshState)
-            .padding(innerPadding),
+        },
+        state = pullToRefreshState,
+        modifier = Modifier.padding(innerPadding)
     ) {
         Column {
             TabRow(
@@ -150,10 +144,5 @@ internal fun LibraryScreenBody(
                 )
             }
         }
-        PullRefreshIndicator(
-            refreshing = viewModel.isPullRefreshing,
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
     }
 }

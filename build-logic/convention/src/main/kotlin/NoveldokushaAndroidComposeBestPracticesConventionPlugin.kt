@@ -12,17 +12,13 @@ import org.gradle.kotlin.dsl.getByType
 class NoveldokushaAndroidComposeBestPracticesConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
         with(target) {
+            pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
             val extension = extensions.findByType<ApplicationExtension>()
                 ?: extensions.getByType<LibraryExtension>()
 
             extension.apply {
                 buildFeatures {
                     compose = true
-                }
-
-                composeOptions {
-                    kotlinCompilerExtensionVersion =
-                        libs.findVersion("kotlin-compose-compilerVersion").get().toString()
                 }
 
                 dependencies {

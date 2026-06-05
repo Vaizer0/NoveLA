@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.R
+import androidx.compose.material3.ripple
 
 @Composable
 fun ErrorView(
@@ -33,8 +34,8 @@ fun ErrorView(
 ) {
     @Composable
     fun Modifier.click(onClick: () -> Unit) = clickable(
-        interactionSource = MutableInteractionSource(),
-        indication = rememberRipple(color = MaterialTheme.colorScheme.onError),
+        interactionSource = remember { MutableInteractionSource() },
+        indication = ripple(color = MaterialTheme.colorScheme.onError),
         onClick = onClick
     )
 
