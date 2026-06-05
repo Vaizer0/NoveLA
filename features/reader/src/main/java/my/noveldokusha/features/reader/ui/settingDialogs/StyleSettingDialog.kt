@@ -53,6 +53,8 @@ import my.noveldokusha.reader.R
 internal fun StyleSettingDialog(
     state: ReaderScreenState.Settings.StyleSettingsData,
     onTextSizeChange: (Float) -> Unit,
+    onLineHeightChange: (Float) -> Unit,
+    onParagraphSpacingChange: (Float) -> Unit,
     onTextFontChange: (String) -> Unit,
     onFollowSystemChange: (Boolean) -> Unit,
     onThemeChange: (Themes) -> Unit,
@@ -71,8 +73,35 @@ internal fun StyleSettingDialog(
                 onTextSizeChange(currentTextSize)
             },
             text = stringResource(R.string.text_size) + ": %.2f".format(currentTextSize),
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
+        
+        // Line height
+        var currentLineHeight by remember { mutableFloatStateOf(state.lineHeight.value) }
+        MySlider(
+            value = currentLineHeight,
+            valueRange = 1.0f..2.5f,
+            onValueChange = {
+                currentLineHeight = it
+                onLineHeightChange(currentLineHeight)
+            },
+            text = stringResource(R.string.line_height) + ": %.2f".format(currentLineHeight),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        // Paragraph spacing
+        var currentParagraphSpacing by remember { mutableFloatStateOf(state.paragraphSpacing.value) }
+        MySlider(
+            value = currentParagraphSpacing,
+            valueRange = 0f..40f,
+            onValueChange = {
+                currentParagraphSpacing = it
+                onParagraphSpacingChange(currentParagraphSpacing)
+            },
+            text = stringResource(R.string.paragraph_spacing) + ": %.0f dp".format(currentParagraphSpacing),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
         // Text font
         Box {
             var showFontsDropdown by rememberSaveable { mutableStateOf(false) }

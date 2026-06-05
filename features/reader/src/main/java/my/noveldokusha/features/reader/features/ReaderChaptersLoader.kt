@@ -69,6 +69,7 @@ internal class ReaderChaptersLoader(
 
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
+    private var errorRetryCount = 0
 
     var hasLoadingError: Boolean
         get() = _hasLoadingError
@@ -77,14 +78,17 @@ internal class ReaderChaptersLoader(
             autoResetJob?.cancel()
             autoResetJob = null
             if (value) {
+                errorRetryCount++
+                val delayMs = (5_000L * errorRetryCount).coerceAtMost(60_000L)
                 autoResetJob = launch {
-                    delay(30_000L)
+                    delay(delayMs)
                     _hasLoadingError = false
                     autoResetJob = null
-                    android.util.Log.d(TAG, "Auto-reset hasLoadingError after 30s timeout, resuming preload")
+                    android.util.Log.d(TAG, "Auto-reset hasLoadingError after ${delayMs/1000}s timeout (attempt $errorRetryCount), resuming preload")
                     tryLoadNext()
                 }
             } else {
+                errorRetryCount = 0
                 loaderQueue.remove(LoadChapter.Type.Next)
             }
         }
@@ -496,17 +500,17 @@ internal class ReaderChaptersLoader(
                 if (!isValidChapterContent(res.data)) {
                     withContext(Dispatchers.Main.immediate) {
                         hasLoadingError = true
-                        android.util.Log.w(TAG, "Chapter content invalid, stopping auto-loading. Preview: ${res.data.take(200)}")
+                        android.util.Log.w(TAG, "Chapter content invalid (possibly Cloudflare or Login), stopping auto-loading. Preview: ${res.data.take(160)}")
                     }
                     maintainPosition {
                         remove(itemProgressBar)
                         remove(itemTitle)
                         items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
-                        val preview = res.data.take(300).ifBlank { "<null>" }
+                        val preview = res.data.take(400).ifBlank { "<empty body>" }
                         val userMessage = if (java.util.Locale.getDefault().language == "ru")
-                            "Ошибка контента: защита Cloudflare, пустая глава или требуется авторизация. Попробуйте открыть в браузере, чтобы пройти проверку.\n\nПолучено: $preview"
+                            "Ошибка контента: защита Cloudflare, пустая глава atau diperlukan login. Попробуйте открыть в браузере.\n\nКод: ${preview.take(100)}..."
                         else
-                            "Invalid content: Cloudflare protection, empty chapter, or login required. Try opening in browser to pass the check.\n\nReceived: $preview"
+                            "Content error: Cloudflare, empty chapter, or login required. Try opening in browser.\n\nCode snippet: ${preview.take(100)}..."
                         insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
@@ -575,7 +579,9 @@ internal class ReaderChaptersLoader(
                                     } else {
                                         android.util.Log.d(TAG, "DB cache partial: ${dbTranslations.size}/${allTextsToTranslate.size}, translating ${missingFromDb.size} missing body paragraphs")
                                         val extraTranslations = withContext(Dispatchers.IO) {
-                                            batchTranslator.invoke(missingFromDb)
+                                            kotlinx.coroutines.withTimeout(60_000L) {
+                                                batchTranslator.invoke(missingFromDb)
+                                            }
                                         }
                                         launch(Dispatchers.IO) {
                                             val entities = missingFromDb.map { original ->

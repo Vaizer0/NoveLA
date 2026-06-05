@@ -91,6 +91,13 @@ fun isValidChapterContent(text: String): Boolean {
         "cf-content",
         "turnstile",
         "but-captcha",
+        "cf-browser-verification",
+        "challenge-running",
+        "just a moment",
+        "checking your browser",
+        "enable cookies",
+        "captcha-container",
+        "hcaptcha",
     )
     
     return !cloudflareMarkers.any { lowerText.contains(it) }

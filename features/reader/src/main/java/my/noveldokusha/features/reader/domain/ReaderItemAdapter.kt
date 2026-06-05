@@ -39,6 +39,8 @@ internal class ReaderItemAdapter(
     private val currentSpeakerActiveItem: () -> TextSynthesis,
     private val currentTextSelectability: () -> Boolean,
     private val currentFontSize: () -> Float,
+    private val currentLineHeight: () -> Float,
+    private val currentParagraphSpacing: () -> Float,
     private val currentTypeface: () -> Typeface,
     private val currentTypefaceBold: () -> Typeface,
     private val onChapterStartVisible: (chapterUrl: String) -> Unit,
@@ -121,10 +123,18 @@ internal class ReaderItemAdapter(
 
         bind.body.updateTextSelectability()
         bind.root.background = getItemReadingStateBackground(item)
-        val paragraph = item.textToDisplay + "\n"
-        bind.body.text = paragraph
+        bind.body.text = item.textToDisplay
         bind.body.textSize = currentFontSize()
         bind.body.typeface = currentTypeface()
+        
+        // Improve reading comfort with line spacing and paragraph spacing
+        bind.body.setLineSpacing(0f, currentLineHeight())
+        val paddingVertical = android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_DIP,
+            currentParagraphSpacing(),
+            ctx.resources.displayMetrics
+        ).toInt()
+        bind.body.setPadding(bind.body.paddingLeft, paddingVertical, bind.body.paddingRight, paddingVertical)
 
         when (item.location) {
             ReaderItem.Location.FIRST -> onChapterStartVisible(item.chapterUrl)

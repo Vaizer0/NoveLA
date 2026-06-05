@@ -78,6 +78,8 @@ internal fun ReaderScreen(
     onThemeSelected: (Themes) -> Unit,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
+    onLineHeightChanged: (Float) -> Unit,
+    onParagraphSpacingChanged: (Float) -> Unit,
     onPressBack: () -> Unit,
     onOpenChapterInWeb: () -> Unit,
     readerContent: @Composable (paddingValues: PaddingValues) -> Unit,
@@ -179,6 +181,8 @@ internal fun ReaderScreen(
                         settings = state.settings,
                         onTextFontChanged = onTextFontChanged,
                         onTextSizeChanged = onTextSizeChanged,
+                        onLineHeightChanged = onLineHeightChanged,
+                        onParagraphSpacingChanged = onParagraphSpacingChanged,
                         onSelectableTextChange = onSelectableTextChange,
                         onFollowSystem = onFollowSystem,
                         onThemeSelected = onThemeSelected,
@@ -331,6 +335,8 @@ private fun ViewsPreview(
         currentTheme = remember { mutableStateOf(Themes.DARK) },
         textFont = remember { mutableStateOf("Arial") },
         textSize = remember { mutableFloatStateOf(20f) },
+        lineHeight = remember { mutableFloatStateOf(1.35f) },
+        paragraphSpacing = remember { mutableFloatStateOf(8f) },
     )
 
     InternalTheme {
@@ -357,6 +363,8 @@ private fun ViewsPreview(
                     showInvalidChapterDialog = remember { mutableStateOf(false) }
                 ),
                 onTextSizeChanged = {},
+                onLineHeightChanged = {},
+                onParagraphSpacingChanged = {},
                 onTextFontChanged = {},
                 onSelectableTextChange = {},
                 onFollowSystem = {},

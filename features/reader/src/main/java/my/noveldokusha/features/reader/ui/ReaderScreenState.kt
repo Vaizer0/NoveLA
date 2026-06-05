@@ -40,6 +40,8 @@ internal data class ReaderScreenState(
             val currentTheme: State<Themes>,
             val textFont: State<String>,
             val textSize: State<Float>,
+            val lineHeight: State<Float>,
+            val paragraphSpacing: State<Float>,
         )
 
         @Immutable
