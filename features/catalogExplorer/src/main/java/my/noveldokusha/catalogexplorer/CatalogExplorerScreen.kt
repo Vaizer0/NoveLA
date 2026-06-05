@@ -70,6 +70,7 @@ fun CatalogExplorerScreen(
     navigationRouteViewModel: NavigationRouteViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val viewModel: CatalogExplorerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var languagesOptionsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -123,17 +124,17 @@ fun CatalogExplorerScreen(
                     },
                     actions = {
                         // Show different actions based on selected tab
-                        if (viewModel.selectedTabIndex == 0) {
+                        if (uiState.selectedTabIndex == 0) {
                             BrowseTabActions(
-                                onAddByUrlClick = { viewModel.showAddByUrlDialog = true },
+                                onAddByUrlClick = { viewModel.setShowAddByUrlDialog(true) },
                                 onGlobalSearchClick = onGlobalSearchClick,
                                 languagesOptionsExpanded = languagesOptionsExpanded,
                                 onToggleLanguagesOptions = { languagesOptionsExpanded = !languagesOptionsExpanded },
                                 availableLanguages = viewModel.availableLanguages,
-                                selectedLanguages = viewModel.selectedLanguages,
+                                selectedLanguages = uiState.selectedLanguages,
                                 onLanguageToggle = viewModel::toggleSourceLanguage,
                                 onClearAll = viewModel::clearLanguageFilter,
-                                sortOrder = viewModel.sortOrder,
+                                sortOrder = uiState.sortOrder,
                                 onSortOrderChange = viewModel::onSortOrderChange,
                                 onDismissLanguagesOptions = { languagesOptionsExpanded = false }
                             )
@@ -145,9 +146,9 @@ fun CatalogExplorerScreen(
 
                 // Tab Row - Browse and Extensions tabs with library-style design
                 TabRow(
-                    selectedTabIndex = viewModel.selectedTabIndex,
+                    selectedTabIndex = uiState.selectedTabIndex,
                     indicator = {
-                        val tabPos = it[viewModel.selectedTabIndex]
+                        val tabPos = it[uiState.selectedTabIndex]
                         Box(
                             modifier = Modifier
                                 .tabIndicatorOffset(tabPos)
@@ -162,7 +163,7 @@ fun CatalogExplorerScreen(
                     }
                 ) {
                     Tab(
-                        selected = viewModel.selectedTabIndex == 0,
+                        selected = uiState.selectedTabIndex == 0,
                         onClick = { viewModel.setTabIndex(0) },
                         text = {
                             Text(
@@ -172,7 +173,7 @@ fun CatalogExplorerScreen(
                         }
                     )
                     Tab(
-                        selected = viewModel.selectedTabIndex == 1,
+                        selected = uiState.selectedTabIndex == 1,
                         onClick = { viewModel.setTabIndex(1) },
                         text = {
                             Text(
@@ -185,23 +186,23 @@ fun CatalogExplorerScreen(
             }
         },
         content = { innerPadding ->
-            when (viewModel.selectedTabIndex) {
+            when (uiState.selectedTabIndex) {
                 0 -> {
                     // Browse tab content
-                    val filteredSources = remember(viewModel.sourcesList, viewModel.selectedLanguages) {
-                        if (viewModel.selectedLanguages.isEmpty()) {
-                            viewModel.sourcesList
+                    val filteredSources = remember(uiState.sourcesList, uiState.selectedLanguages) {
+                        if (uiState.selectedLanguages.isEmpty()) {
+                            uiState.sourcesList
                         } else {
-                            viewModel.sourcesList.filter {
-                                it.catalog.languageTag in viewModel.selectedLanguages
+                            uiState.sourcesList.filter {
+                                it.catalog.languageTag in uiState.selectedLanguages
                             }
                         }
                     }
                     CatalogList(
                         innerPadding = innerPadding,
-                        databasesList = viewModel.databaseList,
+                        databasesList = uiState.databaseList,
                         sourcesList = filteredSources,
-                        sortOrder = viewModel.sortOrder,
+                        sortOrder = uiState.sortOrder,
                         onDatabaseClick = onDatabaseClick,
                         onSourceClick = onSourceClick,
                         onSourceSetPinned = viewModel::onSourceSetPinned
@@ -224,12 +225,12 @@ fun CatalogExplorerScreen(
     )
 
     // Add by URL dialog
-    if (viewModel.showAddByUrlDialog) {
+    if (uiState.showAddByUrlDialog) {
         AddByUrlDialog(
-            onDismiss = { viewModel.showAddByUrlDialog = false },
+            onDismiss = { viewModel.setShowAddByUrlDialog(false) },
             onConfirm = { urls ->
                 viewModel.addNovelsByUrls(urls)
-                viewModel.showAddByUrlDialog = false
+                viewModel.setShowAddByUrlDialog(false)
             },
             scraper = viewModel.scraperRepository.scraper
         )

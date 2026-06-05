@@ -99,7 +99,10 @@ internal fun CatalogList(
             )
         }
 
-        items(databasesList) {
+        items(
+            items = databasesList,
+            key = { it.baseUrl }
+        ) {
             SlimListItem(
                 modifier = Modifier.clickable { onDatabaseClick(it) },
                 headlineContent = {

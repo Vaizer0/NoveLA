@@ -25,8 +25,8 @@ import my.noveldokusha.coreui.theme.PreviewThemes
  */
 @Composable
 fun SlimListItem(
-    headlineContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    headlineContent: @Composable () -> Unit,
     supportingContent: (@Composable () -> Unit)? = null,
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,

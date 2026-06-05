@@ -1,25 +1,51 @@
 package my.noveldokusha.libraryexplorer
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import my.noveldokusha.core.AppCoroutineScope
+import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.LibrarySortOption
+import my.noveldokusha.core.appPreferences.TernaryState
+import my.noveldokusha.core.appPreferences.SortConfig
+import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.coreui.components.BookSettingsDialogState
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
-import my.noveldokusha.core.AppCoroutineScope
-import my.noveldokusha.core.appPreferences.AppPreferences
-import my.noveldokusha.core.appPreferences.LibrarySortOption
-import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.feature.local_database.BookWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter
 import javax.inject.Inject
+
+@Immutable
+internal data class LibraryUiState(
+    val bookSettingsDialogState: BookSettingsDialogState = BookSettingsDialogState.Hide,
+    val showAddByUrlDialog: Boolean = false,
+    val isSelectionMode: Boolean = false,
+    val selectedBooks: Set<String> = emptySet(),
+    val gridColumns: Int = 3,
+    val showBottomSheet: Boolean = false,
+    val readFilter: TernaryState = TernaryState.Inactive,
+    val sortConfig: SortConfig = SortConfig.DEFAULT,
+    val customCategories: List<String> = emptyList(),
+)
+
+internal sealed interface LibraryUiEffect {
+    data class ShowMessage(val message: String) : LibraryUiEffect
+}
 
 @HiltViewModel
 internal class LibraryViewModel @Inject constructor(
@@ -30,57 +56,91 @@ internal class LibraryViewModel @Inject constructor(
     stateHandle: SavedStateHandle,
 ) : BaseViewModel() {
 
-    var bookSettingsDialogState by stateHandle.asMutableStateOf<BookSettingsDialogState>(
-        key = "bookSettingsDialogState",
-        default = { BookSettingsDialogState.Hide },
-    )
+    private val _uiState = MutableStateFlow(LibraryUiState())
+    val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    var showAddByUrlDialog by mutableStateOf(false)
+    private val _uiEffect = Channel<LibraryUiEffect>(Channel.BUFFERED)
+    val uiEffect = _uiEffect.receiveAsFlow()
 
-    // Selection mode
-    var isSelectionMode by mutableStateOf(false)
-    var selectedBooks by mutableStateOf<Set<String>>(emptySet())
+    init {
+        // Sync with preferences
+        viewModelScope.launch {
+            launch {
+                appPreferences.BOOKS_GRID_COLUMNS.flow().collect { cols ->
+                    _uiState.update { it.copy(gridColumns = cols) }
+                }
+            }
+            launch {
+                appPreferences.LIBRARY_FILTER_READ.flow().collect { filter ->
+                    _uiState.update { it.copy(readFilter = filter) }
+                }
+            }
+            launch {
+                appPreferences.LIBRARY_SORT_CONFIG.flow().collect { config ->
+                    _uiState.update { it.copy(sortConfig = config) }
+                }
+            }
+            launch {
+                appPreferences.LIBRARY_CUSTOM_CATEGORIES.flow().collect { cats ->
+                    _uiState.update { it.copy(customCategories = cats) }
+                }
+            }
+        }
+        
+        // Restore from state handle
+        stateHandle.get<BookSettingsDialogState>("bookSettingsDialogState")?.let { restored ->
+            _uiState.update { it.copy(bookSettingsDialogState = restored) }
+        }
+        stateHandle.get<Boolean>("showBottomSheet")?.let { restored ->
+            _uiState.update { it.copy(showBottomSheet = restored) }
+        }
+    }
 
-    // ── Размер сетки — общий preference для библиотеки и каталога ────────────
-    // Диапазон 2..6, дефолт 3.
-    // AppPreferences.BOOKS_GRID_COLUMNS — Int preference, добавить в AppPreferences:
-    //   val BOOKS_GRID_COLUMNS = AppPreference(preferences, "BOOKS_GRID_COLUMNS", 3)
-    val gridColumns = appPreferences.BOOKS_GRID_COLUMNS.state(viewModelScope)
+    fun setBookSettingsDialogState(state: BookSettingsDialogState) {
+        _uiState.update { it.copy(bookSettingsDialogState = state) }
+    }
+
+    fun setShowAddByUrlDialog(show: Boolean) {
+        _uiState.update { it.copy(showAddByUrlDialog = show) }
+    }
 
     fun setGridColumns(columns: Int) {
         appPreferences.BOOKS_GRID_COLUMNS.value = columns.coerceIn(2, 6)
     }
-    // ─────────────────────────────────────────────────────────────────────────
 
     fun toggleSelectionMode() {
-        isSelectionMode = !isSelectionMode
-        if (!isSelectionMode) selectedBooks = emptySet()
+        _uiState.update {
+            val nextMode = !it.isSelectionMode
+            it.copy(
+                isSelectionMode = nextMode,
+                selectedBooks = if (!nextMode) emptySet() else it.selectedBooks
+            )
+        }
     }
 
     fun toggleBookSelection(bookUrl: String) {
-        selectedBooks = if (selectedBooks.contains(bookUrl)) {
-            selectedBooks - bookUrl
-        } else {
-            selectedBooks + bookUrl
+        _uiState.update {
+            val nextSelected = if (it.selectedBooks.contains(bookUrl)) {
+                it.selectedBooks - bookUrl
+            } else {
+                it.selectedBooks + bookUrl
+            }
+            it.copy(selectedBooks = nextSelected)
         }
     }
 
     fun selectAllBooks(books: List<BookWithContext>) {
-        selectedBooks = books.map { it.book.url }.toSet()
+        _uiState.update { it.copy(selectedBooks = books.map { b -> b.book.url }.toSet()) }
     }
 
     fun clearSelection() {
-        selectedBooks = emptySet()
+        _uiState.update { it.copy(selectedBooks = emptySet()) }
     }
 
-    /**
-     * Removes selected books from library (sets inLibrary=false).
-     */
     fun deleteSelectedBooks() {
         viewModelScope.launch {
-            val toDelete = selectedBooks.toList()
-            selectedBooks = emptySet()
-            isSelectionMode = false
+            val toDelete = _uiState.value.selectedBooks.toList()
+            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
             toDelete.forEach { bookUrl ->
                 val book = appRepository.libraryBooks.get(bookUrl) ?: return@forEach
                 appRepository.libraryBooks.update(book.copy(inLibrary = false))
@@ -88,25 +148,24 @@ internal class LibraryViewModel @Inject constructor(
         }
     }
 
-    var showBottomSheet by stateHandle.asMutableStateOf("showBottomSheet") { false }
-
-    var readFilter by appPreferences.LIBRARY_FILTER_READ.state(viewModelScope)
-    var sortConfig by appPreferences.LIBRARY_SORT_CONFIG.state(viewModelScope)
+    fun setShowBottomSheet(show: Boolean) {
+        _uiState.update { it.copy(showBottomSheet = show) }
+    }
 
     fun readFilterToggle() {
-        readFilter = readFilter.next()
+        appPreferences.LIBRARY_FILTER_READ.value = _uiState.value.readFilter.next()
     }
 
     fun sortConfigToggleDirection() {
-        sortConfig = sortConfig.toggleDirection()
+        appPreferences.LIBRARY_SORT_CONFIG.value = _uiState.value.sortConfig.toggleDirection()
     }
 
     fun sortConfigNextOption() {
-        sortConfig = sortConfig.nextOption()
+        appPreferences.LIBRARY_SORT_CONFIG.value = _uiState.value.sortConfig.nextOption()
     }
 
     fun setSortOption(option: LibrarySortOption) {
-        sortConfig = sortConfig.copy(option = option)
+        appPreferences.LIBRARY_SORT_CONFIG.value = _uiState.value.sortConfig.copy(option = option)
     }
 
     fun bookCompletedToggle(bookUrl: String) {
@@ -120,10 +179,10 @@ internal class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
             appRepository.libraryBooks.update(book.copy(inLibrary = false))
-            if (bookSettingsDialogState is BookSettingsDialogState.Show &&
-                (bookSettingsDialogState as BookSettingsDialogState.Show).book.url == bookUrl
+            if (_uiState.value.bookSettingsDialogState is BookSettingsDialogState.Show &&
+                (_uiState.value.bookSettingsDialogState as BookSettingsDialogState.Show).book.url == bookUrl
             ) {
-                bookSettingsDialogState = BookSettingsDialogState.Hide
+                _uiState.update { it.copy(bookSettingsDialogState = BookSettingsDialogState.Hide) }
             }
         }
     }
@@ -142,10 +201,7 @@ internal class LibraryViewModel @Inject constructor(
         }
     }
 
-    // Category management
-    var customCategories by appPreferences.LIBRARY_CUSTOM_CATEGORIES.state(viewModelScope)
-
-    fun getCategories(): List<String> = listOf("", "Completed") + customCategories
+    fun getCategories(): List<String> = listOf("", "Completed") + _uiState.value.customCategories
 
     fun updateBookCategory(bookUrl: String, category: String) {
         viewModelScope.launch {
@@ -159,15 +215,6 @@ internal class LibraryViewModel @Inject constructor(
     }
 
     fun getBook(bookUrl: String) = appRepository.libraryBooks.getFlow(bookUrl).filterNotNull()
-
-    private fun startBackgroundUpdate(urls: List<String>) {
-        viewModelScope.launch {
-            urls.forEach { url ->
-                updateNovelWithRetry(url)
-                delay(500)
-            }
-        }
-    }
 
     private suspend fun updateNovelWithRetry(url: String, maxRetries: Int = 3) {
         if (isUpdateInProgress(url)) return
@@ -212,11 +259,6 @@ internal class LibraryViewModel @Inject constructor(
 
     private suspend fun getBookDescription(bookUrl: String): String? =
         appRepository.downloaderRepository.bookDescription(bookUrl).toSuccessOrNull()?.data
-
-    @Suppress("unused")
-    private suspend fun getBookChapters(bookUrl: String): List<Chapter> =
-        appRepository.downloaderRepository.bookChaptersList(bookUrl).toSuccessOrNull()?.data
-            ?: emptyList()
 
     private val updatesInProgress = mutableSetOf<String>()
     private fun isUpdateInProgress(url: String) = updatesInProgress.contains(url)
