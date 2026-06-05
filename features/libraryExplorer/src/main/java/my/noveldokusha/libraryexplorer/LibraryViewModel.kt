@@ -23,6 +23,7 @@ import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.appPreferences.SortConfig
 import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.BookSettingsDialogState
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
@@ -41,6 +42,7 @@ internal data class LibraryUiState(
     val readFilter: TernaryState = TernaryState.Inactive,
     val sortConfig: SortConfig = SortConfig.DEFAULT,
     val customCategories: List<String> = emptyList(),
+    val toolbarMode: ToolbarMode = ToolbarMode.MAIN,
 )
 
 internal sealed interface LibraryUiEffect {
@@ -94,6 +96,10 @@ internal class LibraryViewModel @Inject constructor(
         stateHandle.get<Boolean>("showBottomSheet")?.let { restored ->
             _uiState.update { it.copy(showBottomSheet = restored) }
         }
+    }
+
+    fun setToolbarMode(mode: ToolbarMode) {
+        _uiState.update { it.copy(toolbarMode = mode) }
     }
 
     fun setBookSettingsDialogState(state: BookSettingsDialogState) {

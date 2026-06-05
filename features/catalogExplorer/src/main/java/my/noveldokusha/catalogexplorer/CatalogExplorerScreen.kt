@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import my.noveldokusha.coreui.components.MyButton
 import androidx.compose.material3.Tab
@@ -54,7 +55,6 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.navigation.NavigationRouteViewModel
@@ -111,13 +111,16 @@ fun CatalogExplorerScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             Column {
-                TopBarApp(
+                MediumTopAppBar(
                     scrollBehavior = scrollBehavior,
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    colors = TopAppBarDefaults.mediumTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
                     title = {
                         Text(
                             text = "Finder",
-                            style = MaterialTheme.typography.headlineSmall
+                            style = MaterialTheme.typography.headlineMedium
                         )
                     },
                     actions = {

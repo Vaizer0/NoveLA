@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -14,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.tooling.backup_create.onBackupCreate
 import my.noveldokusha.tooling.backup_restore.onBackupRestore
@@ -38,13 +38,16 @@ fun SettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             Column {
-                TopBarApp(
+                MediumTopAppBar(
                     scrollBehavior = scrollBehavior,
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    colors = TopAppBarDefaults.mediumTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
                     title = {
                         Text(
                             text = stringResource(id = R.string.title_settings),
-                            style = MaterialTheme.typography.headlineSmall
+                            style = MaterialTheme.typography.headlineMedium
                         )
                     }
                 )

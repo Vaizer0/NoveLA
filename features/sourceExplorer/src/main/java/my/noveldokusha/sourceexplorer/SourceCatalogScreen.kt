@@ -16,6 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,7 +36,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.BooksVerticalView
 import my.noveldokusha.coreui.components.CollapsibleDivider
@@ -80,9 +80,12 @@ internal fun SourceCatalogScreen(
                 Column {
                     AnimatedTransition(targetState = state.toolbarMode.value) { target ->
                         when (target) {
-                            ToolbarMode.MAIN -> TopBarApp(
+                            ToolbarMode.MAIN -> MediumTopAppBar(
                                 scrollBehavior = scrollBehavior,
-                                containerColor = MaterialTheme.colorScheme.surface,
+                                colors = TopAppBarDefaults.mediumTopAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                                ),
                                 title = {
                                     Column {
                                         val title = state.sourceCatalogName.value
@@ -91,7 +94,7 @@ internal fun SourceCatalogScreen(
                                             else ""
                                         Text(
                                             text = title,
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = MaterialTheme.typography.headlineMedium,
                                             maxLines = 1
                                         )
                                         Text(

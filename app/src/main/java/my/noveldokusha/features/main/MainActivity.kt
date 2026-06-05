@@ -18,19 +18,29 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+
 import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import my.noveldokusha.coreui.BaseActivity
@@ -98,21 +108,45 @@ open class MainActivity : BaseActivity() {
                             }
                         }
                     }
-                    NavigationBar {
-                        pages.forEachIndexed { pageIndex, page ->
-                            NavigationBarItem(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(id = page.iconRes),
-                                        contentDescription = stringResource(id = page.stringRes)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(bottom = 16.dp),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(horizontal = 56.dp)
+                                .height(64.dp),
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shadowElevation = 10.dp
+                        ) {
+                            NavigationBar(
+                                containerColor = Color.Transparent,
+                                tonalElevation = 0.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                pages.forEachIndexed { pageIndex, page ->
+                                    NavigationBarItem(
+                                        icon = {
+                                            Icon(
+                                                painter = painterResource(id = page.iconRes),
+                                                contentDescription = stringResource(id = page.stringRes)
+                                            )
+                                        },
+                                        selected = activePageIndex == pageIndex,
+                                        onClick = {
+                                            activePageIndex = pageIndex
+                                        },
+                                        alwaysShowLabel = false,
+                                        colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                                        )
                                     )
-                                },
-                                label = { Text(stringResource(id = page.stringRes)) },
-                                selected = activePageIndex == pageIndex,
-                                onClick = {
-                                    activePageIndex = pageIndex
-                                },
-                            )
+                                }
+                            }
                         }
                     }
                 }

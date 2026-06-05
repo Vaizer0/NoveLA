@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,28 +46,28 @@ internal fun GlobalSourceSearchScreenBody(
     onBookClick: (book: BookMetadata) -> Unit
 ) {
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(contentPadding),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 240.dp)
+        contentPadding = PaddingValues(top = 12.dp, bottom = 240.dp)
     ) {
         items(listSources) { entry ->
-            Text(
-                text = entry.source.catalog.name
-                    ?: if (entry.source.catalog.nameStrId != 0)
-                        stringResource(id = entry.source.catalog.nameStrId)
-                    else "Unknown",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier
-                    .padding(start = 12.dp)
-                    .padding(vertical = 2.dp)
-            )
-            SourceListView(
-                list = entry.fetchIterator.list,
-                loadState = entry.fetchIterator.state,
-                error = entry.fetchIterator.error?.message,
-                onBookClick = onBookClick,
-                onLoadNext = { entry.fetchIterator.fetchNext() },
-            )
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                Text(
+                    text = entry.source.catalog.name
+                        ?: if (entry.source.catalog.nameStrId != 0)
+                            stringResource(id = entry.source.catalog.nameStrId)
+                        else "Unknown",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier
+                        .padding(start = 16.dp, bottom = 8.dp)
+                )
+                SourceListView(
+                    list = entry.fetchIterator.list,
+                    loadState = entry.fetchIterator.state,
+                    error = entry.fetchIterator.error?.message,
+                    onBookClick = onBookClick,
+                    onLoadNext = { entry.fetchIterator.fetchNext() },
+                )
+            }
         }
     }
 }
@@ -87,9 +88,10 @@ private fun SourceListView(
     LazyRow(
         state = state,
         contentPadding = PaddingValues(
-            start = 8.dp,
+            start = 12.dp,
             end = 30.dp,
         ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
             .animateContentSize()
             .fillMaxWidth(),
