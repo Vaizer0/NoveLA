@@ -8,7 +8,6 @@ import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -17,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.reader.R
 
@@ -33,7 +33,7 @@ internal fun MoreSettingDialog(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
     ) {
         // Allow text selection
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onAllowTextSelectionChange(!allowTextSelection) },
             headlineContent = {
@@ -59,7 +59,7 @@ internal fun MoreSettingDialog(
             }
         )
         // Keep screen on
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onKeepScreenOn(!keepScreenOn) },
             headlineContent = {
@@ -85,7 +85,7 @@ internal fun MoreSettingDialog(
             }
         )
         // Keep screen on
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onFullScreen(!fullScreen) },
             headlineContent = {

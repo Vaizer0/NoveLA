@@ -11,7 +11,6 @@ import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -23,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.textPadding
@@ -44,7 +44,7 @@ fun LibraryAutoUpdate(
             modifier = Modifier.textPadding(),
             color = ColorAccent
         )
-        ListItem(
+        SlimListItem(
             modifier = Modifier.clickable {
                 state.autoUpdateEnabled.value = !state.autoUpdateEnabled.value
             },
@@ -73,7 +73,7 @@ fun LibraryAutoUpdate(
             }
         )
         // Library update interval options
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     libraryUpdateTimes.forEach {

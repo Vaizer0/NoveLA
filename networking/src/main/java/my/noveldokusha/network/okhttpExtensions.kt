@@ -3,6 +3,7 @@ package my.noveldokusha.network
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
+import com.google.gson.Strictness
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -46,7 +47,7 @@ fun Response.toDocument(charset: String): Document {
 }
 
 private val lenientGson: Gson by lazy {
-    GsonBuilder().setLenient().create()
+    GsonBuilder().setStrictness(Strictness.LENIENT).create()
 }
 
 fun Response.toJson(): JsonElement {

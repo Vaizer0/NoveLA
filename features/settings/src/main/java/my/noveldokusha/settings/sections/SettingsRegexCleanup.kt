@@ -5,12 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FindReplace
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -29,7 +29,7 @@ fun SettingsRegexCleanup(
             color = ColorAccent
         )
         // Navigate to Regex Cleanup Settings
-        ListItem(
+        SlimListItem(
             modifier = Modifier
                 .clickable { onNavigateToRegexCleanup() },
             headlineContent = {

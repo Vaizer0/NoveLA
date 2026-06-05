@@ -40,7 +40,6 @@ import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -60,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import my.noveldokusha.coreui.components.SlimListItem
 
 @Preview(group = "button")
 @Preview(uiMode = Configuration.UI_MODE_NIGHT_YES, group = "button")
@@ -283,8 +283,7 @@ private fun PreviewMiscellaneous() {
                     label = { Text(text = "3") },
                 )
             }
-            ListItem(
-                overlineContent = { Text(text = "over-line content") },
+            SlimListItem(
                 headlineContent = { Text(text = "Headline") },
                 supportingContent = { Text(text = "supporting content") },
                 leadingContent = { Icon(Icons.Filled.Face, null) },

@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Http
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -25,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -123,7 +123,7 @@ internal fun SettingsNetwork(
         */
 
         // Cloudflare bypass toggle
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.cloudflare_bypass))
             },
@@ -230,7 +230,7 @@ internal fun SettingsNetwork(
 
 
         // Add delay setting
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.add_delay))
             },
