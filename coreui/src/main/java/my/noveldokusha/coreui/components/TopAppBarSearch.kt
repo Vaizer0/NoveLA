@@ -53,7 +53,7 @@ fun TopAppBarSearch(
     onSearchTextChange: (String) -> Unit,
     onClose: () -> Unit,
     onTextDone: (String) -> Unit,
-    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
     placeholderText: String = stringResource(R.string.search_here),
     scrollBehavior: TopAppBarScrollBehavior? = null,
     inputEnabled: Boolean = true,
@@ -86,7 +86,8 @@ fun TopAppBarSearch(
             }, modifier = Modifier.padding(start = 2.dp)) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
@@ -94,7 +95,9 @@ fun TopAppBarSearch(
             TextField(
                 value = searchTextInput,
                 onValueChange = onSearchTextChange,
-                textStyle = MaterialTheme.typography.bodyLarge,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
                 singleLine = true,
                 maxLines = 1,
                 enabled = inputEnabled,
@@ -106,10 +109,10 @@ fun TopAppBarSearch(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
-                    focusedLabelColor = MaterialTheme.colorScheme.onTertiary,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onTertiary,
-                    focusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
-                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
+                    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
                 label = labelText?.let {
                     { Text(text = it) }
