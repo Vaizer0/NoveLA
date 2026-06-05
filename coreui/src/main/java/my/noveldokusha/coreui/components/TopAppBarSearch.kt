@@ -5,12 +5,9 @@ import androidx.compose.animation.expandIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.KeyboardActions
@@ -25,11 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,9 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.ui.unit.Dp
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.theme.ColorAccent
 
@@ -73,121 +65,110 @@ fun TopAppBarSearch(
     var dropdownExpanded by remember { mutableStateOf(false) }
 
     // Many hacks going on here to make it scrollBehavior compatible
-    Box(modifier.clickable(
-        interactionSource = MutableInteractionSource(),
-        indication = null
-    ) {
-        focusRequester.requestFocus()
-    }) {
-        Box(
-            Modifier
-                .padding(8.dp)
-                .systemBarsPadding()
-                .background(containerColor, CircleShape)
-                .matchParentSize()
-        )
-        TopAppBar(
-            scrollBehavior = scrollBehavior,
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-            ),
-            navigationIcon = {
-                IconButton(onClick = {
-                    keyboardController?.hide()
-                    onClose()
-                }, modifier = Modifier.padding(start = 2.dp)) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null
+    TopBarApp(
+        modifier = modifier.clickable(
+            interactionSource = MutableInteractionSource(),
+            indication = null
+        ) {
+            focusRequester.requestFocus()
+        },
+        containerColor = containerColor,
+        scrollBehavior = scrollBehavior,
+        navigationIcon = {
+            IconButton(onClick = {
+                keyboardController?.hide()
+                onClose()
+            }, modifier = Modifier.padding(start = 2.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null
+                )
+            }
+        },
+        title = {
+            TextField(
+                value = searchTextInput,
+                onValueChange = onSearchTextChange,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                singleLine = true,
+                maxLines = 1,
+                enabled = inputEnabled,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    cursorColor = ColorAccent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedLabelColor = MaterialTheme.colorScheme.onTertiary,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onTertiary,
+                    focusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
+                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+                label = labelText?.let {
+                    { Text(text = it) }
+                },
+                keyboardActions = KeyboardActions(onDone = {
+                    if (searchTextInput.isNotBlank()) {
+                        onTextDone(searchTextInput)
+                    }
+                }),
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            keyboardController?.hide()
+                        }
+                    }
+                    .fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        text = placeholderText,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-            },
-            title = {
-                TextField(
-                    value = searchTextInput,
-                    onValueChange = onSearchTextChange,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    singleLine = true,
-                    maxLines = 1,
-                    enabled = inputEnabled,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        cursorColor = ColorAccent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        focusedLabelColor = MaterialTheme.colorScheme.onTertiary,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onTertiary,
-                        focusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
-                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onTertiary,
-                    ),
-                    label = labelText?.let {
-                        { Text(text = it) }
-                    },
-                    keyboardActions = KeyboardActions(onDone = {
-                        if (searchTextInput.isNotBlank()) {
-                            onTextDone(searchTextInput)
-                        }
-                    }),
-                    modifier = Modifier
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { focusState ->
-                            if (!focusState.isFocused) {
-                                keyboardController?.hide()
+                },
+                trailingIcon = {
+                    if (searchTextInput.isNotEmpty()) {
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + expandIn(expandFrom = Alignment.Center),
+                            exit = fadeOut() + shrinkOut(shrinkTowards = Alignment.Center)
+                        ) {
+                            IconButton(onClick = {
+                                onSearchTextChange("")
+                                focusRequester.requestFocus()
+                            }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = null
+                                )
                             }
                         }
-                        .fillMaxWidth(),
-                    placeholder = {
-                        Text(
-                            text = placeholderText,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchTextInput.isNotEmpty()) {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn() + expandIn(expandFrom = Alignment.Center),
-                                exit = fadeOut() + shrinkOut(shrinkTowards = Alignment.Center)
+                    } else if (showMenuButton) {
+                        Box {
+                            IconButton(onClick = {
+                                if (dropdownContent != null) {
+                                    dropdownExpanded = !dropdownExpanded
+                                } else {
+                                    onMenuClick?.invoke()
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = null
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = dropdownExpanded,
+                                onDismissRequest = { dropdownExpanded = false }
                             ) {
-                                IconButton(onClick = {
-                                    onSearchTextChange("")
-                                    focusRequester.requestFocus()
-                                }) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = null
-                                    )
-                                }
-                            }
-                        } else if (showMenuButton) {
-                            Box {
-                                IconButton(onClick = {
-                                    if (dropdownContent != null) {
-                                        dropdownExpanded = !dropdownExpanded
-                                    } else {
-                                        onMenuClick?.invoke()
-                                    }
-                                }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = null
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = dropdownExpanded,
-                                    onDismissRequest = { dropdownExpanded = false }
-                                ) {
-                                    dropdownContent?.invoke()
-                                }
+                                dropdownContent?.invoke()
                             }
                         }
                     }
-                )
-            }
-        )
-    }
+                }
+            )
+        }
+    )
 }

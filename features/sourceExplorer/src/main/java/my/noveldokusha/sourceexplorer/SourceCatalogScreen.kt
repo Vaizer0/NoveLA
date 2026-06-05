@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.BooksVerticalView
 import my.noveldokusha.coreui.components.CollapsibleDivider
@@ -79,12 +80,9 @@ internal fun SourceCatalogScreen(
                 Column {
                     AnimatedTransition(targetState = state.toolbarMode.value) { target ->
                         when (target) {
-                            ToolbarMode.MAIN -> TopAppBar(
+                            ToolbarMode.MAIN -> TopBarApp(
                                 scrollBehavior = scrollBehavior,
-                                colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = Color.Unspecified,
-                                    scrolledContainerColor = Color.Unspecified,
-                                ),
+                                containerColor = MaterialTheme.colorScheme.surface,
                                 title = {
                                     Column {
                                         val title = state.sourceCatalogName.value

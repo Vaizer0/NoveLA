@@ -54,6 +54,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.navigation.NavigationRouteViewModel
@@ -110,12 +111,9 @@ fun CatalogExplorerScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             Column {
-                TopAppBar(
+                TopBarApp(
                     scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    ),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     title = {
                         Text(
                             text = "Finder",

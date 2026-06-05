@@ -28,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.BookSettingsDialog
 import my.noveldokusha.coreui.components.BookSettingsDialogState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import my.noveldokusha.coreui.components.TopBarApp
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
@@ -91,12 +92,9 @@ fun LibraryScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             if (uiState.isSelectionMode) {
-                TopAppBar(
+                TopBarApp(
                     scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    ),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     title = {
                         Text(
                             text = stringResource(R.string.selected_count, uiState.selectedBooks.size),
