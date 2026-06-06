@@ -44,7 +44,6 @@ import my.noveldokusha.coreui.theme.Grey1000
 import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.isLightTheme
 
 enum class BookTitlePosition {
@@ -73,7 +72,7 @@ fun BookImageButtonView(
                 .fillMaxWidth()
                 .aspectRatio(1 / 1.45f)
                 .clip(ImageBorderShape)
-                .background(MaterialTheme.colorApp.bookSurface)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
                 .combinedClickable(
                     indication = indication,
                     interactionSource = interactionSource,

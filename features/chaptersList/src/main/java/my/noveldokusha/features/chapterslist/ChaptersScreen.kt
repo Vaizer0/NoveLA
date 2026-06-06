@@ -61,10 +61,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import my.nanihadesuka.compose.InternalLazyColumnScrollbar
-import my.noveldokusha.coreui.theme.ColorAccent
-import my.noveldokusha.coreui.theme.ColorLike
-import my.noveldokusha.coreui.theme.ColorNotice
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.isAtTop
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.chapterslist.R
@@ -159,14 +155,14 @@ internal fun ChaptersScreen(
                                 Icon(
                                     if (state.book.value.inLibrary) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                                     stringResource(R.string.open_the_web_view),
-                                    tint = ColorLike
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                             }
                             IconButton(onClick = { showBottomSheet = !showBottomSheet }) {
                                 Icon(
                                     Icons.Filled.FilterList,
                                     stringResource(R.string.filter),
-                                    tint = ColorNotice
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                             IconButton(onClick = { showDropDown = !showDropDown }) {
@@ -202,12 +198,15 @@ internal fun ChaptersScreen(
                 exit = shrinkVertically(targetHeight = { it / 2 }, shrinkTowards = Alignment.Top)
                         + fadeOut(),
             ) {
-                Surface(color = MaterialTheme.colorApp.tintedSurface) {
+                Surface(color = MaterialTheme.colorScheme.primary) {
                     TopAppBar(
                         scrollBehavior = scrollBehavior,
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorApp.tintedSurface,
-                            scrolledContainerColor = MaterialTheme.colorApp.tintedSurface,
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            scrolledContainerColor = MaterialTheme.colorScheme.primary,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                         ),
                         title = {
                             Text(
@@ -274,7 +273,8 @@ internal fun ChaptersScreen(
             ) {
                 BottomAppBar(
                     modifier = Modifier.clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                    containerColor = MaterialTheme.colorApp.tintedSurface,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.Center,
@@ -332,7 +332,8 @@ internal fun ChaptersScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                containerColor = ColorAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 onClick = onResumeReading
             ) {
                 Row(

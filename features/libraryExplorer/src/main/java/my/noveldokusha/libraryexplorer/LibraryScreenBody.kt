@@ -33,7 +33,6 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.components.CollapsibleDivider
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.feature.local_database.BookWithContext
 
@@ -88,7 +87,7 @@ internal fun LibraryScreenBody(
                             .tabIndicatorOffset(tabPos)
                             .fillMaxSize()
                             .padding(4.dp)
-                            .background(MaterialTheme.colorScheme.surface, my.noveldokusha.coreui.theme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surfaceContainer, my.noveldokusha.coreui.theme.shapes.small)
                             .zIndex(-1f)
                     )
                 },
@@ -106,7 +105,7 @@ internal fun LibraryScreenBody(
                             text = {
                                 Text(
                                     text = "$text ($count)",
-                                    color = if (selected) MaterialTheme.colorScheme.onBackground else my.noveldokusha.coreui.theme.SubTextLight,
+                                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             },

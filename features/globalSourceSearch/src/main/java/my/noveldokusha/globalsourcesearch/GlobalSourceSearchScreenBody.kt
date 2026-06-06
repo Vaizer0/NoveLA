@@ -28,7 +28,6 @@ import my.noveldokusha.coreui.components.BookTitlePosition
 import my.noveldokusha.coreui.composableActions.ListLoadWatcher
 import my.noveldokusha.coreui.modifiers.bounceOnPressed
 import my.noveldokusha.coreui.states.IteratorState
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.data.CatalogItem
@@ -120,7 +119,7 @@ private fun SourceListView(
             ) {
                 when (loadState) {
                     IteratorState.LOADING -> CircularProgressIndicator(
-                        color = ColorAccent,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(36.dp)
                     )
 
@@ -133,12 +132,12 @@ private fun SourceListView(
 
                         list.isEmpty() -> Text(
                             text = stringResource(R.string.no_results_found),
-                            color = ColorAccent,
+                            color = MaterialTheme.colorScheme.primary,
                         )
 
                         else -> Text(
                             text = stringResource(R.string.no_more_results),
-                            color = ColorAccent,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.topPadding()
                         )
                     }

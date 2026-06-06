@@ -50,7 +50,6 @@ import my.noveldokusha.coreui.components.ExpandableText
 import my.noveldokusha.coreui.components.ImageView
 import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.coreui.modifiers.bounceOnPressed
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.clickableNoIndicator
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.databaseexplorer.R
@@ -278,7 +277,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     ) {
         Text(
             text = title,
-            color = ColorAccent,
+            color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.titleMedium,
         )
         content()

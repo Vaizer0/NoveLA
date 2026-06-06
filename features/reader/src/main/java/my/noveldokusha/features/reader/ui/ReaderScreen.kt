@@ -56,7 +56,6 @@ import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.Themes
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
@@ -103,7 +102,7 @@ internal fun ReaderScreen(
                         + fadeOut(),
             ) {
                 Surface(
-                    color = MaterialTheme.colorApp.tintedSurface,
+                    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
                     modifier = Modifier.animateContentSize(),
                 ) {
                     Column(
@@ -118,8 +117,8 @@ internal fun ReaderScreen(
 
                         TopAppBar(
                             colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorApp.tintedSurface,
-                                scrolledContainerColor = MaterialTheme.colorApp.tintedSurface,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
+                                scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
                             ),
                             title = {
                                 Text(
@@ -183,7 +182,7 @@ internal fun ReaderScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                             .animateContentSize(),
-                        containerColor = MaterialTheme.colorApp.tintedSurface,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
                     ) {
                         val chapterCurrentNumber by state.readerInfo.chapterCurrentNumber
                         val chaptersCount by state.readerInfo.chaptersCount

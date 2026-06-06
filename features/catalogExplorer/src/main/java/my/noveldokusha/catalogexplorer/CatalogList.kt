@@ -32,7 +32,7 @@ import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ImageViewGlide
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.data.CatalogItem
@@ -92,7 +92,7 @@ internal fun CatalogList(
             Text(
                 text = stringResource(id = R.string.database),
                 style = MaterialTheme.typography.titleMedium,
-                color = ColorAccent,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .padding(top = 8.dp),
@@ -133,7 +133,7 @@ internal fun CatalogList(
             Text(
                 text = stringResource(id = R.string.sources),
                 style = MaterialTheme.typography.titleMedium,
-                color = ColorAccent,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .padding(top = 8.dp),

@@ -41,7 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.DropdownMenu
 import my.noveldokusha.coreui.R
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.clickableNoIndicator
 
 enum class ToolbarMode { MAIN, SEARCH }
 
@@ -105,7 +105,7 @@ fun TopAppBarSearch(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
-                    cursorColor = ColorAccent,
+                    cursorColor = MaterialTheme.colorScheme.primary,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,

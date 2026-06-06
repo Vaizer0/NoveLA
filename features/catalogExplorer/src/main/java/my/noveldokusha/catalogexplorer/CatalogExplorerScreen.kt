@@ -56,7 +56,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.CollapsibleDivider
-import my.noveldokusha.coreui.theme.colorApp
+
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.catalogexplorer.AddByUrlDialog
 import my.noveldokusha.extensions.ExtensionsScreen
@@ -148,6 +148,7 @@ fun CatalogExplorerScreen(
                 // Tab Row - Browse and Extensions tabs with library-style design
                 TabRow(
                     selectedTabIndex = uiState.selectedTabIndex,
+                    containerColor = MaterialTheme.colorScheme.background,
                     indicator = {
                         val tabPos = it[uiState.selectedTabIndex]
                         Box(
@@ -155,7 +156,7 @@ fun CatalogExplorerScreen(
                                 .tabIndicatorOffset(tabPos)
                                 .fillMaxSize()
                                 .padding(6.dp)
-                                .background(MaterialTheme.colorApp.tabSurface, CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
                                 .zIndex(-1f)
                         )
                     },
@@ -163,13 +164,15 @@ fun CatalogExplorerScreen(
                         CollapsibleDivider(scrollBehavior.state)
                     }
                 ) {
+                    val selectedColor = MaterialTheme.colorScheme.onSurface
+                    val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
                     Tab(
                         selected = uiState.selectedTabIndex == 0,
                         onClick = { viewModel.setTabIndex(0) },
                         text = {
                             Text(
                                 text = "Browse",
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = if (uiState.selectedTabIndex == 0) selectedColor else unselectedColor
                             )
                         }
                     )
@@ -179,7 +182,7 @@ fun CatalogExplorerScreen(
                         text = {
                             Text(
                                 text = "Extensions",
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = if (uiState.selectedTabIndex == 1) selectedColor else unselectedColor
                             )
                         }
                     )

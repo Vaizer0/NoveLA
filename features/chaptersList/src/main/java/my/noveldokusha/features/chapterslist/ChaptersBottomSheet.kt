@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.TernaryStateToggle
-import my.noveldokusha.coreui.theme.ColorAccent
+
 import my.noveldokusha.chapterslist.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,7 +36,7 @@ internal fun ChaptersBottomSheet(
                 modifier = Modifier
                     .padding(8.dp)
                     .padding(horizontal = 8.dp),
-                color = ColorAccent,
+                color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.titleMedium
             )
             TernaryStateToggle(

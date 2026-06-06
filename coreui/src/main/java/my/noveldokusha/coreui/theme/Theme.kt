@@ -52,11 +52,7 @@ fun InternalTheme(
         Themes.BLACK -> black_colorScheme
     }
 
-    val appColor = when (theme) {
-        Themes.LIGHT -> light_appColor
-        Themes.DARK -> dark_appColor
-        Themes.BLACK -> black_appColor
-    }
+
 
     val context = LocalContext.current
     DisposableEffect(theme, colorScheme) {
@@ -85,8 +81,7 @@ fun InternalTheme(
         shapes = shapes,
     ) {
         CompositionLocalProvider(
-            LocalContentColor provides MaterialTheme.colorScheme.onPrimary,
-            LocalAppColor provides appColor,
+            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
             LocalTextSelectionColors provides textSelectionColors,
             content = content
         )

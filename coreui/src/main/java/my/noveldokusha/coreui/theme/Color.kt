@@ -36,7 +36,11 @@ val TextLight = Color(0xFF1E1715)
 val TextDark = Color(0xFFEBEEF1)
 
 val SubTextLight = Color(0xFF8C8C8C)
-val SubTextDark = Color(0xFFA8ABB0)
+val SubTextDark = Color(0xBFE1E6EB)
+
+val PopupLight = Color(0xFFFFFFFF)
+val PopupDark = Color(0xFF1E1E1E)
+val PopupBlack = Color(0xFF111111)
 
 val StrokeLight = Color(0x268C8C8C) // rgba(140,140,140,0.15)
 val StrokeDark = Color(0x1AE1E6EB) // rgba(225,230,235,0.10)

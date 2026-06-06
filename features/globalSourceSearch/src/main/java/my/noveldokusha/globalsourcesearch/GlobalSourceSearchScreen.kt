@@ -29,7 +29,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.feature.local_database.BookMetadata
 
@@ -116,7 +115,7 @@ internal fun GlobalSourceSearchScreen(
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth(),
-                        color = ColorAccent,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }

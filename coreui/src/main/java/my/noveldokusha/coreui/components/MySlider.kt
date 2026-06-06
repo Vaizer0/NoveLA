@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import my.noveldokusha.coreui.theme.ColorAccent
+
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.selectableMinHeight
 
@@ -79,7 +79,7 @@ private fun MySliderBase(
     onValueChange: (Float) -> Unit,
     height: Dp = selectableMinHeight,
     backgroundColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    trackColor: Color = ColorAccent,
+    trackColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     val currentValue by rememberUpdatedState(newValue = value)
     BoxWithConstraints {

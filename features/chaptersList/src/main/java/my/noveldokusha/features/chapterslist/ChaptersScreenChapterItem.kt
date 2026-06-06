@@ -25,11 +25,8 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
-import my.noveldokusha.coreui.theme.ColorNotice
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -50,9 +47,9 @@ internal fun ChaptersScreenChapterItem(
     val chapter = chapterWithContext.chapter
 
     val targetContainerColor = when {
-        selected -> MaterialTheme.colorApp.tintedSelectedSurface
-        highlighted -> ColorAccent.copy(alpha = 0.18f)
-        else -> MaterialTheme.colorScheme.surface
+        selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        highlighted -> MaterialTheme.colorScheme.secondaryContainer
+        else -> Color.Transparent
     }
     val containerColor by animateColorAsState(
         targetValue = targetContainerColor,
@@ -68,7 +65,8 @@ internal fun ChaptersScreenChapterItem(
         headlineContent = {
             Text(
                 text = translatedTitle ?: chapter.title,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (chapter.read) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
             )
         },
         supportingContent = {
@@ -79,7 +77,7 @@ internal fun ChaptersScreenChapterItem(
                 when {
                     lastReadPosition -> Text(
                         stringResource(id = R.string.last_read),
-                        color = ColorNotice
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     read -> Text(stringResource(id = R.string.read))
                     else -> Text("")

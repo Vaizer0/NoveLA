@@ -55,7 +55,6 @@ import my.noveldokusha.coreui.components.BookImageButtonView
 import my.noveldokusha.coreui.components.BookTitlePosition
 import my.noveldokusha.coreui.components.ExpandableText
 import my.noveldokusha.coreui.components.ImageView
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.clickableNoIndicator
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.rememberResolvedBookImagePath

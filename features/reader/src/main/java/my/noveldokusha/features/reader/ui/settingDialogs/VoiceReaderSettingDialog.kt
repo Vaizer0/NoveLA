@@ -88,7 +88,6 @@ import my.noveldokusha.coreui.components.MySlider
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.composableActions.debouncedAction
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
@@ -379,10 +378,10 @@ private fun VoiceSelectorDialog(
             state = listState,
             modifier = Modifier
                 .shadow(10.dp, MaterialTheme.shapes.large)
-                .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
         ) {
             stickyHeader {
-                Surface(color = MaterialTheme.colorApp.tintedSurface) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     Column {
                         MyOutlinedTextField(
                             value = inputTextFilter.value,
@@ -419,8 +418,8 @@ private fun VoiceSelectorDialog(
                     modifier = Modifier
                         .heightIn(min = 54.dp)
                         .background(
-                            if (selected) MaterialTheme.colorApp.tintedSelectedSurface
-                            else MaterialTheme.colorScheme.primary
+                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else Color.Transparent
                         )
                         .clickable(enabled = !selected) { setVoice(voice.id) }
                         .padding(horizontal = 16.dp)
@@ -440,7 +439,7 @@ private fun VoiceSelectorDialog(
                             Icon(
                                 imageVector = if (yay) Icons.Filled.StarRate else Icons.Outlined.StarBorder,
                                 contentDescription = null,
-                                tint = if (yay) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onPrimary,
+                                tint = if (yay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
                                 modifier = Modifier.size(10.dp)
                             )
                         }
@@ -453,6 +452,7 @@ private fun VoiceSelectorDialog(
                     ) {
                         Text(
                             text = voice.id,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier
                                 .background(
                                     MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium
@@ -465,6 +465,7 @@ private fun VoiceSelectorDialog(
                         if (voice.needsInternet) {
                             Text(
                                 text = stringResource(R.string.needs_internet),
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier
                                     .background(
                                         MaterialTheme.colorScheme.primary,
