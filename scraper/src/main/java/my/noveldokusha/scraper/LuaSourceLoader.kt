@@ -29,9 +29,11 @@ import org.luaj.vm2.lib.VarArgFunction
 import org.luaj.vm2.lib.ZeroArgFunction
 import org.luaj.vm2.lib.jse.JsePlatform
 import org.yaml.snakeyaml.Yaml
+import androidx.core.os.ConfigurationCompat
 import timber.log.Timber
 import java.io.File
 import java.net.URI
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -129,10 +131,12 @@ class LuaEngine @Inject constructor(
      */
     private inner class HttpGetFunction : TwoArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue): LuaValue = runBlocking {
-            val url     = a1.checkjstring()
-            val config  = if (a2.istable()) a2.checktable() else LuaTable()
-            val headers = convertHeaders(config.get("headers").opttable(LuaTable()))
-            val charset = config.get("charset").optjstring("UTF-8")
+            val url           = a1.checkjstring()
+            val config        = if (a2.istable()) a2.checktable() else LuaTable()
+            val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
+            val charset       = config.get("charset").optjstring("UTF-8")
+            // Дефолтные заголовки: плагин переопределяет только то что ему нужно
+            val headers       = defaultHeaders(url) + pluginHeaders
             try {
                 networkClient.getWithHeaders(url, headers).use { r ->
                     val bytes = r.body.bytes()
@@ -153,13 +157,15 @@ class LuaEngine @Inject constructor(
      */
     private inner class HttpPostFunction : ThreeArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = runBlocking {
-            val url     = a1.checkjstring()
-            val bodyStr = a2.checkjstring()
-            val config  = if (a3.istable()) a3.checktable() else LuaTable()
-            val headers = convertHeaders(config.get("headers").opttable(LuaTable()))
-            val charset = config.get("charset").optjstring("UTF-8")
+            val url           = a1.checkjstring()
+            val bodyStr       = a2.checkjstring()
+            val config        = if (a3.istable()) a3.checktable() else LuaTable()
+            val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
+            val charset       = config.get("charset").optjstring("UTF-8")
+            // Дефолтные заголовки: плагин переопределяет только то что ему нужно
+            val headers       = defaultHeaders(url) + pluginHeaders
             try {
-                val mediaType = (headers["Content-Type"] ?: "application/x-www-form-urlencoded").toMediaType()
+                val mediaType = (headers["Content-Type"] ?: detectContentType(bodyStr)).toMediaType()
                 val body = bodyStr.toRequestBody(mediaType)
                 networkClient.call(postRequest(url, body = body, headers = headers.toHeaders())).use { r ->
                     val bytes = r.body.bytes()
@@ -185,6 +191,54 @@ class LuaEngine @Inject constructor(
         t.set("code",    LuaValue.valueOf(-1))
     }
 
+    // ── Дефолтные заголовки для Lua HTTP-функций ─────────────────────────────
+
+    /**
+     * Referer = scheme://host/ — минимальный Referer который не раскрывает путь
+     * но достаточен для обхода anti-scraping проверок большинства сайтов.
+     */
+    private fun refererFromUrl(url: String): String = try {
+        val uri = URI(url)
+        "${uri.scheme}://${uri.host}/"
+    } catch (_: Exception) { url }
+
+    /**
+     * Accept-Language из системных локалей устройства.
+     * Пример: "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+     */
+    private fun systemAcceptLanguage(): String {
+        val locales = ConfigurationCompat.getLocales(context.resources.configuration)
+        return buildString {
+            for (i in 0 until locales.size()) {
+                val locale = locales.get(i) ?: continue
+                if (isNotEmpty()) append(',')
+                append(locale.toLanguageTag())
+                if (i > 0) {
+                    val q = maxOf(0.1, 1.0 - i * 0.1)
+                    append(";q=%.1f".format(q))
+                }
+            }
+        }.ifEmpty { Locale.getDefault().toLanguageTag() }
+    }
+
+    /**
+     * Дефолтные заголовки для всех Lua HTTP-запросов.
+     * Плагин переопределяет нужные через свой config.headers — остальные берутся отсюда.
+     */
+    private fun defaultHeaders(url: String): Map<String, String> = mapOf(
+        "Accept-Language" to systemAcceptLanguage(),
+        "Referer"         to refererFromUrl(url),
+    )
+
+    /**
+     * Определяет Content-Type по телу запроса если плагин его не указал.
+     * JSON-тело (начинается с { или [) → application/json
+     * Иначе → application/x-www-form-urlencoded
+     */
+    private fun detectContentType(body: String): String =
+        if (body.trimStart().firstOrNull() in listOf('{', '[')) "application/json"
+        else "application/x-www-form-urlencoded"
+
     private fun convertHeaders(table: LuaTable): Map<String, String> {
         val map = mutableMapOf<String, String>()
         table.keys().forEach { map[it.tojstring()] = table.get(it).tojstring() }
@@ -201,7 +255,7 @@ class LuaEngine @Inject constructor(
                 urls.map { url ->
                     async(Dispatchers.IO) {
                         try {
-                            networkClient.getWithHeaders(url, emptyMap()).use { r ->
+                            networkClient.getWithHeaders(url, defaultHeaders(url)).use { r ->
                                 val body = r.body.string()
                                 Triple(r.isSuccessful, body, r.code)
                             }
