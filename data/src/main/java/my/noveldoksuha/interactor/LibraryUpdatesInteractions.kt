@@ -1,5 +1,6 @@
 package my.noveldokusha.interactor
 
+import android.util.Log
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -21,6 +22,10 @@ class LibraryUpdatesInteractions @Inject constructor(
     private val appRepository: AppRepository,
     private val downloaderRepository: DownloaderRepository,
 ) {
+    companion object {
+        private const val TAG = "LibraryUpdate"
+    }
+
     data class NewUpdate(
         val newChapters: List<Chapter>,
         val book: Book
@@ -42,6 +47,7 @@ class LibraryUpdatesInteractions @Inject constructor(
             .filter { it.completed == completedOnes }
             .filter { !it.url.isLocalUri }
             .also { list ->
+                Log.d(TAG, "=== Library update started: ${list.size} books (completed=$completedOnes) ===")
                 countingUpdating.update {
                     CountingUpdating(
                         updated = 0,
@@ -64,6 +70,8 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
             .awaitAll()
+
+        Log.d(TAG, "=== Library update finished ===")
     }
 
     private suspend fun updateBook(
@@ -73,6 +81,7 @@ class LibraryUpdatesInteractions @Inject constructor(
         newUpdates: MutableStateFlow<Set<NewUpdate>>,
         failedUpdates: MutableStateFlow<Set<Book>>,
     ): Unit = withContext(Dispatchers.Default) {
+        Log.d(TAG, "[book] \"${book.title}\" — start update | chaptersLastPage=${book.chaptersLastPage} | chaptersListHash=${book.chaptersListHash?.take(8)?.let { "$it…" } ?: "null"}")
         currentUpdating.update { it + book }
 
         // Быстрая проверка хэша — только для книг без chaptersLastPage (старый путь).
@@ -84,6 +93,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                 } else false
             }
             if (hashUnchanged) {
+                Log.d(TAG, "[SKIP] \"${book.title}\" — hash unchanged, no new chapters")
                 currentUpdating.update { it - book }
                 countingUpdating.update { it?.copy(updated = it.updated + 1) }
                 return@withContext
@@ -122,15 +132,18 @@ class LibraryUpdatesInteractions @Inject constructor(
         if (book.chaptersLastPage != null) {
             // parsePage-режим: книга уже была спарсена через parsePage.
             // Перечитываем последнюю известную страницу + догружаем новые.
+            Log.d(TAG, "[STRATEGY: parsePage incremental] \"${book.title}\" — lastPage=${book.chaptersLastPage}")
             updateBookWithParsePage(book, oldChaptersList, newUpdates, failedUpdates)
         } else {
             // Проверяем, поддерживает ли плагин parsePage (первый раз для этой книги).
             val firstPageResult = downloaderRepository.bookChaptersPage(book.url, page = 1)
             if (firstPageResult != null) {
                 // Плагин поддерживает parsePage — полный первоначальный парс всех страниц
+                Log.d(TAG, "[STRATEGY: parsePage first-time] \"${book.title}\" — will scan all pages")
                 updateBookFirstTimeParsePage(book, firstPageResult, oldChaptersList, newUpdates, failedUpdates)
             } else {
                 // Плагин не поддерживает parsePage — старый путь через getChapterList
+                Log.d(TAG, "[STRATEGY: legacy getChapterList] \"${book.title}\"")
                 updateBookLegacy(book, oldChaptersList, newUpdates, failedUpdates)
             }
         }
@@ -151,9 +164,14 @@ class LibraryUpdatesInteractions @Inject constructor(
         failedUpdates: MutableStateFlow<Set<Book>>,
     ) {
         val firstPage = (firstPageResult as? my.noveldokusha.core.Response.Success)?.data
-            ?: run { failedUpdates.update { it + book }; return }
+            ?: run {
+                Log.d(TAG, "[parsePage first-time] \"${book.title}\" — FAILED to parse page 1")
+                failedUpdates.update { it + book }
+                return
+            }
 
         val totalPages = firstPage.totalPages
+        Log.d(TAG, "[parsePage first-time] \"${book.title}\" — totalPages=$totalPages, page 1 chapters=${firstPage.chapters.size}")
         val allChapters = mutableListOf<Chapter>()
 
         // Добавляем главы первой страницы
@@ -164,7 +182,11 @@ class LibraryUpdatesInteractions @Inject constructor(
         // Загружаем оставшиеся страницы 2..totalPages
         for (page in 2..totalPages) {
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
-                ?: break
+                ?: run {
+                    Log.d(TAG, "[parsePage first-time] \"${book.title}\" — FAILED to load page $page, stopping early")
+                    break
+                }
+            Log.d(TAG, "[parsePage first-time] \"${book.title}\" — page $page chapters=${pageData.chapters.size}")
             // Захватываем offset ДО начала итерации — allChapters.size меняется внутри forEachIndexed
             val offset = allChapters.size
             pageData.chapters.forEachIndexed { idx, ch ->
@@ -174,6 +196,7 @@ class LibraryUpdatesInteractions @Inject constructor(
             }
         }
 
+        Log.d(TAG, "[parsePage first-time] \"${book.title}\" — total chapters collected=${allChapters.size}, saving lastPage=$totalPages")
         mergeAndNotify(book, allChapters, oldChaptersList, newUpdates)
         appRepository.libraryBooks.updateChaptersLastPage(book.url, totalPages)
     }
@@ -196,7 +219,11 @@ class LibraryUpdatesInteractions @Inject constructor(
 
         val lastPageResult = downloaderRepository.bookChaptersPage(book.url, lastKnownPage)
         val lastPageData = (lastPageResult as? my.noveldokusha.core.Response.Success)?.data
-            ?: run { failedUpdates.update { it + book }; return }
+            ?: run {
+                Log.d(TAG, "[parsePage incremental] \"${book.title}\" — FAILED to load lastPage=$lastKnownPage")
+                failedUpdates.update { it + book }
+                return
+            }
 
         val newTotalPages = lastPageData.totalPages
 
@@ -205,23 +232,32 @@ class LibraryUpdatesInteractions @Inject constructor(
         val existingUrls = oldChaptersList.await()
         var positionOffset = existingUrls.size
 
+        Log.d(TAG, "[parsePage incremental] \"${book.title}\" — lastPage=$lastKnownPage, newTotalPages=$newTotalPages, existingChapters=${existingUrls.size}, lastPageChapters=${lastPageData.chapters.size}")
+
         val chaptersToAdd = mutableListOf<Chapter>()
 
         // Из последней страницы берём ТОЛЬКО новые главы.
         // Существующие не передаём в merge() — иначе их позиции будут перезаписаны неверными значениями.
-        lastPageData.chapters
-            .filter { it.url !in existingUrls }
-            .forEachIndexed { idx, ch ->
-                chaptersToAdd.add(
-                    Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = positionOffset + idx)
-                )
-            }
+        val newFromLastPage = lastPageData.chapters.filter { it.url !in existingUrls }
+        Log.d(TAG, "[parsePage incremental] \"${book.title}\" — new chapters from lastPage=$lastKnownPage: ${newFromLastPage.size}")
+        newFromLastPage.forEachIndexed { idx, ch ->
+            chaptersToAdd.add(
+                Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = positionOffset + idx)
+            )
+        }
         positionOffset += chaptersToAdd.size
 
         // Если появились новые страницы — загружаем их
+        if (newTotalPages > lastKnownPage) {
+            Log.d(TAG, "[parsePage incremental] \"${book.title}\" — ${newTotalPages - lastKnownPage} new page(s) detected (${lastKnownPage + 1}..$newTotalPages), loading...")
+        }
         for (page in (lastKnownPage + 1)..newTotalPages) {
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
-                ?: break
+                ?: run {
+                    Log.d(TAG, "[parsePage incremental] \"${book.title}\" — FAILED to load new page $page, stopping early")
+                    break
+                }
+            Log.d(TAG, "[parsePage incremental] \"${book.title}\" — new page $page chapters=${pageData.chapters.size}")
             val offset = positionOffset
             pageData.chapters.forEachIndexed { idx, ch ->
                 chaptersToAdd.add(
@@ -231,10 +267,14 @@ class LibraryUpdatesInteractions @Inject constructor(
             positionOffset += pageData.chapters.size
         }
 
+        Log.d(TAG, "[parsePage incremental] \"${book.title}\" — total new chapters to add: ${chaptersToAdd.size}")
         mergeAndNotify(book, chaptersToAdd, oldChaptersList, newUpdates)
 
         if (newTotalPages != lastKnownPage) {
+            Log.d(TAG, "[parsePage incremental] \"${book.title}\" — updating lastPage $lastKnownPage → $newTotalPages")
             appRepository.libraryBooks.updateChaptersLastPage(book.url, newTotalPages)
+        } else {
+            Log.d(TAG, "[parsePage incremental] \"${book.title}\" — no new pages, lastPage=$lastKnownPage unchanged")
         }
     }
 
@@ -248,6 +288,7 @@ class LibraryUpdatesInteractions @Inject constructor(
         failedUpdates: MutableStateFlow<Set<Book>>,
     ) {
         downloaderRepository.bookChaptersList(bookUrl = book.url).onSuccess { chapters ->
+            Log.d(TAG, "[legacy] \"${book.title}\" — fetched ${chapters.size} chapters total")
             mergeAndNotify(book, chapters, oldChaptersList, newUpdates)
             // Обновляем хэш для быстрого скипа в следующий раз
             downloaderRepository.bookChaptersListHash(bookUrl = book.url).onSuccess { hash ->
@@ -256,6 +297,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         }.onError {
+            Log.d(TAG, "[legacy] \"${book.title}\" — FAILED to fetch chapter list")
             failedUpdates.update { it + book }
         }
     }
@@ -270,8 +312,11 @@ class LibraryUpdatesInteractions @Inject constructor(
         appRepository.bookChapters.merge(chapters, book.url)
         val newChapters = chapters.filter { it.url !in oldChaptersList.await() }
         if (newChapters.isNotEmpty()) {
+            Log.d(TAG, "[merge] \"${book.title}\" — NEW chapters added: ${newChapters.size}")
             appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = book.url)
             newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+        } else {
+            Log.d(TAG, "[merge] \"${book.title}\" — no new chapters (merged ${chapters.size} existing)")
         }
     }
 }
