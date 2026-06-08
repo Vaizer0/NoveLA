@@ -57,6 +57,31 @@ sealed interface SourceInterface {
         suspend fun getCatalogSearch(index: Int, input: String): Response<PagedList<BookResult>>
 
         suspend fun getChapterListHash(bookUrl: String): Response<String?> = Response.Success(null)
+
+        /**
+         * Результат parsePage — список глав со страницы + общее количество страниц.
+         */
+        data class PagedChapterResult(
+            val chapters: List<ChapterResult>,
+            val totalPages: Int,
+        )
+
+        /**
+         * Загружает одну страницу списка глав. Реализуется плагином опционально.
+         *
+         * Если плагин объявляет эту функцию, движок переходит в пагинированный режим:
+         *   — первый парс: загружает все страницы от 1 до totalPages
+         *   — обновление: перечитывает последнюю сохранённую страницу (ищет новые главы)
+         *     + догружает страницы lastPage+1..newTotalPages если список вырос
+         *
+         * Если функция не объявлена (возвращает null), движок использует старый путь
+         * через getChapterList() — полный парс при каждом обновлении.
+         *
+         * @param bookUrl  URL страницы книги
+         * @param page     номер страницы, начиная с 1
+         * @return         Response с результатом, или null если плагин не поддерживает пагинацию
+         */
+        suspend fun parsePage(bookUrl: String, page: Int): Response<PagedChapterResult>? = null
     }
 
     /**

@@ -1,5 +1,6 @@
 package my.noveldokusha.interactor
 
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -65,7 +66,6 @@ class LibraryUpdatesInteractions @Inject constructor(
             .awaitAll()
     }
 
-
     private suspend fun updateBook(
         book: Book,
         countingUpdating: MutableStateFlow<CountingUpdating?>,
@@ -74,33 +74,28 @@ class LibraryUpdatesInteractions @Inject constructor(
         failedUpdates: MutableStateFlow<Set<Book>>,
     ): Unit = withContext(Dispatchers.Default) {
         currentUpdating.update { it + book }
-        
-        // Quick check: compare chapters list hash to detect changes
-        // If hash matches stored value, skip the full update
-        val shouldSkipUpdate = if (book.chaptersListHash != null) {
-            downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
+
+        // Быстрая проверка хэша — только для книг без chaptersLastPage (старый путь).
+        // parsePage-плагины не используют хэш.
+        if (book.chaptersLastPage == null && book.chaptersListHash != null) {
+            val hashUnchanged = downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
                 if (result is my.noveldokusha.core.Response.Success) {
                     result.data == book.chaptersListHash
                 } else false
             }
-        } else {
-            // No stored hash, need to do full update
-            false
+            if (hashUnchanged) {
+                currentUpdating.update { it - book }
+                countingUpdating.update { it?.copy(updated = it.updated + 1) }
+                return@withContext
+            }
         }
-        
-        if (shouldSkipUpdate) {
-            // No changes detected, skip update
-            currentUpdating.update { it - book }
-            countingUpdating.update { it?.copy(updated = it.updated + 1) }
-            return@withContext
-        }
-        
+
+        // Загружаем текущий список URL глав один раз — используется во всех стратегиях.
         val oldChaptersList = async(Dispatchers.IO) {
             appRepository.bookChapters.chapters(book.url).map { it.url }.toSet()
         }
 
-        // Update book metadata if needed (title, cover, description)
-        // Only update title if it's "Unknown Novel" or empty
+        // Обновляем метаданные книги если нужно
         if (book.title == "Unknown Novel" || book.title.isBlank()) {
             downloaderRepository.bookTitle(bookUrl = book.url).onSuccess { newTitle ->
                 if (!newTitle.isNullOrBlank() && newTitle != "Unknown Novel") {
@@ -108,8 +103,6 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         }
-
-        // Only update cover if it's empty
         if (book.coverImageUrl.isBlank()) {
             downloaderRepository.bookCoverImageUrl(bookUrl = book.url).onSuccess { newCoverUrl ->
                 if (!newCoverUrl.isNullOrBlank()) {
@@ -117,8 +110,6 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         }
-
-        // Only update description if it's empty
         if (book.description.isBlank()) {
             downloaderRepository.bookDescription(bookUrl = book.url).onSuccess { newDescription ->
                 if (!newDescription.isNullOrBlank()) {
@@ -127,26 +118,160 @@ class LibraryUpdatesInteractions @Inject constructor(
             }
         }
 
-        downloaderRepository.bookChaptersList(bookUrl = book.url).onSuccess { chapters ->
-            oldChaptersList.join()
-            appRepository.bookChapters.merge(chapters, book.url)
-            val newChapters = chapters.filter { it.url !in oldChaptersList.await() }
-            if (newChapters.isNotEmpty()) {
-                appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = book.url)
-                newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+        // ── Выбор стратегии обновления ────────────────────────────────────────
+        if (book.chaptersLastPage != null) {
+            // parsePage-режим: книга уже была спарсена через parsePage.
+            // Перечитываем последнюю известную страницу + догружаем новые.
+            updateBookWithParsePage(book, oldChaptersList, newUpdates, failedUpdates)
+        } else {
+            // Проверяем, поддерживает ли плагин parsePage (первый раз для этой книги).
+            val firstPageResult = downloaderRepository.bookChaptersPage(book.url, page = 1)
+            if (firstPageResult != null) {
+                // Плагин поддерживает parsePage — полный первоначальный парс всех страниц
+                updateBookFirstTimeParsePage(book, firstPageResult, oldChaptersList, newUpdates, failedUpdates)
+            } else {
+                // Плагин не поддерживает parsePage — старый путь через getChapterList
+                updateBookLegacy(book, oldChaptersList, newUpdates, failedUpdates)
             }
-            
-            // Update the chapters list hash for future change detection
+        }
+
+        currentUpdating.update { it - book }
+        countingUpdating.update { it?.copy(updated = it.updated + 1) }
+    }
+
+    /**
+     * Первый парс книги через parsePage: загружаем все страницы 1..totalPages,
+     * сохраняем chaptersLastPage = totalPages.
+     */
+    private suspend fun updateBookFirstTimeParsePage(
+        book: Book,
+        firstPageResult: my.noveldokusha.core.Response<my.noveldokusha.scraper.SourceInterface.Catalog.PagedChapterResult>,
+        oldChaptersList: Deferred<Set<String>>,
+        newUpdates: MutableStateFlow<Set<NewUpdate>>,
+        failedUpdates: MutableStateFlow<Set<Book>>,
+    ) {
+        val firstPage = (firstPageResult as? my.noveldokusha.core.Response.Success)?.data
+            ?: run { failedUpdates.update { it + book }; return }
+
+        val totalPages = firstPage.totalPages
+        val allChapters = mutableListOf<Chapter>()
+
+        // Добавляем главы первой страницы
+        firstPage.chapters.forEachIndexed { idx, ch ->
+            allChapters.add(Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = idx))
+        }
+
+        // Загружаем оставшиеся страницы 2..totalPages
+        for (page in 2..totalPages) {
+            val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
+                ?: break
+            // Захватываем offset ДО начала итерации — allChapters.size меняется внутри forEachIndexed
+            val offset = allChapters.size
+            pageData.chapters.forEachIndexed { idx, ch ->
+                allChapters.add(
+                    Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = offset + idx)
+                )
+            }
+        }
+
+        mergeAndNotify(book, allChapters, oldChaptersList, newUpdates)
+        appRepository.libraryBooks.updateChaptersLastPage(book.url, totalPages)
+    }
+
+    /**
+     * Инкрементальное обновление для parsePage-книги:
+     * перечитываем последнюю известную страницу и берём из неё только НОВЫЕ главы
+     * (не меняем позиции уже сохранённых), затем догружаем страницы lastPage+1..newTotalPages.
+     *
+     * Важно: в merge() позиция перезаписывается для любого переданного URL,
+     * поэтому существующие главы нельзя включать в список с пересчитанными позициями.
+     */
+    private suspend fun updateBookWithParsePage(
+        book: Book,
+        oldChaptersList: Deferred<Set<String>>,
+        newUpdates: MutableStateFlow<Set<NewUpdate>>,
+        failedUpdates: MutableStateFlow<Set<Book>>,
+    ) {
+        val lastKnownPage = book.chaptersLastPage ?: return
+
+        val lastPageResult = downloaderRepository.bookChaptersPage(book.url, lastKnownPage)
+        val lastPageData = (lastPageResult as? my.noveldokusha.core.Response.Success)?.data
+            ?: run { failedUpdates.update { it + book }; return }
+
+        val newTotalPages = lastPageData.totalPages
+
+        // Единственный источник истины о существующих главах.
+        // Переиспользуем уже запущенный deferred — никакого дополнительного DB-запроса.
+        val existingUrls = oldChaptersList.await()
+        var positionOffset = existingUrls.size
+
+        val chaptersToAdd = mutableListOf<Chapter>()
+
+        // Из последней страницы берём ТОЛЬКО новые главы.
+        // Существующие не передаём в merge() — иначе их позиции будут перезаписаны неверными значениями.
+        lastPageData.chapters
+            .filter { it.url !in existingUrls }
+            .forEachIndexed { idx, ch ->
+                chaptersToAdd.add(
+                    Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = positionOffset + idx)
+                )
+            }
+        positionOffset += chaptersToAdd.size
+
+        // Если появились новые страницы — загружаем их
+        for (page in (lastKnownPage + 1)..newTotalPages) {
+            val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
+                ?: break
+            val offset = positionOffset
+            pageData.chapters.forEachIndexed { idx, ch ->
+                chaptersToAdd.add(
+                    Chapter(title = ch.title, url = ch.url, bookUrl = book.url, position = offset + idx)
+                )
+            }
+            positionOffset += pageData.chapters.size
+        }
+
+        mergeAndNotify(book, chaptersToAdd, oldChaptersList, newUpdates)
+
+        if (newTotalPages != lastKnownPage) {
+            appRepository.libraryBooks.updateChaptersLastPage(book.url, newTotalPages)
+        }
+    }
+
+    /**
+     * Старый путь — полный getChapterList без пагинации.
+     */
+    private suspend fun updateBookLegacy(
+        book: Book,
+        oldChaptersList: Deferred<Set<String>>,
+        newUpdates: MutableStateFlow<Set<NewUpdate>>,
+        failedUpdates: MutableStateFlow<Set<Book>>,
+    ) {
+        downloaderRepository.bookChaptersList(bookUrl = book.url).onSuccess { chapters ->
+            mergeAndNotify(book, chapters, oldChaptersList, newUpdates)
+            // Обновляем хэш для быстрого скипа в следующий раз
             downloaderRepository.bookChaptersListHash(bookUrl = book.url).onSuccess { hash ->
                 if (hash != null) {
                     appRepository.libraryBooks.updateChaptersListHash(book.url, hash)
                 }
             }
-
         }.onError {
             failedUpdates.update { it + book }
         }
-        currentUpdating.update { it - book }
-        countingUpdating.update { it?.copy(updated = it.updated + 1) }
+    }
+
+    private suspend fun mergeAndNotify(
+        book: Book,
+        chapters: List<Chapter>,
+        oldChaptersList: Deferred<Set<String>>,
+        newUpdates: MutableStateFlow<Set<NewUpdate>>,
+    ) {
+        oldChaptersList.join()
+        appRepository.bookChapters.merge(chapters, book.url)
+        val newChapters = chapters.filter { it.url !in oldChaptersList.await() }
+        if (newChapters.isNotEmpty()) {
+            appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = book.url)
+            newUpdates.update { it + NewUpdate(book = book, newChapters = newChapters) }
+        }
     }
 }

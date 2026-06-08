@@ -20,4 +20,7 @@ data class Book(
     val lastUpdateEpochTimeMilli: Long = 0,
     val category: String = "",
     val chaptersListHash: String? = null,
+    // Последняя известная страница списка глав (для parsePage-плагинов).
+    // null → плагин не поддерживает parsePage, используется старый getChapterList.
+    val chaptersLastPage: Int? = null,
 ) : Parcelable

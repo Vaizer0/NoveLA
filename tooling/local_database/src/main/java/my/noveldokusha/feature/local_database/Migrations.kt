@@ -155,6 +155,13 @@ internal fun databaseMigrations() = arrayOf(
         it.execSQL("CREATE INDEX IF NOT EXISTS index_BookGenre_bookUrl ON BookGenre (bookUrl)")
         it.execSQL("CREATE INDEX IF NOT EXISTS index_BookGenre_genre ON BookGenre (genre)")
     },
+    migration(16) {
+        // parsePage support: store the last known page of chapters list per book.
+        // null = plugin does not support parsePage (uses legacy getChapterList).
+        if (!it.columnExists("Book", "chaptersLastPage")) {
+            it.execSQL("ALTER TABLE Book ADD COLUMN chaptersLastPage INTEGER")
+        }
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

@@ -1,5 +1,8 @@
 package my.noveldokusha.data
 
+import android.content.Context
+import androidx.core.os.ConfigurationCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -8,16 +11,19 @@ import my.noveldokusha.core.map
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.toDocument
 import my.noveldokusha.scraper.Scraper
+import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.TextExtractor
 import my.noveldokusha.feature.local_database.tables.Chapter
 import net.dankito.readability4j.extended.Readability4JExtended
 import org.jsoup.nodes.Document
 import java.net.SocketTimeoutException
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class DownloaderRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val scraper: Scraper,
     private val networkClient: NetworkClient,
 ) {
@@ -119,13 +125,11 @@ class DownloaderRepository @Inject constructor(
     suspend fun bookChapter(
         chapterUrl: String,
     ): Response<my.noveldokusha.scraper.ChapterDownload> = withContext(Dispatchers.Default) {
-        // Retry с exponential backoff: до 3 попыток при временных ошибках сети
         val maxRetries = 3
         var lastError: Response<my.noveldokusha.scraper.ChapterDownload>? = null
 
         for (attempt in 0 until maxRetries) {
             if (attempt > 0) {
-                // Exponential backoff: 1с, 2с, 4с
                 val backoffMs = (1000L * (1L shl (attempt - 1))).coerceAtMost(5000L)
                 android.util.Log.d(TAG, "bookChapter: retry attempt $attempt/$maxRetries for $chapterUrl, waiting ${backoffMs}ms")
                 delay(backoffMs)
@@ -133,27 +137,33 @@ class DownloaderRepository @Inject constructor(
 
             val result = my.noveldokusha.network.tryFlatConnect {
                 val request = my.noveldokusha.network.getRequest(chapterUrl)
-                // FIX: .use{} закрывает response после получения redirect url
                 val realUrl = networkClient
                     .call(request, followRedirects = true)
                     .use { it.request.url.toString() }
 
                 val error by lazy {
                     """
-				Unable to load chapter from url:
-				$chapterUrl
+					Unable to load chapter from url:
+					$chapterUrl
 
-				Redirect url:
-				$realUrl
+					Redirect url:
+					$realUrl
 
-				Source not supported
-			""".trimIndent()
+					Source not supported
+				""".trimIndent()
                 }
 
                 scraper.getCompatibleSource(realUrl)?.also { source ->
-                    // FIX: .use{} закрывает response после парсинга документа
-                    val doc = networkClient.get(source.transformChapterUrl(realUrl))
+                    val chapterPageUrl = source.transformChapterUrl(realUrl)
+
+                    // Всегда передаём Referer и базовые заголовки при загрузке страницы главы.
+                    // Без Referer ряд сайтов (jaomix и др.) после нескольких запросов
+                    // возвращает пустую страницу или редирект на защиту.
+                    val headers = buildChapterHeaders(chapterPageUrl)
+
+                    val doc = networkClient.getWithHeaders(chapterPageUrl, headers)
                         .use { it.toDocument(source.charset) }
+
                     val data = my.noveldokusha.scraper.ChapterDownload(
                         body = source.getChapterText(doc) ?: return@also,
                         title = null
@@ -176,7 +186,6 @@ class DownloaderRepository @Inject constructor(
             when (result) {
                 is Response.Success -> return@withContext result
                 is Response.Error -> {
-                    // Проверяем, является ли ошибка временной (таймаут/сеть) — тогда retry
                     val isTransient = result.exception is SocketTimeoutException ||
                         result.message.contains("Timeout", ignoreCase = true) ||
                         result.message.contains("timeout", ignoreCase = true) ||
@@ -184,16 +193,13 @@ class DownloaderRepository @Inject constructor(
                         result.message.contains("connection", ignoreCase = true)
 
                     if (!isTransient || attempt == maxRetries - 1) {
-                        // Не временная ошибка или последняя попытка — возвращаем ошибку
                         return@withContext result
                     }
-                    // Временная ошибка — продолжаем retry
                     lastError = result
                 }
             }
         }
 
-        // Не должно сюда попасть, но на всякий случай
         lastError ?: Response.Error("Unknown error", Exception("Unexpected retry loop exit"))
     }
 
@@ -236,6 +242,26 @@ class DownloaderRepository @Inject constructor(
             }
     }
 
+    /**
+     * Загружает одну страницу списка глав через parsePage().
+     * Возвращает null если плагин не поддерживает parsePage.
+     */
+    suspend fun bookChaptersPage(
+        bookUrl: String,
+        page: Int,
+    ): Response<SourceInterface.Catalog.PagedChapterResult>? = withContext(Dispatchers.Default) {
+        val scrap = scraper.getCompatibleSourceCatalog(bookUrl) ?: return@withContext null
+        // parsePage() возвращает null если плагин не объявил функцию.
+        // Оборачиваем исключения вручную — tryFlatConnect не подходит, так как
+        // его лямбда типизирована как () -> Response<T> (non-nullable),
+        // а нам нужно пробросить наружу null от самого parsePage.
+        try {
+            scrap.parsePage(bookUrl, page)
+        } catch (e: Exception) {
+            Response.Error(e.message ?: "Unknown error", e)
+        }
+    }
+
     suspend fun bookChaptersListHash(
         bookUrl: String,
     ): Response<String?> = withContext(Dispatchers.Default) {
@@ -256,8 +282,52 @@ class DownloaderRepository @Inject constructor(
         }
     }
 
+    // ── Заголовки для загрузки страницы главы ────────────────────────────────
+
+    /**
+     * Строит Accept-Language из системных локалей устройства.
+     * Пример: "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+     */
+    private fun systemAcceptLanguage(): String {
+        val locales = ConfigurationCompat.getLocales(context.resources.configuration)
+        return buildString {
+            for (i in 0 until locales.size()) {
+                val locale = locales.get(i) ?: continue
+                if (isNotEmpty()) append(',')
+                append(locale.toLanguageTag())
+                if (i > 0) {
+                    val q = maxOf(0.1, 1.0 - i * 0.1)
+                    append(";q=%.1f".format(q))
+                }
+            }
+        }.ifEmpty { Locale.getDefault().toLanguageTag() }
+    }
+
+    /**
+     * Формирует заголовки для запроса страницы главы.
+     * Referer и Accept-Language критичны для сайтов с защитой от парсинга —
+     * без них сервер после нескольких запросов возвращает пустую страницу.
+     */
+    private fun buildChapterHeaders(chapterUrl: String): Map<String, String> {
+        val referer = try {
+            val uri = java.net.URI(chapterUrl)
+            "${uri.scheme}://${uri.host}/"
+        } catch (_: Exception) {
+            chapterUrl
+        }
+        return mapOf(
+            "Referer"         to referer,
+            "Accept"          to ACCEPT_HTML,
+            "Accept-Language" to systemAcceptLanguage(),
+        )
+    }
+
     companion object {
         private const val TAG = "DownloaderRepository"
+
+        /** MIME-типы при загрузке HTML — аналог браузерного Accept, не зависит от устройства */
+        private const val ACCEPT_HTML =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
 }
 

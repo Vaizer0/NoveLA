@@ -265,6 +265,45 @@ open class LuaSourceAdapter(
             }
         }
 
+
+    /**
+     * Пагинированный парс списка глав. Вызывается движком если плагин объявил parsePage().
+     * Возвращает главы страницы + totalPages. null если функция не объявлена в Lua.
+     */
+    override suspend fun parsePage(
+        bookUrl: String,
+        page: Int,
+    ): Response<SourceInterface.Catalog.PagedChapterResult>? =
+        withContext(Dispatchers.IO) {
+            val fn = luaScript.get("parsePage")
+            if (fn.isnil()) return@withContext null
+            try {
+                val result = fn.call(LuaValue.valueOf(bookUrl), LuaValue.valueOf(page))
+                if (!result.istable()) return@withContext Response.Error(
+                    "parsePage returned non-table", Exception()
+                )
+                val table = result.checktable()
+                val chaptersTable = table.get("chapters").opttable(null)
+                val chapters = mutableListOf<ChapterResult>()
+                if (chaptersTable != null) {
+                    for (i in 1..chaptersTable.length()) {
+                        val ch = chaptersTable.get(LuaValue.valueOf(i))
+                        if (ch.istable()) chapters.add(convertLuaTableToChapterResult(ch.checktable()))
+                    }
+                }
+                val totalPages = table.get("totalPages").optint(1)
+                Response.Success(
+                    SourceInterface.Catalog.PagedChapterResult(
+                        chapters = chapters,
+                        totalPages = totalPages,
+                    )
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "Lua parsePage [${metadata.id}] page=$page")
+                Response.Error(e.message ?: "Unknown Lua error", e)
+            }
+        }
+
     override suspend fun getChapterText(doc: Document): String? {
         val html = doc.outerHtml()
         val url  = doc.location()
