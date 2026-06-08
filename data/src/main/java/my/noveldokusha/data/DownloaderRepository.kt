@@ -187,10 +187,10 @@ class DownloaderRepository @Inject constructor(
                 is Response.Success -> return@withContext result
                 is Response.Error -> {
                     val isTransient = result.exception is SocketTimeoutException ||
-                        result.message.contains("Timeout", ignoreCase = true) ||
-                        result.message.contains("timeout", ignoreCase = true) ||
-                        result.message.contains("connect", ignoreCase = true) ||
-                        result.message.contains("connection", ignoreCase = true)
+                            result.message.contains("Timeout", ignoreCase = true) ||
+                            result.message.contains("timeout", ignoreCase = true) ||
+                            result.message.contains("connect", ignoreCase = true) ||
+                            result.message.contains("connection", ignoreCase = true)
 
                     if (!isTransient || attempt == maxRetries - 1) {
                         return@withContext result
@@ -225,6 +225,43 @@ class DownloaderRepository @Inject constructor(
 
         println("DownloaderRepository: Found source ${scrap.id} for $bookUrl")
 
+        // Если плагин поддерживает parsePage — собираем все страницы через него.
+        // Это нужно для первичной загрузки глав (ChaptersActivity), а не только для обновлений.
+        val firstPageResult = try {
+            scrap.parsePage(bookUrl, 1)
+        } catch (e: Exception) {
+            Response.Error(e.message ?: "Unknown error", e)
+        }
+
+        if (firstPageResult != null) {
+            val firstPage = (firstPageResult as? Response.Success)?.data
+                ?: return@withContext Response.Error(
+                    (firstPageResult as Response.Error).message,
+                    (firstPageResult as Response.Error).exception
+                )
+
+            println("DownloaderRepository: Using parsePage, totalPages=${firstPage.totalPages}")
+
+            val allChapters = mutableListOf<Chapter>()
+
+            firstPage.chapters.forEachIndexed { idx, ch ->
+                allChapters.add(Chapter(title = ch.title, url = ch.url, bookUrl = bookUrl, position = idx))
+            }
+
+            for (page in 2..firstPage.totalPages) {
+                val pageData = (bookChaptersPage(bookUrl, page) as? Response.Success)?.data
+                    ?: break
+                val offset = allChapters.size
+                pageData.chapters.forEachIndexed { idx, ch ->
+                    allChapters.add(Chapter(title = ch.title, url = ch.url, bookUrl = bookUrl, position = offset + idx))
+                }
+            }
+
+            println("DownloaderRepository: Got ${allChapters.size} chapters via parsePage for $bookUrl")
+            return@withContext Response.Success(allChapters)
+        }
+
+        // Плагин не объявил parsePage — старый путь через getChapterList.
         my.noveldokusha.network.tryFlatConnect {
             println("DownloaderRepository: Calling getChapterList for $bookUrl")
             scrap.getChapterList(bookUrl)
