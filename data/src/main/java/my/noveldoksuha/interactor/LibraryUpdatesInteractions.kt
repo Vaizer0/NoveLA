@@ -182,10 +182,10 @@ class LibraryUpdatesInteractions @Inject constructor(
         // Загружаем оставшиеся страницы 2..totalPages
         for (page in 2..totalPages) {
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
-                ?: run {
-                    Log.d(TAG, "[parsePage first-time] \"${book.title}\" — FAILED to load page $page, stopping early")
-                    break
-                }
+            if (pageData == null) {
+                Log.d(TAG, "[parsePage first-time] \"${book.title}\" — FAILED to load page $page, stopping early")
+                break
+            }
             Log.d(TAG, "[parsePage first-time] \"${book.title}\" — page $page chapters=${pageData.chapters.size}")
             // Захватываем offset ДО начала итерации — allChapters.size меняется внутри forEachIndexed
             val offset = allChapters.size
@@ -253,10 +253,10 @@ class LibraryUpdatesInteractions @Inject constructor(
         }
         for (page in (lastKnownPage + 1)..newTotalPages) {
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
-                ?: run {
-                    Log.d(TAG, "[parsePage incremental] \"${book.title}\" — FAILED to load new page $page, stopping early")
-                    break
-                }
+            if (pageData == null) {
+                Log.d(TAG, "[parsePage incremental] \"${book.title}\" — FAILED to load new page $page, stopping early")
+                break
+            }
             Log.d(TAG, "[parsePage incremental] \"${book.title}\" — new page $page chapters=${pageData.chapters.size}")
             val offset = positionOffset
             pageData.chapters.forEachIndexed { idx, ch ->
