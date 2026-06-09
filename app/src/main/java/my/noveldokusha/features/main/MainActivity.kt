@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -121,10 +122,10 @@ open class MainActivity : BaseActivity() {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 24.dp) // Truly floating from the bottom
-                            .padding(horizontal = 64.dp)
-                            .height(52.dp), // Slimmer height
-                        shape = RoundedCornerShape(26.dp), // Perfect pill
+                            .navigationBarsPadding()
+                            .padding(horizontal = 64.dp, vertical = 16.dp)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
                         shadowElevation = 8.dp,
                         tonalElevation = 4.dp
