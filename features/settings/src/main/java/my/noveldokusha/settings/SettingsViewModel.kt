@@ -28,7 +28,6 @@ import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.asMutableStateOf
-import my.noveldokusha.text_translator.domain.TranslationManager
 import java.io.File
 import javax.inject.Inject
 
@@ -38,7 +37,6 @@ internal class SettingsViewModel @Inject constructor(
     private val appScope: AppCoroutineScope,
     private val appPreferences: AppPreferences,
     @ApplicationContext private val context: Context,
-    private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
     private val appFileResolver: AppFileResolver,
     private val appRemoteRepository: AppRemoteRepository,
@@ -72,8 +70,6 @@ internal class SettingsViewModel @Inject constructor(
             try { DarkMode.valueOf(darkModePref.value) }
             catch (_: Exception) { DarkMode.SYSTEM }
         },
-        isTranslationSettingsVisible = mutableStateOf(translationManager.available),
-        translationModelsStates = translationManager.models,
         updateAppSetting = SettingsScreenState.UpdateApp(
             currentAppVersion = appRemoteRepository.getCurrentAppVersion().toString(),
             showNewVersionDialog = mutableStateOf(null),
@@ -129,14 +125,6 @@ internal class SettingsViewModel @Inject constructor(
             }
         }
 
-    }
-
-    fun downloadTranslationModel(lang: String) {
-        translationManager.downloadModel(lang)
-    }
-
-    fun removeTranslationModel(lang: String) {
-        translationManager.removeModel(lang)
     }
 
     fun cleanDatabase() = appScope.launch(Dispatchers.IO) {

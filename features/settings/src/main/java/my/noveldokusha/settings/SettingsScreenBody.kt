@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -37,7 +36,6 @@ import my.noveldokusha.settings.sections.SettingsGeminiTranslation
 import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
-import my.noveldokusha.settings.sections.SettingsTranslationModels
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
 
 @Composable
@@ -53,8 +51,6 @@ internal fun SettingsScreenBody(
     onMassAddDelayChange: (Long) -> Unit,
     onBackupData: () -> Unit,
     onRestoreData: () -> Unit,
-    onDownloadTranslationModel: (lang: String) -> Unit,
-    onRemoveTranslationModel: (lang: String) -> Unit,
     onCheckForUpdatesManual: () -> Unit,
     onGeminiApiKeyChange: (String) -> Unit,
     onGeminiModelChange: (String) -> Unit,
@@ -108,15 +104,7 @@ internal fun SettingsScreenBody(
             onBackupData = onBackupData,
             onRestoreData = onRestoreData
         )
-        if (state.isTranslationSettingsVisible.value) {
-            HorizontalDivider()
-            SettingsTranslationModels(
-                translationModelsStates = state.translationModelsStates,
-                onDownloadTranslationModel = onDownloadTranslationModel,
-                onRemoveTranslationModel = onRemoveTranslationModel
-            )
-            HorizontalDivider()
-            SettingsGeminiTranslation(
+        SettingsGeminiTranslation(
                 translationProvider            = state.translationProvider.value,
                 geminiApiKey                   = state.geminiApiKey.value,
                 geminiModel                    = state.geminiModel.value,
@@ -143,7 +131,6 @@ internal fun SettingsScreenBody(
                 onLlmBatchSizeChange           = onLlmBatchSizeChange,
                 onLlmMaxOutputTokensChange     = onLlmMaxOutputTokensChange,
             )
-        }
         HorizontalDivider()
         SettingsRegexCleanup(
             onNavigateToRegexCleanup = onNavigateToRegexCleanup
@@ -155,7 +142,7 @@ internal fun SettingsScreenBody(
             state = state.updateAppSetting,
             onCheckForUpdatesManual = onCheckForUpdatesManual
         )
-        Spacer(modifier = Modifier.height(500.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "(°.°)",
             modifier = Modifier
@@ -189,8 +176,6 @@ private fun Preview() {
                     imageFolderSize = remember { mutableStateOf("10 MB") },
                     isCleaningDatabase = remember { mutableStateOf(false) },
                     isCleaningImages = remember { mutableStateOf(false) },
-                    isTranslationSettingsVisible = remember { mutableStateOf(true) },
-                    translationModelsStates = remember { mutableStateListOf() },
                     updateAppSetting = SettingsScreenState.UpdateApp(
                         currentAppVersion = "1.0.0",
                         appUpdateCheckerEnabled = remember { mutableStateOf(true) },
@@ -225,8 +210,6 @@ private fun Preview() {
                 onMassAddDelayChange = { },
                 onBackupData = { },
                 onRestoreData = { },
-                onDownloadTranslationModel = { },
-                onRemoveTranslationModel = { },
                 onCheckForUpdatesManual = { },
                 onGeminiApiKeyChange = { },
                 onGeminiModelChange = { },

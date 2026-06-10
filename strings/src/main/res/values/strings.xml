@@ -117,8 +117,6 @@
     <string name="updating_book_info">Updating book info</string>
     <string name="backup_options">Backup options</string>
     <string name="save_images">Save images</string>
-    <string name="settings_translations_models_main_description">Download the desired languages models to translate novels on the fly</string>
-    <string name="settings_title_translation_models">Live translation models</string>
     <string name="translating_from_lang_a_to_lang_b">Translating from %1$s to %2$s</string>
     <string name="language_source_empty_text">Source</string>
     <string name="language_target_empty_text">Target</string>
@@ -161,7 +159,6 @@
     <string name="save_current_voice">Save current voice</string>
     <string name="save_current_voice_parameters">Save current voice and parameters</string>
     <string name="layout">Layout</string>
-    <string name="open_translation_models_manager">Open translation models manager</string>
     <string name="new_chapters">New chapters</string>
     <string name="update_error">Update error</string>
     <string name="media_control_previous">previous</string>

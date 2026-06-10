@@ -67,8 +67,6 @@ fun SettingsScreen(
                     onMassAddDelayChange = viewModel::onMassAddDelayChange,
                     onBackupData = onBackupCreate(),
                     onRestoreData = onBackupRestore(),
-                    onDownloadTranslationModel = viewModel::downloadTranslationModel,
-                    onRemoveTranslationModel = viewModel::removeTranslationModel,
                     onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
                     onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
                     onGeminiModelChange = viewModel::onGeminiModelChange,

@@ -8,15 +8,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.DarkMode
@@ -55,7 +56,7 @@ internal fun SettingsTheme(
             color = ColorAccent
         )
 
-        // Mode chips (System/Light/Dark/Black) — above Color Scheme
+        // Mode chips (System/Light/Dark/Black)
         FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -93,15 +94,13 @@ internal fun SettingsTheme(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // Theme preview grid
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        // Compact horizontal scrollable theme picker
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AppTheme.entries.forEach { theme ->
+            items(AppTheme.entries) { theme ->
                 ThemePreviewChip(
                     theme = theme,
                     isSelected = theme == currentAppTheme,
@@ -113,7 +112,6 @@ internal fun SettingsTheme(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemePreviewChip(
     theme: AppTheme,
@@ -147,42 +145,28 @@ private fun ThemePreviewChip(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clickable(onClick = onClick)
-            .width(72.dp)
+            .width(52.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(accentColor)
                 .border(
                     width = if (isSelected) 2.dp else 0.dp,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = CircleShape
                 )
-                .padding(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(accentColor)
-            )
-            Spacer(Modifier.width(2.dp))
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
-        }
+        )
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(4.dp))
 
         Text(
             text = stringResource(id = theme.titleRes),
             style = MaterialTheme.typography.labelSmall,
             color = if (isSelected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
+            maxLines = 1,
         )
     }
 }
