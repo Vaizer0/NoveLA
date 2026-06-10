@@ -8,4 +8,8 @@ interface ThemeProvider {
     fun followSystem(stateCoroutineScope: CoroutineScope): State<Boolean>
 
     fun currentTheme(stateCoroutineScope: CoroutineScope): State<Themes>
+
+    fun currentAppTheme(stateCoroutineScope: CoroutineScope): State<AppTheme>
+
+    fun currentDarkMode(stateCoroutineScope: CoroutineScope): State<DarkMode>
 }

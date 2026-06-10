@@ -60,6 +60,8 @@ open class BaseActivity : AppCompatActivity() {
         setTheme(getAppTheme())
         appPreferences.THEME_ID.flow().drop(1).asLiveData().observe(this) { recreate() }
         appPreferences.THEME_FOLLOW_SYSTEM.flow().drop(1).asLiveData().observe(this) { recreate() }
+        appPreferences.APP_THEME.flow().drop(1).asLiveData().observe(this) { recreate() }
+        appPreferences.THEME_DARK_MODE.flow().drop(1).asLiveData().observe(this) { recreate() }
         super.onCreate(savedInstanceState)
     }
 

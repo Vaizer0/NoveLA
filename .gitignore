@@ -52,3 +52,4 @@ app/release/output-metadata.json
 
 keystore_base64.txt
 *.patch
+repomix.config.json

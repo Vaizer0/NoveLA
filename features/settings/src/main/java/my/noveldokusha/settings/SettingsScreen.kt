@@ -60,6 +60,8 @@ fun SettingsScreen(
                     state = viewModel.state,
                     onFollowSystem = viewModel::onFollowSystemChange,
                     onThemeSelected = viewModel::onThemeChange,
+                    onAppThemeSelected = viewModel::onAppThemeChange,
+                    onDarkModeSelected = viewModel::onDarkModeChange,
                     onCleanDatabase = viewModel::cleanDatabase,
                     onCleanImageFolder = viewModel::cleanImagesFolder,
                     onMassAddDelayChange = viewModel::onMassAddDelayChange,

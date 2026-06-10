@@ -116,7 +116,7 @@ internal fun ChaptersScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.primary,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val isAtTop by lazyListState.isAtTop(threshold = 40.dp)
             val alpha by animateFloatAsState(targetValue = if (isAtTop) 0f else 1f, label = "")

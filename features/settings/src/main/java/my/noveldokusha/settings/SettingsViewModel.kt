@@ -14,8 +14,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.BaseViewModel
+import my.noveldokusha.coreui.mappers.toDarkMode
 import my.noveldokusha.coreui.mappers.toPreferenceTheme
 import my.noveldokusha.coreui.mappers.toTheme
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.data.AppRemoteRepository
@@ -50,6 +53,9 @@ internal class SettingsViewModel @Inject constructor(
     private val themeId by appPreferences.THEME_ID.state(viewModelScope)
     private val cloudflareBypassEnabled by appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope)
 
+    private val appThemePref = appPreferences.APP_THEME.state(viewModelScope)
+    private val darkModePref = appPreferences.THEME_DARK_MODE.state(viewModelScope)
+
     val state = SettingsScreenState(
         databaseSize = stateHandle.asMutableStateOf("databaseSize") { "" },
         imageFolderSize = stateHandle.asMutableStateOf("imageFolderSize") { "" },
@@ -58,6 +64,14 @@ internal class SettingsViewModel @Inject constructor(
         followsSystemTheme = appPreferences.THEME_FOLLOW_SYSTEM.state(viewModelScope),
         currentTheme = derivedStateOf { themeId.toTheme },
         currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
+        currentAppTheme = derivedStateOf {
+            try { AppTheme.valueOf(appThemePref.value) }
+            catch (_: Exception) { AppTheme.DEFAULT }
+        },
+        currentDarkMode = derivedStateOf {
+            try { DarkMode.valueOf(darkModePref.value) }
+            catch (_: Exception) { DarkMode.SYSTEM }
+        },
         isTranslationSettingsVisible = mutableStateOf(translationManager.available),
         translationModelsStates = translationManager.models,
         updateAppSetting = SettingsScreenState.UpdateApp(
@@ -221,6 +235,16 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onThemeChange(themes: Themes) {
         appPreferences.THEME_ID.value = themes.toPreferenceTheme
+    }
+
+    fun onAppThemeChange(appTheme: AppTheme) {
+        appPreferences.APP_THEME.value = appTheme.name
+        onRestartApp?.invoke()
+    }
+
+    fun onDarkModeChange(darkMode: DarkMode) {
+        appPreferences.THEME_DARK_MODE.value = darkMode.name
+        onRestartApp?.invoke()
     }
 
     fun onLanguageChange(language: AppLanguage) {

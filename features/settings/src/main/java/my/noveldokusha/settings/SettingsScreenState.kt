@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import my.noveldokusha.core.domain.RemoteAppVersion
 import my.noveldokusha.text_translator.domain.TranslationModelState
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 
@@ -16,6 +18,8 @@ data class SettingsScreenState(
     val isCleaningImages: State<Boolean>,
     val followsSystemTheme: State<Boolean>,
     val currentTheme: State<Themes>,
+    val currentAppTheme: State<AppTheme>,
+    val currentDarkMode: State<DarkMode>,
     val currentLanguage: State<AppLanguage>,
     val isTranslationSettingsVisible: State<Boolean>,
     val translationModelsStates: SnapshotStateList<TranslationModelState>,

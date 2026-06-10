@@ -52,9 +52,14 @@ import androidx.core.content.ContextCompat
 
 import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import my.noveldokusha.coreui.BaseActivity
 import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.ThemeProvider
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.R
 import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
 import my.noveldokusha.libraryexplorer.LibraryScreen

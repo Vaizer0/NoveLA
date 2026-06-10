@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.coreui.theme.Themes
@@ -44,6 +46,8 @@ internal fun SettingsScreenBody(
     modifier: Modifier = Modifier,
     onFollowSystem: (Boolean) -> Unit,
     onThemeSelected: (Themes) -> Unit,
+    onAppThemeSelected: (AppTheme) -> Unit,
+    onDarkModeSelected: (DarkMode) -> Unit,
     onCleanDatabase: () -> Unit,
     onCleanImageFolder: () -> Unit,
     onMassAddDelayChange: (Long) -> Unit,
@@ -77,10 +81,10 @@ internal fun SettingsScreenBody(
         )
         HorizontalDivider()
         SettingsTheme(
-            currentFollowSystem = state.followsSystemTheme.value,
-            currentTheme = state.currentTheme.value,
-            onFollowSystemChange = onFollowSystem,
-            onCurrentThemeChange = onThemeSelected
+            currentAppTheme = state.currentAppTheme.value,
+            currentDarkMode = state.currentDarkMode.value,
+            onAppThemeChange = onAppThemeSelected,
+            onDarkModeChange = onDarkModeSelected,
         )
         HorizontalDivider()
         SettingsData(
@@ -178,6 +182,8 @@ private fun Preview() {
                 state = SettingsScreenState(
                     followsSystemTheme = remember { derivedStateOf { true } },
                     currentTheme = theme,
+                    currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
+                    currentDarkMode = remember { mutableStateOf(DarkMode.SYSTEM) },
                     currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
                     databaseSize = remember { mutableStateOf("1 MB") },
                     imageFolderSize = remember { mutableStateOf("10 MB") },
@@ -235,8 +241,10 @@ private fun Preview() {
                 onDeletePreset = { },
                 onLlmBatchSizeChange = { },
                 onLlmMaxOutputTokensChange = { },
-                onLanguageChange = { },
-                onNavigateToRegexCleanup = { },
+                    onLanguageChange = { },
+                    onAppThemeSelected = { },
+                    onDarkModeSelected = { },
+                    onNavigateToRegexCleanup = { },
             )
         }
     }

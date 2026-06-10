@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdded
@@ -49,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import my.noveldokusha.coreui.components.BookImageButtonView
@@ -102,8 +105,9 @@ internal fun ChaptersScreenHeader(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            0f to MaterialTheme.colorScheme.primary.copy(alpha = 0f),
-                            1f to MaterialTheme.colorScheme.primary,
+                            0f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                            0.6f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                            1f to MaterialTheme.colorScheme.background,
                         )
                     )
             )
@@ -262,7 +266,7 @@ internal fun ChaptersScreenHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
+                    .heightIn(min = 48.dp)
             ) {
                 // Кнопка "К последней читаемой"
                 if (onScrollToLastRead != null) {
@@ -273,11 +277,21 @@ internal fun ChaptersScreenHeader(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
                         ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.weight(1f),
                     ) {
-                        Text(text = stringResource(id = R.string.scroll_to_last_read_chapter))
+                        Icon(
+                            imageVector = Icons.Filled.BookmarkAdded,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(id = R.string.scroll_to_last_read_chapter),
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
 
@@ -295,11 +309,12 @@ internal fun ChaptersScreenHeader(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                     ),
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     if (isTranslating) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -307,21 +322,33 @@ internal fun ChaptersScreenHeader(
                         Icon(
                             imageVector = if (translatedTitle != null || translatedDescription != null) Icons.Outlined.Close else Icons.Outlined.GTranslate,
                             contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Text(text = if (translatedTitle != null || translatedDescription != null) stringResource(R.string.clear_translation) else stringResource(R.string.translate))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (translatedTitle != null || translatedDescription != null) stringResource(R.string.clear_translation) else stringResource(R.string.translate),
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
-                
+
                 // Кнопка "Перейти к главе"
-                IconButton(
+                Button(
                     onClick = onScrollToChapter,
-                    modifier = Modifier.fillMaxHeight().background(MaterialTheme.colorScheme.surface, my.noveldokusha.coreui.theme.shapes.large)
+                    shape = my.noveldokusha.coreui.theme.shapes.large,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Search,
                         contentDescription = stringResource(id = R.string.go_to_chapter),
-                        tint = MaterialTheme.colorScheme.onSurface
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
