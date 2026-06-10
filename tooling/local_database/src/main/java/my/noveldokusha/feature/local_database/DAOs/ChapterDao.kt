@@ -78,6 +78,9 @@ interface ChapterDao {
     @Query("DELETE FROM Chapter WHERE Chapter.bookUrl IN (:bookUrls)")
     suspend fun removeAllFromBooks(bookUrls: List<String>)
 
+    @Query("DELETE FROM Chapter WHERE url IN (:urls)")
+    suspend fun removeByUrls(urls: List<String>)
+
     @Query(
         """
         SELECT Chapter.*, ChapterBody.url IS NOT NULL AS downloaded , Book.lastReadChapter IS NOT NULL AS lastReadChapter

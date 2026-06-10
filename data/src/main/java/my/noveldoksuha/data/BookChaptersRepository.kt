@@ -54,5 +54,16 @@ class BookChaptersRepository @Inject constructor(
                 chapter
             ) { old, new -> old.copy(position = new.position) }
         insertReplace(current.values.toList())
+
+        // Sync: remove chapters no longer returned by plugin.
+        // Safety: skip if plugin returned fewer than 30% of current count —
+        // likely means plugin is broken and returned garbage, not a real update.
+        if (newChapters.isNotEmpty() && newChapters.size >= current.size * 0.3) {
+            val newUrls = newChapters.map { it.url }.toSet()
+            val removedUrls = current.keys.filter { it !in newUrls }
+            if (removedUrls.isNotEmpty()) {
+                chapterDao.removeByUrls(removedUrls)
+            }
+        }
     }
 }

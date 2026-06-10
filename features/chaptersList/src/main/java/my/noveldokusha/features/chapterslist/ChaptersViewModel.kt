@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import my.noveldokusha.core.Response
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloaderRepository
@@ -32,6 +33,7 @@ import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.tables.BookGenre
+import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.text_translator.domain.TranslationManager
 import javax.inject.Inject
@@ -279,17 +281,94 @@ internal class ChaptersViewModel @Inject constructor(
             state.error.value = ""
             state.isRefreshing.value = true
             val url = bookUrl
-            downloaderRepository.bookChaptersList(bookUrl = url)
-                .onSuccess {
-                    if (it.isEmpty())
-                        toasty.show(R.string.no_chapters_found)
-                    appRepository.bookChapters.merge(newChapters = it, bookUrl = url)
-                    appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = url)
-                }.onError {
-                    state.error.value = it.message
-                }
+            val book = appRepository.libraryBooks.get(url)
+
+            // Try incremental parsePage if book already has chaptersLastPage.
+            // This only re-checks the last known page + loads new pages,
+            // instead of re-parsing all pages from scratch.
+            val lastPage = book?.chaptersLastPage
+            if (lastPage != null) {
+                updateChaptersIncremental(url, lastPage)
+            } else {
+                // First time or legacy: try full parsePage, fallback to getChapterList
+                updateChaptersFull(url)
+            }
+
+            appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = url)
             state.isRefreshing.value = false
         }
+    }
+
+    /**
+     * Incremental update: re-read the last known page to detect new chapters,
+     * then load any new pages beyond the last known total.
+     */
+    private suspend fun updateChaptersIncremental(bookUrl: String, lastKnownPage: Int) {
+        val lastPageResult = downloaderRepository.bookChaptersPage(bookUrl, lastKnownPage)
+        val lastPageData = (lastPageResult as? Response.Success)?.data
+        if (lastPageData == null) {
+            android.util.Log.w(TAG, "updateChaptersIncremental: failed to load lastPage=$lastKnownPage, falling back to full update")
+            updateChaptersFull(bookUrl)
+            return
+        }
+
+        val existingUrls = appRepository.bookChapters.chapters(bookUrl).map { it.url }.toSet()
+        var positionOffset = existingUrls.size
+        val chaptersToAdd = mutableListOf<Chapter>()
+
+        // From the last page, only take chapters that don't exist yet
+        val newFromLastPage = lastPageData.chapters.filter { it.url !in existingUrls }
+        newFromLastPage.forEachIndexed { idx, ch ->
+            chaptersToAdd.add(
+                Chapter(
+                    title = ch.title, url = ch.url, bookUrl = bookUrl, position = positionOffset + idx
+                )
+            )
+        }
+        positionOffset += chaptersToAdd.size
+
+        // Load any new pages beyond the last known total
+        val newTotalPages = lastPageData.totalPages
+        for (page in (lastKnownPage + 1)..newTotalPages) {
+            val pageData = (downloaderRepository.bookChaptersPage(bookUrl, page) as? Response.Success)?.data
+                ?: break
+            val offset = positionOffset
+            pageData.chapters.forEachIndexed { idx, ch ->
+                chaptersToAdd.add(
+                    Chapter(
+                        title = ch.title, url = ch.url, bookUrl = bookUrl, position = offset + idx
+                    )
+                )
+            }
+            positionOffset += pageData.chapters.size
+        }
+
+        if (chaptersToAdd.isNotEmpty()) {
+            appRepository.bookChapters.merge(newChapters = chaptersToAdd, bookUrl = bookUrl)
+        }
+
+        if (newTotalPages != lastKnownPage) {
+            appRepository.libraryBooks.updateChaptersLastPage(bookUrl, newTotalPages)
+        }
+    }
+
+    /**
+     * Full update: load all pages via parsePage or fallback to getChapterList.
+     */
+    private suspend fun updateChaptersFull(bookUrl: String) {
+        downloaderRepository.bookChaptersList(bookUrl = bookUrl)
+            .onSuccess {
+                if (it.isEmpty()) toasty.show(R.string.no_chapters_found)
+                appRepository.bookChapters.merge(newChapters = it, bookUrl = bookUrl)
+                // Save chaptersLastPage for future incremental updates
+                val firstPage = downloaderRepository.bookChaptersPage(bookUrl, 1)
+                val totalPages = (firstPage as? Response.Success)?.data?.totalPages
+                if (totalPages != null) {
+                    appRepository.libraryBooks.updateChaptersLastPage(bookUrl, totalPages)
+                }
+            }.onError {
+                state.error.value = it.message
+            }
     }
 
     suspend fun getLastReadChapter(): String? =
