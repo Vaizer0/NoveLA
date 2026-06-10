@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.tables.ChapterTranslation
 
@@ -20,6 +21,7 @@ interface ChapterTranslationDao {
         WHERE chapterUrl = :chapterUrl 
         AND sourceLang = :sourceLang 
         AND targetLang = :targetLang
+        ORDER BY paragraphIndex
     """)
     suspend fun getTranslations(
         chapterUrl: String,
@@ -27,6 +29,7 @@ interface ChapterTranslationDao {
         targetLang: String
     ): List<ChapterTranslation>
 
+    @Transaction
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReplace(translations: List<ChapterTranslation>)
 

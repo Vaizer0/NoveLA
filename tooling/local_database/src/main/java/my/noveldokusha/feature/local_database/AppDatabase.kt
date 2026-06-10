@@ -43,6 +43,7 @@ interface AppDatabase {
     companion object {
         fun createRoom(ctx: Context, name: String): AppDatabase = Room
             .databaseBuilder(ctx, AppRoomDatabase::class.java, name)
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(*databaseMigrations())
             .build()
             .also { it.name = name }
@@ -53,6 +54,7 @@ interface AppDatabase {
             inputStream: InputStream
         ): AppDatabase = Room
             .databaseBuilder(ctx, AppRoomDatabase::class.java, name)
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .createFromInputStream { inputStream }
             .fallbackToDestructiveMigration() // Don't apply migrations, database is already at correct version
             .build()
@@ -70,7 +72,7 @@ interface AppDatabase {
         ChapterTranslation::class,
         Extension::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
@@ -94,6 +96,9 @@ internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
     }
 
     override suspend fun vacuum() {
-        withContext(Dispatchers.IO) { openHelper.writableDatabase.execSQL("VACUUM") }
+        withContext(Dispatchers.IO) {
+            openHelper.writableDatabase.execSQL("REINDEX")
+            openHelper.writableDatabase.execSQL("VACUUM")
+        }
     }
 }

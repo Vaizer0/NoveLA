@@ -162,6 +162,47 @@ internal fun databaseMigrations() = arrayOf(
             it.execSQL("ALTER TABLE Book ADD COLUMN chaptersLastPage INTEGER")
         }
     },
+    migration(17) {
+        // Optimize ChapterTranslation: replace composite PK (chapterUrl,sourceLang,targetLang,originalText)
+        // with auto-generated Long id + paragraphIndex + unique index on (chapterUrl,sourceLang,targetLang,paragraphIndex).
+        // This drastically reduces index size since originalText (~500 chars) is no longer part of the PK.
+        // Also adds index on Chapter(bookUrl) for faster chapter lookups.
+        it.execSQL("""
+            CREATE TABLE IF NOT EXISTS ChapterTranslation_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                chapterUrl TEXT NOT NULL,
+                sourceLang TEXT NOT NULL,
+                targetLang TEXT NOT NULL,
+                paragraphIndex INTEGER NOT NULL,
+                originalText TEXT NOT NULL,
+                translatedText TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+        """)
+        // Migrate data with row_number partition to assign paragraphIndex
+        it.execSQL("""
+            INSERT INTO ChapterTranslation_new (chapterUrl, sourceLang, targetLang, paragraphIndex, originalText, translatedText, timestamp)
+            SELECT chapterUrl, sourceLang, targetLang,
+                ROW_NUMBER() OVER (
+                    PARTITION BY chapterUrl, sourceLang, targetLang
+                    ORDER BY timestamp
+                ) - 1 AS paragraphIndex,
+                originalText, translatedText, timestamp
+            FROM ChapterTranslation
+        """)
+        it.execSQL("DROP TABLE ChapterTranslation")
+        it.execSQL("ALTER TABLE ChapterTranslation_new RENAME TO ChapterTranslation")
+        it.execSQL("""
+            CREATE UNIQUE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang_paragraphIndex
+            ON ChapterTranslation (chapterUrl, sourceLang, targetLang, paragraphIndex)
+        """)
+        it.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang
+            ON ChapterTranslation (chapterUrl, sourceLang, targetLang)
+        """)
+        // Add index on Chapter(bookUrl) for faster queries
+        it.execSQL("CREATE INDEX IF NOT EXISTS index_Chapter_bookUrl ON Chapter (bookUrl)")
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

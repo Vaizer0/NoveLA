@@ -584,11 +584,12 @@ internal class ReaderChaptersLoader(
                                             }
                                         }
                                         launch(Dispatchers.IO) {
-                                            val entities = missingFromDb.map { original ->
+                                            val entities = missingFromDb.mapIndexed { index, original ->
                                                 ChapterTranslation(
                                                     chapterUrl = chapter.url,
                                                     sourceLang = sourceLang,
                                                     targetLang = targetLang,
+                                                    paragraphIndex = index,
                                                     originalText = original,
                                                     translatedText = extraTranslations[original] ?: original
                                                 )
@@ -688,6 +689,7 @@ internal class ReaderChaptersLoader(
                                     chapterUrl = chapter.url,
                                     sourceLang = sourceLang,
                                     targetLang = targetLang,
+                                    paragraphIndex = -1,
                                     originalText = titleOriginal,
                                     translatedText = titleTranslated,
                                 )
@@ -753,11 +755,12 @@ internal class ReaderChaptersLoader(
         val translations = batchTranslator.invoke(bodyTexts)
 
         withContext(Dispatchers.IO) {
-            val entities = bodyTexts.map { original ->
+            val entities = bodyTexts.mapIndexed { index, original ->
                 ChapterTranslation(
                     chapterUrl = chapterUrl,
                     sourceLang = sourceLang,
                     targetLang = targetLang,
+                    paragraphIndex = index,
                     originalText = original,
                     translatedText = translations[original] ?: original
                 )
@@ -790,11 +793,12 @@ internal class ReaderChaptersLoader(
         if (missing > 0) android.util.Log.w(TAG, "translateAndCache: $missing paragraphs missing, saving original as fallback")
 
         withContext(Dispatchers.IO) {
-            val entities = textsToTranslate.map { original ->
+            val entities = textsToTranslate.mapIndexed { index, original ->
                 ChapterTranslation(
                     chapterUrl = chapterUrl,
                     sourceLang = sourceLang,
                     targetLang = targetLang,
+                    paragraphIndex = index,
                     originalText = original,
                     translatedText = translations[original] ?: original
                 )
