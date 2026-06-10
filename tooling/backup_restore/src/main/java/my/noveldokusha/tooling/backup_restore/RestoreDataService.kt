@@ -245,7 +245,6 @@ class RestoreDataService : Service() {
                     fun close() = newDatabase.closeDatabase()
                     fun delete() {
                         try {
-                            newDatabase.clearDatabase()
                             tempDbFile.delete()
                             File(tempDbFile.absolutePath + "-shm").delete()
                             File(tempDbFile.absolutePath + "-wal").delete()
