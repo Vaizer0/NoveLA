@@ -99,7 +99,6 @@ internal fun LibraryPageBody(
                     }
                 }
 
-                val isLight = MaterialTheme.colorScheme.isLightTheme()
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 AnimatedVisibility(
                     visible = notReadCount != 0,
@@ -108,11 +107,11 @@ internal fun LibraryPageBody(
                 ) {
                     Text(
                         text = notReadCount.toString(),
-                        color = if (isLight) Grey0 else Grey1000,
+                        color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .padding(4.dp)
                             .background(
-                                color = if (isLight) Error300 else Grey400,
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f),
                                 shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 12.dp)
                             )
                             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -122,12 +121,12 @@ internal fun LibraryPageBody(
 
                 if (it.book.url.isLocalUri) Text(
                     text = stringResource(R.string.local),
-                    color = if (isLight) Grey0 else Grey1000,
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
                         .background(
-                            color = if (isLight) Grey1000 else Grey75,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                             shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp),

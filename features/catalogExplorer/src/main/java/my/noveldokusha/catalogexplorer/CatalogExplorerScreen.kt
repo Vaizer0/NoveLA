@@ -75,11 +75,6 @@ fun CatalogExplorerScreen(
 
     val context = LocalContext.current
     var languagesOptionsExpanded by rememberSaveable { mutableStateOf(false) }
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        snapAnimationSpec = null,
-        flingAnimationSpec = null
-    )
-
     val onDatabaseClick = remember(context) {
         { database: my.noveldokusha.scraper.DatabaseInterface ->
             navigationRouteViewModel.databaseSearch(
@@ -108,14 +103,11 @@ fun CatalogExplorerScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             Column {
-                MediumTopAppBar(
-                    scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.mediumTopAppBarColors(
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     ),
                     title = {
                         Text(
@@ -160,9 +152,7 @@ fun CatalogExplorerScreen(
                                 .zIndex(-1f)
                         )
                     },
-                    divider = {
-                        CollapsibleDivider(scrollBehavior.state)
-                    }
+                    divider = {}
                 ) {
                     val selectedColor = MaterialTheme.colorScheme.onSurface
                     val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant

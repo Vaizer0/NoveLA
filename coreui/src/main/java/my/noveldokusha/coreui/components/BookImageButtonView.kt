@@ -89,17 +89,15 @@ fun BookImageButtonView(
                 forceCache = forceCache,
             )
 
-            val isLight = MaterialTheme.colorScheme.isLightTheme()
-            
             // Source text in top-right corner
             sourceText?.let {
                 Text(
                     text = it,
-                    color = if (isLight) Grey0 else Grey1000,
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .background(
-                            color = if (isLight) Grey1000 else Grey75,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                             shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp),

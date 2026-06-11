@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,10 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.coreui.components.BookSettingsDialog
@@ -30,20 +30,13 @@ import my.noveldokusha.coreui.components.BookSettingsDialogState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.MediumTopAppBar
-import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
-import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.feature.local_database.BookWithContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -57,11 +50,9 @@ fun LibraryScreen(
     val uiState by libraryModel.uiState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val showDropdownMenu = remember { mutableStateOf(false) }
     val lastClickTime = remember { mutableStateOf(0L) }
 
-    // Читаем количество колонок из общего preference
     val gridColumns = uiState.gridColumns
 
     val handleBookClick = remember(context, uiState.isSelectionMode) {
@@ -94,20 +85,12 @@ fun LibraryScreen(
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        snapAnimationSpec = null,
-        flingAnimationSpec = null
-    )
-
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             if (uiState.isSelectionMode) {
                 TopAppBar(
-                    scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     ),
                     title = {
                         Text(
@@ -145,62 +128,65 @@ fun LibraryScreen(
                 Column(
                     modifier = Modifier.background(MaterialTheme.colorScheme.background)
                 ) {
-                    TopAppBar(
-                        scrollBehavior = scrollBehavior,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                        ),
-                        title = {
-                            Text(
-                                text = "NoveLA", // Replaced R.string.title_library with NoveLA as per prototype
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        },
-                        actions = {
-                            IconButton(onClick = { libraryModel.setShowBottomSheet(true) }) {
-                                Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
-                            }
-                            IconButton(onClick = { showDropdownMenu.value = true }) {
-                                Icon(Icons.Filled.MoreVert, stringResource(R.string.options_panel))
-                            }
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = showDropdownMenu.value,
-                                onDismissRequest = { showDropdownMenu.value = false }
-                            ) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.Checklist, stringResource(R.string.select_books))
-                                    },
-                                    text = { Text(stringResource(R.string.select_books)) },
-                                    onClick = {
-                                        showDropdownMenu.value = false
-                                        libraryModel.toggleSelectionMode()
+                    AnimatedTransition(targetState = uiState.toolbarMode) { target ->
+                        when (target) {
+                            ToolbarMode.MAIN -> TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                                title = {
+                                    Text(
+                                        text = "NoveLA",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                },
+                                actions = {
+                                    IconButton(onClick = { libraryModel.setToolbarMode(ToolbarMode.SEARCH) }) {
+                                        Icon(Icons.Filled.Search, stringResource(R.string.search_for_title))
                                     }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.FileOpen, stringResource(id = R.string.import_epub))
-                                    },
-                                    text = { Text(stringResource(id = R.string.import_epub)) },
-                                    onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
-                                )
-                            }
+                                    IconButton(onClick = { libraryModel.setShowBottomSheet(true) }) {
+                                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
+                                    }
+                                    IconButton(onClick = { showDropdownMenu.value = true }) {
+                                        Icon(Icons.Filled.MoreVert, stringResource(R.string.options_panel))
+                                    }
+                                    androidx.compose.material3.DropdownMenu(
+                                        expanded = showDropdownMenu.value,
+                                        onDismissRequest = { showDropdownMenu.value = false }
+                                    ) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.Checklist, stringResource(R.string.select_books))
+                                            },
+                                            text = { Text(stringResource(R.string.select_books)) },
+                                            onClick = {
+                                                showDropdownMenu.value = false
+                                                libraryModel.toggleSelectionMode()
+                                            }
+                                        )
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.FileOpen, stringResource(id = R.string.import_epub))
+                                            },
+                                            text = { Text(stringResource(id = R.string.import_epub)) },
+                                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
+                                        )
+                                    }
+                                }
+                            )
+                            ToolbarMode.SEARCH -> TopAppBarSearch(
+                                focusRequester = remember { androidx.compose.ui.focus.FocusRequester() },
+                                searchTextInput = pageViewModel.searchQuery,
+                                onClose = {
+                                    libraryModel.setToolbarMode(ToolbarMode.MAIN)
+                                    pageViewModel.updateSearchQuery("")
+                                },
+                                onTextDone = { },
+                                placeholderText = stringResource(R.string.search_here),
+                                onSearchTextChange = { pageViewModel.updateSearchQuery(it) }
+                            )
                         }
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        my.noveldokusha.coreui.components.MyOutlinedTextField(
-                            value = pageViewModel.searchQuery,
-                            onValueChange = { pageViewModel.updateSearchQuery(it) },
-                            placeHolderText = stringResource(R.string.search_here),
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
             }
@@ -209,7 +195,7 @@ fun LibraryScreen(
             LibraryScreenBody(
                 tabs = listOf("Reading", "Completed"),
                 innerPadding = innerPadding,
-                topAppBarState = scrollBehavior.state,
+                topAppBarState = null,
                 onBookClick = handleBookClick,
                 onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
@@ -219,7 +205,6 @@ fun LibraryScreen(
         }
     )
 
-    // Handle book settings dialog
     when (val state = uiState.bookSettingsDialogState) {
         is BookSettingsDialogState.Show -> {
             BookSettingsDialog(

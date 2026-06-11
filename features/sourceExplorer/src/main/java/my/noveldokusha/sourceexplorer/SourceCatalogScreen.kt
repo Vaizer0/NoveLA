@@ -16,7 +16,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -38,7 +36,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.BooksVerticalView
-import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.core.utils.actionCopyToClipboard
@@ -66,23 +63,17 @@ internal fun SourceCatalogScreen(
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
     val focusManager by rememberUpdatedState(newValue = LocalFocusManager.current)
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        snapAnimationSpec = null,
-        flingAnimationSpec = null
-    )
-
     val hasActiveFilters = !state.activeFilters.value.isEmpty
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier,
             topBar = {
                 Column {
                     AnimatedTransition(targetState = state.toolbarMode.value) { target ->
                         when (target) {
-                            ToolbarMode.MAIN -> MediumTopAppBar(
-                                scrollBehavior = scrollBehavior,
-                                colors = TopAppBarDefaults.mediumTopAppBarColors(
+                            ToolbarMode.MAIN -> TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(
                                     containerColor = MaterialTheme.colorScheme.surface,
                                     scrolledContainerColor = MaterialTheme.colorScheme.surface,
                                 ),
@@ -142,7 +133,6 @@ internal fun SourceCatalogScreen(
                                 }
                             )
                             ToolbarMode.SEARCH -> TopAppBarSearch(
-                                scrollBehavior = scrollBehavior,
                                 focusRequester = focusRequester,
                                 searchTextInput = state.searchTextInput.value,
                                 onClose = {
@@ -159,7 +149,6 @@ internal fun SourceCatalogScreen(
                             )
                         }
                     }
-                    CollapsibleDivider(scrollBehavior.state)
                 }
             },
             content = { innerPadding ->

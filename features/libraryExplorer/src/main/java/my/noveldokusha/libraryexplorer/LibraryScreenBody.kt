@@ -44,7 +44,7 @@ import my.noveldokusha.feature.local_database.BookWithContext
 internal fun LibraryScreenBody(
     tabs: List<String>,
     innerPadding: PaddingValues,
-    topAppBarState: TopAppBarState,
+    topAppBarState: TopAppBarState? = null,
     onBookClick: (BookWithContext) -> Unit,
     onBookLongClick: (BookWithContext) -> Unit,
     // Количество колонок из общего AppPreferences

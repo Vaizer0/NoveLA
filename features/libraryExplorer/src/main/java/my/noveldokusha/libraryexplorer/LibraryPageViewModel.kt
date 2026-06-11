@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.Toasty
+import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.SortConfig
@@ -204,6 +205,7 @@ internal class LibraryPageViewModel @Inject constructor(
     }
 
     fun getSourceName(url: String): String {
+        if (url.isLocalUri) return "Local"
         return scraper.getCompatibleSource(url)?.resolveName(context) ?: "Unknown Source"
     }
 }

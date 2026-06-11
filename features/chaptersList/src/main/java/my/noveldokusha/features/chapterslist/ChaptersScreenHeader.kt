@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,17 +97,17 @@ internal fun ChaptersScreenHeader(
                 modifier = Modifier
                     .alpha(0.2f)
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .aspectRatio(1 / 1.45f)
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .aspectRatio(1 / 1.45f)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
                             0f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                            0.6f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                            0.3f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
                             1f to MaterialTheme.colorScheme.background,
                         )
                     )
