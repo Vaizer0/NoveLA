@@ -72,7 +72,7 @@ interface AppDatabase {
         ChapterTranslation::class,
         Extension::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {

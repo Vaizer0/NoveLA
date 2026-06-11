@@ -203,6 +203,10 @@ internal fun databaseMigrations() = arrayOf(
         // Add index on Chapter(bookUrl) for faster queries
         it.execSQL("CREATE INDEX IF NOT EXISTS index_Chapter_bookUrl ON Chapter (bookUrl)")
     },
+    migration(18) {
+        // Index on Book.inLibrary for faster library queries (getBooksInLibraryWithContextFlow)
+        it.execSQL("CREATE INDEX IF NOT EXISTS index_Book_inLibrary ON Book (inLibrary)")
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

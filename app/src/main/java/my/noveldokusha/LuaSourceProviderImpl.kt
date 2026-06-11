@@ -35,10 +35,8 @@ class LuaSourceProviderImpl @Inject constructor(
                 // Первый запуск — грузим, UI подождёт
                 reload()
             } else {
-                // Используем кэш мгновенно
+                // Используем кэш мгновенно — без немедленного reload()
                 _sourcesFlow.value = cached
-                // Асинхронно обновляем Lua-скрипты
-                reload()
             }
             // Подписываемся на изменения установленных плагинов
             extensionRepository.getInstalledExtensionsFlow().collect {
@@ -61,7 +59,15 @@ class LuaSourceProviderImpl @Inject constructor(
             val json = file.readText()
             val type = object : TypeToken<List<SourceCacheEntry>>() {}.type
             val entries: List<SourceCacheEntry> = Gson().fromJson(json, type)
-            entries.map { CachedSource(id = it.id, name = it.name, nameStrId = it.nameStrId, baseUrl = it.baseUrl) }
+            entries.map {
+                CachedSource(
+                    id = it.id,
+                    name = it.name,
+                    nameStrId = it.nameStrId.toIntOrNull() ?: 0,
+                    baseUrl = it.baseUrl,
+                    language = it.language?.let { lang -> my.noveldokusha.core.LanguageCode.entries.find { it.iso639_1 == lang } },
+                )
+            }
         } catch (e: Exception) {
             Timber.e(e, "LuaSourceProvider: failed to load cache")
             emptyList()
@@ -98,7 +104,8 @@ class LuaSourceProviderImpl @Inject constructor(
 private fun SourceInterface.toCacheEntry(): SourceCacheEntry =
     SourceCacheEntry(
         id = id,
-        name = name,
-        nameStrId = nameStrId,
+        name = name ?: "",
+        nameStrId = nameStrId.toString(),
         baseUrl = baseUrl,
+        language = (this as? SourceInterface.Catalog)?.language?.iso639_1,
     )

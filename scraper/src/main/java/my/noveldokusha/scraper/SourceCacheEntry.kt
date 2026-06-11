@@ -6,7 +6,8 @@ package my.noveldokusha.scraper
  */
 data class SourceCacheEntry(
     val id: String,
-    val name: String?,
-    val nameStrId: Int,
+    val name: String,
+    val nameStrId: String,
     val baseUrl: String,
+    val language: String? = null,
 )

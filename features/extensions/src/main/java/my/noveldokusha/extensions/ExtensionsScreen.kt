@@ -66,7 +66,6 @@ import my.noveldokusha.core.Extension
 import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.coreui.components.SlimListItem
-import timber.log.Timber
 import java.util.Locale
 import my.noveldokusha.core.getLanguageDisplayName
 import kotlinx.coroutines.delay
@@ -350,7 +349,6 @@ private fun ExtensionListItem(
                 } else {
                     "v${extension.version}"
                 }
-                Timber.d("Extension UI: ${extension.name}, version: $versionText, isUpdateAvailable: ${extension.isUpdateAvailable}, remoteVersion: ${extension.remoteVersion}")
                 Text(
                     text = versionText,
                     style = MaterialTheme.typography.bodySmall,

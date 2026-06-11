@@ -9,11 +9,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
@@ -80,6 +80,39 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .toState(viewModelScope, emptyMap())
 
+    // Shared base flow — only ONE Room query (JOIN Book+Chapter) instead of 4
+    private val baseLibraryFlow = appRepository.libraryBooks
+        .getBooksInLibraryWithContextFlow
+        .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
+            when (filterRead) {
+                TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
+                TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
+                TernaryState.Inactive -> list
+            }
+        }.combine(_searchQueryFlow) { list, query ->
+            if (query.isBlank()) list
+            else {
+                val q = query.trim()
+                val cache = genreToBookUrls.value
+                list.filter { book ->
+                    book.book.title.contains(q, ignoreCase = true) ||
+                            cache.any { (genre, urls) ->
+                                book.book.url in urls && genre.contains(q, ignoreCase = true)
+                            }
+                }
+            }
+        }.combine(_selectedGenres) { list, selectedGenres ->
+            if (selectedGenres.isEmpty()) list
+            else {
+                val cache = genreToBookUrls.value
+                list.filter { book ->
+                    selectedGenres.all { genre ->
+                        book.book.url in (cache[genre] ?: emptySet())
+                    }
+                }
+            }
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
+
     val listReading by createPageList(isShowCompleted = false)
     val listCompleted by createPageList(isShowCompleted = true)
 
@@ -111,65 +144,30 @@ internal class LibraryPageViewModel @Inject constructor(
     }
 
 
-    private fun createPageList(isShowCompleted: Boolean) = appRepository.libraryBooks
-        .getBooksInLibraryWithContextFlow
+    private fun createPageList(isShowCompleted: Boolean) = baseLibraryFlow
         .map { it.filter { book -> book.book.completed == isShowCompleted } }
-        .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
-            when (filterRead) {
-                TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
-                TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
-                TernaryState.Inactive -> list
-            }
-        }.combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
-            val sortedList = when (sortConfig.option) {
-                LibrarySortOption.TITLE -> list.sortedBy { it.book.title.lowercase() }
-                LibrarySortOption.UNREAD_CHAPTERS -> list.sortedBy { it.chaptersCount - it.chaptersReadCount }
-                LibrarySortOption.LAST_READ -> list.sortedBy { it.book.lastReadEpochTimeMilli }
-                LibrarySortOption.LAST_UPDATE -> list.sortedBy { it.book.lastUpdateEpochTimeMilli }
-                LibrarySortOption.ADDED -> list.sortedBy { it.book.addedToLibraryEpochTimeMilli }
-            }
-
+        .combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
             when (sortConfig.direction) {
-                SortDirection.ASC -> sortedList
-                SortDirection.DESC -> sortedList.reversed()
-            }
-        }.combine(_searchQueryFlow) { list, query ->
-            if (query.isBlank()) list
-            else {
-                val q = query.trim()
-                val cache = genreToBookUrls.value
-                list.filter { book ->
-                    // Совпадение по названию
-                    book.book.title.contains(q, ignoreCase = true) ||
-                            // Совпадение по жанру — ищем в кэше какие жанры содержат bookUrl
-                            cache.any { (genre, urls) ->
-                                book.book.url in urls && genre.contains(q, ignoreCase = true)
-                            }
+                SortDirection.ASC -> when (sortConfig.option) {
+                    LibrarySortOption.TITLE -> list.sortedBy { it.book.title.lowercase() }
+                    LibrarySortOption.UNREAD_CHAPTERS -> list.sortedBy { it.chaptersCount - it.chaptersReadCount }
+                    LibrarySortOption.LAST_READ -> list.sortedBy { it.book.lastReadEpochTimeMilli }
+                    LibrarySortOption.LAST_UPDATE -> list.sortedBy { it.book.lastUpdateEpochTimeMilli }
+                    LibrarySortOption.ADDED -> list.sortedBy { it.book.addedToLibraryEpochTimeMilli }
                 }
-            }
-        }.combine(_selectedGenres) { list, selectedGenres ->
-            if (selectedGenres.isEmpty()) list
-            else {
-                val cache = genreToBookUrls.value
-                list.filter { book ->
-                    selectedGenres.all { genre ->
-                        book.book.url in (cache[genre] ?: emptySet())
-                    }
+                SortDirection.DESC -> when (sortConfig.option) {
+                    LibrarySortOption.TITLE -> list.sortedByDescending { it.book.title.lowercase() }
+                    LibrarySortOption.UNREAD_CHAPTERS -> list.sortedByDescending { it.chaptersCount - it.chaptersReadCount }
+                    LibrarySortOption.LAST_READ -> list.sortedByDescending { it.book.lastReadEpochTimeMilli }
+                    LibrarySortOption.LAST_UPDATE -> list.sortedByDescending { it.book.lastUpdateEpochTimeMilli }
+                    LibrarySortOption.ADDED -> list.sortedByDescending { it.book.addedToLibraryEpochTimeMilli }
                 }
             }
         }
         .toState(viewModelScope, listOf())
 
-    private fun createCountFlow(isShowCompleted: Boolean) = appRepository.libraryBooks
-        .getBooksInLibraryWithContextFlow
-        .map { it.filter { book -> book.book.completed == isShowCompleted } }
-        .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
-            when (filterRead) {
-                TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
-                TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
-                TernaryState.Inactive -> list
-            }
-        }.map { it.size }
+    private fun createCountFlow(isShowCompleted: Boolean) = baseLibraryFlow
+        .map { it.count { book -> book.book.completed == isShowCompleted } }
         .toState(viewModelScope, 0)
 
 

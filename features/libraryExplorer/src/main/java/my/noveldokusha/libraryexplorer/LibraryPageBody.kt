@@ -1,8 +1,5 @@
 package my.noveldokusha.libraryexplorer
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -51,21 +47,15 @@ internal fun LibraryPageBody(
     isSelectionMode: Boolean = false,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
-    // Скролл в начало при изменении списка (фильтры, сортировка, поиск)
-    LaunchedEffect(list) {
-        if (gridState.firstVisibleItemIndex > 0) {
-            gridState.scrollToItem(0)
-        }
-    }
-
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(gridColumns.coerceIn(2, 6)),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 400.dp, start = 4.dp, end = 4.dp)
+        contentPadding = PaddingValues(top = 4.dp, bottom = 100.dp, start = 4.dp, end = 4.dp)
     ) {
         items(
             items = list,
-            key = { it.book.url }
+            key = { it.book.url },
+            contentType = { "book" }
         ) {
             val isSelected = selectedBooks.contains(it.book.url)
             Box {
@@ -100,11 +90,7 @@ internal fun LibraryPageBody(
                 }
 
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
-                AnimatedVisibility(
-                    visible = notReadCount != 0,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
+                if (notReadCount != 0) {
                     Text(
                         text = notReadCount.toString(),
                         color = MaterialTheme.colorScheme.surface,

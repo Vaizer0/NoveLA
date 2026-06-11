@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,10 +36,6 @@ import my.noveldokusha.coreui.AppTestTags
 import my.noveldokusha.coreui.R
 import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.Grey0
-import my.noveldokusha.coreui.theme.Grey25
-import my.noveldokusha.coreui.theme.Grey75
-import my.noveldokusha.coreui.theme.Grey800
-import my.noveldokusha.coreui.theme.Grey1000
 import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
@@ -128,6 +123,7 @@ fun BookImageButtonView(
                 }
             }
             if (bookTitlePosition == BookTitlePosition.Inside) {
+                // Stroke outline for better readability
                 Text(
                     text = title,
                     textAlign = TextAlign.Center,
@@ -145,7 +141,7 @@ fun BookImageButtonView(
                         .padding(horizontal = 8.dp),
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = FontWeight.ExtraBold,
-                        color = Grey800,
+                        color = MaterialTheme.colorScheme.inverseSurface,
                         drawStyle = Stroke(
                             miter = 4f,
                             width = 4f,
@@ -153,6 +149,7 @@ fun BookImageButtonView(
                         )
                     )
                 )
+                // Fill text on top
                 Text(
                     text = title,
                     textAlign = TextAlign.Center,
@@ -163,7 +160,7 @@ fun BookImageButtonView(
                         .padding(horizontal = 8.dp),
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = FontWeight.ExtraBold,
-                        color = Grey25,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
                     )
                 )
             }
