@@ -182,18 +182,6 @@ internal fun SourceCatalogScreen(
             }
         )
 
-        if (state.fetchIterator.state == IteratorState.LOADING && state.fetchIterator.list.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
-
         if (state.isFilterSheetOpen.value && state.hasFilters) {
             FilterBottomSheet(
                 filterList    = state.filterList.value,

@@ -407,14 +407,19 @@ private fun ExtensionListItem(
         trailingContent = {
             when {
                 extension.isInstalling -> {
-                    MyButton(
-                        text = "Installing...",
+                    FilledTonalButton(
                         onClick = {},
                         enabled = false,
-                        modifier = Modifier.height(40.dp),
-                        backgroundColor = MaterialTheme.colorScheme.surface,
-                        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                    )
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("Installing...")
+                    }
                 }
                 extension.isUpdateAvailable -> {
                     FilledTonalButton(
