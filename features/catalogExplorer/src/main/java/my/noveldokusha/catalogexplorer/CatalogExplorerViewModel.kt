@@ -1,7 +1,6 @@
 package my.noveldokusha.catalogexplorer
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,6 +50,10 @@ internal class CatalogExplorerViewModel @Inject constructor(
     ))
     val uiState: StateFlow<CatalogExplorerUiState> = _uiState.asStateFlow()
 
+    // Reactive list of available languages derived from sourcesList
+    private val _availableLanguages = MutableStateFlow<List<SourceLanguage>>(emptyList())
+    val availableLanguages: StateFlow<List<SourceLanguage>> = _availableLanguages.asStateFlow()
+
     init {
         // Sync with preferences and repository
         viewModelScope.launch {
@@ -69,6 +72,16 @@ internal class CatalogExplorerViewModel @Inject constructor(
                     _uiState.update { it.copy(selectedLanguages = langs) }
                 }
             }
+            // Recompute availableLanguages whenever sourcesList changes
+            launch {
+                _uiState.collectLatest { state ->
+                    _availableLanguages.value = state.sourcesList
+                        .mapNotNull { it.catalog.languageTag }
+                        .distinct()
+                        .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
+                        .sortedBy { it.name }
+                }
+            }
         }
     }
 
@@ -78,15 +91,6 @@ internal class CatalogExplorerViewModel @Inject constructor(
     val sourcesList get() = _uiState.value.sourcesList
     val sortOrder get() = _uiState.value.sortOrder
     val selectedLanguages get() = _uiState.value.selectedLanguages
-    
-    // Список языков динамически из реальных источников — реактивно через derivedStateOf
-    val availableLanguages: List<SourceLanguage> by derivedStateOf {
-        _uiState.value.sourcesList
-            .mapNotNull { it.catalog.languageTag }
-            .distinct()
-            .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
-            .sortedBy { it.name }
-    }
 
     fun setShowAddByUrlDialog(show: Boolean) {
         _uiState.update { it.copy(showAddByUrlDialog = show) }

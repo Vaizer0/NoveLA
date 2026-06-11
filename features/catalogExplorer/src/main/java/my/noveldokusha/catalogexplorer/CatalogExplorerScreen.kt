@@ -72,6 +72,7 @@ fun CatalogExplorerScreen(
 ) {
     val viewModel: CatalogExplorerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val availableLanguages by viewModel.availableLanguages.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var languagesOptionsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -123,7 +124,7 @@ fun CatalogExplorerScreen(
                                 onGlobalSearchClick = onGlobalSearchClick,
                                 languagesOptionsExpanded = languagesOptionsExpanded,
                                 onToggleLanguagesOptions = { languagesOptionsExpanded = !languagesOptionsExpanded },
-                                availableLanguages = viewModel.availableLanguages,
+                                availableLanguages = availableLanguages,
                                 selectedLanguages = uiState.selectedLanguages,
                                 onLanguageToggle = viewModel::toggleSourceLanguage,
                                 onClearAll = viewModel::clearLanguageFilter,
