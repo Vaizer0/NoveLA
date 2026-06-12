@@ -24,16 +24,16 @@ import my.noveldokusha.core.appPreferences.SortConfig
 import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.coreui.components.ToolbarMode
-import my.noveldokusha.coreui.components.BookSettingsDialogState
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.feature.local_database.BookWithContext
+import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
 import javax.inject.Inject
 
 @Immutable
 internal data class LibraryUiState(
-    val bookSettingsDialogState: BookSettingsDialogState = BookSettingsDialogState.Hide,
+    val bookActionsSheetBook: Book? = null,
     val showAddByUrlDialog: Boolean = false,
     val isSelectionMode: Boolean = false,
     val selectedBooks: Set<String> = emptySet(),
@@ -89,10 +89,6 @@ internal class LibraryViewModel @Inject constructor(
             }
         }
         
-        // Restore from state handle
-        stateHandle.get<BookSettingsDialogState>("bookSettingsDialogState")?.let { restored ->
-            _uiState.update { it.copy(bookSettingsDialogState = restored) }
-        }
         stateHandle.get<Boolean>("showBottomSheet")?.let { restored ->
             _uiState.update { it.copy(showBottomSheet = restored) }
         }
@@ -102,8 +98,8 @@ internal class LibraryViewModel @Inject constructor(
         _uiState.update { it.copy(toolbarMode = mode) }
     }
 
-    fun setBookSettingsDialogState(state: BookSettingsDialogState) {
-        _uiState.update { it.copy(bookSettingsDialogState = state) }
+    fun setBookActionsSheetBook(book: Book?) {
+        _uiState.update { it.copy(bookActionsSheetBook = book) }
     }
 
     fun setShowAddByUrlDialog(show: Boolean) {
@@ -185,10 +181,8 @@ internal class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
             appRepository.libraryBooks.update(book.copy(inLibrary = false))
-            if (_uiState.value.bookSettingsDialogState is BookSettingsDialogState.Show &&
-                (_uiState.value.bookSettingsDialogState as BookSettingsDialogState.Show).book.url == bookUrl
-            ) {
-                _uiState.update { it.copy(bookSettingsDialogState = BookSettingsDialogState.Hide) }
+            if (_uiState.value.bookActionsSheetBook?.url == bookUrl) {
+                _uiState.update { it.copy(bookActionsSheetBook = null) }
             }
         }
     }
@@ -211,12 +205,8 @@ internal class LibraryViewModel @Inject constructor(
 
     fun updateBookCategory(bookUrl: String, category: String) {
         viewModelScope.launch {
-            appRepository.libraryBooks.updateCategory(bookUrl, category)
             val isCompleted = category == "Completed"
-            val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
-            if (book.completed != isCompleted) {
-                appRepository.libraryBooks.update(book.copy(completed = isCompleted))
-            }
+            appRepository.libraryBooks.updateCategoryAndCompleted(bookUrl, category, isCompleted)
         }
     }
 

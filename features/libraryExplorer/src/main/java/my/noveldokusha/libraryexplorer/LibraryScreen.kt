@@ -25,8 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldokusha.coreui.components.BookSettingsDialog
-import my.noveldokusha.coreui.components.BookSettingsDialogState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
@@ -78,7 +76,7 @@ fun LibraryScreen(
     val handleBookLongClick = remember(uiState.isSelectionMode) {
         { book: BookWithContext ->
             if (!uiState.isSelectionMode) {
-                libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Show(book.book))
+                libraryModel.setBookActionsSheetBook(book.book)
             } else {
                 libraryModel.toggleBookSelection(book.book.url)
             }
@@ -205,19 +203,16 @@ fun LibraryScreen(
         }
     )
 
-    when (val state = uiState.bookSettingsDialogState) {
-        is BookSettingsDialogState.Show -> {
-            BookSettingsDialog(
-                book = state.book,
-                onDismiss = { libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Hide) },
-                onDeleteNovel = { libraryModel.deleteBook(state.book.url) },
-                onCategorySelected = { libraryModel.updateBookCategory(state.book.url, it) },
-                categories = libraryModel.getCategories(),
-                onMarkAllChaptersRead = { libraryModel.markAllChaptersAsRead(state.book.url) },
-                onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(state.book.url) }
-            )
-        }
-        else -> Unit
+    uiState.bookActionsSheetBook?.let { book ->
+        BookActionsBottomSheet(
+            book = book,
+            onDismiss = { libraryModel.setBookActionsSheetBook(null) },
+            onDeleteNovel = { libraryModel.deleteBook(book.url) },
+            onCategorySelected = { libraryModel.updateBookCategory(book.url, it) },
+            categories = libraryModel.getCategories(),
+            onMarkAllChaptersRead = { libraryModel.markAllChaptersAsRead(book.url) },
+            onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(book.url) }
+        )
     }
 
     LibraryBottomSheet(
