@@ -26,8 +26,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -102,6 +104,7 @@ internal fun LibraryScreenBody(
                         }
                         Tab(
                             selected = selected,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                             text = {
                                 Text(
                                     text = "$text ($count)",

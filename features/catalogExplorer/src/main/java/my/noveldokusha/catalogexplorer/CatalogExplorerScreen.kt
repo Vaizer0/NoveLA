@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -138,7 +139,7 @@ fun CatalogExplorerScreen(
                     }
                 )
 
-                // Tab Row - Browse and Extensions tabs with library-style design
+                // Tab Row - Browse and Extensions tabs (same style as Library)
                 TabRow(
                     selectedTabIndex = uiState.selectedTabIndex,
                     containerColor = MaterialTheme.colorScheme.background,
@@ -148,8 +149,8 @@ fun CatalogExplorerScreen(
                             modifier = Modifier
                                 .tabIndicatorOffset(tabPos)
                                 .fillMaxSize()
-                                .padding(6.dp)
-                                .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
+                                .padding(4.dp)
+                                .background(MaterialTheme.colorScheme.surfaceContainer, my.noveldokusha.coreui.theme.shapes.small)
                                 .zIndex(-1f)
                         )
                     },
@@ -159,21 +160,25 @@ fun CatalogExplorerScreen(
                     val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
                     Tab(
                         selected = uiState.selectedTabIndex == 0,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                         onClick = { viewModel.setTabIndex(0) },
                         text = {
                             Text(
                                 text = "Browse",
-                                color = if (uiState.selectedTabIndex == 0) selectedColor else unselectedColor
+                                color = if (uiState.selectedTabIndex == 0) selectedColor else unselectedColor,
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     )
                     Tab(
                         selected = uiState.selectedTabIndex == 1,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
                         onClick = { viewModel.setTabIndex(1) },
                         text = {
                             Text(
                                 text = "Extensions",
-                                color = if (uiState.selectedTabIndex == 1) selectedColor else unselectedColor
+                                color = if (uiState.selectedTabIndex == 1) selectedColor else unselectedColor,
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     )
