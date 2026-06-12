@@ -56,6 +56,8 @@ fun BookImageButtonView(
     interactionSource: MutableInteractionSource = MutableInteractionSource(),
     sourceIcon: (@Composable () -> Unit)? = null,
     sourceText: String? = null,
+    topLeftBadge: (@Composable () -> Unit)? = null,
+    topRightBadge: (@Composable () -> Unit)? = null,
     forceCache: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = { },
@@ -104,8 +106,18 @@ fun BookImageButtonView(
                 )
             }
 
-            // Source icon in top-right corner (only if no source text)
-            if (sourceText == null) {
+            // Top-left badge (count, etc.)
+            topLeftBadge?.let {
+                Box(modifier = Modifier.align(Alignment.TopStart)) { it() }
+            }
+
+            // Top-right badge (priority over sourceText)
+            if (sourceText == null) topRightBadge?.let {
+                Box(modifier = Modifier.align(Alignment.TopEnd)) { it() }
+            }
+
+            // Source icon in top-right corner (only if no source text or badge)
+            if (sourceText == null && topRightBadge == null) {
                 sourceIcon?.let {
                     Box(
                         modifier = Modifier

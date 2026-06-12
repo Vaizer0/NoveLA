@@ -59,6 +59,7 @@ internal fun LibraryPageBody(
         ) {
             val isSelected = selectedBooks.contains(it.book.url)
             Box {
+                val notReadCount = it.chaptersCount - it.chaptersReadCount
                 BookImageButtonView(
                     title = it.book.title,
                     coverImageModel = rememberResolvedBookImagePath(
@@ -68,6 +69,42 @@ internal fun LibraryPageBody(
                     onClick = { onClick(it) },
                     onLongClick = { onLongClick(it) },
                     sourceText = getSourceName(it.book.url),
+                    topLeftBadge = if (notReadCount != 0) {
+                        {
+                            Text(
+                                text = notReadCount.toString(),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                        shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 12.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    fontSize = 8.sp
+                                )
+                            )
+                        }
+                    } else null,
+                    topRightBadge = if (it.book.url.isLocalUri) {
+                        {
+                            Text(
+                                text = stringResource(R.string.local),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                        shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    fontSize = 8.sp
+                                )
+                            )
+                        }
+                    } else null,
                     forceCache = true
                 )
 
@@ -88,36 +125,6 @@ internal fun LibraryPageBody(
                         )
                     }
                 }
-
-                val notReadCount = it.chaptersCount - it.chaptersReadCount
-                if (notReadCount != 0) {
-                    Text(
-                        text = notReadCount.toString(),
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f),
-                                shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 12.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp
-                    )
-                }
-
-                if (it.book.url.isLocalUri) Text(
-                    text = stringResource(R.string.local),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                            shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    fontSize = 10.sp
-                )
             }
         }
     }
