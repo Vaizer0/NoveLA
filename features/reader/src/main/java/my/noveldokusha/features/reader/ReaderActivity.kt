@@ -612,7 +612,10 @@ class ReaderActivity : BaseActivity() {
                     viewModel.chaptersLoader.tryLoadNext()
                 }
                 if (isTop) {
-                    viewModel.chaptersLoader.tryLoadPrevious()
+                    val firstItem = viewModel.items.getOrNull(0)
+                    if (firstItem != null && firstItem !is ReaderItem.BookStart) {
+                        viewModel.chaptersLoader.tryLoadPrevious()
+                    }
                 }
             }
             ReaderState.LOADING -> run {}
