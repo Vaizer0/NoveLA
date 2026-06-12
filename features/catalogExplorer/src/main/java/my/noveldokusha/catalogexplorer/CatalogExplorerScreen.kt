@@ -1,37 +1,26 @@
 package my.noveldokusha.catalogexplorer
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLink
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
-import my.noveldokusha.coreui.components.MyButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -40,31 +29,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldokusha.coreui.components.CollapsibleDivider
-
+import my.noveldokusha.coreui.components.ChipOption
+import my.noveldokusha.coreui.components.LanguageFilterChips
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.catalogexplorer.AddByUrlDialog
 import my.noveldokusha.extensions.ExtensionsScreen
 import my.noveldokusha.extensions.ExtensionsManagerViewModel
-import my.noveldokusha.extensions.ExtensionsLanguageFilterDropDown
 import my.noveldokusha.extensions.ExtensionsScreenEvent
-import my.noveldokusha.core.appPreferences.SortOrder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,8 +56,12 @@ fun CatalogExplorerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val availableLanguages by viewModel.availableLanguages.collectAsStateWithLifecycle()
 
+    val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
+    val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
+
     val context = LocalContext.current
-    var languagesOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+    var extensionsChipsVisible by rememberSaveable { mutableStateOf(false) }
+
     val onDatabaseClick = remember(context) {
         { database: my.noveldokusha.scraper.DatabaseInterface ->
             navigationRouteViewModel.databaseSearch(
@@ -123,18 +108,14 @@ fun CatalogExplorerScreen(
                             BrowseTabActions(
                                 onAddByUrlClick = { viewModel.setShowAddByUrlDialog(true) },
                                 onGlobalSearchClick = onGlobalSearchClick,
-                                languagesOptionsExpanded = languagesOptionsExpanded,
-                                onToggleLanguagesOptions = { languagesOptionsExpanded = !languagesOptionsExpanded },
-                                availableLanguages = availableLanguages,
-                                selectedLanguages = uiState.selectedLanguages,
-                                onLanguageToggle = viewModel::toggleSourceLanguage,
-                                onClearAll = viewModel::clearLanguageFilter,
-                                sortOrder = uiState.sortOrder,
-                                onSortOrderChange = viewModel::onSortOrderChange,
-                                onDismissLanguagesOptions = { languagesOptionsExpanded = false }
+                                onToggleLanguageChips = viewModel::toggleLanguageChips,
                             )
                         } else {
-                            ExtensionsTabActions()
+                            ExtensionsTabActions(
+                                onRefresh = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnRefresh) },
+                                onShowRepositoryDialog = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) },
+                                onToggleLanguageChips = { extensionsChipsVisible = !extensionsChipsVisible },
+                            )
                         }
                     }
                 )
@@ -183,6 +164,25 @@ fun CatalogExplorerScreen(
                         }
                     )
                 }
+
+                // Language filter chips row
+                if (uiState.selectedTabIndex == 0) {
+                    LanguageFilterChips(
+                        selected = uiState.selectedLanguages,
+                        all = availableLanguages.map { ChipOption(id = it.code, label = it.name) },
+                        onToggle = viewModel::toggleSourceLanguage,
+                        onClearAll = viewModel::clearLanguageFilter,
+                        visible = uiState.showLanguageChips,
+                    )
+                } else {
+                    LanguageFilterChips(
+                        selected = extensionsState.selectedLanguages,
+                        all = extensionsState.availableLanguages.map { ChipOption(id = it.code, label = it.name, count = it.count) },
+                        onToggle = { code -> extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterToggle(code)) },
+                        onClearAll = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterClear(null)) },
+                        visible = extensionsChipsVisible,
+                    )
+                }
             }
         },
         content = { innerPadding ->
@@ -202,7 +202,6 @@ fun CatalogExplorerScreen(
                         innerPadding = innerPadding,
                         databasesList = uiState.databaseList,
                         sourcesList = filteredSources,
-                        sortOrder = uiState.sortOrder,
                         onDatabaseClick = onDatabaseClick,
                         onSourceClick = onSourceClick,
                         onSourceSetPinned = viewModel::onSourceSetPinned
@@ -241,15 +240,7 @@ fun CatalogExplorerScreen(
 private fun BrowseTabActions(
     onAddByUrlClick: () -> Unit,
     onGlobalSearchClick: () -> Unit,
-    languagesOptionsExpanded: Boolean,
-    onToggleLanguagesOptions: () -> Unit,
-    availableLanguages: List<SourceLanguage>,
-    selectedLanguages: Set<String>,
-    onLanguageToggle: (String) -> Unit,
-    onClearAll: () -> Unit,
-    sortOrder: SortOrder,
-    onSortOrderChange: (SortOrder) -> Unit,
-    onDismissLanguagesOptions: () -> Unit
+    onToggleLanguageChips: () -> Unit,
 ) {
     Row {
         IconButton(onClick = onAddByUrlClick) {
@@ -265,43 +256,27 @@ private fun BrowseTabActions(
             )
         }
 
-        // Language filter button
-        Box {
-            IconButton(onClick = onToggleLanguagesOptions) {
-                Icon(
-                    painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                    contentDescription = "Languages",
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            // Show dropdown for Browse tab
-            LanguagesDropDown(
-                expanded = languagesOptionsExpanded,
-                onDismiss = onDismissLanguagesOptions,
-                availableLanguages = availableLanguages,
-                selectedLanguages = selectedLanguages,
-                onLanguageToggle = onLanguageToggle,
-                onClearAll = onClearAll,
-                sortOrder = sortOrder,
-                onSortOrderChange = onSortOrderChange
+        // Language filter toggle button
+        IconButton(onClick = onToggleLanguageChips) {
+            Icon(
+                painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
+                contentDescription = "Languages",
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
     }
 }
 
 @Composable
-private fun ExtensionsTabActions() {
-    val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
-    val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
-    var settingsExpanded by remember { mutableStateOf(false) }
-
+private fun ExtensionsTabActions(
+    onRefresh: () -> Unit,
+    onShowRepositoryDialog: () -> Unit,
+    onToggleLanguageChips: () -> Unit,
+) {
     Row {
         // Refresh button
-        IconButton(
-            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnRefresh) }
-        ) {
+        IconButton(onClick = onRefresh) {
             Icon(
                 imageVector = Icons.Default.Refresh,
                 contentDescription = "Refresh",
@@ -310,9 +285,7 @@ private fun ExtensionsTabActions() {
         }
 
         // Repository settings button
-        IconButton(
-            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) }
-        ) {
+        IconButton(onClick = onShowRepositoryDialog) {
             Icon(
                 imageVector = Icons.Default.Settings,
                 contentDescription = "Repository Settings",
@@ -320,117 +293,14 @@ private fun ExtensionsTabActions() {
             )
         }
 
-        // Sort and language filter combined
-        Box {
-            IconButton(
-                onClick = { settingsExpanded = !settingsExpanded }
-            ) {
-                Icon(
-                    painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                    contentDescription = "Sort and Filter",
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            // Combined dropdown with same design as LanguagesDropDown
-            DropdownMenu(
-                expanded = settingsExpanded,
-                onDismissRequest = { settingsExpanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .widthIn(min = 128.dp)
-                ) {
-                    // Sort section
-                    Text(
-                        text = "Sort Order",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    OutlinedCard {
-                        MyButton(
-                            text = "Name (A-Z)",
-                            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.ASCENDING)) },
-                            selected = extensionsState.sortOrder == SortOrder.ASCENDING,
-                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                            borderWidth = Dp.Unspecified,
-                            textAlign = TextAlign.Center,
-                            outerPadding = 0.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(0.dp),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                        )
-                        MyButton(
-                            text = "Name (Z-A)",
-                            onClick = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnSortOrderChange(SortOrder.DESCENDING)) },
-                            selected = extensionsState.sortOrder == SortOrder.DESCENDING,
-                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                            borderWidth = Dp.Unspecified,
-                            textAlign = TextAlign.Center,
-                            outerPadding = 0.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(0.dp),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                        )
-                    }
-
-                    // Language filter section
-                    Text(
-                        text = "Language Filter",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    OutlinedCard {
-                        // All languages option
-                        MyButton(
-                            text = "All Languages",
-                            onClick = {
-                                extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterClear(null))
-                                settingsExpanded = false
-                            },
-                            selected = extensionsState.selectedLanguages.isEmpty(),
-                            selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                            borderWidth = Dp.Unspecified,
-                            textAlign = TextAlign.Center,
-                            outerPadding = 0.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(0.dp),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                        )
-
-                        // Available languages
-                        extensionsState.availableLanguages.forEach { language ->
-                            MyButton(
-                                text = language.name,
-                                onClick = {
-                                    extensionsViewModel.onEvent(ExtensionsScreenEvent.OnLanguageFilterToggle(language.code))
-                                },
-                                selected = language.code in extensionsState.selectedLanguages,
-                                selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                                borderWidth = Dp.Unspecified,
-                                textAlign = TextAlign.Center,
-                                outerPadding = 0.dp,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(0.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
+        // Language filter toggle button
+        IconButton(onClick = onToggleLanguageChips) {
+            Icon(
+                painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
+                contentDescription = "Languages",
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

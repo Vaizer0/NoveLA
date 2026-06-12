@@ -63,7 +63,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.skydoves.landscapist.glide.GlideImage
 import my.noveldokusha.core.Extension
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.coreui.components.SlimListItem
 import java.util.Locale
@@ -150,14 +149,8 @@ private fun UnifiedExtensionsScreen(
                     state.availableExtensions.filter { it.language in state.selectedLanguages }
                 }
 
-                // Sort extensions based on sort order
-                val sortedExtensions = when (state.sortOrder) {
-                    SortOrder.ASCENDING -> filteredExtensions.sortedBy { it.name.lowercase() }
-                    SortOrder.DESCENDING -> filteredExtensions.sortedByDescending { it.name.lowercase() }
-                }
-
-                val installedExtensions = sortedExtensions.filter { it.isInstalled }
-                val availableExtensions = sortedExtensions.filter { !it.isInstalled }
+                val installedExtensions = filteredExtensions.filter { it.isInstalled }
+                val availableExtensions = filteredExtensions.filter { !it.isInstalled }
 
                 if (filteredExtensions.isEmpty()) {
                     Box(
@@ -470,75 +463,4 @@ private fun ExtensionListItem(
             }
         }
     )
-}
-
-@Composable
-fun ExtensionsLanguageFilterDropDown(
-    expanded: Boolean,
-    availableLanguages: List<ExtensionLanguage>,
-    selectedLanguages: Set<String>,
-    onLanguageToggle: (String) -> Unit,
-    onClearAll: () -> Unit,
-    onRefresh: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .padding(8.dp)
-                .widthIn(min = 128.dp)
-        ) {
-            Text(text = "Select Languages")
-
-            FilledTonalButton(
-                onClick = {
-                    onRefresh()
-                    onDismiss()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("Refresh Plugins")
-            }
-
-            OutlinedCard {
-                availableLanguages.forEach { language ->
-                    MyButton(
-                        text = "${language.name} (${language.count})",
-                        onClick = { onLanguageToggle(language.code) },
-                        selected = selectedLanguages.contains(language.code),
-                        selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                        borderWidth = Dp.Unspecified,
-                        textAlign = TextAlign.Center,
-                        outerPadding = 0.dp,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(0.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                    )
-                }
-            }
-
-            if (selectedLanguages.isNotEmpty()) {
-                TextButton(
-                    onClick = onClearAll,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Clear Selection")
-                }
-            }
-        }
-    }
 }

@@ -112,8 +112,6 @@
     <string name="updating_book_info">Обновление информации о книге</string>
     <string name="backup_options">Опции резервной копии</string>
     <string name="save_images">Сохранить изображения</string>
-    <string name="settings_translations_models_main_description">Загрузите модели желаемых языков для перевода романов на лету</string>
-    <string name="settings_title_translation_models">Модели живого перевода</string>
     <string name="translating_from_lang_a_to_lang_b">Перевод с %1$s на %2$s</string>
     <string name="language_source_empty_text">Источник</string>
     <string name="language_target_empty_text">Цель</string>
@@ -154,7 +152,6 @@
     <string name="save_current_voice">Сохранить текущий голос</string>
     <string name="save_current_voice_parameters">Сохранить текущий голос и параметры</string>
     <string name="layout">Макет</string>
-    <string name="open_translation_models_manager">Открыть менеджер моделей перевода</string>
     <string name="new_chapters">Новые главы</string>
     <string name="update_error">Ошибка обновления</string>
     <string name="media_control_previous">предыдущий</string>

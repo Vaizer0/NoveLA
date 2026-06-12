@@ -3,19 +3,16 @@ package my.noveldokusha.extensions
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import my.noveldokusha.core.Extension
-import my.noveldokusha.core.appPreferences.SortOrder
-
 @Immutable
 data class ExtensionsScreenState(
     val extensions: List<Extension> = emptyList(),
     val availableExtensions: List<ExtensionInfo> = emptyList(),
-    val availableLanguages: List<ExtensionLanguage> = emptyList(), // Dynamic list of available languages
-    val selectedLanguages: Set<String> = emptySet(), // empty = show all, specific language codes = filter by languages
+    val availableLanguages: List<ExtensionLanguage> = emptyList(),
+    val selectedLanguages: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val showRepositoryDialog: Boolean = false,
     val repositoryUrl: String = "https://raw.githubusercontent.com/HnDK0/external-sources/refs/heads/main/index.yaml",
-    val sortOrder: SortOrder = SortOrder.ASCENDING
 )
 
 @Immutable
@@ -58,5 +55,4 @@ sealed interface ExtensionsScreenEvent {
     data object OnBackPressed : ExtensionsScreenEvent // New event for back navigation
     data class OnExtensionInstall(val extensionId: String) : ExtensionsScreenEvent
     data class OnExtensionUninstallById(val extensionId: String) : ExtensionsScreenEvent
-    data class OnSortOrderChange(val sortOrder: SortOrder) : ExtensionsScreenEvent
 }

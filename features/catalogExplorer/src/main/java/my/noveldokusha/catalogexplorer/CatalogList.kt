@@ -25,14 +25,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ImageViewGlide
 import my.noveldokusha.coreui.components.SlimListItem
-
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.data.CatalogItem
@@ -41,7 +38,6 @@ import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.scraper.displayName
 import my.noveldokusha.scraper.fixtures.fixturesCatalogList
 import my.noveldokusha.scraper.fixtures.fixturesDatabaseList
-import java.util.Locale
 import my.noveldokusha.core.getLanguageDisplayName
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,38 +48,10 @@ internal fun CatalogList(
     innerPadding: PaddingValues,
     databasesList: List<DatabaseInterface>,
     sourcesList: List<CatalogItem>,
-    sortOrder: SortOrder?,
     onDatabaseClick: (DatabaseInterface) -> Unit,
     onSourceClick: (SourceInterface.Catalog) -> Unit,
     onSourceSetPinned: (id: String, pinned: Boolean) -> Unit,
 ) {
-    // displayName() is @Composable (uses stringResource for static sources).
-    // We replicate the same logic here: Lua sources have a non-null `name`, static ones have `nameStrId`.
-    val displayNames: Map<String, String> = sourcesList.associate { item ->
-        val catalog = item.catalog
-        item.catalog.id to (
-                catalog.name?.takeIf { it.isNotBlank() }
-                    ?: stringResource(id = catalog.nameStrId)
-                )
-    }
-
-    val sortedSourcesList = if (sortOrder != null) {
-        val nameComparator = if (sortOrder == SortOrder.DESCENDING)
-            compareByDescending<CatalogItem> { displayNames[it.catalog.id]?.lowercase() ?: it.catalog.id }
-        else
-            compareBy<CatalogItem> { displayNames[it.catalog.id]?.lowercase() ?: it.catalog.id }
-
-        sourcesList.sortedWith(
-            compareBy<CatalogItem> {
-                if (it.catalog.id == "local_source") 0 else 1
-            }.thenBy {
-                if (it.pinned) 0 else 1
-            }.then(nameComparator)
-        )
-    } else {
-        sourcesList
-    }
-
     LazyColumn(
         contentPadding = PaddingValues(bottom = 300.dp),
         modifier = Modifier.padding(paddingValues = innerPadding)
@@ -141,7 +109,7 @@ internal fun CatalogList(
         }
 
         items(
-            items = sortedSourcesList,
+            items = sourcesList,
             key = { it.catalog.id }
         ) {
             SlimListItem(
@@ -150,8 +118,6 @@ internal fun CatalogList(
                     .animateItem(),
                 headlineContent = {
                     Text(
-                        // displayName() безопасно возвращает name для Lua источников
-                        // или stringResource(nameStrId) для статических
                         text = it.catalog.displayName(),
                         style = MaterialTheme.typography.titleSmall,
                     )
@@ -231,7 +197,6 @@ private fun PreviewView() {
             innerPadding = PaddingValues(),
             databasesList = fixturesDatabaseList(),
             sourcesList = catalogItemsList,
-            sortOrder = SortOrder.ASCENDING,
             onDatabaseClick = {},
             onSourceClick = {},
             onSourceSetPinned = { _, _ -> },
