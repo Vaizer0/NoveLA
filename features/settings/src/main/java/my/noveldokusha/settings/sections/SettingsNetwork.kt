@@ -31,7 +31,7 @@ import my.noveldokusha.settings.R
 
 @Composable
 internal fun SettingsNetwork(
-    @Suppress("UNUSED_PARAMETER") scraperUserAgent: MutableState<String>,
+    scraperUserAgent: MutableState<String>,
     cloudflareBypassEnabled: MutableState<Boolean>,
     @Suppress("UNUSED_PARAMETER") cloudflareChallengeTimeoutSeconds: MutableState<Int>,
     massAddDelayMs: State<Long>,
@@ -46,10 +46,9 @@ internal fun SettingsNetwork(
             color = colorAccent()
         )
 
-        // User-Agent setting - DISABLED (not used yet)
-        /*
+        // User-Agent setting
         var showUserAgentDialog by remember { mutableStateOf(false) }
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.scraper_user_agent))
             },
@@ -62,11 +61,12 @@ internal fun SettingsNetwork(
             leadingContent = {
                 Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
-            modifier = Modifier.clickable { showUserAgentDialog = true }
+            onClick = { showUserAgentDialog = true }
         )
 
         if (showUserAgentDialog) {
             var tempUserAgent by remember { mutableStateOf(scraperUserAgent.value) }
+            val hasInvalidChars = tempUserAgent.isNotBlank() && tempUserAgent.any { it.code > 127 }
             Dialog(onDismissRequest = { showUserAgentDialog = false }) {
                 androidx.compose.material3.Card {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -82,10 +82,20 @@ internal fun SettingsNetwork(
                             onValueChange = { tempUserAgent = it },
                             label = { Text(stringResource(R.string.user_agent), color = MaterialTheme.colorScheme.onSurface) },
                             modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text(stringResource(R.string.leave_empty_for_default)) },
+                            isError = hasInvalidChars,
+                            supportingText = {
+                                if (hasInvalidChars) {
+                                    Text(
+                                        text = stringResource(R.string.user_agent_invalid_chars),
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                } else {
+                                    Text(stringResource(R.string.leave_empty_for_default))
+                                }
+                            },
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                focusedBorderColor = if (hasInvalidChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                unfocusedBorderColor = if (hasInvalidChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                 cursorColor = MaterialTheme.colorScheme.onSurface
                             )
                         )
@@ -109,6 +119,7 @@ internal fun SettingsNetwork(
                                     scraperUserAgent.value = tempUserAgent.trim()
                                     showUserAgentDialog = false
                                 },
+                                enabled = !hasInvalidChars,
                                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.onSurface
                                 )
@@ -120,7 +131,6 @@ internal fun SettingsNetwork(
                 }
             }
         }
-        */
 
         // Cloudflare bypass toggle
         SlimListItem(

@@ -117,6 +117,17 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
         }
+
+        // Show notification when User-Agent setting changes
+        viewModelScope.launch {
+            var previousValue = state.scraperUserAgent.value
+            appPreferences.SCRAPER_USER_AGENT.flow().collect { newValue ->
+                if (newValue != previousValue) {
+                    toasty.show(R.string.user_agent_restart_required)
+                    previousValue = newValue
+                }
+            }
+        }
     }
 
     fun cleanDatabase() = appScope.launch(Dispatchers.IO) {

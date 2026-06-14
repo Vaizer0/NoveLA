@@ -316,10 +316,12 @@
     <string name="user_agent">User-Agent</string>
     <string name="leave_empty_for_default">Leave empty for default</string>
     <string name="default_user_agent">Default User-Agent</string>
+    <string name="user_agent_invalid_chars">User-Agent must contain only Latin characters (A-Z, 0-9, symbols)</string>
 
     <string name="cloudflare_bypass">Cloudflare bypass</string>
     <string name="cloudflare_bypass_description">Enable automatic Cloudflare challenge bypass</string>
     <string name="cloudflare_bypass_restart_required">Cloudflare bypass setting will be applied after app restart</string>
+    <string name="user_agent_restart_required">User-Agent changed. Restart the app to apply.</string>
     <string name="cloudflare_challenge_timeout">Challenge timeout</string>
     <string name="timeout_seconds">Timeout (seconds)</string>
     <string name="seconds_format">%d seconds</string>
