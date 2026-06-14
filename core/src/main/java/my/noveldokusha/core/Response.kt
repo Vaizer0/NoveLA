@@ -93,9 +93,6 @@ fun isValidChapterContent(text: String): Boolean {
         "but-captcha",
         "cf-browser-verification",
         "challenge-running",
-        "just a moment",
-        "checking your browser",
-        "enable cookies",
         "captcha-container",
         "hcaptcha",
     )

@@ -518,15 +518,28 @@ internal class ReaderChaptersLoader(
                         android.util.Log.w(TAG, "Chapter content invalid (possibly Cloudflare or Login), stopping auto-loading. Preview: ${res.data.take(160)}")
                     }
                     maintainPosition {
-                        remove(itemProgressBar)
-                        remove(itemTitle)
-                        items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
+                        // 1. Сначала подготавливаем сообщения
                         val preview = res.data.take(400).ifBlank { "<empty body>" }
                         val userMessage = if (java.util.Locale.getDefault().language == "ru")
-                            "Ошибка контента: защита Cloudflare, пустая глава atau diperlukan login. Попробуйте открыть в браузере.\n\nКод: ${preview.take(100)}..."
+                            "Ошибка контента: защита Cloudflare, пустая глава или требуется login. Попробуйте открыть в браузере.\n\nКод: ${preview.take(100)}..."
                         else
                             "Content error: Cloudflare, empty chapter, or login required. Try opening in browser.\n\nCode snippet: ${preview.take(100)}..."
-                        insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
+
+                        // 2. Атомарно модифицируем список данных, не дёргая адаптер на каждое удаление
+                        // (Предполагается, что remove/insert у тебя работают напрямую с внутренним массивом)
+                        val updatedItems = items.toMutableList().apply {
+                            remove(itemProgressBar)
+                            remove(itemTitle)
+                            removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
+                            // Добавляем ошибку вместо удаленного прогресс-бара
+                            add(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
+                        }
+
+                        // 3. Перезаписываем список в адаптере целиком
+                        items.clear()
+                        items.addAll(updatedItems)
+
+                        // 4. Только теперь уведомляем UI (внутри или сразу после этого блока)
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
                     return@_addChapterInternal false
