@@ -28,7 +28,7 @@
 
 <br/>
 
-<img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/banner.jpg" alt="NoveLA — Android web novel reader with built-in translator, 25+ sources, TTS, and EPUB support" width="100%"/>
+<img src="preview.png" alt="NoveLA — Android web novel reader with built-in translator, 25+ sources, TTS, and EPUB support" width="100%"/>
 
 <br/><br/>
 
@@ -129,27 +129,6 @@ NoveLA supports Lua-based external plugin repos — community-maintained sources
 Official repo: [`HnDK0/external-sources`](https://github.com/HnDK0/external-sources)
 
 To add: **Finder → Extensions → Settings (gear icon)** → paste the repo URL.
-
----
-
-## 🖼 Screenshots
-
-<div align="center">
-<table>
-  <tr>
-    <td align="center"><b>Library</b><br/><img src="screenshots/library_white.jpg" width="180" alt="NoveLA library — reading list with novel covers"/></td>
-    <td align="center"><b>Catalog</b><br/><img src="screenshots/catalog.jpg" width="180" alt="NoveLA catalog — browse novels from NovelFire"/></td>
-    <td align="center"><b>Book Info</b><br/><img src="screenshots/book_info.jpg" width="180" alt="NoveLA book info — Shadow Slave with chapter list"/></td>
-    <td align="center"><b>Chapter</b><br/><img src="screenshots/chapter.jpg" width="180" alt="NoveLA reader — clean chapter view"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Translation</b><br/><img src="screenshots/translate_chapter.jpg" width="180" alt="NoveLA — chapter translated to Russian via Google Translate"/></td>
-    <td align="center"><b>Translate Settings</b><br/><img src="screenshots/translate_settings.jpg" width="180" alt="NoveLA translation settings — Google, Gemini, OpenAI backends"/></td>
-    <td align="center"><b>Add by URL</b><br/><img src="screenshots/add_novel_by_URLs.jpg" width="180" alt="NoveLA — add novel by URL dialog"/></td>
-    <td align="center"><b>Plugins</b><br/><img src="screenshots/plugins_repo.jpg" width="180" alt="NoveLA plugin repository — install community sources"/></td>
-  </tr>
-</table>
-</div>
 
 ---
 
