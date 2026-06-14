@@ -112,8 +112,6 @@
     <string name="updating_book_info">Обновление информации о книге</string>
     <string name="backup_options">Опции резервной копии</string>
     <string name="save_images">Сохранить изображения</string>
-    <string name="settings_translations_models_main_description">Загрузите модели желаемых языков для перевода романов на лету</string>
-    <string name="settings_title_translation_models">Модели живого перевода</string>
     <string name="translating_from_lang_a_to_lang_b">Перевод с %1$s на %2$s</string>
     <string name="language_source_empty_text">Источник</string>
     <string name="language_target_empty_text">Цель</string>
@@ -154,9 +152,9 @@
     <string name="save_current_voice">Сохранить текущий голос</string>
     <string name="save_current_voice_parameters">Сохранить текущий голос и параметры</string>
     <string name="layout">Макет</string>
-    <string name="open_translation_models_manager">Открыть менеджер моделей перевода</string>
     <string name="new_chapters">Новые главы</string>
     <string name="update_error">Ошибка обновления</string>
+    <string name="update_cancelled">Обновление отменено</string>
     <string name="media_control_previous">предыдущий</string>
     <string name="media_control_rewind">перемотка назад</string>
     <string name="media_control_play">воспроизведение</string>
@@ -271,9 +269,11 @@
     <string name="user_agent">User-Agent</string>
     <string name="leave_empty_for_default">Оставить пустым для значения по умолчанию</string>
     <string name="default_user_agent">User-Agent по умолчанию</string>
+    <string name="user_agent_invalid_chars">User-Agent должен содержать только латинские символы (A-Z, 0-9, символы)</string>
     <string name="cloudflare_bypass">Обход Cloudflare</string>
     <string name="cloudflare_bypass_description">Включить автоматическое решение вызовов Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">Настройка обхода Cloudflare будет применена после перезапуска приложения</string>
+    <string name="user_agent_restart_required">User-Agent изменён. Перезапустите приложение для применения.</string>
     <string name="regex_cleanup">Очистка текста с помощью регулярных выражений</string>
     <string name="regex_cleanup_manage_rules">Управление правилами регулярных выражений</string>
     <string name="regex_cleanup_manage_description">Настроить шаблоны регулярных выражений для очистки текста в главах</string>
@@ -293,6 +293,18 @@
     <string name="no_regex_rules_yet">Правила регулярных выражений еще не добавлены.\nДобавьте первое правило!</string>
     <string name="delete_rule">Удалить правило</string>
     <string name="delete_rule_confirmation">Вы уверены, что хотите удалить это правило регулярного выражения?\n\nШаблон: %s</string>
+    <string name="regex_cleanup_title">Регулярки</string>
+    <string name="search_patterns_hint">Поиск по шаблону…</string>
+    <string name="description">Описание</string>
+    <string name="description_hint">Введите описание…</string>
+    <string name="preview">Предпросмотр</string>
+    <string name="preview_label">Результат:</string>
+    <string name="new_rule">Новое правило</string>
+    <string name="rule_disabled">Выкл.</string>
+    <string name="rule_enabled">Вкл.</string>
+    <string name="preview_sample_text">Глава 1 [реклама] продолжение</string>
+    <string name="invalid_regex_pattern_with">Неверное регулярное выражение: %s</string>
+    <string name="enabled">Включено</string>
     <string name="wtr_lab_no_translation_hint">Перевод отключён — контент будет загружаться на английском (или китайском в RAW-режиме).</string>
     <string name="scroll_to_last_read_chapter">Последняя читаемая</string>
     <string name="go_to_chapter">Перейти к главе</string>
@@ -323,8 +335,14 @@
     <string name="clear_translation">Сбросить перевод</string>
     <string name="apply">Применить</string>
 
-
-
+    <!-- Category filter strings -->
+    <string name="all_categories">Все</string>
+    <string name="categories">Категории</string>
+    <string name="move_selected_to_category">Переместить выбранные в категорию</string>
+    <string name="create_category">Создать категорию</string>
+    <string name="delete_category">Удалить категорию</string>
+    <string name="category_delete_confirm">Удалить категорию \"%s\"? Книги будут перемещены в \"Читаю\".</string>
+    <string name="enter_category_name">Введите название категории</string>
     <!-- ── OpenAI-compatible провайдер ──────────────────────────────────────── -->
     <string name="provider_openai">OpenAI-совместимый API</string>
     <string name="provider_openai_description">OpenAI, OpenRouter, Mistral, DeepSeek, Ollama и др.</string>
@@ -362,4 +380,6 @@
     <string name="llm_max_output_tokens_tip">Жёсткий лимит длины ответа. 0 = модель сама определяет оптимальный размер (рекомендуется). Указывайте значение только если нужно ограничить расходы для многословных моделей.</string>
 
     <string name="llm_tokens_auto">Авто</string>
+    <string name="dark_mode">Тёмный режим</string>
+    <string name="color_scheme">Цветовая схема</string>
 </resources>

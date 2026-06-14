@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import my.noveldokusha.coreui.theme.ColorAccent
+
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.selectableMinHeight
 
@@ -39,17 +39,19 @@ fun MySlider(
     onValueChange: (Float) -> Unit,
     text: String,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: () -> Unit = {},
 ) {
     MySlider(
         value = value,
         valueRange = valueRange,
         onValueChange = onValueChange,
         modifier = modifier,
+        onValueChangeFinished = onValueChangeFinished,
     ) {
         Text(
             text = text,
             modifier = Modifier.align(Alignment.Center),
-            color = MaterialTheme.colorScheme.onPrimary
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -60,6 +62,7 @@ fun MySlider(
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: () -> Unit = {},
     overlayContent: @Composable BoxScope.() -> Unit,
 ) {
     Box(modifier) {
@@ -67,6 +70,7 @@ fun MySlider(
             range = valueRange,
             value = value,
             onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
         )
         overlayContent()
     }
@@ -77,9 +81,10 @@ private fun MySliderBase(
     range: ClosedFloatingPointRange<Float>,
     value: Float,
     onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit = {},
     height: Dp = selectableMinHeight,
     backgroundColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    trackColor: Color = ColorAccent,
+    trackColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     val currentValue by rememberUpdatedState(newValue = value)
     BoxWithConstraints {
@@ -119,7 +124,8 @@ private fun MySliderBase(
                         if (newValue != currentValue) {
                             onValueChange(newValue)
                         }
-                    }
+                    },
+                    onDragStopped = { onValueChangeFinished() }
                 )
         ) {
             Box(

@@ -58,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -88,7 +90,6 @@ import my.noveldokusha.coreui.components.MySlider
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.composableActions.debouncedAction
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
@@ -124,50 +125,63 @@ internal fun VoiceReaderSettingDialog(
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
         ) {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(16.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(8.dp)
             ) {
+                var localPitch by remember { mutableFloatStateOf(state.voicePitch.value) }
+                var localSpeed by remember { mutableFloatStateOf(state.voiceSpeed.value) }
+                LaunchedEffect(state.voicePitch.value) { localPitch = state.voicePitch.value }
+                LaunchedEffect(state.voiceSpeed.value) { localSpeed = state.voiceSpeed.value }
+
                 MySlider(
-                    value = state.voicePitch.value,
+                    value = localPitch,
                     valueRange = 0.1f..5f,
-                    onValueChange = state.setVoicePitch,
-                    text = stringResource(R.string.voice_pitch) + ": %.2f".format(state.voicePitch.value),
+                    onValueChange = { localPitch = it },
+                    text = stringResource(R.string.voice_pitch) + ": %.2f".format(localPitch),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    onValueChangeFinished = { state.setVoicePitch(localPitch) },
                 )
                 MySlider(
-                    value = state.voiceSpeed.value,
+                    value = localSpeed,
                     valueRange = 0.1f..5f,
-                    onValueChange = state.setVoiceSpeed,
-                    text = stringResource(R.string.voice_speed) + ": %.2f".format(state.voiceSpeed.value),
+                    onValueChange = { localSpeed = it },
+                    text = stringResource(R.string.voice_speed) + ": %.2f".format(localSpeed),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     AssistChip(
                         label = { Text(text = stringResource(id = R.string.start_here)) },
                         onClick = debouncedAction { state.playFirstVisibleItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null) },
+                        leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null, Modifier.size(14.dp)) },
+                        modifier = Modifier.heightIn(min = 30.dp),
                         colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                     AssistChip(
                         label = { Text(text = stringResource(id = R.string.focus)) },
                         onClick = debouncedAction { state.scrollToActiveItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null) },
+                        leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null, Modifier.size(14.dp)) },
+                        modifier = Modifier.heightIn(min = 30.dp),
                         colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                     AssistChip(
                         label = { Text(text = stringResource(id = R.string.voices)) },
                         onClick = { openVoicesDialog = !openVoicesDialog },
-                        leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null) },
+                        leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
+                        modifier = Modifier.heightIn(min = 30.dp),
                         colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                     AssistChip(
@@ -177,10 +191,11 @@ internal fun VoiceReaderSettingDialog(
                                 it.value = !it.value
                             }
                         },
-                        leadingIcon = { Icon(Icons.Filled.Bookmarks, null) },
+                        leadingIcon = { Icon(Icons.Filled.Bookmarks, null, Modifier.size(14.dp)) },
+                        modifier = Modifier.heightIn(min = 30.dp),
                         colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                     Box {
@@ -227,7 +242,7 @@ internal fun VoiceReaderSettingDialog(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
@@ -241,7 +256,7 @@ internal fun VoiceReaderSettingDialog(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(34.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
@@ -249,7 +264,7 @@ internal fun VoiceReaderSettingDialog(
                         AnimatedContent(
                             targetState = state.isPlaying.value,
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(48.dp)
                                 .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
                             label = ""
                         ) { target ->
@@ -277,7 +292,7 @@ internal fun VoiceReaderSettingDialog(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(34.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
@@ -291,7 +306,7 @@ internal fun VoiceReaderSettingDialog(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
@@ -379,10 +394,10 @@ private fun VoiceSelectorDialog(
             state = listState,
             modifier = Modifier
                 .shadow(10.dp, MaterialTheme.shapes.large)
-                .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
         ) {
             stickyHeader {
-                Surface(color = MaterialTheme.colorApp.tintedSurface) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     Column {
                         MyOutlinedTextField(
                             value = inputTextFilter.value,
@@ -419,8 +434,8 @@ private fun VoiceSelectorDialog(
                     modifier = Modifier
                         .heightIn(min = 54.dp)
                         .background(
-                            if (selected) MaterialTheme.colorApp.tintedSelectedSurface
-                            else MaterialTheme.colorScheme.primary
+                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else Color.Transparent
                         )
                         .clickable(enabled = !selected) { setVoice(voice.id) }
                         .padding(horizontal = 16.dp)
@@ -440,7 +455,7 @@ private fun VoiceSelectorDialog(
                             Icon(
                                 imageVector = if (yay) Icons.Filled.StarRate else Icons.Outlined.StarBorder,
                                 contentDescription = null,
-                                tint = if (yay) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onPrimary,
+                                tint = if (yay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
                                 modifier = Modifier.size(10.dp)
                             )
                         }
@@ -453,6 +468,7 @@ private fun VoiceSelectorDialog(
                     ) {
                         Text(
                             text = voice.id,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier
                                 .background(
                                     MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium
@@ -465,6 +481,7 @@ private fun VoiceSelectorDialog(
                         if (voice.needsInternet) {
                             Text(
                                 text = stringResource(R.string.needs_internet),
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier
                                     .background(
                                         MaterialTheme.colorScheme.primary,
@@ -507,7 +524,7 @@ private fun DropdownCustomSavedVoices(
                 Icon(
                     Icons.Outlined.Save,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             modifier = Modifier.clickable { expandedAddNextEntry = true }

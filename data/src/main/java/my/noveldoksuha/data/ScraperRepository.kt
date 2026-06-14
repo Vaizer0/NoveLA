@@ -3,6 +3,7 @@ package my.noveldokusha.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import my.noveldokusha.core.LanguageCode
@@ -32,6 +33,7 @@ class ScraperRepository @Inject constructor(
                 .map { CatalogItem(catalog = it, pinned = it.id in pinnedIds) }
                 .sortedByDescending { it.pinned }
         }.flowOn(Dispatchers.Default)
+            .distinctUntilChanged()
 
     fun sourcesLanguagesListFlow(): Flow<List<LanguageItem>> =
         combine(

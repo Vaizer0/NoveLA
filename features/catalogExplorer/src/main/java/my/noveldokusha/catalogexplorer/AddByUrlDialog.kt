@@ -11,11 +11,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,7 +29,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.R
 import my.noveldokusha.scraper.Scraper
 
@@ -105,37 +108,55 @@ fun AddByUrlDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    val validationResult = validateUrls(urlsText, scraper)
-                    when (validationResult) {
-                        is ValidationResult.Success -> {
-                            onConfirm(validationResult.urls)
-                            onDismiss()
-                        }
-                        is ValidationResult.Error -> {
-                            errorMessage = validationResult.message
-                        }
-                    }
-                },
-                enabled = urlsText.isNotBlank()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    stringResource(R.string.add),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                )
+                FilledTonalButton(
+                    onClick = onDismiss,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                FilledTonalButton(
+                    onClick = {
+                        val validationResult = validateUrls(urlsText, scraper)
+                        when (validationResult) {
+                            is ValidationResult.Success -> {
+                                onConfirm(validationResult.urls)
+                                onDismiss()
+                            }
+                            is ValidationResult.Error -> {
+                                errorMessage = validationResult.message
+                            }
+                        }
+                    },
+                    enabled = urlsText.isNotBlank(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = stringResource(R.string.add),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    stringResource(R.string.cancel),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                )
-            }
-        }
+        dismissButton = {}
     )
 }
 

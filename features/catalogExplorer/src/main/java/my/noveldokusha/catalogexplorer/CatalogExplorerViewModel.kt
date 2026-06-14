@@ -1,7 +1,6 @@
 package my.noveldokusha.catalogexplorer
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -21,7 +20,6 @@ import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.data.CatalogItem
@@ -32,9 +30,9 @@ internal data class CatalogExplorerUiState(
     val selectedTabIndex: Int = 0,
     val databaseList: List<my.noveldokusha.scraper.DatabaseInterface> = emptyList(),
     val sourcesList: List<CatalogItem> = emptyList(),
-    val sortOrder: SortOrder = SortOrder.ASCENDING,
     val selectedLanguages: Set<String> = emptySet(),
     val showAddByUrlDialog: Boolean = false,
+    val showLanguageChips: Boolean = false,
 )
 
 @HiltViewModel
@@ -51,6 +49,10 @@ internal class CatalogExplorerViewModel @Inject constructor(
     ))
     val uiState: StateFlow<CatalogExplorerUiState> = _uiState.asStateFlow()
 
+    // Reactive list of available languages derived from sourcesList
+    private val _availableLanguages = MutableStateFlow<List<SourceLanguage>>(emptyList())
+    val availableLanguages: StateFlow<List<SourceLanguage>> = _availableLanguages.asStateFlow()
+
     init {
         // Sync with preferences and repository
         viewModelScope.launch {
@@ -60,13 +62,18 @@ internal class CatalogExplorerViewModel @Inject constructor(
                 }
             }
             launch {
-                appPreferences.SOURCE_SORT_ORDER.flow().collect { order ->
-                    _uiState.update { it.copy(sortOrder = order) }
-                }
-            }
-            launch {
                 appPreferences.SOURCES_LANGUAGES_ISO639_1.flow().collect { langs ->
                     _uiState.update { it.copy(selectedLanguages = langs) }
+                }
+            }
+            // Recompute availableLanguages whenever sourcesList changes
+            launch {
+                _uiState.collectLatest { state ->
+                    _availableLanguages.value = state.sourcesList
+                        .mapNotNull { it.catalog.languageTag }
+                        .distinct()
+                        .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
+                        .sortedBy { it.name }
                 }
             }
         }
@@ -76,17 +83,7 @@ internal class CatalogExplorerViewModel @Inject constructor(
     val selectedTabIndex get() = _uiState.value.selectedTabIndex
     val databaseList get() = _uiState.value.databaseList
     val sourcesList get() = _uiState.value.sourcesList
-    val sortOrder get() = _uiState.value.sortOrder
     val selectedLanguages get() = _uiState.value.selectedLanguages
-    
-    // Список языков динамически из реальных источников — реактивно через derivedStateOf
-    val availableLanguages: List<SourceLanguage> by derivedStateOf {
-        _uiState.value.sourcesList
-            .mapNotNull { it.catalog.languageTag }
-            .distinct()
-            .map { code -> SourceLanguage(code, getLanguageDisplayName(code)) }
-            .sortedBy { it.name }
-    }
 
     fun setShowAddByUrlDialog(show: Boolean) {
         _uiState.update { it.copy(showAddByUrlDialog = show) }
@@ -94,6 +91,10 @@ internal class CatalogExplorerViewModel @Inject constructor(
 
     fun setTabIndex(index: Int) {
         _uiState.update { it.copy(selectedTabIndex = index) }
+    }
+
+    fun toggleLanguageChips() {
+        _uiState.update { it.copy(showLanguageChips = !it.showLanguageChips) }
     }
 
     fun toggleSourceLanguage(code: String) {
@@ -112,11 +113,6 @@ internal class CatalogExplorerViewModel @Inject constructor(
         appPreferences.FINDER_SOURCES_PINNED.value = appPreferences.FINDER_SOURCES_PINNED
             .value.let { if (pinned) it.plus(id) else it.minus(id) }
     }
-
-    fun onSortOrderChange(order: SortOrder) {
-        appPreferences.SOURCE_SORT_ORDER.value = order
-    }
-
 
     fun addNovelsByUrls(urls: List<String>) {
         viewModelScope.launch {

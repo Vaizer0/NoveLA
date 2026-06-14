@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 
 interface ThemeProvider {
 
-    fun followSystem(stateCoroutineScope: CoroutineScope): State<Boolean>
+    fun currentAppTheme(stateCoroutineScope: CoroutineScope): State<AppTheme>
 
-    fun currentTheme(stateCoroutineScope: CoroutineScope): State<Themes>
+    fun currentDarkMode(stateCoroutineScope: CoroutineScope): State<DarkMode>
 }

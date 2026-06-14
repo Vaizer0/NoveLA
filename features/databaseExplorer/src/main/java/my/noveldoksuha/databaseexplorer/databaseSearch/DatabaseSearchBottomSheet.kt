@@ -28,15 +28,14 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.next
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.databaseexplorer.R
 
 
@@ -75,7 +74,7 @@ internal fun DatabaseSearchBottomSheet(
                     content = {
                         Text(
                             text = stringResource(R.string.clear_filters),
-                            color = ColorAccent
+                            color = MaterialTheme.colorScheme.primary
                         )
                     },
                     modifier = Modifier.weight(1f)
@@ -102,9 +101,19 @@ internal fun DatabaseSearchBottomSheet(
                     label = { Text(text = genreItem.genre) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = when (genreItem.state) {
-                            ToggleableState.On -> MaterialTheme.colorApp.checkboxPositive
-                            ToggleableState.Off -> MaterialTheme.colorApp.checkboxNeutral
-                            ToggleableState.Indeterminate -> MaterialTheme.colorApp.checkboxNegative
+                            ToggleableState.On -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
+                            ToggleableState.Indeterminate -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                            else -> Color.Transparent
+                        },
+                        selectedLabelColor = when (genreItem.state) {
+                            ToggleableState.On -> MaterialTheme.colorScheme.tertiary
+                            ToggleableState.Indeterminate -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        selectedLeadingIconColor = when (genreItem.state) {
+                            ToggleableState.On -> MaterialTheme.colorScheme.tertiary
+                            ToggleableState.Indeterminate -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     ),
                     leadingIcon = {

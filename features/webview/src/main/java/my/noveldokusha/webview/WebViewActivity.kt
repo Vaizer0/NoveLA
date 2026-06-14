@@ -15,8 +15,9 @@ import kotlinx.coroutines.delay
 import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.coreui.theme.ThemeProvider
 import my.noveldokusha.core.Toasty
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.interceptors.CloudflareBypassSignal
-import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
+import my.noveldokusha.network.interceptors.resolveUserAgent
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -24,6 +25,7 @@ class WebViewActivity : ComponentActivity() {
 
     @Inject lateinit var toasty: Toasty
     @Inject lateinit var themeProvider: ThemeProvider
+    @Inject lateinit var appPreferences: AppPreferences
 
     private var currentTargetUrl: String = ""
     private var isBypassMode: Boolean = false
@@ -39,7 +41,7 @@ class WebViewActivity : ComponentActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                userAgentString = GLOBAL_USER_AGENT
+                userAgentString = resolveUserAgent(appPreferences)
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             }
         }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.selects.select
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.domain.CloudfareVerificationBypassFailedException
 import my.noveldokusha.core.domain.WebViewCookieManagerInitializationFailedException
 import okhttp3.Interceptor
@@ -87,7 +88,8 @@ object CloudflareBypassSignal {
 }
 
 internal class CloudFareVerificationInterceptor(
-    @ApplicationContext private val appContext: Context
+    @ApplicationContext private val appContext: Context,
+    private val appPreferences: AppPreferences
 ) : Interceptor {
 
     private val lock = ReentrantLock()
@@ -140,7 +142,7 @@ internal class CloudFareVerificationInterceptor(
             val host = bufferedRequest.url.host
             val cookieManager = CookieManager.getInstance()
                 ?: throw WebViewCookieManagerInitializationFailedException()
-            val userAgent = GLOBAL_USER_AGENT
+            val userAgent = resolveUserAgent(appPreferences)
 
             val existingCookie = cookieManager.getCookie(siteUrl) ?: ""
             if (resolvedDomains.contains(host) || existingCookie.contains("cf_clearance")) {
@@ -286,7 +288,7 @@ internal class CloudFareVerificationInterceptor(
             webView.settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                userAgentString = GLOBAL_USER_AGENT
+                userAgentString = resolveUserAgent(appPreferences)
                 cacheMode = WebSettings.LOAD_NO_CACHE
             }
             webView.webViewClient = object : WebViewClient() {

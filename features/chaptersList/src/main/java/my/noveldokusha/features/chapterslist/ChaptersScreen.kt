@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,10 +62,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import my.nanihadesuka.compose.InternalLazyColumnScrollbar
-import my.noveldokusha.coreui.theme.ColorAccent
-import my.noveldokusha.coreui.theme.ColorLike
-import my.noveldokusha.coreui.theme.ColorNotice
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.isAtTop
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.chapterslist.R
@@ -120,7 +117,7 @@ internal fun ChaptersScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.primary,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val isAtTop by lazyListState.isAtTop(threshold = 40.dp)
             val alpha by animateFloatAsState(targetValue = if (isAtTop) 0f else 1f, label = "")
@@ -129,7 +126,7 @@ internal fun ChaptersScreen(
                 label = ""
             )
             val titleColor by animateColorAsState(
-                targetValue = MaterialTheme.colorScheme.onPrimary.copy(alpha = alpha),
+                targetValue = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
                 label = ""
             )
             Surface(color = backgroundColor) {
@@ -159,14 +156,14 @@ internal fun ChaptersScreen(
                                 Icon(
                                     if (state.book.value.inLibrary) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                                     stringResource(R.string.open_the_web_view),
-                                    tint = ColorLike
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                             }
                             IconButton(onClick = { showBottomSheet = !showBottomSheet }) {
                                 Icon(
                                     Icons.Filled.FilterList,
                                     stringResource(R.string.filter),
-                                    tint = ColorNotice
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                             IconButton(onClick = { showDropDown = !showDropDown }) {
@@ -197,17 +194,20 @@ internal fun ChaptersScreen(
             }
             AnimatedVisibility(
                 visible = state.isInSelectionMode.value,
-                enter = expandVertically(initialHeight = { it / 2 }, expandFrom = Alignment.Top)
-                        + fadeIn(),
-                exit = shrinkVertically(targetHeight = { it / 2 }, shrinkTowards = Alignment.Top)
-                        + fadeOut(),
+                enter = expandVertically(initialHeight = { it / 8 }, expandFrom = Alignment.Top)
+                        + fadeIn(animationSpec = tween(120)),
+                exit = shrinkVertically(targetHeight = { it / 8 }, shrinkTowards = Alignment.Top)
+                        + fadeOut(animationSpec = tween(120)),
             ) {
-                Surface(color = MaterialTheme.colorApp.tintedSurface) {
+                Surface(color = MaterialTheme.colorScheme.primary) {
                     TopAppBar(
                         scrollBehavior = scrollBehavior,
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorApp.tintedSurface,
-                            scrolledContainerColor = MaterialTheme.colorApp.tintedSurface,
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            scrolledContainerColor = MaterialTheme.colorScheme.primary,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                         ),
                         title = {
                             Text(
@@ -269,12 +269,13 @@ internal fun ChaptersScreen(
         bottomBar = {
             AnimatedVisibility(
                 visible = state.isInSelectionMode.value,
-                enter = expandVertically(initialHeight = { it / 2 }) + fadeIn(),
-                exit = shrinkVertically(targetHeight = { it / 2 }) + fadeOut(),
+                enter = expandVertically(initialHeight = { it / 8 }) + fadeIn(animationSpec = tween(120)),
+                exit = shrinkVertically(targetHeight = { it / 8 }) + fadeOut(animationSpec = tween(120)),
             ) {
                 BottomAppBar(
                     modifier = Modifier.clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                    containerColor = MaterialTheme.colorApp.tintedSurface,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.Center,
@@ -332,7 +333,8 @@ internal fun ChaptersScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                containerColor = ColorAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 onClick = onResumeReading
             ) {
                 Row(
@@ -343,7 +345,7 @@ internal fun ChaptersScreen(
                     Icon(
                         Icons.Filled.PlayArrow,
                         contentDescription = stringResource(id = R.string.open_last_read_chapter),
-                        tint = Color.White
+
                     )
                     AnimatedVisibility(visible = lazyListState.isAtTop(threshold = 100.dp).value) {
                         Text(

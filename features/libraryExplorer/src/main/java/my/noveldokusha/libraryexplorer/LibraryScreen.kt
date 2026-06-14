@@ -6,7 +6,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,22 +24,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import my.noveldokusha.coreui.components.BookSettingsDialog
-import my.noveldokusha.coreui.components.BookSettingsDialogState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.filled.MoreVert
+import my.noveldokusha.coreui.components.AnimatedTransition
+import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
-import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.feature.local_database.BookWithContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun LibraryScreen(
     navigationRouteViewModel: NavigationRouteViewModel = viewModel()
@@ -45,12 +52,14 @@ fun LibraryScreen(
     val uiState by libraryModel.uiState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val showDropdownMenu = remember { mutableStateOf(false) }
     val lastClickTime = remember { mutableStateOf(0L) }
 
-    // Читаем количество колонок из общего preference
     val gridColumns = uiState.gridColumns
+
+    // Dialog states
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
+    var showMoveToCategoryDialog by remember { mutableStateOf(false) }
 
     val handleBookClick = remember(context, uiState.isSelectionMode) {
         { book: BookWithContext ->
@@ -75,27 +84,19 @@ fun LibraryScreen(
     val handleBookLongClick = remember(uiState.isSelectionMode) {
         { book: BookWithContext ->
             if (!uiState.isSelectionMode) {
-                libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Show(book.book))
+                libraryModel.setBookActionsSheetBook(book.book)
             } else {
                 libraryModel.toggleBookSelection(book.book.url)
             }
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        snapAnimationSpec = null,
-        flingAnimationSpec = null
-    )
-
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             if (uiState.isSelectionMode) {
                 TopAppBar(
-                    scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     ),
                     title = {
                         Text(
@@ -106,11 +107,23 @@ fun LibraryScreen(
                     actions = {
                         IconButton(
                             onClick = {
-                                val currentBooks = pageViewModel.listReading
+                                val currentBooks = pageViewModel.filteredList.value
                                 libraryModel.selectAllBooks(currentBooks)
                             }
                         ) {
                             Icon(Icons.Filled.SelectAll, stringResource(R.string.select_all))
+                        }
+                        IconButton(
+                            onClick = { showMoveToCategoryDialog = true },
+                            enabled = uiState.selectedBooks.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Filled.DriveFileRenameOutline,
+                                stringResource(R.string.move_to),
+                                tint = if (uiState.selectedBooks.isNotEmpty())
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
                         }
                         IconButton(
                             onClick = { libraryModel.deleteSelectedBooks() },
@@ -130,93 +143,147 @@ fun LibraryScreen(
                     }
                 )
             } else {
-                TopAppBarSearch(
-                    focusRequester = focusRequester,
-                    searchTextInput = pageViewModel.searchQuery,
-                    onSearchTextChange = { pageViewModel.updateSearchQuery(it) },
-                    onTextDone = { },
-                    onClose = {
-                        pageViewModel.updateSearchQuery("")
-                        focusRequester.freeFocus()
-                    },
-                    placeholderText = stringResource(R.string.search_here),
-                    scrollBehavior = scrollBehavior,
-                    modifier = Modifier,
-                    showMenuButton = true,
-                    onMenuClick = { showDropdownMenu.value = true },
-                    dropdownContent = {
-                        androidx.compose.material3.DropdownMenuItem(
-                            leadingIcon = {
-                                androidx.compose.material3.Icon(
-                                    Icons.AutoMirrored.Filled.Sort,
-                                    stringResource(R.string.filter)
-                                )
-                            },
-                            text = { androidx.compose.material3.Text(stringResource(R.string.filter)) },
-                            onClick = {
-                                showDropdownMenu.value = false
-                                libraryModel.setShowBottomSheet(true)
-                            }
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            leadingIcon = {
-                                androidx.compose.material3.Icon(
-                                    Icons.Filled.Checklist,
-                                    stringResource(R.string.select_books)
-                                )
-                            },
-                            text = { androidx.compose.material3.Text(stringResource(R.string.select_books)) },
-                            onClick = {
-                                showDropdownMenu.value = false
-                                libraryModel.toggleSelectionMode()
-                            }
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            leadingIcon = {
-                                androidx.compose.material3.Icon(
-                                    Icons.Filled.FileOpen,
-                                    stringResource(id = R.string.import_epub)
-                                )
-                            },
-                            text = { androidx.compose.material3.Text(stringResource(id = R.string.import_epub)) },
-                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
-                        )
+                Column(
+                    modifier = Modifier.background(MaterialTheme.colorScheme.background)
+                ) {
+                    AnimatedTransition(targetState = uiState.toolbarMode) { target ->
+                        when (target) {
+                            ToolbarMode.MAIN -> TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                                title = {
+                                    Text(
+                                        text = "NoveLA",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                },
+                                actions = {
+                                    if (pageViewModel.isUpdating) {
+                                        IconButton(onClick = { pageViewModel.cancelLibraryUpdates() }) {
+                                            Icon(
+                                                Icons.Filled.Close,
+                                                stringResource(R.string.cancel),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                    IconButton(onClick = { libraryModel.setToolbarMode(ToolbarMode.SEARCH) }) {
+                                        Icon(Icons.Filled.Search, stringResource(R.string.search_for_title))
+                                    }
+                                    IconButton(onClick = { libraryModel.setShowBottomSheet(true) }) {
+                                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
+                                    }
+                                    // Category toggle button (like language filter in Finder)
+                                    IconButton(
+                                        onClick = { libraryModel.toggleShowCategories() }
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.FolderOpen,
+                                            stringResource(R.string.categories),
+                                            tint = if (uiState.showCategories)
+                                                MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    IconButton(onClick = { showDropdownMenu.value = true }) {
+                                        Icon(Icons.Filled.MoreVert, stringResource(R.string.options_panel))
+                                    }
+                                    androidx.compose.material3.DropdownMenu(
+                                        expanded = showDropdownMenu.value,
+                                        onDismissRequest = { showDropdownMenu.value = false }
+                                    ) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.Checklist, stringResource(R.string.select_books))
+                                            },
+                                            text = { Text(stringResource(R.string.select_books)) },
+                                            onClick = {
+                                                showDropdownMenu.value = false
+                                                libraryModel.toggleSelectionMode()
+                                            }
+                                        )
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.FileOpen, stringResource(id = R.string.import_epub))
+                                            },
+                                            text = { Text(stringResource(id = R.string.import_epub)) },
+                                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
+                                        )
+                                    }
+                                }
+                            )
+                            ToolbarMode.SEARCH -> TopAppBarSearch(
+                                focusRequester = remember { androidx.compose.ui.focus.FocusRequester() },
+                                searchTextInput = pageViewModel.searchQuery,
+                                onClose = {
+                                    libraryModel.setToolbarMode(ToolbarMode.MAIN)
+                                    pageViewModel.updateSearchQuery("")
+                                },
+                                onTextDone = { },
+                                placeholderText = stringResource(R.string.search_here),
+                                onSearchTextChange = { pageViewModel.updateSearchQuery(it) }
+                            )
+                        }
                     }
-                )
+                }
             }
         },
         content = { innerPadding ->
             LibraryScreenBody(
-                tabs = listOf("Reading", "Completed"),
                 innerPadding = innerPadding,
-                topAppBarState = scrollBehavior.state,
+                topAppBarState = null,
                 onBookClick = handleBookClick,
                 onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
                 selectedBooks = uiState.selectedBooks,
-                isSelectionMode = uiState.isSelectionMode
+                isSelectionMode = uiState.isSelectionMode,
+                showCategories = uiState.showCategories,
+                customCategories = uiState.customCategories,
+                onCreateCategory = { showCreateCategoryDialog = true },
+                onDeleteCategory = { libraryModel.removeCategory(it) }
             )
         }
     )
 
-    // Handle book settings dialog
-    when (val state = uiState.bookSettingsDialogState) {
-        is BookSettingsDialogState.Show -> {
-            BookSettingsDialog(
-                book = state.book,
-                onDismiss = { libraryModel.setBookSettingsDialogState(BookSettingsDialogState.Hide) },
-                onDeleteNovel = { libraryModel.deleteBook(state.book.url) },
-                onCategorySelected = { libraryModel.updateBookCategory(state.book.url, it) },
-                categories = libraryModel.getCategories(),
-                onMarkAllChaptersRead = { libraryModel.markAllChaptersAsRead(state.book.url) },
-                onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(state.book.url) }
-            )
-        }
-        else -> Unit
+    uiState.bookActionsSheetBook?.let { book ->
+        BookActionsBottomSheet(
+            book = book,
+            onDismiss = { libraryModel.setBookActionsSheetBook(null) },
+            onDeleteNovel = { libraryModel.deleteBook(book.url) },
+            onCategorySelected = { libraryModel.updateBookCategory(book.url, it) },
+            categories = libraryModel.getCategories(),
+            onMarkAllChaptersRead = { libraryModel.markAllChaptersAsRead(book.url) },
+            onMarkAllChaptersUnread = { libraryModel.markAllChaptersAsUnread(book.url) }
+        )
     }
 
     LibraryBottomSheet(
         visible = uiState.showBottomSheet,
         onDismiss = { libraryModel.setShowBottomSheet(false) }
     )
+
+    // Create category dialog
+    if (showCreateCategoryDialog) {
+        CreateCategoryDialog(
+            onDismiss = { showCreateCategoryDialog = false },
+            onCreate = { name ->
+                libraryModel.addCategory(name)
+                showCreateCategoryDialog = false
+            }
+        )
+    }
+
+    // Move to category dialog (selection mode)
+    if (showMoveToCategoryDialog) {
+        MoveToCategoryDialog(
+            categories = libraryModel.getCategories(),
+            onDismiss = { showMoveToCategoryDialog = false },
+            onCategorySelected = { category ->
+                libraryModel.moveBooksToCategory(uiState.selectedBooks, category)
+                showMoveToCategoryDialog = false
+            }
+        )
+    }
 }

@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.R
@@ -31,7 +31,7 @@ internal fun SettingsLanguage(
             text = stringResource(id = R.string.language),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         SlimListItem(
             headlineContent = {
@@ -46,7 +46,7 @@ internal fun SettingsLanguage(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.Language, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Language, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         )
     }

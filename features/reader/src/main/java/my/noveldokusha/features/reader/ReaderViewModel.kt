@@ -11,13 +11,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.BaseViewModel
-import my.noveldokusha.coreui.mappers.toTheme
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.StateExtra_Boolean
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.features.reader.manager.ReaderManager
 import my.noveldokusha.features.reader.ui.ReaderScreenState
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import kotlin.properties.Delegates
 
@@ -45,7 +47,6 @@ internal class ReaderViewModel @Inject constructor(
     )
 
     private val readingPosStats = readerSession.readingStats
-    private val themeId = appPreferences.THEME_ID.state(viewModelScope)
 
     val state = ReaderScreenState(
         showReaderInfo = mutableStateOf(false),
@@ -68,8 +69,26 @@ internal class ReaderViewModel @Inject constructor(
             liveTranslation = readerSession.readerLiveTranslation.state,
             fullScreen = appPreferences.READER_FULL_SCREEN.state(viewModelScope),
             style = ReaderScreenState.Settings.StyleSettingsData(
-                followSystem = appPreferences.THEME_FOLLOW_SYSTEM.state(viewModelScope),
-                currentTheme = derivedStateOf { themeId.value.toTheme },
+                currentDarkMode = mutableStateOf(DarkMode.SYSTEM).also { state ->
+                    viewModelScope.launch {
+                        appPreferences.THEME_DARK_MODE.flow()
+                            .map {
+                                try { DarkMode.valueOf(it) }
+                                catch (_: Exception) { DarkMode.SYSTEM }
+                            }
+                            .collect { withContext(Dispatchers.Main) { state.value = it } }
+                    }
+                },
+                currentAppTheme = mutableStateOf(AppTheme.DEFAULT).also { state ->
+                    viewModelScope.launch {
+                        appPreferences.APP_THEME.flow()
+                            .map {
+                                try { AppTheme.valueOf(it) }
+                                catch (_: Exception) { AppTheme.DEFAULT }
+                            }
+                            .collect { withContext(Dispatchers.Main) { state.value = it } }
+                    }
+                },
                 textFont = appPreferences.READER_FONT_FAMILY.state(viewModelScope),
                 textSize = appPreferences.READER_FONT_SIZE.state(viewModelScope),
                 lineHeight = appPreferences.READER_LINE_HEIGHT.state(viewModelScope),

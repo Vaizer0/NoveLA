@@ -84,6 +84,8 @@ fun Modifier.clickableNoIndicator(onClick: () -> Unit) = composed {
 fun Modifier.debouncedClickable(waitMillis: Long = 250, action: () -> Unit) = composed {
     then(
         clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = ripple(bounded = true),
             onClick = debouncedAction(waitMillis = waitMillis, action = action)
         )
     )

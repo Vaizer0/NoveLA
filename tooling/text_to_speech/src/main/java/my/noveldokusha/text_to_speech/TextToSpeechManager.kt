@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import android.util.Log
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +50,7 @@ class TextToSpeechManager<T : Utterance<T>>(
     val queueList = _queueList as Map<String, T>
     val currentTextSpeakFlow = _currentTextSpeakFlow.shareIn(
         scope = scope,
-        started = SharingStarted.WhileSubscribed()
+        started = SharingStarted.Eagerly
     )
 
     private val auxiliaryServices = mutableListOf<TextToSpeech>()
@@ -65,6 +66,7 @@ class TextToSpeechManager<T : Utterance<T>>(
 
     private fun onServiceReady() {
         currentEnginePackage = service.defaultEngine ?: ""
+        Log.d("TTS", "onServiceReady engine=$currentEnginePackage")
         listenToUtterances()
         updateActiveVoice()
         collectVoicesFromAllEngines()
@@ -84,6 +86,7 @@ class TextToSpeechManager<T : Utterance<T>>(
     fun getCurrentEnginePackage(): String = currentEnginePackage
 
     fun reinitWithEngine(enginePackage: String, voiceId: String) {
+        Log.d("TTS", "reinitWithEngine engine=$enginePackage voice=$voiceId")
         auxiliaryServices.forEach { runCatching { it.shutdown() } }
         auxiliaryServices.clear()
 
@@ -94,7 +97,6 @@ class TextToSpeechManager<T : Utterance<T>>(
         val savedPitch = voicePitch.floatValue
 
         service = createService(enginePackage = enginePackage) {
-            // Запоминаем реальный движок этого service объекта
             currentEnginePackage = enginePackage
             service.setSpeechRate(savedSpeed)
             service.setPitch(savedPitch)
@@ -119,7 +121,6 @@ class TextToSpeechManager<T : Utterance<T>>(
 
         engines.forEach { engineInfo ->
             if (engineInfo.name == service.defaultEngine) {
-                // Голоса дефолтного движка уже доступны через текущий service
                 val voices = service.voices
                     ?.map { it.toVoiceData(engineInfo.name) }
                     ?: emptyList()
@@ -144,7 +145,14 @@ class TextToSpeechManager<T : Utterance<T>>(
     }
 
     fun stop() {
+        Log.d("TTS", "stop() queueSize=${_queueList.size}")
         service.stop()
+        _queueList.clear()
+        _queueListItemSize.clear()
+    }
+
+    fun clearQueue() {
+        Log.d("TTS", "clearQueue() queueSize=${_queueList.size}")
         _queueList.clear()
         _queueListItemSize.clear()
     }
@@ -158,6 +166,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueList[textSynthesis.utteranceId] = textSynthesis
         _queueListItemSize[textSynthesis.utteranceId] = subItems.size
 
+        Log.d("TTS", "speak id=${textSynthesis.utteranceId} subItems=${subItems.size} queueSize=${_queueList.size}")
         subItems.forEachIndexed { index, textSlice ->
             val uniqueID = "$index|${textSynthesis.utteranceId}"
             val bundle = Bundle().apply {
@@ -176,13 +185,19 @@ class TextToSpeechManager<T : Utterance<T>>(
         val voice = service.voices?.find { it.name == id } ?: return false
         service.voice = voice
         updateActiveVoice()
+        Log.d("TTS", "trySetVoiceById($id) -> success")
         return true
     }
 
     fun trySetVoicePitch(value: Float): Boolean {
-        if (value < 0.1 || value > 5) return false
+        if (value < 0.1 || value > 5) {
+            Log.w("TTS", "trySetVoicePitch: invalid $value")
+            return false
+        }
         val result = service.setPitch(value)
-        if (result == TextToSpeech.SUCCESS) {
+        val success = result == TextToSpeech.SUCCESS
+        Log.d("TTS", "trySetVoicePitch($value) -> $success")
+        if (success) {
             voicePitch.floatValue = value
             return true
         }
@@ -190,9 +205,14 @@ class TextToSpeechManager<T : Utterance<T>>(
     }
 
     fun trySetVoiceSpeed(value: Float): Boolean {
-        if (value < 0.1 || value > 5) return false
+        if (value < 0.1 || value > 5) {
+            Log.w("TTS", "trySetVoiceSpeed: invalid $value")
+            return false
+        }
         val result = service.setSpeechRate(value)
-        if (result == TextToSpeech.SUCCESS) {
+        val success = result == TextToSpeech.SUCCESS
+        Log.d("TTS", "trySetVoiceSpeed($value) -> $success")
+        if (success) {
             voiceSpeed.floatValue = value
             return true
         }
@@ -237,22 +257,35 @@ class TextToSpeechManager<T : Utterance<T>>(
             override fun onError(utteranceId: String?) = onFinished(utteranceId)
 
             private fun onFinished(utteranceId: String?) {
-                if (utteranceId == null) return
+                if (utteranceId == null) {
+                    Log.w("TTS", "onFinished: null id")
+                    return
+                }
                 val subItemUtteranceIndex = utteranceId
                     .substringBefore('|', "")
-                    .toIntOrNull() ?: return
+                    .toIntOrNull() ?: run {
+                        Log.w("TTS", "onFinished: cant parse index from $utteranceId")
+                        return
+                    }
                 val itemUtteranceId = utteranceId.substringAfter('|')
 
-                val itemSize = _queueListItemSize[itemUtteranceId]?.minus(1) ?: return
+                val itemSize = _queueListItemSize[itemUtteranceId]?.minus(1) ?: run {
+                    Log.w("TTS", "onFinished: no itemSize for $itemUtteranceId")
+                    return
+                }
                 if (itemSize != subItemUtteranceIndex) return
 
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.FINISHED)
-                    ?: return
+                    ?: run {
+                        Log.w("TTS", "onFinished: no queue entry for $itemUtteranceId")
+                        return
+                    }
 
                 _queueList.remove(itemUtteranceId)
                 _queueListItemSize.remove(itemUtteranceId)
 
+                Log.d("TTS", "onFinished -> FINISHED $itemUtteranceId queueSize=${_queueList.size}")
                 currentActiveItemState.value = res
                 scope.launch { _currentTextSpeakFlow.emit(res) }
             }

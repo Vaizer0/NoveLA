@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
@@ -26,7 +26,7 @@ internal fun SettingsBackup(
             text = stringResource(id = R.string.backup),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         SlimListItem(
             headlineContent = {
@@ -36,7 +36,7 @@ internal fun SettingsBackup(
                 Text(text = stringResource(id = R.string.opens_the_file_explorer_to_select_the_backup_saving_location))
             },
             leadingContent = {
-                Icon(Icons.Outlined.Save, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Save, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable { onBackupData() }
         )
@@ -51,7 +51,7 @@ internal fun SettingsBackup(
                 Icon(
                     Icons.Outlined.SettingsBackupRestore,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             modifier = Modifier.clickable { onRestoreData() }

@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -37,12 +36,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.BooksVerticalView
-import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.core.utils.actionCopyToClipboard
 import my.noveldokusha.coreui.states.IteratorState
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.feature.local_database.BookMetadata
 import my.noveldokusha.scraper.ActiveFilters
 
@@ -65,25 +63,19 @@ internal fun SourceCatalogScreen(
     val context by rememberUpdatedState(newValue = LocalContext.current)
     val focusRequester = remember { FocusRequester() }
     val focusManager by rememberUpdatedState(newValue = LocalFocusManager.current)
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        snapAnimationSpec = null,
-        flingAnimationSpec = null
-    )
-
     val hasActiveFilters = !state.activeFilters.value.isEmpty
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier,
             topBar = {
                 Column {
                     AnimatedTransition(targetState = state.toolbarMode.value) { target ->
                         when (target) {
                             ToolbarMode.MAIN -> TopAppBar(
-                                scrollBehavior = scrollBehavior,
                                 colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = Color.Unspecified,
-                                    scrolledContainerColor = Color.Unspecified,
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
                                 ),
                                 title = {
                                     Column {
@@ -93,7 +85,7 @@ internal fun SourceCatalogScreen(
                                             else ""
                                         Text(
                                             text = title,
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = MaterialTheme.typography.headlineMedium,
                                             maxLines = 1
                                         )
                                         Text(
@@ -125,14 +117,14 @@ internal fun SourceCatalogScreen(
                                             BadgedBox(
                                                 badge = {
                                                     if (hasActiveFilters) {
-                                                        Badge(containerColor = ColorAccent)
+                                                        Badge(containerColor = colorAccent())
                                                     }
                                                 }
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.FilterList,
                                                     contentDescription = stringResource(R.string.filter),
-                                                    tint = if (hasActiveFilters) ColorAccent
+                                                    tint = if (hasActiveFilters) colorAccent()
                                                     else LocalContentColor
                                                 )
                                             }
@@ -141,7 +133,6 @@ internal fun SourceCatalogScreen(
                                 }
                             )
                             ToolbarMode.SEARCH -> TopAppBarSearch(
-                                scrollBehavior = scrollBehavior,
                                 focusRequester = focusRequester,
                                 searchTextInput = state.searchTextInput.value,
                                 onClose = {
@@ -158,7 +149,6 @@ internal fun SourceCatalogScreen(
                             )
                         }
                     }
-                    CollapsibleDivider(scrollBehavior.state)
                 }
             },
             content = { innerPadding ->
@@ -180,18 +170,6 @@ internal fun SourceCatalogScreen(
                 )
             }
         )
-
-        if (state.fetchIterator.state == IteratorState.LOADING && state.fetchIterator.list.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
 
         if (state.isFilterSheetOpen.value && state.hasFilters) {
             FilterBottomSheet(

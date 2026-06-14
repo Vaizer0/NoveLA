@@ -42,7 +42,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedTextField
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.colorAccent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,14 +59,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.skydoves.landscapist.glide.GlideImage
 import my.noveldokusha.core.Extension
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.coreui.components.MyButton
 import my.noveldokusha.coreui.components.SlimListItem
-import timber.log.Timber
 import java.util.Locale
 import my.noveldokusha.core.getLanguageDisplayName
 import kotlinx.coroutines.delay
@@ -152,14 +150,8 @@ private fun UnifiedExtensionsScreen(
                     state.availableExtensions.filter { it.language in state.selectedLanguages }
                 }
 
-                // Sort extensions based on sort order
-                val sortedExtensions = when (state.sortOrder) {
-                    SortOrder.ASCENDING -> filteredExtensions.sortedBy { it.name.lowercase() }
-                    SortOrder.DESCENDING -> filteredExtensions.sortedByDescending { it.name.lowercase() }
-                }
-
-                val installedExtensions = sortedExtensions.filter { it.isInstalled }
-                val availableExtensions = sortedExtensions.filter { !it.isInstalled }
+                val installedExtensions = filteredExtensions.filter { it.isInstalled }
+                val availableExtensions = filteredExtensions.filter { !it.isInstalled }
 
                 if (filteredExtensions.isEmpty()) {
                     Box(
@@ -267,13 +259,13 @@ private fun RepositoryUrlDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ColorAccent,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedLabelColor = ColorAccent,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary,
                     unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    cursorColor = ColorAccent,
+                    cursorColor = MaterialTheme.colorScheme.primary,
                 )
             )
         },
@@ -282,20 +274,40 @@ private fun RepositoryUrlDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MyButton(
-                    text = "Cancel",
+                FilledTonalButton(
                     onClick = {
                         viewModel.onEvent(ExtensionsScreenEvent.OnHideRepositoryDialog)
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
                     modifier = Modifier.weight(1f)
-                )
-                MyButton(
-                    text = "Save",
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                FilledTonalButton(
                     onClick = {
                         viewModel.onEvent(ExtensionsScreenEvent.OnUpdateRepositoryUrl(tempUrl))
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Text(
+                        text = "Save",
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     )
@@ -351,7 +363,6 @@ private fun ExtensionListItem(
                 } else {
                     "v${extension.version}"
                 }
-                Timber.d("Extension UI: ${extension.name}, version: $versionText, isUpdateAvailable: ${extension.isUpdateAvailable}, remoteVersion: ${extension.remoteVersion}")
                 Text(
                     text = versionText,
                     style = MaterialTheme.typography.bodySmall,
@@ -408,14 +419,19 @@ private fun ExtensionListItem(
         trailingContent = {
             when {
                 extension.isInstalling -> {
-                    MyButton(
-                        text = "Installing...",
+                    FilledTonalButton(
                         onClick = {},
                         enabled = false,
-                        modifier = Modifier.height(40.dp),
-                        backgroundColor = MaterialTheme.colorScheme.surface,
-                        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                    )
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("Installing...")
+                    }
                 }
                 extension.isUpdateAvailable -> {
                     FilledTonalButton(
@@ -468,75 +484,4 @@ private fun ExtensionListItem(
             }
         }
     )
-}
-
-@Composable
-fun ExtensionsLanguageFilterDropDown(
-    expanded: Boolean,
-    availableLanguages: List<ExtensionLanguage>,
-    selectedLanguages: Set<String>,
-    onLanguageToggle: (String) -> Unit,
-    onClearAll: () -> Unit,
-    onRefresh: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .padding(8.dp)
-                .widthIn(min = 128.dp)
-        ) {
-            Text(text = "Select Languages")
-
-            FilledTonalButton(
-                onClick = {
-                    onRefresh()
-                    onDismiss()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("Refresh Plugins")
-            }
-
-            OutlinedCard {
-                availableLanguages.forEach { language ->
-                    MyButton(
-                        text = "${language.name} (${language.count})",
-                        onClick = { onLanguageToggle(language.code) },
-                        selected = selectedLanguages.contains(language.code),
-                        selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
-                        borderWidth = Dp.Unspecified,
-                        textAlign = TextAlign.Center,
-                        outerPadding = 0.dp,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(0.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                    )
-                }
-            }
-
-            if (selectedLanguages.isNotEmpty()) {
-                TextButton(
-                    onClick = onClearAll,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Clear Selection")
-                }
-            }
-        }
-    }
 }

@@ -14,11 +14,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
-import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
+import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.network.interceptors.resolveUserAgent
 import java.util.concurrent.TimeUnit
 
 class TranslationManagerGoogleFree(
-    private val coroutineScope: AppCoroutineScope
+    private val coroutineScope: AppCoroutineScope,
+    private val appPreferences: AppPreferences
 ) : TranslationManager {
 
     private val client = OkHttpClient.Builder()
@@ -71,7 +73,7 @@ class TranslationManagerGoogleFree(
                 .build()
             val request = okhttp3.Request.Builder()
                 .url(url)
-                .header("User-Agent", GLOBAL_USER_AGENT)
+                .header("User-Agent", resolveUserAgent(appPreferences))
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
@@ -116,7 +118,7 @@ class TranslationManagerGoogleFree(
                     okhttp3.Request.Builder()
                         .url("https://translate.googleapis.com/translate_a/single")
                         .post(formBody)
-                        .addHeader("User-Agent", GLOBAL_USER_AGENT)
+                        .addHeader("User-Agent", resolveUserAgent(appPreferences))
                         .build()
                 } else {
                     val url = "https://translate.googleapis.com/translate_a/single".toHttpUrl().newBuilder()
@@ -126,7 +128,7 @@ class TranslationManagerGoogleFree(
                         .addQueryParameter("dt", "t")
                         .addQueryParameter("q", text)
                         .build()
-                    okhttp3.Request.Builder().url(url).addHeader("User-Agent", GLOBAL_USER_AGENT).build()
+                    okhttp3.Request.Builder().url(url).addHeader("User-Agent", resolveUserAgent(appPreferences)).build()
                 }
 
                 val startTime = System.currentTimeMillis()

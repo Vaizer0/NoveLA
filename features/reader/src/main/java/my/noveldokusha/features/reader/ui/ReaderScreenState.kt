@@ -4,7 +4,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
-import my.noveldokusha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
 
@@ -36,8 +37,8 @@ internal data class ReaderScreenState(
     ) {
         @Stable
         data class StyleSettingsData(
-            val followSystem: State<Boolean>,
-            val currentTheme: State<Themes>,
+            val currentDarkMode: State<DarkMode>,
+            val currentAppTheme: State<AppTheme>,
             val textFont: State<String>,
             val textSize: State<Float>,
             val lineHeight: State<Float>,

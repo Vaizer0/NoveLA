@@ -1,27 +1,44 @@
 package my.noveldokusha.settings
 
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import my.noveldokusha.core.models.RegexRule
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.models.RegexRule
 import javax.inject.Inject
+
+data class RegexCleanupUiState(
+    val searchQuery: String = "",
+    val rules: List<RegexRule> = emptyList(),
+    val isBottomSheetOpen: Boolean = false,
+    val editingRule: RegexRule? = null,
+    val editingIndex: Int? = null,
+    val validationError: String? = null,
+    val previewText: String = "",
+    val deleteConfirmationPattern: String? = null
+)
 
 @HiltViewModel
 class RegexCleanupSettingsViewModel @Inject constructor(
     private val appPreferences: AppPreferences
 ) : ViewModel() {
 
-    val uiState = mutableStateOf(RegexCleanupUiState())
+    var uiState = mutableStateOf(RegexCleanupUiState())
+        private set
 
-    private val _editingRule = mutableStateOf<RegexRule?>(null)
-    val editingRule = _editingRule
+    private val _searchQuery = mutableStateOf("")
 
-    private val _validationError = mutableStateOf<String?>(null)
-    val validationError = _validationError
+    val filteredRules: List<RegexRule>
+        get() {
+            val query = _searchQuery.value.trim().lowercase()
+            if (query.isEmpty()) return uiState.value.rules
+            return uiState.value.rules.filter {
+                it.pattern.lowercase().contains(query) ||
+                it.description.lowercase().contains(query)
+            }
+        }
 
     init {
         loadRules()
@@ -30,58 +47,106 @@ class RegexCleanupSettingsViewModel @Inject constructor(
     private fun loadRules() {
         viewModelScope.launch {
             val rules = appPreferences.USER_REGEX_CLEANUP_RULES.value
-            uiState.value = uiState.value.copy(rules = rules.toMutableStateList())
+            uiState.value = uiState.value.copy(rules = rules)
         }
     }
 
-    fun addRule(pattern: String, replacement: String) {
+    // ── Callbacks ──────────────────────────────────────────────────────────
+
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun onAddRule() {
+        uiState.value = uiState.value.copy(
+            isBottomSheetOpen = true,
+            editingRule = RegexRule("", "", isEnabled = true),
+            editingIndex = null,
+            validationError = null
+        )
+    }
+
+    fun onEditRule(index: Int) {
+        val rule = uiState.value.rules.getOrNull(index) ?: return
+        uiState.value = uiState.value.copy(
+            isBottomSheetOpen = true,
+            editingRule = rule,
+            editingIndex = index,
+            validationError = null
+        )
+    }
+
+    fun onDismissBottomSheet() {
+        uiState.value = uiState.value.copy(
+            isBottomSheetOpen = false,
+            editingRule = null,
+            editingIndex = null,
+            validationError = null
+        )
+    }
+
+    fun onSaveRule(pattern: String, replacement: String, enabled: Boolean, description: String) {
         if (!validateRegex(pattern)) {
-            _validationError.value = "Invalid regex pattern: $pattern"
+            uiState.value = uiState.value.copy(
+                validationError = pattern
+            )
             return
         }
 
-        _validationError.value = null
+        uiState.value = uiState.value.copy(validationError = null)
 
         viewModelScope.launch {
             val currentRules = appPreferences.USER_REGEX_CLEANUP_RULES.value.toMutableList()
-            currentRules.add(RegexRule(pattern, replacement))
-            appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
+            val newRule = RegexRule(
+                pattern = pattern.trim(),
+                replacement = replacement.trim(),
+                isEnabled = enabled,
+                description = description.trim()
+            )
 
-            loadRules()
-        }
-    }
-
-    fun updateRule(oldPattern: String, newPattern: String, replacement: String) {
-        if (!validateRegex(newPattern)) {
-            _validationError.value = "Invalid regex pattern: $newPattern"
-            return
-        }
-
-        _validationError.value = null
-
-        viewModelScope.launch {
-            val currentRules = appPreferences.USER_REGEX_CLEANUP_RULES.value.toMutableList()
-            val index = currentRules.indexOfFirst { it.pattern == oldPattern }
-            if (index != -1) {
-                currentRules[index] = RegexRule(newPattern, replacement)
-                appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
+            val editingIndex = uiState.value.editingIndex
+            if (editingIndex != null && editingIndex in currentRules.indices) {
+                currentRules[editingIndex] = newRule
+            } else {
+                currentRules.add(newRule)
             }
 
+            appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
             loadRules()
+            onDismissBottomSheet()
         }
     }
 
-    fun deleteRule(pattern: String) {
+    fun onDeleteRule(pattern: String) {
+        uiState.value = uiState.value.copy(deleteConfirmationPattern = pattern)
+    }
+
+    fun onConfirmDelete() {
+        val pattern = uiState.value.deleteConfirmationPattern ?: return
         viewModelScope.launch {
             val currentRules = appPreferences.USER_REGEX_CLEANUP_RULES.value.toMutableList()
             currentRules.removeAll { it.pattern == pattern }
             appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
+            loadRules()
+            uiState.value = uiState.value.copy(deleteConfirmationPattern = null)
+        }
+    }
 
+    fun onDismissDelete() {
+        uiState.value = uiState.value.copy(deleteConfirmationPattern = null)
+    }
+
+    fun onToggleRule(index: Int) {
+        viewModelScope.launch {
+            val currentRules = appPreferences.USER_REGEX_CLEANUP_RULES.value.toMutableList()
+            val rule = currentRules.getOrNull(index) ?: return@launch
+            currentRules[index] = rule.copy(isEnabled = !rule.isEnabled)
+            appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
             loadRules()
         }
     }
 
-    fun moveRule(fromIndex: Int, toIndex: Int) {
+    fun onMoveRule(fromIndex: Int, toIndex: Int) {
         viewModelScope.launch {
             val currentRules = appPreferences.USER_REGEX_CLEANUP_RULES.value.toMutableList()
             if (fromIndex in currentRules.indices && toIndex in currentRules.indices) {
@@ -89,24 +154,24 @@ class RegexCleanupSettingsViewModel @Inject constructor(
                 currentRules.add(toIndex, item)
                 appPreferences.USER_REGEX_CLEANUP_RULES.value = currentRules
             }
-
             loadRules()
         }
     }
 
-    fun startEditingRule(rule: RegexRule?) {
-        // Если rule == null, значит создаем новое правило, используем пустое RegexRule
-        _editingRule.value = rule ?: RegexRule("", "")
-        _validationError.value = null
+    fun updatePreview(text: String) {
+        uiState.value = uiState.value.copy(previewText = text)
     }
 
-    fun finishEditingRule() {
-        _editingRule.value = null
+    fun getPreviewResult(rule: RegexRule, text: String): String {
+        if (!rule.isEnabled) return text
+        return try {
+            text.replace(Regex(rule.pattern), rule.replacement)
+        } catch (e: Exception) {
+            text
+        }
     }
 
-    fun clearValidationError() {
-        _validationError.value = null
-    }
+    // ── Validation ─────────────────────────────────────────────────────────
 
     private fun validateRegex(pattern: String): Boolean {
         return try {
@@ -116,14 +181,4 @@ class RegexCleanupSettingsViewModel @Inject constructor(
             false
         }
     }
-}
-
-data class RegexCleanupUiState(
-    val rules: MutableList<RegexRule> = mutableListOf()
-)
-
-fun <T> List<T>.toMutableStateList(): MutableList<T> {
-    val mutableList = mutableStateListOf<T>()
-    mutableList.addAll(this)
-    return mutableList
 }

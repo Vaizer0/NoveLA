@@ -141,6 +141,7 @@ internal class ReaderChaptersLoader(
     fun isChapterIndexValid(chapterIndex: Int) = chapterIndex in 0 until orderedChapters.size
 
     @Synchronized fun tryLoadInitial(chapterIndex: Int) {
+        android.util.Log.d("READER_DEBUG", "tryLoadInitial called, chapterIndex=$chapterIndex, stack=${Thread.currentThread().stackTrace[2]}")
         if (LoadChapter.Type.Initial in loaderQueue) return
         loaderQueue.add(LoadChapter.Type.Initial)
         launch { chapterLoaderFlow.emit(LoadChapter.Initial(chapterIndex = chapterIndex)) }
@@ -312,6 +313,7 @@ internal class ReaderChaptersLoader(
     private suspend fun loadInitialChapter(
         chapterIndex: Int
     ) = withContext(Dispatchers.Main.immediate) {
+        android.util.Log.d("READER_DEBUG", "loadInitialChapter START, chapterIndex=$chapterIndex")
         readerState = ReaderState.INITIAL_LOAD
         items.clear()
         readerViewHandlersActions.doForceUpdateListViewState()
@@ -331,8 +333,11 @@ internal class ReaderChaptersLoader(
             withContext(Dispatchers.Main.immediate) { items.remove(it); readerViewHandlersActions.doForceUpdateListViewState() }
         }
 
-        addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove,
-            maintainPosition = readerViewHandlersActions::doMaintainStartPosition)
+        addChapter(
+            chapterIndex = chapterIndex,
+            insert = insert, insertAll = insertAll, remove = remove,
+            maintainPosition = readerViewHandlersActions::doMaintainStartPosition,
+        )
 
         val chapter = orderedChapters[chapterIndex]
         val initialPosition = readerRepository.getInitialChapterItemPosition(
@@ -390,7 +395,9 @@ internal class ReaderChaptersLoader(
         }
 
         addChapter(chapterIndex = previousIndex, insert = insert, insertAll = insertAll, remove = remove,
-            maintainPosition = readerViewHandlersActions::doMaintainLastVisiblePosition)
+            maintainPosition = readerViewHandlersActions::doMaintainLastVisiblePosition,
+            skipLoadedCheck = true,
+            maintainOnSuccess = true)
 
         chapterLoadedFlow.emit(ChapterLoaded(chapterIndex = previousIndex, type = ChapterLoaded.Type.Previous))
         readerState = ReaderState.IDLE
@@ -438,11 +445,14 @@ internal class ReaderChaptersLoader(
         insertAll: suspend (Collection<ReaderItem>) -> Unit,
         remove: suspend (ReaderItem) -> Unit,
         maintainPosition: suspend (suspend () -> Unit) -> Unit = { it() },
+        showLoadingState: Boolean = true,
+        skipLoadedCheck: Boolean = false,
+        maintainOnSuccess: Boolean = false,
     ): Boolean? = withContext(Dispatchers.Default) {
         val chapter = orderedChapters.getOrNull(chapterIndex) ?: return@withContext null
 
         synchronized(loadedChapters) {
-            if (loadedChapters.contains(chapter.url)) {
+            if (!skipLoadedCheck && loadedChapters.contains(chapter.url)) {
                 android.util.Log.d(TAG, "addChapter: chapter ${chapter.url} already loaded or loading, skipping")
                 return@withContext null
             }
@@ -450,7 +460,7 @@ internal class ReaderChaptersLoader(
         }
 
         try {
-            _addChapterInternal(chapter, chapterIndex, insert, insertAll, remove, maintainPosition)
+            _addChapterInternal(chapter, chapterIndex, insert, insertAll, remove, maintainPosition, showLoadingState, maintainOnSuccess)
         } catch (e: kotlinx.coroutines.CancellationException) {
             android.util.Log.w(TAG, "addChapter: cancelled for chapter ${chapter.url}, cleaning up")
             synchronized(loadedChapters) {
@@ -473,6 +483,8 @@ internal class ReaderChaptersLoader(
         insertAll: suspend (Collection<ReaderItem>) -> Unit,
         remove: suspend (ReaderItem) -> Unit,
         maintainPosition: suspend (suspend () -> Unit) -> Unit,
+        showLoadingState: Boolean = true,
+        maintainOnSuccess: Boolean = false,
     ): Boolean? {
 
         val itemProgressBar = ReaderItem.Progressbar(chapterIndex = chapterIndex)
@@ -488,11 +500,14 @@ internal class ReaderChaptersLoader(
         )
         chapterItemPosition += 1
 
-        maintainPosition {
-            insert(ReaderItem.Divider(chapterIndex = chapterIndex))
-            insert(itemTitle)
-            insert(itemProgressBar)
-            readerViewHandlersActions.doForceUpdateListViewState()
+        if (showLoadingState) {
+            android.util.Log.d("READER_DEBUG", "inserting Progressbar for chapterIndex=$chapterIndex")
+            maintainPosition {
+                insert(ReaderItem.Divider(chapterIndex = chapterIndex))
+                insert(itemTitle)
+                insert(itemProgressBar)
+                readerViewHandlersActions.doForceUpdateListViewState()
+            }
         }
 
         when (val res = readerRepository.downloadChapter(chapter.url)) {
@@ -698,7 +713,25 @@ internal class ReaderChaptersLoader(
                     }
                 }
 
-                maintainPosition {
+                // Do NOT use maintainPosition for success block — it would call
+                // setSelection(titleIndex) via doMaintainStartPosition and override
+                // the scroll position set by setInitialPosition later.
+                // When maintainOnSuccess is true (loadPreviousChapter), use it to
+                // preserve scroll position after replacing Progressbar with real content.
+                if (maintainOnSuccess) {
+                    maintainPosition {
+                        remove(itemProgressBar)
+                        itemTranslating?.let { remove(it) }
+                        withContext(Dispatchers.Main.immediate) {
+                            val idx = this@ReaderChaptersLoader.items.indexOf(itemTitle)
+                            if (idx != -1) this@ReaderChaptersLoader.items[idx] = finalItemTitle
+                        }
+                        itemTranslationAttribution?.let { insert(it) }
+                        insertAll(items)
+                        insert(ReaderItem.Divider(chapterIndex = chapterIndex))
+                        readerViewHandlersActions.doForceUpdateListViewState()
+                    }
+                } else {
                     remove(itemProgressBar)
                     itemTranslating?.let { remove(it) }
                     withContext(Dispatchers.Main.immediate) {

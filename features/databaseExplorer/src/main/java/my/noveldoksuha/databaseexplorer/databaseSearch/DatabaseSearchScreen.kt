@@ -32,13 +32,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.components.BooksVerticalView
 import my.noveldokusha.coreui.components.CollapsibleDivider
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.coreui.states.PagedListIteratorState
-import my.noveldokusha.coreui.theme.ColorNotice
-import my.noveldokusha.coreui.theme.Grey25
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.databaseexplorer.R
@@ -108,9 +107,11 @@ internal fun DatabaseSearchScreen(
                         label = { Text(text = stringResource(R.string.filter_catalog)) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, null) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedLeadingIconColor = Grey25,
-                            disabledLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
-                            iconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedContainerColor   = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            selectedLabelColor       = MaterialTheme.colorScheme.primary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            labelColor               = MaterialTheme.colorScheme.onSurfaceVariant,
+                            containerColor           = Color.Transparent,
                         )
                     )
                     FilterChip(
@@ -122,9 +123,11 @@ internal fun DatabaseSearchScreen(
                         label = { Text(text = stringResource(R.string.filter_title)) },
                         leadingIcon = { Icon(Icons.Filled.Title, null) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedLeadingIconColor = Grey25,
-                            disabledLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
-                            iconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedContainerColor   = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            selectedLabelColor       = MaterialTheme.colorScheme.primary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            labelColor               = MaterialTheme.colorScheme.onSurfaceVariant,
+                            containerColor           = Color.Transparent,
                         )
                     )
                     FilterChip(
@@ -137,8 +140,15 @@ internal fun DatabaseSearchScreen(
                             Text(text = stringResource(R.string.filter_genres))
                         },
                         leadingIcon = {
-                            Icon(Icons.Filled.FilterList, null, tint = ColorNotice)
-                        }
+                            Icon(Icons.Filled.FilterList, null)
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor   = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            selectedLabelColor       = MaterialTheme.colorScheme.primary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            labelColor               = MaterialTheme.colorScheme.onSurfaceVariant,
+                            containerColor           = Color.Transparent,
+                        )
                     )
                 }
                 CollapsibleDivider(scrollBehavior.state)

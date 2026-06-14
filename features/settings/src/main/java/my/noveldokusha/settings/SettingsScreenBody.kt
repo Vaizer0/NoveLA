@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,9 +22,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
@@ -35,22 +35,19 @@ import my.noveldokusha.settings.sections.SettingsGeminiTranslation
 import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
-import my.noveldokusha.settings.sections.SettingsTranslationModels
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
 
 @Composable
 internal fun SettingsScreenBody(
     state: SettingsScreenState,
     modifier: Modifier = Modifier,
-    onFollowSystem: (Boolean) -> Unit,
-    onThemeSelected: (Themes) -> Unit,
+    onAppThemeSelected: (AppTheme) -> Unit,
+    onDarkModeSelected: (DarkMode) -> Unit,
     onCleanDatabase: () -> Unit,
     onCleanImageFolder: () -> Unit,
     onMassAddDelayChange: (Long) -> Unit,
     onBackupData: () -> Unit,
     onRestoreData: () -> Unit,
-    onDownloadTranslationModel: (lang: String) -> Unit,
-    onRemoveTranslationModel: (lang: String) -> Unit,
     onCheckForUpdatesManual: () -> Unit,
     onGeminiApiKeyChange: (String) -> Unit,
     onGeminiModelChange: (String) -> Unit,
@@ -77,10 +74,10 @@ internal fun SettingsScreenBody(
         )
         HorizontalDivider()
         SettingsTheme(
-            currentFollowSystem = state.followsSystemTheme.value,
-            currentTheme = state.currentTheme.value,
-            onFollowSystemChange = onFollowSystem,
-            onCurrentThemeChange = onThemeSelected
+            currentAppTheme = state.currentAppTheme.value,
+            currentDarkMode = state.currentDarkMode.value,
+            onAppThemeChange = onAppThemeSelected,
+            onDarkModeChange = onDarkModeSelected,
         )
         HorizontalDivider()
         SettingsData(
@@ -104,15 +101,7 @@ internal fun SettingsScreenBody(
             onBackupData = onBackupData,
             onRestoreData = onRestoreData
         )
-        if (state.isTranslationSettingsVisible.value) {
-            HorizontalDivider()
-            SettingsTranslationModels(
-                translationModelsStates = state.translationModelsStates,
-                onDownloadTranslationModel = onDownloadTranslationModel,
-                onRemoveTranslationModel = onRemoveTranslationModel
-            )
-            HorizontalDivider()
-            SettingsGeminiTranslation(
+        SettingsGeminiTranslation(
                 translationProvider            = state.translationProvider.value,
                 geminiApiKey                   = state.geminiApiKey.value,
                 geminiModel                    = state.geminiModel.value,
@@ -139,7 +128,6 @@ internal fun SettingsScreenBody(
                 onLlmBatchSizeChange           = onLlmBatchSizeChange,
                 onLlmMaxOutputTokensChange     = onLlmMaxOutputTokensChange,
             )
-        }
         HorizontalDivider()
         SettingsRegexCleanup(
             onNavigateToRegexCleanup = onNavigateToRegexCleanup
@@ -151,7 +139,7 @@ internal fun SettingsScreenBody(
             state = state.updateAppSetting,
             onCheckForUpdatesManual = onCheckForUpdatesManual
         )
-        Spacer(modifier = Modifier.height(500.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "(°.°)",
             modifier = Modifier
@@ -159,7 +147,7 @@ internal fun SettingsScreenBody(
                 .fillMaxWidth(),
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(120.dp))
@@ -171,20 +159,17 @@ internal fun SettingsScreenBody(
 @Composable
 private fun Preview() {
     val isDark = isSystemInDarkTheme()
-    val theme = remember { mutableStateOf(if (isDark) Themes.DARK else Themes.LIGHT) }
-    InternalTheme(theme.value) {
+    InternalTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
             SettingsScreenBody(
                 state = SettingsScreenState(
-                    followsSystemTheme = remember { derivedStateOf { true } },
-                    currentTheme = theme,
+                    currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
+                    currentDarkMode = remember { mutableStateOf(DarkMode.SYSTEM) },
                     currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
                     databaseSize = remember { mutableStateOf("1 MB") },
                     imageFolderSize = remember { mutableStateOf("10 MB") },
                     isCleaningDatabase = remember { mutableStateOf(false) },
                     isCleaningImages = remember { mutableStateOf(false) },
-                    isTranslationSettingsVisible = remember { mutableStateOf(true) },
-                    translationModelsStates = remember { mutableStateListOf() },
                     updateAppSetting = SettingsScreenState.UpdateApp(
                         currentAppVersion = "1.0.0",
                         appUpdateCheckerEnabled = remember { mutableStateOf(true) },
@@ -212,15 +197,11 @@ private fun Preview() {
                     llmBatchSize = remember { derivedStateOf { 60 } },
                     llmMaxOutputTokens = remember { derivedStateOf { 0 } },
                 ),
-                onFollowSystem = { },
-                onThemeSelected = { },
                 onCleanDatabase = { },
                 onCleanImageFolder = { },
                 onMassAddDelayChange = { },
                 onBackupData = { },
                 onRestoreData = { },
-                onDownloadTranslationModel = { },
-                onRemoveTranslationModel = { },
                 onCheckForUpdatesManual = { },
                 onGeminiApiKeyChange = { },
                 onGeminiModelChange = { },
@@ -235,8 +216,10 @@ private fun Preview() {
                 onDeletePreset = { },
                 onLlmBatchSizeChange = { },
                 onLlmMaxOutputTokensChange = { },
-                onLanguageChange = { },
-                onNavigateToRegexCleanup = { },
+                    onLanguageChange = { },
+                    onAppThemeSelected = { },
+                    onDarkModeSelected = { },
+                    onNavigateToRegexCleanup = { },
             )
         }
     }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -48,7 +51,11 @@ private fun LabeledIconButton(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true),
+                onClick = onClick
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Icon(icon, contentDescription = label)
@@ -78,7 +85,7 @@ internal fun <T : View> WebViewScreen(
     Scaffold(
         topBar = {
             Surface(tonalElevation = 3.dp) {
-                Column {
+                Column(modifier = Modifier.statusBarsPadding()) {
                     // Строка 1: кнопка "назад" + поле URL (на всю ширину)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -86,8 +93,13 @@ internal fun <T : View> WebViewScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp, vertical = 4.dp)
                     ) {
-                        IconButton(onClick = onBackClicked) {
-                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        TextButton(onClick = onBackClicked) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                            Text("Close", style = MaterialTheme.typography.labelMedium)
                         }
                         OutlinedTextField(
                             value = editingUrl,

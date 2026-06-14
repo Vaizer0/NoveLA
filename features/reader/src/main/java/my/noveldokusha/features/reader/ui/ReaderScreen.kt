@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,9 +54,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.Themes
-import my.noveldokusha.coreui.theme.colorApp
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
@@ -73,9 +74,9 @@ internal fun ReaderScreen(
     state: ReaderScreenState,
     onSelectableTextChange: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
-    onFollowSystem: (Boolean) -> Unit,
+    onDarkModeSelected: (DarkMode) -> Unit,
+    onAppThemeChanged: (AppTheme) -> Unit,
     onFullScreen: (Boolean) -> Unit,
-    onThemeSelected: (Themes) -> Unit,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
     onLineHeightChanged: (Float) -> Unit,
@@ -102,23 +103,29 @@ internal fun ReaderScreen(
                         + fadeOut(),
             ) {
                 Surface(
-                    color = MaterialTheme.colorApp.tintedSurface,
+                    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
                     modifier = Modifier.animateContentSize(),
                 ) {
                     Column(
                         modifier = if (fullScreen) Modifier.displayCutoutPadding() else Modifier
                     ) {
                         val chapterTitle by state.readerInfo.chapterTitle
+                        val selectedSetting by state.settings.selectedSetting
+
+                        val toggleOrSet = { type: Type ->
+                            state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
+                        }
+
                         TopAppBar(
                             colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorApp.tintedSurface,
-                                scrolledContainerColor = MaterialTheme.colorApp.tintedSurface,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
+                                scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
                             ),
                             title = {
                                 Text(
                                     text = chapterTitle,
                                     style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 2,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.animateContentSize()
                                 )
@@ -129,19 +136,64 @@ internal fun ReaderScreen(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = onOpenChapterInWeb) {
-                                    Icon(Icons.Filled.Public, null)
+                                if (state.settings.liveTranslation.isAvailable) {
+                                    IconButton(onClick = { toggleOrSet(Type.LiveTranslation) }) {
+                                        Icon(Icons.Outlined.Translate, stringResource(R.string.translator), tint = if (selectedSetting == Type.LiveTranslation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.TextToSpeech) }) {
+                                    Icon(Icons.Filled.RecordVoiceOver, stringResource(R.string.voice_reader), tint = if (selectedSetting == Type.TextToSpeech) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.Style) }) {
+                                    Icon(Icons.Outlined.ColorLens, stringResource(R.string.style), tint = if (selectedSetting == Type.Style) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                }
+                                IconButton(onClick = { toggleOrSet(Type.More) }) {
+                                    Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.more), tint = if (selectedSetting == Type.More) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                                 }
                             }
                         )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        content = readerContent,
+        bottomBar = {
+            val selectedSetting by state.settings.selectedSetting
+            AnimatedVisibility(
+                visible = showReaderInfo,
+                enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
+                exit = shrinkVertically(targetHeight = { 0 }) + fadeOut(),
+            ) {
+                Column {
+                    ReaderScreenBottomBarDialogs(
+                        settings = state.settings,
+                        onTextFontChanged = onTextFontChanged,
+                        onTextSizeChanged = onTextSizeChanged,
+                        onLineHeightChanged = onLineHeightChanged,
+                        onParagraphSpacingChanged = onParagraphSpacingChanged,
+                        onSelectableTextChange = onSelectableTextChange,
+                        onDarkModeSelected = onDarkModeSelected,
+                        onAppThemeSelected = onAppThemeChanged,
+                        onKeepScreenOn = onKeepScreenOn,
+                        onFullScreen = onFullScreen,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    BottomAppBar(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .animateContentSize(),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
+                    ) {
                         val chapterCurrentNumber by state.readerInfo.chapterCurrentNumber
                         val chaptersCount by state.readerInfo.chaptersCount
                         val chapterPercentageProgress by state.readerInfo.chapterPercentageProgress
                         
                         Column(
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = stringResource(
@@ -159,71 +211,6 @@ internal fun ReaderScreen(
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         }
-                        HorizontalDivider()
-                    }
-                }
-            }
-        },
-        content = readerContent,
-        bottomBar = {
-            val selectedSetting by state.settings.selectedSetting
-
-            val toggleOrSet = { type: Type ->
-                state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
-            }
-            AnimatedVisibility(
-                visible = showReaderInfo,
-                enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
-                exit = shrinkVertically(targetHeight = { 0 }) + fadeOut(),
-            ) {
-                Column {
-                    ReaderScreenBottomBarDialogs(
-                        settings = state.settings,
-                        onTextFontChanged = onTextFontChanged,
-                        onTextSizeChanged = onTextSizeChanged,
-                        onLineHeightChanged = onLineHeightChanged,
-                        onParagraphSpacingChanged = onParagraphSpacingChanged,
-                        onSelectableTextChange = onSelectableTextChange,
-                        onFollowSystem = onFollowSystem,
-                        onThemeSelected = onThemeSelected,
-                        onKeepScreenOn = onKeepScreenOn,
-                        onFullScreen = onFullScreen,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    BottomAppBar(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                            .animateContentSize(),
-                        containerColor = MaterialTheme.colorApp.tintedSurface,
-                    ) {
-                        if (state.settings.liveTranslation.isAvailable) SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.LiveTranslation,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.Translate,
-                            textId = R.string.translator,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.TextToSpeech,
-                            onClick = toggleOrSet,
-                            icon = Icons.Filled.RecordVoiceOver,
-                            textId = R.string.voice_reader,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.Style,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.ColorLens,
-                            textId = R.string.style,
-                        )
-                        SettingIconItem(
-                            currentType = selectedSetting,
-                            settingType = Type.More,
-                            onClick = toggleOrSet,
-                            icon = Icons.Outlined.MoreHoriz,
-                            textId = R.string.more,
-                        )
                     }
                 }
             }
@@ -331,8 +318,8 @@ private fun ViewsPreview(
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(
-        followSystem = remember { mutableStateOf(true) },
-        currentTheme = remember { mutableStateOf(Themes.DARK) },
+        currentDarkMode = remember { mutableStateOf(DarkMode.DARK) },
+        currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
         textFont = remember { mutableStateOf("Arial") },
         textSize = remember { mutableFloatStateOf(20f) },
         lineHeight = remember { mutableFloatStateOf(1.35f) },
@@ -367,8 +354,8 @@ private fun ViewsPreview(
                 onParagraphSpacingChanged = {},
                 onTextFontChanged = {},
                 onSelectableTextChange = {},
-                onFollowSystem = {},
-                onThemeSelected = {},
+                onDarkModeSelected = {},
+                onAppThemeChanged = {},
                 onPressBack = {},
                 onOpenChapterInWeb = {},
                 readerContent = {},

@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.ScraperNetworkClient
-import my.noveldokusha.network.interceptors.GLOBAL_USER_AGENT
+import my.noveldokusha.network.interceptors.resolveUserAgent
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import my.noveldokusha.text_translator.domain.TranslatorState
@@ -183,7 +183,7 @@ class TranslationManagerGooglePA(
             val rankingHtml = client.newCall(
                 Request.Builder()
                     .url("https://wtr-lab.com/en/ranking/monthly")
-                    .header("User-Agent", GLOBAL_USER_AGENT)
+                    .header("User-Agent", resolveUserAgent(appPreferences))
                     .build()
             ).execute().body.string().ifBlank {
                 Log.w(TAG, "fetchKeyFromWtrLab: ranking page returned null body")
@@ -215,7 +215,7 @@ class TranslationManagerGooglePA(
             val chapterHtml = client.newCall(
                 Request.Builder()
                     .url(chapterUrl)
-                    .header("User-Agent", GLOBAL_USER_AGENT)
+                    .header("User-Agent", resolveUserAgent(appPreferences))
                     .build()
             ).execute().body.string().ifBlank { return@withContext null }
 

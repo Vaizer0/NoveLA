@@ -14,8 +14,6 @@ import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -37,8 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.BaseActivity
 import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
-import my.noveldokusha.coreui.mappers.toPreferenceTheme
 import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.readerTheme
 import my.noveldokusha.coreui.theme.colorAttrRes
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_String
@@ -302,10 +300,11 @@ class ReaderActivity : BaseActivity() {
 
         setContent {
             Theme(themeProvider) {
-                SetSystemBarTransparent()
+                readerTheme {
+                    SetSystemBarTransparent()
 
-                // Reader info
-                ReaderScreen(
+                    // Reader info
+                    ReaderScreen(
                     state = viewModel.state,
                     onTextFontChanged = { appPreferences.READER_FONT_FAMILY.value = it },
                     onTextSizeChanged = { appPreferences.READER_FONT_SIZE.value = it },
@@ -313,8 +312,8 @@ class ReaderActivity : BaseActivity() {
                     onParagraphSpacingChanged = { appPreferences.READER_PARAGRAPH_SPACING.value = it },
                     onSelectableTextChange = { appPreferences.READER_SELECTABLE_TEXT.value = it },
                     onKeepScreenOn = { appPreferences.READER_KEEP_SCREEN_ON.value = it },
-                    onFollowSystem = { appPreferences.THEME_FOLLOW_SYSTEM.value = it },
-                    onThemeSelected = { appPreferences.THEME_ID.value = it.toPreferenceTheme },
+                    onDarkModeSelected = { appPreferences.THEME_DARK_MODE.value = it.name },
+                    onAppThemeChanged = { appPreferences.APP_THEME.value = it.name },
                     onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
@@ -326,19 +325,17 @@ class ReaderActivity : BaseActivity() {
                             navigationRoutes.webView(this, url = url).let(::startActivity)
                         }
                     },
-                    readerContent = { paddingValues ->
-                        AndroidView(
-                            factory = { viewBind.root },
-                            modifier = Modifier.padding(paddingValues)
-                        )
+                    readerContent = {
+                        AndroidView(factory = { viewBind.root })
                     },
-                )
+                    )
 
-                if (viewModel.state.showInvalidChapterDialog.value) {
-                    BasicAlertDialog(onDismissRequest = {
-                        viewModel.state.showInvalidChapterDialog.value = false
-                    }) {
-                        Text(stringResource(id = R.string.invalid_chapter))
+                    if (viewModel.state.showInvalidChapterDialog.value) {
+                        BasicAlertDialog(onDismissRequest = {
+                            viewModel.state.showInvalidChapterDialog.value = false
+                        }) {
+                            Text(stringResource(id = R.string.invalid_chapter))
+                        }
                     }
                 }
             }
@@ -617,7 +614,10 @@ class ReaderActivity : BaseActivity() {
                     viewModel.chaptersLoader.tryLoadNext()
                 }
                 if (isTop) {
-                    viewModel.chaptersLoader.tryLoadPrevious()
+                    val firstItem = viewModel.items.getOrNull(0)
+                    if (firstItem != null && firstItem !is ReaderItem.BookStart) {
+                        viewModel.chaptersLoader.tryLoadPrevious()
+                    }
                 }
             }
             ReaderState.LOADING -> run {}

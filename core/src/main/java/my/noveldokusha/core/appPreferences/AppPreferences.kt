@@ -47,13 +47,11 @@ class AppPreferences @Inject constructor(
         }
     }
 
-    val THEME_ID = object : Preference<PreferenceThemes>("THEME_ID") {
-        override var value by SharedPreference_Enum(name, preferences, PreferenceThemes.Light) {
-            enumValueOf(it)
-        }
+    val APP_THEME = object : Preference<String>("APP_THEME") {
+        override var value by SharedPreference_String(name, preferences, "DEFAULT")
     }
-    val THEME_FOLLOW_SYSTEM = object : Preference<Boolean>("THEME_FOLLOW_SYSTEM") {
-        override var value by SharedPreference_Boolean(name, preferences, true)
+    val THEME_DARK_MODE = object : Preference<String>("THEME_DARK_MODE") {
+        override var value by SharedPreference_String(name, preferences, "SYSTEM")
     }
     val READER_FONT_SIZE = object : Preference<Float>("READER_FONT_SIZE") {
         override var value by SharedPreference_Float(name, preferences, 14f)

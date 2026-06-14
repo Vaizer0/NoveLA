@@ -1,22 +1,24 @@
 package my.noveldokusha.libraryexplorer
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.Toasty
+import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.SortConfig
@@ -25,7 +27,8 @@ import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
-import my.noveldokusha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.interactor.WorkersInteractions
+import my.noveldokusha.scraper.Scraper
 import javax.inject.Inject
 
 @HiltViewModel
@@ -33,28 +36,21 @@ internal class LibraryPageViewModel @Inject constructor(
     private val appRepository: AppRepository,
     private val preferences: AppPreferences,
     private val toasty: Toasty,
-    private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
+    private val workersInteractions: WorkersInteractions,
     private val bookGenreDao: BookGenreDao,
+    private val scraper: Scraper,
+    @ApplicationContext private val context: Context,
 ) : BaseViewModel() {
-    var isPullRefreshing by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
         private set
 
-    // State flows to track update progress
-    private val _countingUpdating = MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
-    val countingUpdating = _countingUpdating.asStateFlow()
-
-    private val _currentUpdating = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
-    val currentUpdating = _currentUpdating.asStateFlow()
-
-    private val _newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(emptySet())
-    val newUpdates = _newUpdates.asStateFlow()
-
-    private val _failedUpdates = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
-    val failedUpdates = _failedUpdates.asStateFlow()
-
     private val _searchQueryFlow = MutableStateFlow("")
     val searchQueryFlow = _searchQueryFlow.asStateFlow()
+
+    // Selected categories: empty = All, otherwise shows books matching ANY of selected categories (OR logic)
+    // Values: "" = Reading, "Completed" = Completed, custom = custom category name
+    private val _selectedCategories = MutableStateFlow<Set<String>>(emptySet())
+    val selectedCategories = _selectedCategories.asStateFlow()
 
     // Жанры-фильтры — пустой Set означает "все жанры"
     private val _selectedGenres = MutableStateFlow<Set<String>>(emptySet())
@@ -74,58 +70,14 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .toState(viewModelScope, emptyMap())
 
-    val listReading by createPageList(isShowCompleted = false)
-    val listCompleted by createPageList(isShowCompleted = true)
-
-    val countReading by createCountFlow(isShowCompleted = false)
-    val countCompleted by createCountFlow(isShowCompleted = true)
-
-    init {
-        // Sync the mutable state with the flow
-        viewModelScope.launch {
-            _searchQueryFlow.collect { newQuery ->
-                searchQuery = newQuery
-            }
-        }
-    }
-
-    fun updateSearchQuery(query: String) {
-        searchQuery = query
-        _searchQueryFlow.value = query
-    }
-
-    fun toggleGenreFilter(genre: String) {
-        _selectedGenres.update { current ->
-            if (genre in current) current - genre else current + genre
-        }
-    }
-
-    fun clearGenreFilters() {
-        _selectedGenres.value = emptySet()
-    }
-
-
-    private fun createPageList(isShowCompleted: Boolean) = appRepository.libraryBooks
+    // Shared base flow — only ONE Room query (JOIN Book+Chapter) instead of 4
+    private val baseLibraryFlow = appRepository.libraryBooks
         .getBooksInLibraryWithContextFlow
-        .map { it.filter { book -> book.book.completed == isShowCompleted } }
         .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
             when (filterRead) {
                 TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
                 TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
                 TernaryState.Inactive -> list
-            }
-        }.combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
-            val sortedList = when (sortConfig.option) {
-                LibrarySortOption.TITLE -> list.sortedBy { it.book.title.lowercase() }
-                LibrarySortOption.UNREAD_CHAPTERS -> list.sortedBy { it.chaptersCount - it.chaptersReadCount }
-                LibrarySortOption.LAST_READ -> list.sortedBy { it.book.lastReadEpochTimeMilli }
-                LibrarySortOption.LAST_UPDATE -> list.sortedBy { it.book.lastUpdateEpochTimeMilli }
-                LibrarySortOption.ADDED -> list.sortedBy { it.book.addedToLibraryEpochTimeMilli }
-            }
-
-            when (sortConfig.direction) {
-                SortDirection.ASC -> sortedList
-                SortDirection.DESC -> sortedList.reversed()
             }
         }.combine(_searchQueryFlow) { list, query ->
             if (query.isBlank()) list
@@ -133,9 +85,7 @@ internal class LibraryPageViewModel @Inject constructor(
                 val q = query.trim()
                 val cache = genreToBookUrls.value
                 list.filter { book ->
-                    // Совпадение по названию
                     book.book.title.contains(q, ignoreCase = true) ||
-                            // Совпадение по жанру — ищем в кэше какие жанры содержат bookUrl
                             cache.any { (genre, urls) ->
                                 book.book.url in urls && genre.contains(q, ignoreCase = true)
                             }
@@ -151,50 +101,104 @@ internal class LibraryPageViewModel @Inject constructor(
                     }
                 }
             }
+        }.combine(_selectedCategories) { list, categories ->
+            if (categories.isEmpty()) list // All
+            else {
+                list.filter { book ->
+                    categories.any { cat ->
+                        when (cat) {
+                            "" -> book.book.category == "" || book.book.category == null // Reading
+                            "Completed" -> book.book.category == "Completed"
+                            else -> book.book.category == cat // Custom
+                        }
+                    }
+                }
+            }
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
+
+    // Single filtered list instead of listReading/listCompleted
+    val filteredList = baseLibraryFlow
+        .combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
+            when (sortConfig.direction) {
+                SortDirection.ASC -> when (sortConfig.option) {
+                    LibrarySortOption.TITLE -> list.sortedBy { it.book.title.lowercase() }
+                    LibrarySortOption.UNREAD_CHAPTERS -> list.sortedBy { it.chaptersCount - it.chaptersReadCount }
+                    LibrarySortOption.LAST_READ -> list.sortedBy { it.book.lastReadEpochTimeMilli }
+                    LibrarySortOption.LAST_UPDATE -> list.sortedBy { it.book.lastUpdateEpochTimeMilli }
+                    LibrarySortOption.ADDED -> list.sortedBy { it.book.addedToLibraryEpochTimeMilli }
+                }
+                SortDirection.DESC -> when (sortConfig.option) {
+                    LibrarySortOption.TITLE -> list.sortedByDescending { it.book.title.lowercase() }
+                    LibrarySortOption.UNREAD_CHAPTERS -> list.sortedByDescending { it.chaptersCount - it.chaptersReadCount }
+                    LibrarySortOption.LAST_READ -> list.sortedByDescending { it.book.lastReadEpochTimeMilli }
+                    LibrarySortOption.LAST_UPDATE -> list.sortedByDescending { it.book.lastUpdateEpochTimeMilli }
+                    LibrarySortOption.ADDED -> list.sortedByDescending { it.book.addedToLibraryEpochTimeMilli }
+                }
+            }
         }
         .toState(viewModelScope, listOf())
 
-    private fun createCountFlow(isShowCompleted: Boolean) = appRepository.libraryBooks
-        .getBooksInLibraryWithContextFlow
-        .map { it.filter { book -> book.book.completed == isShowCompleted } }
-        .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
-            when (filterRead) {
-                TernaryState.Active -> list.filter { it.chaptersCount == it.chaptersReadCount }
-                TernaryState.Inverse -> list.filter { it.chaptersCount != it.chaptersReadCount }
-                TernaryState.Inactive -> list
-            }
-        }.map { it.size }
-        .toState(viewModelScope, 0)
+    // Count of items in each category for the chips
+    val categoryCounts = baseLibraryFlow
+        .map { list ->
+            val reading = list.count { it.book.category == "" || it.book.category == null }
+            val completed = list.count { it.book.category == "Completed" }
+            reading to completed
+        }
+        .toState(viewModelScope, 0 to 0)
 
-
-    private fun showLoadingSpinner() {
+    init {
+        // Sync the mutable state with the flow
         viewModelScope.launch {
-            // Keep for 3 seconds so the user can notice the refresh has been triggered.
-            isPullRefreshing = true
-            delay(3000L)
-            isPullRefreshing = false
+            _searchQueryFlow.collect { newQuery ->
+                searchQuery = newQuery
+            }
         }
     }
 
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        _searchQueryFlow.value = query
+    }
+
+    fun toggleCategory(category: String) {
+        _selectedCategories.update { current ->
+            if (category in current) current - category else current + category
+        }
+    }
+
+    fun clearCategoryFilters() {
+        _selectedCategories.value = emptySet()
+    }
+
+    fun toggleGenreFilter(genre: String) {
+        _selectedGenres.update { current ->
+            if (genre in current) current - genre else current + genre
+        }
+    }
+
+    fun clearGenreFilters() {
+        _selectedGenres.value = emptySet()
+    }
+
+
+    // Observes WorkManager state: true while manual update is running
+    val isUpdating by workersInteractions.isManualUpdateRunning()
+        .toState(viewModelScope, initialValue = false)
+
     @Suppress("UNUSED_PARAMETER")
     fun onLibraryCategoryRefresh(libraryCategory: LibraryCategory) {
-        showLoadingSpinner()
         toasty.show(R.string.updating_library_notice)
+        workersInteractions.checkForLibraryUpdates(libraryCategory)
+    }
 
-        // Launch coroutine to update library books information including titles
-        viewModelScope.launch {
-            try {
-                // Update books based on the selected category
-                libraryUpdatesInteractions.updateLibraryBooks(
-                    completedOnes = libraryCategory == LibraryCategory.COMPLETED,
-                    countingUpdating = _countingUpdating,
-                    currentUpdating = _currentUpdating,
-                    newUpdates = _newUpdates,
-                    failedUpdates = _failedUpdates
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+    fun cancelLibraryUpdates() {
+        workersInteractions.cancelLibraryUpdates()
+        toasty.show(R.string.update_cancelled)
+    }
+
+    fun getSourceName(url: String): String {
+        if (url.isLocalUri) return "Local"
+        return scraper.getCompatibleSource(url)?.resolveName(context) ?: "Unknown Source"
     }
 }

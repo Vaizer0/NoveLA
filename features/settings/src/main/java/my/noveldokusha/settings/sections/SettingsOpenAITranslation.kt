@@ -91,7 +91,7 @@ internal fun SettingsOpenAITranslation(
                         Icon(
                             Icons.Outlined.Link,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -140,7 +140,7 @@ internal fun SettingsOpenAITranslation(
                         Icon(
                             Icons.Outlined.Key,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(

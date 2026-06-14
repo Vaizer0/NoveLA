@@ -1,12 +1,12 @@
 package my.noveldokusha.coreui.theme
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -16,66 +16,108 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-
+import my.noveldokusha.coreui.theme.colorscheme.BaseColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.CatppuccinColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.CloudflareColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.CottoncandyColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.DoomColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.GreenAppleColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.LavenderColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.MatrixColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.MidnightDuskColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.MochaColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.MonetColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.MonochromeColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.NordColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.SapphireColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.StrawberryDaiquiriColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.TachiyomiColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.TakoColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.TealTurquoiseColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.TidalWaveColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.YinYangColorScheme
+import my.noveldokusha.coreui.theme.colorscheme.YotsubaColorScheme
 
 @Composable
 fun Theme(
     themeProvider: ThemeProvider,
     content: @Composable () -> @Composable Unit,
 ) {
-    val followSystemsTheme by themeProvider.followSystem(rememberCoroutineScope())
-    val selectedTheme by themeProvider.currentTheme(rememberCoroutineScope())
+    val coroutineScope = rememberCoroutineScope()
+    val darkMode = themeProvider.currentDarkMode(coroutineScope).value
+    val resolvedAppTheme = themeProvider.currentAppTheme(coroutineScope).value
 
-    val isSystemThemeLight = !isSystemInDarkTheme()
-    val theme: Themes = when (followSystemsTheme) {
-        true -> when {
-            isSystemThemeLight && !selectedTheme.isLight -> Themes.LIGHT
-            !isSystemThemeLight && selectedTheme.isLight -> Themes.DARK
-            else -> selectedTheme
-        }
-        false -> selectedTheme
+    val isDark = when (darkMode) {
+        DarkMode.LIGHT -> false
+        DarkMode.DARK -> true
+        DarkMode.BLACK -> true
+        DarkMode.SYSTEM -> isSystemInDarkTheme()
     }
+
     InternalTheme(
-        theme = theme,
+        appTheme = resolvedAppTheme,
+        isDark = isDark,
+        isAmoled = darkMode == DarkMode.BLACK,
+        content = content,
+    )
+}
+
+@Composable
+fun Theme(
+    appTheme: AppTheme = AppTheme.DEFAULT,
+    darkMode: DarkMode = DarkMode.SYSTEM,
+    content: @Composable () -> @Composable Unit,
+) {
+    val isDark = when (darkMode) {
+        DarkMode.LIGHT -> false
+        DarkMode.DARK -> true
+        DarkMode.BLACK -> true
+        DarkMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    InternalTheme(
+        appTheme = appTheme,
+        isDark = isDark,
+        isAmoled = darkMode == DarkMode.BLACK,
         content = content,
     )
 }
 
 @Composable
 fun InternalTheme(
-    theme: Themes = if (isSystemInDarkTheme()) Themes.DARK else Themes.LIGHT,
-    content: @Composable () -> Unit
+    appTheme: AppTheme = AppTheme.DEFAULT,
+    isDark: Boolean = isSystemInDarkTheme(),
+    isAmoled: Boolean = false,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when (theme) {
-        Themes.LIGHT -> light_colorScheme
-        Themes.DARK -> dark_colorScheme
-        Themes.BLACK -> black_colorScheme
-    }
-
-    val appColor = when (theme) {
-        Themes.LIGHT -> light_appColor
-        Themes.DARK -> dark_appColor
-        Themes.BLACK -> black_appColor
-    }
-
     val context = LocalContext.current
-    DisposableEffect(theme, colorScheme) {
+
+    val colorScheme = remember(context, appTheme, isDark, isAmoled) {
+        val baseScheme = getBaseColorScheme(appTheme, context)
+        baseScheme.getColorScheme(
+            isDark = isDark,
+            isAmoled = isAmoled,
+        )
+    }
+
+    DisposableEffect(appTheme, isDark) {
         (context as? ComponentActivity)?.enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT,
-            ) { !theme.isLight },
+            ) { isDark },
             navigationBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT,
-            ) { !theme.isLight }
+            ) { isDark }
         )
         onDispose {}
     }
-    val textSelectionColors = remember {
+
+    val textSelectionColors = remember(colorScheme.primary) {
         TextSelectionColors(
-            handleColor = ColorAccent,
-            backgroundColor = ColorAccent.copy(alpha = 0.3f)
+            handleColor = colorScheme.primary,
+            backgroundColor = colorScheme.primary.copy(alpha = 0.3f)
         )
     }
 
@@ -85,10 +127,53 @@ fun InternalTheme(
         shapes = shapes,
     ) {
         CompositionLocalProvider(
-            LocalContentColor provides MaterialTheme.colorScheme.onPrimary,
-            LocalAppColor provides appColor,
+            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
             LocalTextSelectionColors provides textSelectionColors,
             content = content
         )
     }
 }
+
+@Composable
+fun InternalTheme(
+    darkMode: DarkMode = DarkMode.SYSTEM,
+    appTheme: AppTheme = AppTheme.DEFAULT,
+    content: @Composable () -> Unit,
+) {
+    InternalTheme(
+        appTheme = appTheme,
+        isDark = when (darkMode) {
+            DarkMode.LIGHT -> false
+            DarkMode.DARK, DarkMode.BLACK -> true
+            DarkMode.SYSTEM -> isSystemInDarkTheme()
+        },
+        isAmoled = darkMode == DarkMode.BLACK,
+        content = content,
+    )
+}
+
+private fun getBaseColorScheme(appTheme: AppTheme, context: Context): BaseColorScheme {
+    return when (appTheme) {
+        AppTheme.DEFAULT -> MonetColorScheme(context)
+        AppTheme.TACHIYOMI -> TachiyomiColorScheme
+        AppTheme.GREEN_APPLE -> GreenAppleColorScheme
+        AppTheme.LAVENDER -> LavenderColorScheme
+        AppTheme.MIDNIGHT_DUSK -> MidnightDuskColorScheme
+        AppTheme.STRAWBERRY_DAIQUIRI -> StrawberryDaiquiriColorScheme
+        AppTheme.TAKO -> TakoColorScheme
+        AppTheme.TEALTURQUOISE -> TealTurquoiseColorScheme
+        AppTheme.TIDAL_WAVE -> TidalWaveColorScheme
+        AppTheme.YOTSUBA -> YotsubaColorScheme
+        AppTheme.MONOCHROME -> MonochromeColorScheme
+        AppTheme.CATPPUCCIN -> CatppuccinColorScheme
+        AppTheme.NORD -> NordColorScheme
+        AppTheme.YINYANG -> YinYangColorScheme
+        AppTheme.CLOUDFLARE -> CloudflareColorScheme
+        AppTheme.COTTONCANDY -> CottoncandyColorScheme
+        AppTheme.DOOM -> DoomColorScheme
+        AppTheme.MATRIX -> MatrixColorScheme
+        AppTheme.MOCHA -> MochaColorScheme
+        AppTheme.SAPPHIRE -> SapphireColorScheme
+    }
+}
+

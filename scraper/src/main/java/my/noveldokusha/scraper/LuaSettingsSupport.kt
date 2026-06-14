@@ -12,7 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import org.luaj.vm2.LuaValue
 
 /**
@@ -157,7 +157,7 @@ fun LuaSettingsScreen(
                         Text(
                             text = setting.label,
                             style = MaterialTheme.typography.titleSmall,
-                            color = ColorAccent,
+                            color = colorAccent(),
                         )
                         Spacer(Modifier.height(10.dp))
 
@@ -177,11 +177,11 @@ fun LuaSettingsScreen(
                                             prefs.edit().putString(setting.key, opt.value).apply()
                                         },
                                         shape = RoundedCornerShape(14.dp),
-                                        color = if (selected) ColorAccent.copy(alpha = 0.12f)
+                                        color = if (selected) colorAccent().copy(alpha = 0.12f)
                                         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                         border = BorderStroke(
                                             width = if (selected) 1.5.dp else 1.dp,
-                                            color = if (selected) ColorAccent
+                                            color = if (selected) colorAccent()
                                             else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                                         ),
                                         modifier = Modifier.weight(1f).fillMaxHeight()
@@ -196,7 +196,7 @@ fun LuaSettingsScreen(
                                                 text = opt.label,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                                color = if (selected) ColorAccent
+                                                color = if (selected) colorAccent()
                                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
@@ -209,7 +209,7 @@ fun LuaSettingsScreen(
                                 OutlinedButton(
                                     onClick = { expanded = true },
                                     shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.5.dp, ColorAccent.copy(alpha = 0.6f)),
+                                    border = BorderStroke(1.5.dp, colorAccent().copy(alpha = 0.6f)),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         contentColor = MaterialTheme.colorScheme.onSurface,
                                     ),
@@ -218,7 +218,7 @@ fun LuaSettingsScreen(
                                     Icon(
                                         imageVector = Icons.Filled.FilterList,
                                         contentDescription = null,
-                                        tint = ColorAccent,
+                                        tint = colorAccent(),
                                         modifier = Modifier.padding(end = 8.dp)
                                     )
                                     Text(
@@ -239,14 +239,14 @@ fun LuaSettingsScreen(
                                                 Text(
                                                     text = opt.label,
                                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                                    color = if (selected) ColorAccent
+                                                    color = if (selected) colorAccent()
                                                     else MaterialTheme.colorScheme.onSurface,
                                                 )
                                             },
                                             trailingIcon = if (selected) ({
                                                 Icon(
                                                     Icons.Filled.Check, null,
-                                                    tint = ColorAccent
+                                                    tint = colorAccent()
                                                 )
                                             }) else null,
                                             onClick = {

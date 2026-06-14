@@ -25,13 +25,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
 @Composable
 internal fun SettingsNetwork(
-    @Suppress("UNUSED_PARAMETER") scraperUserAgent: MutableState<String>,
+    scraperUserAgent: MutableState<String>,
     cloudflareBypassEnabled: MutableState<Boolean>,
     @Suppress("UNUSED_PARAMETER") cloudflareChallengeTimeoutSeconds: MutableState<Int>,
     massAddDelayMs: State<Long>,
@@ -43,13 +43,12 @@ internal fun SettingsNetwork(
             text = stringResource(id = R.string.network),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
 
-        // User-Agent setting - DISABLED (not used yet)
-        /*
+        // User-Agent setting
         var showUserAgentDialog by remember { mutableStateOf(false) }
-        ListItem(
+        SlimListItem(
             headlineContent = {
                 Text(text = stringResource(R.string.scraper_user_agent))
             },
@@ -60,13 +59,14 @@ internal fun SettingsNetwork(
                     scraperUserAgent.value.take(50) + if (scraperUserAgent.value.length > 50) "..." else "")
             },
             leadingContent = {
-                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
-            modifier = Modifier.clickable { showUserAgentDialog = true }
+            onClick = { showUserAgentDialog = true }
         )
 
         if (showUserAgentDialog) {
             var tempUserAgent by remember { mutableStateOf(scraperUserAgent.value) }
+            val hasInvalidChars = tempUserAgent.isNotBlank() && tempUserAgent.any { it.code > 127 }
             Dialog(onDismissRequest = { showUserAgentDialog = false }) {
                 androidx.compose.material3.Card {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -82,10 +82,20 @@ internal fun SettingsNetwork(
                             onValueChange = { tempUserAgent = it },
                             label = { Text(stringResource(R.string.user_agent), color = MaterialTheme.colorScheme.onSurface) },
                             modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text(stringResource(R.string.leave_empty_for_default)) },
+                            isError = hasInvalidChars,
+                            supportingText = {
+                                if (hasInvalidChars) {
+                                    Text(
+                                        text = stringResource(R.string.user_agent_invalid_chars),
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                } else {
+                                    Text(stringResource(R.string.leave_empty_for_default))
+                                }
+                            },
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                focusedBorderColor = if (hasInvalidChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                unfocusedBorderColor = if (hasInvalidChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                 cursorColor = MaterialTheme.colorScheme.onSurface
                             )
                         )
@@ -109,6 +119,7 @@ internal fun SettingsNetwork(
                                     scraperUserAgent.value = tempUserAgent.trim()
                                     showUserAgentDialog = false
                                 },
+                                enabled = !hasInvalidChars,
                                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.onSurface
                                 )
@@ -120,7 +131,6 @@ internal fun SettingsNetwork(
                 }
             }
         }
-        */
 
         // Cloudflare bypass toggle
         SlimListItem(
@@ -131,7 +141,7 @@ internal fun SettingsNetwork(
                 Text(text = stringResource(R.string.cloudflare_bypass_description))
             },
             leadingContent = {
-                Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             trailingContent = {
                 androidx.compose.material3.Switch(
@@ -141,9 +151,8 @@ internal fun SettingsNetwork(
                         // Note: Requires app restart to take effect
                     },
                     colors = androidx.compose.material3.SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
@@ -161,7 +170,7 @@ internal fun SettingsNetwork(
                     Text(text = stringResource(R.string.seconds_format, cloudflareChallengeTimeoutSeconds.value))
                 },
                 leadingContent = {
-                    Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
                 modifier = Modifier.clickable { showTimeoutDialog = true }
             )
@@ -240,7 +249,7 @@ internal fun SettingsNetwork(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable {
                 // Cycle through common delay values: 0.5s, 1s, 2s, 3s, 5s

@@ -23,7 +23,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.colorApp
+
 
 fun ToggleableState.next() = when (this) {
     ToggleableState.On -> ToggleableState.Indeterminate
@@ -53,9 +53,9 @@ fun PosNegCheckbox(
     ) {
         val checkedColor by animateColorAsState(
             targetValue = when (updatedState) {
-                ToggleableState.Off -> MaterialTheme.colorApp.checkboxPositive
-                ToggleableState.On -> MaterialTheme.colorApp.checkboxPositive
-                ToggleableState.Indeterminate -> MaterialTheme.colorApp.checkboxNegative
+                ToggleableState.Off -> MaterialTheme.colorScheme.tertiary
+                ToggleableState.On -> MaterialTheme.colorScheme.tertiary
+                ToggleableState.Indeterminate -> MaterialTheme.colorScheme.error
             },
             animationSpec = tween(250), label = ""
         )

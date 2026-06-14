@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.ExtensionInfoCached
-import my.noveldokusha.core.appPreferences.SortOrder
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.scraper.LuaSourceLoader
 import my.noveldokusha.data.ScraperRepository
@@ -70,7 +69,6 @@ class ExtensionsManagerViewModel @Inject constructor(
         ExtensionsScreenEvent.OnShowRepositoryDialog     -> _state.update { it.copy(showRepositoryDialog = true) }
         ExtensionsScreenEvent.OnHideRepositoryDialog     -> _state.update { it.copy(showRepositoryDialog = false) }
         is ExtensionsScreenEvent.OnUpdateRepositoryUrl   -> updateRepositoryUrl(event.url)
-        is ExtensionsScreenEvent.OnSortOrderChange       -> _state.update { it.copy(sortOrder = event.sortOrder) }
         is ExtensionsScreenEvent.OnLanguageFilterToggle  -> toggleLanguageFilter(event.languageCode)
         is ExtensionsScreenEvent.OnLanguageFilterClear   -> clearLanguageFilter(event.languageCode)
         ExtensionsScreenEvent.OnBackPressed              -> Unit
