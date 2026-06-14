@@ -95,7 +95,7 @@ internal fun BookActionsBottomSheet(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Category: two-button segmented control ───────────────────────
+            // ── Category selection: buttons for each category ─────────────────
             Text(
                 text = stringResource(R.string.category_name),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -103,78 +103,63 @@ internal fun BookActionsBottomSheet(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                val readingSelected = selectedCategory == ""
-                val completedSelected = selectedCategory == "Completed"
+            // Build category list with labels
+            val categoryLabels = categories.map { category ->
+                val label = when (category) {
+                    "" -> stringResource(R.string.reading)
+                    "Completed" -> stringResource(R.string.completed)
+                    else -> category
+                }
+                category to label
+            }
 
-                if (readingSelected) {
-                    FilledTonalButton(
-                        onClick = {},
-                        shape = buttonShape,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.reading),
-                            fontSize = buttonTextSize,
-                            textAlign = TextAlign.Center
-                        )
+            // Show 2 columns of buttons for categories
+            categoryLabels.chunked(2).forEach { chunk ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    chunk.forEach { (category, label) ->
+                        val isSelected = selectedCategory == category
+                        if (isSelected) {
+                            FilledTonalButton(
+                                onClick = {},
+                                shape = buttonShape,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = buttonTextSize,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    selectedCategory = category
+                                    onCategorySelected(category)
+                                },
+                                shape = buttonShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = buttonTextSize,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            selectedCategory = ""
-                            onCategorySelected("")
-                        },
-                        shape = buttonShape,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.reading),
-                            fontSize = buttonTextSize,
-                            textAlign = TextAlign.Center
-                        )
+                    // If chunk had only 1 item, add spacer for alignment
+                    if (chunk.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
-
-                if (completedSelected) {
-                    FilledTonalButton(
-                        onClick = {},
-                        shape = buttonShape,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.completed),
-                            fontSize = buttonTextSize,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            selectedCategory = "Completed"
-                            onCategorySelected("Completed")
-                        },
-                        shape = buttonShape,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.completed),
-                            fontSize = buttonTextSize,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             Spacer(modifier = Modifier.height(12.dp))

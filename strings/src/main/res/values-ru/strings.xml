@@ -335,8 +335,14 @@
     <string name="clear_translation">Сбросить перевод</string>
     <string name="apply">Применить</string>
 
-
-
+    <!-- Category filter strings -->
+    <string name="all_categories">Все</string>
+    <string name="categories">Категории</string>
+    <string name="move_selected_to_category">Переместить выбранные в категорию</string>
+    <string name="create_category">Создать категорию</string>
+    <string name="delete_category">Удалить категорию</string>
+    <string name="category_delete_confirm">Удалить категорию \"%s\"? Книги будут перемещены в \"Читаю\".</string>
+    <string name="enter_category_name">Введите название категории</string>
     <!-- ── OpenAI-compatible провайдер ──────────────────────────────────────── -->
     <string name="provider_openai">OpenAI-совместимый API</string>
     <string name="provider_openai_description">OpenAI, OpenRouter, Mistral, DeepSeek, Ollama и др.</string>

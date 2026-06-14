@@ -426,4 +426,15 @@
     <string name="llm_max_output_tokens_label">Token limit (0 = auto)</string>
     <string name="llm_max_output_tokens_tip">Hard cap on response length. 0 = let the model decide (recommended). Set a value only if you need to limit costs on verbose models.</string>
     <string name="llm_tokens_auto">Auto</string>
+
+    <!-- Category filter strings -->
+    <string name="all_categories">All</string>
+    <string name="categories">Categories</string>
+    <string name="move_selected_to_category">Move selected to category</string>
+    <string name="create_category">Create category</string>
+    <string name="delete_category">Delete category</string>
+    <string name="rename_category">Rename</string>
+    <string name="category_delete_confirm">Delete category \"%s\"? Books will be moved to \"Reading\".</string>
+    <string name="no_category">No category</string>
+    <string name="enter_category_name">Enter category name</string>
 </resources>

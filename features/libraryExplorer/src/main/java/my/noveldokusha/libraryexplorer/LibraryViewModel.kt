@@ -43,6 +43,7 @@ internal data class LibraryUiState(
     val sortConfig: SortConfig = SortConfig.DEFAULT,
     val customCategories: List<String> = emptyList(),
     val toolbarMode: ToolbarMode = ToolbarMode.MAIN,
+    val showCategories: Boolean = false,
 )
 
 internal sealed interface LibraryUiEffect {
@@ -154,6 +155,10 @@ internal class LibraryViewModel @Inject constructor(
         _uiState.update { it.copy(showBottomSheet = show) }
     }
 
+    fun toggleShowCategories() {
+        _uiState.update { it.copy(showCategories = !it.showCategories) }
+    }
+
     fun readFilterToggle() {
         appPreferences.LIBRARY_FILTER_READ.value = _uiState.value.readFilter.next()
     }
@@ -207,6 +212,31 @@ internal class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val isCompleted = category == "Completed"
             appRepository.libraryBooks.updateCategoryAndCompleted(bookUrl, category, isCompleted)
+        }
+    }
+
+    fun addCategory(name: String) {
+        if (name.isBlank()) return
+        val current = appPreferences.LIBRARY_CUSTOM_CATEGORIES.value
+        if (name !in current) {
+            appPreferences.LIBRARY_CUSTOM_CATEGORIES.value = current + name
+        }
+    }
+
+    fun removeCategory(name: String) {
+        val current = appPreferences.LIBRARY_CUSTOM_CATEGORIES.value
+        appPreferences.LIBRARY_CUSTOM_CATEGORIES.value = current - name
+    }
+
+    fun moveBooksToCategory(bookUrls: Set<String>, category: String) {
+        viewModelScope.launch {
+            bookUrls.forEach { bookUrl ->
+                val book = appRepository.libraryBooks.get(bookUrl) ?: return@forEach
+                appRepository.libraryBooks.updateCategoryAndCompleted(
+                    bookUrl, category, category == "Completed"
+                )
+            }
+            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
         }
     }
 

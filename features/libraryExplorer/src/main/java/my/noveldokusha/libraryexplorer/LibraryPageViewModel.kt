@@ -47,6 +47,11 @@ internal class LibraryPageViewModel @Inject constructor(
     private val _searchQueryFlow = MutableStateFlow("")
     val searchQueryFlow = _searchQueryFlow.asStateFlow()
 
+    // Selected categories: empty = All, otherwise shows books matching ANY of selected categories (OR logic)
+    // Values: "" = Reading, "Completed" = Completed, custom = custom category name
+    private val _selectedCategories = MutableStateFlow<Set<String>>(emptySet())
+    val selectedCategories = _selectedCategories.asStateFlow()
+
     // Жанры-фильтры — пустой Set означает "все жанры"
     private val _selectedGenres = MutableStateFlow<Set<String>>(emptySet())
     val selectedGenres = _selectedGenres.asStateFlow()
@@ -96,41 +101,23 @@ internal class LibraryPageViewModel @Inject constructor(
                     }
                 }
             }
+        }.combine(_selectedCategories) { list, categories ->
+            if (categories.isEmpty()) list // All
+            else {
+                list.filter { book ->
+                    categories.any { cat ->
+                        when (cat) {
+                            "" -> book.book.category == "" || book.book.category == null // Reading
+                            "Completed" -> book.book.category == "Completed"
+                            else -> book.book.category == cat // Custom
+                        }
+                    }
+                }
+            }
         }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
-    val listReading by createPageList(isShowCompleted = false)
-    val listCompleted by createPageList(isShowCompleted = true)
-
-    val countReading by createCountFlow(isShowCompleted = false)
-    val countCompleted by createCountFlow(isShowCompleted = true)
-
-    init {
-        // Sync the mutable state with the flow
-        viewModelScope.launch {
-            _searchQueryFlow.collect { newQuery ->
-                searchQuery = newQuery
-            }
-        }
-    }
-
-    fun updateSearchQuery(query: String) {
-        searchQuery = query
-        _searchQueryFlow.value = query
-    }
-
-    fun toggleGenreFilter(genre: String) {
-        _selectedGenres.update { current ->
-            if (genre in current) current - genre else current + genre
-        }
-    }
-
-    fun clearGenreFilters() {
-        _selectedGenres.value = emptySet()
-    }
-
-
-    private fun createPageList(isShowCompleted: Boolean) = baseLibraryFlow
-        .map { it.filter { book -> book.book.completed == isShowCompleted } }
+    // Single filtered list instead of listReading/listCompleted
+    val filteredList = baseLibraryFlow
         .combine(preferences.LIBRARY_SORT_CONFIG.flow()) { list, sortConfig ->
             when (sortConfig.direction) {
                 SortDirection.ASC -> when (sortConfig.option) {
@@ -151,9 +138,48 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .toState(viewModelScope, listOf())
 
-    private fun createCountFlow(isShowCompleted: Boolean) = baseLibraryFlow
-        .map { it.count { book -> book.book.completed == isShowCompleted } }
-        .toState(viewModelScope, 0)
+    // Count of items in each category for the chips
+    val categoryCounts = baseLibraryFlow
+        .map { list ->
+            val reading = list.count { it.book.category == "" || it.book.category == null }
+            val completed = list.count { it.book.category == "Completed" }
+            reading to completed
+        }
+        .toState(viewModelScope, 0 to 0)
+
+    init {
+        // Sync the mutable state with the flow
+        viewModelScope.launch {
+            _searchQueryFlow.collect { newQuery ->
+                searchQuery = newQuery
+            }
+        }
+    }
+
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        _searchQueryFlow.value = query
+    }
+
+    fun toggleCategory(category: String) {
+        _selectedCategories.update { current ->
+            if (category in current) current - category else current + category
+        }
+    }
+
+    fun clearCategoryFilters() {
+        _selectedCategories.value = emptySet()
+    }
+
+    fun toggleGenreFilter(genre: String) {
+        _selectedGenres.update { current ->
+            if (genre in current) current - genre else current + genre
+        }
+    }
+
+    fun clearGenreFilters() {
+        _selectedGenres.value = emptySet()
+    }
 
 
     // Observes WorkManager state: true while manual update is running

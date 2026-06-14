@@ -6,9 +6,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +56,10 @@ fun LibraryScreen(
     val lastClickTime = remember { mutableStateOf(0L) }
 
     val gridColumns = uiState.gridColumns
+
+    // Dialog states
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
+    var showMoveToCategoryDialog by remember { mutableStateOf(false) }
 
     val handleBookClick = remember(context, uiState.isSelectionMode) {
         { book: BookWithContext ->
@@ -100,11 +107,23 @@ fun LibraryScreen(
                     actions = {
                         IconButton(
                             onClick = {
-                                val currentBooks = pageViewModel.listReading
+                                val currentBooks = pageViewModel.filteredList.value
                                 libraryModel.selectAllBooks(currentBooks)
                             }
                         ) {
                             Icon(Icons.Filled.SelectAll, stringResource(R.string.select_all))
+                        }
+                        IconButton(
+                            onClick = { showMoveToCategoryDialog = true },
+                            enabled = uiState.selectedBooks.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Filled.DriveFileRenameOutline,
+                                stringResource(R.string.move_to),
+                                tint = if (uiState.selectedBooks.isNotEmpty())
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
                         }
                         IconButton(
                             onClick = { libraryModel.deleteSelectedBooks() },
@@ -156,6 +175,18 @@ fun LibraryScreen(
                                     IconButton(onClick = { libraryModel.setShowBottomSheet(true) }) {
                                         Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.filter))
                                     }
+                                    // Category toggle button (like language filter in Finder)
+                                    IconButton(
+                                        onClick = { libraryModel.toggleShowCategories() }
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.FolderOpen,
+                                            stringResource(R.string.categories),
+                                            tint = if (uiState.showCategories)
+                                                MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                     IconButton(onClick = { showDropdownMenu.value = true }) {
                                         Icon(Icons.Filled.MoreVert, stringResource(R.string.options_panel))
                                     }
@@ -201,14 +232,17 @@ fun LibraryScreen(
         },
         content = { innerPadding ->
             LibraryScreenBody(
-                tabs = listOf("Reading", "Completed"),
                 innerPadding = innerPadding,
                 topAppBarState = null,
                 onBookClick = handleBookClick,
                 onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
                 selectedBooks = uiState.selectedBooks,
-                isSelectionMode = uiState.isSelectionMode
+                isSelectionMode = uiState.isSelectionMode,
+                showCategories = uiState.showCategories,
+                customCategories = uiState.customCategories,
+                onCreateCategory = { showCreateCategoryDialog = true },
+                onDeleteCategory = { libraryModel.removeCategory(it) }
             )
         }
     )
@@ -229,4 +263,27 @@ fun LibraryScreen(
         visible = uiState.showBottomSheet,
         onDismiss = { libraryModel.setShowBottomSheet(false) }
     )
+
+    // Create category dialog
+    if (showCreateCategoryDialog) {
+        CreateCategoryDialog(
+            onDismiss = { showCreateCategoryDialog = false },
+            onCreate = { name ->
+                libraryModel.addCategory(name)
+                showCreateCategoryDialog = false
+            }
+        )
+    }
+
+    // Move to category dialog (selection mode)
+    if (showMoveToCategoryDialog) {
+        MoveToCategoryDialog(
+            categories = libraryModel.getCategories(),
+            onDismiss = { showMoveToCategoryDialog = false },
+            onCategorySelected = { category ->
+                libraryModel.moveBooksToCategory(uiState.selectedBooks, category)
+                showMoveToCategoryDialog = false
+            }
+        )
+    }
 }
