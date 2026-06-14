@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -140,6 +141,15 @@ fun LibraryScreen(
                                     )
                                 },
                                 actions = {
+                                    if (pageViewModel.isUpdating) {
+                                        IconButton(onClick = { pageViewModel.cancelLibraryUpdates() }) {
+                                            Icon(
+                                                Icons.Filled.Close,
+                                                stringResource(R.string.cancel),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
                                     IconButton(onClick = { libraryModel.setToolbarMode(ToolbarMode.SEARCH) }) {
                                         Icon(Icons.Filled.Search, stringResource(R.string.search_for_title))
                                     }

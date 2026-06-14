@@ -67,7 +67,7 @@ internal fun LibraryScreenBody(
     val pullToRefreshState = rememberPullToRefreshState()
 
     PullToRefreshBox(
-        isRefreshing = viewModel.isPullRefreshing,
+        isRefreshing = viewModel.isUpdating,
         onRefresh = {
             viewModel.onLibraryCategoryRefresh(
                 libraryCategory = when (updateCompleted.value) {

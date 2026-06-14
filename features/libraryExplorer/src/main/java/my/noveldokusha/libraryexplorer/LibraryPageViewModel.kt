@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +27,7 @@ import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
-import my.noveldokusha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.interactor.WorkersInteractions
 import my.noveldokusha.scraper.Scraper
 import javax.inject.Inject
 
@@ -37,27 +36,13 @@ internal class LibraryPageViewModel @Inject constructor(
     private val appRepository: AppRepository,
     private val preferences: AppPreferences,
     private val toasty: Toasty,
-    private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
+    private val workersInteractions: WorkersInteractions,
     private val bookGenreDao: BookGenreDao,
     private val scraper: Scraper,
     @ApplicationContext private val context: Context,
 ) : BaseViewModel() {
-    var isPullRefreshing by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
         private set
-
-    // State flows to track update progress
-    private val _countingUpdating = MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
-    val countingUpdating = _countingUpdating.asStateFlow()
-
-    private val _currentUpdating = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
-    val currentUpdating = _currentUpdating.asStateFlow()
-
-    private val _newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(emptySet())
-    val newUpdates = _newUpdates.asStateFlow()
-
-    private val _failedUpdates = MutableStateFlow<Set<my.noveldokusha.feature.local_database.tables.Book>>(emptySet())
-    val failedUpdates = _failedUpdates.asStateFlow()
 
     private val _searchQueryFlow = MutableStateFlow("")
     val searchQueryFlow = _searchQueryFlow.asStateFlow()
@@ -171,35 +156,19 @@ internal class LibraryPageViewModel @Inject constructor(
         .toState(viewModelScope, 0)
 
 
-    private fun showLoadingSpinner() {
-        viewModelScope.launch {
-            // Keep for 3 seconds so the user can notice the refresh has been triggered.
-            isPullRefreshing = true
-            delay(3000L)
-            isPullRefreshing = false
-        }
-    }
+    // Observes WorkManager state: true while manual update is running
+    val isUpdating by workersInteractions.isManualUpdateRunning()
+        .toState(viewModelScope, initialValue = false)
 
     @Suppress("UNUSED_PARAMETER")
     fun onLibraryCategoryRefresh(libraryCategory: LibraryCategory) {
-        showLoadingSpinner()
         toasty.show(R.string.updating_library_notice)
+        workersInteractions.checkForLibraryUpdates(libraryCategory)
+    }
 
-        // Launch coroutine to update library books information including titles
-        viewModelScope.launch {
-            try {
-                // Update books based on the selected category
-                libraryUpdatesInteractions.updateLibraryBooks(
-                    completedOnes = libraryCategory == LibraryCategory.COMPLETED,
-                    countingUpdating = _countingUpdating,
-                    currentUpdating = _currentUpdating,
-                    newUpdates = _newUpdates,
-                    failedUpdates = _failedUpdates
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+    fun cancelLibraryUpdates() {
+        workersInteractions.cancelLibraryUpdates()
+        toasty.show(R.string.update_cancelled)
     }
 
     fun getSourceName(url: String): String {

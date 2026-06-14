@@ -154,6 +154,7 @@
     <string name="layout">Макет</string>
     <string name="new_chapters">Новые главы</string>
     <string name="update_error">Ошибка обновления</string>
+    <string name="update_cancelled">Обновление отменено</string>
     <string name="media_control_previous">предыдущий</string>
     <string name="media_control_rewind">перемотка назад</string>
     <string name="media_control_play">воспроизведение</string>
