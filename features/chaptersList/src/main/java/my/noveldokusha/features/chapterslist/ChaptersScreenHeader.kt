@@ -100,12 +100,12 @@ internal fun ChaptersScreenHeader(
                 modifier = Modifier
                     .alpha(0.2f)
                     .fillMaxWidth()
-                    .aspectRatio(1 / 1.45f)
+                    .aspectRatio(1 / 1.25f)
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1 / 1.45f)
+                    .aspectRatio(1 / 1.25f)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
