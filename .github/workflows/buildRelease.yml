@@ -31,6 +31,9 @@ jobs:
           echo keyAlias=${{ secrets.ALIAS }} >> custom.properties
           echo keyPassword=${{ secrets.KEY_PASSWORD }} >> custom.properties
 
+      - name: Remove local Java home from gradle.properties
+        run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
+
       - name: Build app
         run: |
           ./gradlew assembleRelease -PlocalPropertiesFilePath=custom.properties
