@@ -35,8 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.BaseActivity
 import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
-import my.noveldokusha.coreui.mappers.toPreferenceTheme
 import my.noveldokusha.coreui.theme.Theme
+import my.noveldokusha.coreui.theme.readerTheme
 import my.noveldokusha.coreui.theme.colorAttrRes
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_String
@@ -300,10 +300,11 @@ class ReaderActivity : BaseActivity() {
 
         setContent {
             Theme(themeProvider) {
-                SetSystemBarTransparent()
+                readerTheme {
+                    SetSystemBarTransparent()
 
-                // Reader info
-                ReaderScreen(
+                    // Reader info
+                    ReaderScreen(
                     state = viewModel.state,
                     onTextFontChanged = { appPreferences.READER_FONT_FAMILY.value = it },
                     onTextSizeChanged = { appPreferences.READER_FONT_SIZE.value = it },
@@ -311,8 +312,8 @@ class ReaderActivity : BaseActivity() {
                     onParagraphSpacingChanged = { appPreferences.READER_PARAGRAPH_SPACING.value = it },
                     onSelectableTextChange = { appPreferences.READER_SELECTABLE_TEXT.value = it },
                     onKeepScreenOn = { appPreferences.READER_KEEP_SCREEN_ON.value = it },
-                    onFollowSystem = { appPreferences.THEME_FOLLOW_SYSTEM.value = it },
-                    onThemeSelected = { appPreferences.THEME_ID.value = it.toPreferenceTheme },
+                    onDarkModeSelected = { appPreferences.THEME_DARK_MODE.value = it.name },
+                    onAppThemeChanged = { appPreferences.APP_THEME.value = it.name },
                     onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
@@ -327,13 +328,14 @@ class ReaderActivity : BaseActivity() {
                     readerContent = {
                         AndroidView(factory = { viewBind.root })
                     },
-                )
+                    )
 
-                if (viewModel.state.showInvalidChapterDialog.value) {
-                    BasicAlertDialog(onDismissRequest = {
-                        viewModel.state.showInvalidChapterDialog.value = false
-                    }) {
-                        Text(stringResource(id = R.string.invalid_chapter))
+                    if (viewModel.state.showInvalidChapterDialog.value) {
+                        BasicAlertDialog(onDismissRequest = {
+                            viewModel.state.showInvalidChapterDialog.value = false
+                        }) {
+                            Text(stringResource(id = R.string.invalid_chapter))
+                        }
                     }
                 }
             }

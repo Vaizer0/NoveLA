@@ -39,7 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 import my.noveldokusha.text_translator.BUILT_IN_PROMPTS
@@ -75,7 +75,7 @@ internal fun SettingsPromptManager(
         text     = stringResource(R.string.llm_prompt_section_title),
         style    = MaterialTheme.typography.titleMedium,
         modifier = Modifier.textPadding(),
-        color    = ColorAccent,
+        color    = colorAccent(),
     )
 
     // ── System Prompt field ───────────────────────────────────────────────────
@@ -94,7 +94,7 @@ internal fun SettingsPromptManager(
                     Icon(
                         Icons.Outlined.Psychology,
                         contentDescription = null,
-                        tint               = MaterialTheme.colorScheme.onPrimary
+                        tint               = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -236,7 +236,7 @@ internal fun SettingsPromptManager(
                         Icon(
                             Icons.Outlined.Translate,
                             contentDescription = null,
-                            tint               = MaterialTheme.colorScheme.onPrimary,
+                            tint               = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.width(8.dp))
                         Column {
@@ -256,8 +256,8 @@ internal fun SettingsPromptManager(
                         checked         = promptUseEnglishLocale,
                         onCheckedChange = onPromptUseEnglishLocaleChange,
                         colors          = SwitchDefaults.colors(
-                            checkedThumbColor = ColorAccent,
-                            checkedTrackColor = ColorAccent.copy(alpha = 0.4f),
+                            checkedThumbColor = colorAccent(),
+                            checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                         ),
                     )
                 }

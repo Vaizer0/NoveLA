@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 import my.noveldokusha.settings.RegexCleanupSettingsScreen
@@ -26,7 +26,7 @@ fun SettingsRegexCleanup(
             text = stringResource(id = R.string.regex_cleanup),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         // Navigate to Regex Cleanup Settings
         SlimListItem(
@@ -45,7 +45,7 @@ fun SettingsRegexCleanup(
                 Icon(
                     Icons.Outlined.FindReplace,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         )

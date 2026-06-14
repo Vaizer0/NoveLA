@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import my.noveldokusha.core.domain.RemoteAppVersion
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 
 data class SettingsScreenState(
@@ -14,8 +13,6 @@ data class SettingsScreenState(
     val imageFolderSize: MutableState<String>,
     val isCleaningDatabase: State<Boolean>,
     val isCleaningImages: State<Boolean>,
-    val followsSystemTheme: State<Boolean>,
-    val currentTheme: State<Themes>,
     val currentAppTheme: State<AppTheme>,
     val currentDarkMode: State<DarkMode>,
     val currentLanguage: State<AppLanguage>,

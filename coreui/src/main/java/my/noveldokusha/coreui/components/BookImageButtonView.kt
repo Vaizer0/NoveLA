@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import my.noveldokusha.coreui.AppTestTags
 import my.noveldokusha.coreui.R
-import my.noveldokusha.coreui.theme.ColorAccent
 import my.noveldokusha.coreui.theme.Grey0
 import my.noveldokusha.coreui.theme.ImageBorderShape
 import my.noveldokusha.coreui.theme.InternalTheme

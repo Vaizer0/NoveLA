@@ -125,7 +125,7 @@ internal fun ChaptersScreen(
                 label = ""
             )
             val titleColor by animateColorAsState(
-                targetValue = MaterialTheme.colorScheme.onPrimary.copy(alpha = alpha),
+                targetValue = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
                 label = ""
             )
             Surface(color = backgroundColor) {
@@ -344,7 +344,7 @@ internal fun ChaptersScreen(
                     Icon(
                         Icons.Filled.PlayArrow,
                         contentDescription = stringResource(id = R.string.open_last_read_chapter),
-                        tint = Color.White
+
                     )
                     AnimatedVisibility(visible = lazyListState.isAtTop(threshold = 100.dp).value) {
                         Text(

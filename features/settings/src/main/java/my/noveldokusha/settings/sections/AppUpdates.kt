@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.debouncedClickable
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
@@ -35,7 +35,7 @@ internal fun AppUpdates(
             text = stringResource(R.string.app_updates) + " | " + state.currentAppVersion,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         SlimListItem(
             modifier = Modifier.clickable {
@@ -48,7 +48,7 @@ internal fun AppUpdates(
                 Icon(
                     Icons.Outlined.AutoMode,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
@@ -58,9 +58,8 @@ internal fun AppUpdates(
                         state.appUpdateCheckerEnabled.value = !state.appUpdateCheckerEnabled.value
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
@@ -73,14 +72,14 @@ internal fun AppUpdates(
                 Icon(
                     Icons.Outlined.DoubleArrow,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
                 AnimatedVisibility(visible = state.checkingForNewVersion.value) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(22.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },

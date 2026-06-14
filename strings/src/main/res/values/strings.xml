@@ -185,6 +185,7 @@
 
     <!-- Theme names for color schemes -->
     <string name="theme_name_default">Default</string>
+    <string name="theme_name_tachiyomi">Tachiyomi</string>
     <string name="theme_name_monet">Material You</string>
     <string name="theme_name_green_apple">Green Apple</string>
     <string name="theme_name_lavender">Lavender</string>
@@ -209,6 +210,8 @@
     <string name="dark_mode_light">Light</string>
     <string name="dark_mode_dark">Dark</string>
     <string name="dark_mode_black">Black</string>
+    <string name="dark_mode"></string>
+    <string name="color_scheme">Color Scheme</string>
     <string name="translation_services">Translation Services</string>
     <string name="gemini_api_key">Gemini API Key</string>
     <string name="active_google_gemini_api">Active: Google Gemini API</string>

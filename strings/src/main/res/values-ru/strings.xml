@@ -371,4 +371,6 @@
     <string name="llm_max_output_tokens_tip">Жёсткий лимит длины ответа. 0 = модель сама определяет оптимальный размер (рекомендуется). Указывайте значение только если нужно ограничить расходы для многословных моделей.</string>
 
     <string name="llm_tokens_auto">Авто</string>
+    <string name="dark_mode">Тёмный режим</string>
+    <string name="color_scheme">Цветовая схема</string>
 </resources>

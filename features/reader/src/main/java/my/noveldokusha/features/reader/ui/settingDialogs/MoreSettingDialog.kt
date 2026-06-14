@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.reader.R
 
 @Composable
@@ -43,7 +43,7 @@ internal fun MoreSettingDialog(
                 Icon(
                     Icons.Outlined.TouchApp,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
@@ -51,9 +51,8 @@ internal fun MoreSettingDialog(
                     checked = allowTextSelection,
                     onCheckedChange = onAllowTextSelectionChange,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
@@ -69,7 +68,7 @@ internal fun MoreSettingDialog(
                 Icon(
                     Icons.Outlined.LightMode,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
@@ -77,14 +76,13 @@ internal fun MoreSettingDialog(
                     checked = keepScreenOn,
                     onCheckedChange = onKeepScreenOn,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
         )
-        // Keep screen on
+        // Full screen
         SlimListItem(
             modifier = Modifier
                 .clickable { onFullScreen(!fullScreen) },
@@ -95,7 +93,7 @@ internal fun MoreSettingDialog(
                 Icon(
                     Icons.Outlined.Fullscreen,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
@@ -103,9 +101,8 @@ internal fun MoreSettingDialog(
                     checked = fullScreen,
                     onCheckedChange = onFullScreen,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }

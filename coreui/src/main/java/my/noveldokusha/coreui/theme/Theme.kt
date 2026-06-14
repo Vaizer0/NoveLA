@@ -37,28 +37,27 @@ import my.noveldokusha.coreui.theme.colorscheme.TealTurquoiseColorScheme
 import my.noveldokusha.coreui.theme.colorscheme.TidalWaveColorScheme
 import my.noveldokusha.coreui.theme.colorscheme.YinYangColorScheme
 import my.noveldokusha.coreui.theme.colorscheme.YotsubaColorScheme
-import my.noveldokusha.coreui.mappers.toDarkMode
 
 @Composable
 fun Theme(
     themeProvider: ThemeProvider,
     content: @Composable () -> @Composable Unit,
 ) {
-    val appTheme = themeProvider.currentAppTheme(rememberCoroutineScope()).value
-    val darkMode = themeProvider.currentDarkMode(rememberCoroutineScope()).value
+    val coroutineScope = rememberCoroutineScope()
+    val darkMode = themeProvider.currentDarkMode(coroutineScope).value
+    val resolvedAppTheme = themeProvider.currentAppTheme(coroutineScope).value
 
     val isDark = when (darkMode) {
-        DarkMode.SYSTEM -> isSystemInDarkTheme()
         DarkMode.LIGHT -> false
         DarkMode.DARK -> true
         DarkMode.BLACK -> true
+        DarkMode.SYSTEM -> isSystemInDarkTheme()
     }
-    val isAmoled = darkMode == DarkMode.BLACK
 
     InternalTheme(
-        appTheme = appTheme,
+        appTheme = resolvedAppTheme,
         isDark = isDark,
-        isAmoled = isAmoled,
+        isAmoled = darkMode == DarkMode.BLACK,
         content = content,
     )
 }
@@ -67,38 +66,19 @@ fun Theme(
 fun Theme(
     appTheme: AppTheme = AppTheme.DEFAULT,
     darkMode: DarkMode = DarkMode.SYSTEM,
-    themeProvider: ThemeProvider? = null,
     content: @Composable () -> @Composable Unit,
 ) {
-    val resolvedDarkMode = if (themeProvider != null) {
-        val isSystemDark = !isSystemInDarkTheme()
-        val followSystem = themeProvider.followSystem(rememberCoroutineScope())
-        val selectedTheme = themeProvider.currentTheme(rememberCoroutineScope())
-
-        when {
-            followSystem.value -> when {
-                isSystemDark && !selectedTheme.value.isLight -> DarkMode.LIGHT
-                !isSystemDark && selectedTheme.value.isLight -> DarkMode.DARK
-                else -> selectedTheme.value.toDarkMode
-            }
-            else -> selectedTheme.value.toDarkMode
-        }
-    } else {
-        darkMode
-    }
-
-    val isDark = when (resolvedDarkMode) {
+    val isDark = when (darkMode) {
         DarkMode.LIGHT -> false
         DarkMode.DARK -> true
         DarkMode.BLACK -> true
         DarkMode.SYSTEM -> isSystemInDarkTheme()
     }
-    val isAmoled = resolvedDarkMode == DarkMode.BLACK
 
     InternalTheme(
         appTheme = appTheme,
         isDark = isDark,
-        isAmoled = isAmoled,
+        isAmoled = darkMode == DarkMode.BLACK,
         content = content,
     )
 }
@@ -117,7 +97,6 @@ fun InternalTheme(
         baseScheme.getColorScheme(
             isDark = isDark,
             isAmoled = isAmoled,
-            overrideDarkSurfaceContainers = appTheme != AppTheme.MONET,
         )
     }
 
@@ -135,10 +114,10 @@ fun InternalTheme(
         onDispose {}
     }
 
-    val textSelectionColors = remember {
+    val textSelectionColors = remember(colorScheme.primary) {
         TextSelectionColors(
-            handleColor = ColorAccent,
-            backgroundColor = ColorAccent.copy(alpha = 0.3f)
+            handleColor = colorScheme.primary,
+            backgroundColor = colorScheme.primary.copy(alpha = 0.3f)
         )
     }
 
@@ -157,21 +136,26 @@ fun InternalTheme(
 
 @Composable
 fun InternalTheme(
-    theme: Themes,
+    darkMode: DarkMode = DarkMode.SYSTEM,
+    appTheme: AppTheme = AppTheme.DEFAULT,
     content: @Composable () -> Unit,
 ) {
     InternalTheme(
-        appTheme = AppTheme.DEFAULT,
-        isDark = !theme.isLight,
-        isAmoled = theme == Themes.BLACK,
+        appTheme = appTheme,
+        isDark = when (darkMode) {
+            DarkMode.LIGHT -> false
+            DarkMode.DARK, DarkMode.BLACK -> true
+            DarkMode.SYSTEM -> isSystemInDarkTheme()
+        },
+        isAmoled = darkMode == DarkMode.BLACK,
         content = content,
     )
 }
 
 private fun getBaseColorScheme(appTheme: AppTheme, context: Context): BaseColorScheme {
     return when (appTheme) {
-        AppTheme.DEFAULT -> TachiyomiColorScheme
-        AppTheme.MONET -> MonetColorScheme(context)
+        AppTheme.DEFAULT -> MonetColorScheme(context)
+        AppTheme.TACHIYOMI -> TachiyomiColorScheme
         AppTheme.GREEN_APPLE -> GreenAppleColorScheme
         AppTheme.LAVENDER -> LavenderColorScheme
         AppTheme.MIDNIGHT_DUSK -> MidnightDuskColorScheme
@@ -193,16 +177,3 @@ private fun getBaseColorScheme(appTheme: AppTheme, context: Context): BaseColorS
     }
 }
 
-// Re-export old function for backward compatibility
-@Composable
-fun ThemeOld(
-    themeProvider: ThemeProvider,
-    content: @Composable () -> @Composable Unit,
-) {
-    Theme(
-        appTheme = AppTheme.DEFAULT,
-        darkMode = DarkMode.SYSTEM,
-        themeProvider = themeProvider,
-        content = content,
-    )
-}

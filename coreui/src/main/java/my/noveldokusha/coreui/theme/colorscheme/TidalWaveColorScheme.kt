@@ -14,8 +14,8 @@ internal object TidalWaveColorScheme : BaseColorScheme() {
         inversePrimary = Color(0xFFa12b03),
         secondary = Color(0xFF5ed4fc),
         onSecondary = Color(0xFF003544),
-        secondaryContainer = Color(0xFF004d61),
-        onSecondaryContainer = Color(0xFFb8eaff),
+        secondaryContainer = Color(0xFF1A2A30),
+        onSecondaryContainer = Color(0xFFA0D0E0),
         tertiary = Color(0xFF92f7bc),
         onTertiary = Color(0xFF001c3b),
         tertiaryContainer = Color(0xFFc3fada),
@@ -40,13 +40,13 @@ internal object TidalWaveColorScheme : BaseColorScheme() {
     override val lightScheme = lightColorScheme(
         primary = Color(0xFF006780),
         onPrimary = Color(0xFFffffff),
-        primaryContainer = Color(0xFFB4D4DF),
+        primaryContainer = Color(0xFF80C0D8),
         onPrimaryContainer = Color(0xFF001f28),
         inversePrimary = Color(0xFFff987f),
         secondary = Color(0xFF006780),
         onSecondary = Color(0xFFffffff),
-        secondaryContainer = Color(0xFF9AE1FF),
-        onSecondaryContainer = Color(0xFF001f28),
+        secondaryContainer = Color(0xFFE0EFF5),
+        onSecondaryContainer = Color(0xFF002030),
         tertiary = Color(0xFF92f7bc),
         onTertiary = Color(0xFF001c3b),
         tertiaryContainer = Color(0xFFc3fada),
@@ -67,4 +67,23 @@ internal object TidalWaveColorScheme : BaseColorScheme() {
         surfaceContainerHigh = Color(0xFFedf4fA),
         surfaceContainerHighest = Color(0xFFf5faff),
     )
+    // -----------------------------------------------------------------------------------------
+    // Reader colors — используются ТОЛЬКО в ReaderScreen
+    // -----------------------------------------------------------------------------------------
+
+    // Основной текст — нейтральный, без фиолетового оттенка темы
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)  // тёплый почти-белый
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A) // мягкий почти-чёрный
+
+    // Вторичный текст: номера глав, сноски, метаданные
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+
+    // Фон страницы чтения — совпадает с background, задан явно для будущего переопределения
+    override val readerBackgroundColorDark: Color = Color(0xFF001C3B)
+    override val readerBackgroundColorLight: Color = Color(0xFFFDFBFF)
+
+    // Выделение текста — единственное место в ридере где допустим акцентный цвет
+    override val readerSelectionColorDark: Color = Color(0x405ED4FC)
+    override val readerSelectionColorLight: Color = Color(0x40006780)
 }

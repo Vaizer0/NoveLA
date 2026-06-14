@@ -39,8 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.theme.AppTheme
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.DarkMode
+import my.noveldokusha.coreui.theme.HighlightDark
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
@@ -57,7 +58,7 @@ internal fun SettingsTheme(
             text = stringResource(id = R.string.theme),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
 
         // Mode chips (System/Light/Dark/Black)
@@ -123,8 +124,8 @@ private fun ThemePreviewChip(
     onClick: () -> Unit,
 ) {
     val accentColor = when (theme) {
-        AppTheme.DEFAULT -> Color(0xFF0088FF)
-        AppTheme.MONET -> Color(0xFF6750A4)
+        AppTheme.DEFAULT -> MaterialTheme.colorScheme.primary
+        AppTheme.TACHIYOMI -> HighlightDark
         AppTheme.GREEN_APPLE -> Color(0xFF188140)
         AppTheme.LAVENDER -> Color(0xFFA177FF)
         AppTheme.MIDNIGHT_DUSK -> Color(0xFFF02475)
@@ -161,9 +162,9 @@ private fun ThemePreviewChip(
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(accentColor)
-                .border(
+                    .border(
                     width = if (isSelected) 2.dp else 0.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
                     shape = CircleShape
                 )
         )

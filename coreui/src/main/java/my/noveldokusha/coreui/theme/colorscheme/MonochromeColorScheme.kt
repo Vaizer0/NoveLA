@@ -81,4 +81,23 @@ internal object MonochromeColorScheme : BaseColorScheme() {
         surfaceContainerHigh = Color(0xFFFFFFFF),
         surfaceContainerHighest = Color(0xFFFFFFFF),
     )
+    // -----------------------------------------------------------------------------------------
+    // Reader colors — используются ТОЛЬКО в ReaderScreen
+    // -----------------------------------------------------------------------------------------
+
+    // Основной текст — нейтральный, без фиолетового оттенка темы
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)  // тёплый почти-белый
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A) // мягкий почти-чёрный
+
+    // Вторичный текст: номера глав, сноски, метаданные
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+
+    // Фон страницы чтения — совпадает с background, задан явно для будущего переопределения
+    override val readerBackgroundColorDark: Color = Color(0xFF000000)
+    override val readerBackgroundColorLight: Color = Color(0xFFFFFFFF)
+
+    // Выделение текста — единственное место в ридере где допустим акцентный цвет
+    override val readerSelectionColorDark: Color = Color(0x40FFFFFF)
+    override val readerSelectionColorLight: Color = Color(0x40000000)
 }

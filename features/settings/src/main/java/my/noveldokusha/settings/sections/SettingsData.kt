@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DataArray
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -16,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
@@ -34,7 +33,7 @@ internal fun SettingsData(
             text = stringResource(id = R.string.data),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         SlimListItem(
             headlineContent = {
@@ -52,7 +51,7 @@ internal fun SettingsData(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Icon(Icons.Outlined.DataArray, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Outlined.DataArray, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             modifier = Modifier.clickable(enabled = !isCleaningDatabase) { onCleanDatabase() }
@@ -63,7 +62,6 @@ internal fun SettingsData(
             },
             supportingContent = {
                 Column {
-                    //Text(text = stringResource(id = R.string.preserve_only_images_from_library_books))
                     Text(text = stringResource(id = R.string.size) + " " + imagesFolderSize)
                 }
             },
@@ -74,11 +72,10 @@ internal fun SettingsData(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             modifier = Modifier.clickable(enabled = !isCleaningImages) { onCleanImageFolder() }
         )
-
     }
 }

@@ -12,7 +12,5 @@
 	android:padding="17sp"
 	android:textSize="22sp"
 	android:textStyle="bold"
-	android:textColor="#04b1b4"
 	tools:text="@tools:sample/lorem"
-	app:drawableTint="#04b1b4"
 	/>

@@ -54,8 +54,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
@@ -73,9 +74,9 @@ internal fun ReaderScreen(
     state: ReaderScreenState,
     onSelectableTextChange: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
-    onFollowSystem: (Boolean) -> Unit,
+    onDarkModeSelected: (DarkMode) -> Unit,
+    onAppThemeChanged: (AppTheme) -> Unit,
     onFullScreen: (Boolean) -> Unit,
-    onThemeSelected: (Themes) -> Unit,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
     onLineHeightChanged: (Float) -> Unit,
@@ -172,8 +173,8 @@ internal fun ReaderScreen(
                         onLineHeightChanged = onLineHeightChanged,
                         onParagraphSpacingChanged = onParagraphSpacingChanged,
                         onSelectableTextChange = onSelectableTextChange,
-                        onFollowSystem = onFollowSystem,
-                        onThemeSelected = onThemeSelected,
+                        onDarkModeSelected = onDarkModeSelected,
+                        onAppThemeSelected = onAppThemeChanged,
                         onKeepScreenOn = onKeepScreenOn,
                         onFullScreen = onFullScreen,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -317,8 +318,8 @@ private fun ViewsPreview(
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(
-        followSystem = remember { mutableStateOf(true) },
-        currentTheme = remember { mutableStateOf(Themes.DARK) },
+        currentDarkMode = remember { mutableStateOf(DarkMode.DARK) },
+        currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
         textFont = remember { mutableStateOf("Arial") },
         textSize = remember { mutableFloatStateOf(20f) },
         lineHeight = remember { mutableFloatStateOf(1.35f) },
@@ -353,8 +354,8 @@ private fun ViewsPreview(
                 onParagraphSpacingChanged = {},
                 onTextFontChanged = {},
                 onSelectableTextChange = {},
-                onFollowSystem = {},
-                onThemeSelected = {},
+                onDarkModeSelected = {},
+                onAppThemeChanged = {},
                 onPressBack = {},
                 onOpenChapterInWeb = {},
                 readerContent = {},

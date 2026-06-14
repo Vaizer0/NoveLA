@@ -11,11 +11,11 @@ internal object TachiyomiColorScheme : BaseColorScheme() {
         primary = HighlightDark,
         onPrimary = Color(0xFFFFFFFF),
         primaryContainer = Color(0xFF003A7A),
-        onPrimaryContainer = HighlightDark,
+        onPrimaryContainer = Color(0xFFB0D0F0),
         secondary = HighlightDark,
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFE6A817).copy(alpha = 0.15f),
-        onSecondaryContainer = Color(0xFFC68A00),
+        secondaryContainer = Color(0xFF2A2A3A),
+        onSecondaryContainer = Color(0xFFE6A817),
         tertiary = Color(0xFF4CAF50),
         onTertiary = Color(0xFF003910),
         tertiaryContainer = Success800,
@@ -48,12 +48,12 @@ internal object TachiyomiColorScheme : BaseColorScheme() {
     override val lightScheme = lightColorScheme(
         primary = HighlightLight,
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFD6E4FF),
-        onPrimaryContainer = HighlightLight,
+        primaryContainer = Color(0xFF84A1D9),
+        onPrimaryContainer = Color(0xFF003060),
         secondary = HighlightLight,
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFE6A817).copy(alpha = 0.15f),
-        onSecondaryContainer = Color(0xFFC68A00),
+        secondaryContainer = Color(0xFFE8E0EC),
+        onSecondaryContainer = Color(0xFF4A3800),
         tertiary = Success600,
         onTertiary = Color(0xFFFFFFFF),
         tertiaryContainer = Success50,
@@ -82,4 +82,23 @@ internal object TachiyomiColorScheme : BaseColorScheme() {
         surfaceContainerHigh = PopupLight,
         surfaceContainerHighest = Grey100,
     )
+    // -----------------------------------------------------------------------------------------
+    // Reader colors — используются ТОЛЬКО в ReaderScreen
+    // -----------------------------------------------------------------------------------------
+
+    // Основной текст — нейтральный, без фиолетового оттенка темы
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)  // тёплый почти-белый
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A) // мягкий почти-чёрный
+
+    // Вторичный текст: номера глав, сноски, метаданные
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+
+    // Фон страницы чтения — совпадает с background, задан явно для будущего переопределения
+    override val readerBackgroundColorDark: Color = BgDark
+    override val readerBackgroundColorLight: Color = BgLight
+
+    // Выделение текста — единственное место в ридере где допустим акцентный цвет
+    override val readerSelectionColorDark: Color = HighlightDark.copy(alpha = 0.25f)
+    override val readerSelectionColorLight: Color = HighlightLight.copy(alpha = 0.25f)
 }

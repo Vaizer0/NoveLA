@@ -1,6 +1,7 @@
 package my.noveldokusha.features.reader.features
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
@@ -161,6 +162,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     fun start() {
+        Log.d("TTS", "start()")
         state.isPlaying.value = true
         updateJob?.cancel()
         updateJob = coroutineScope.launch {
@@ -168,6 +170,7 @@ internal class ReaderTextToSpeech(
                 .currentTextSpeakFlow
                 .filter { it.playState == Utterance.PlayState.FINISHED }
                 .collect {
+                    Log.d("TTS", "collect FINISHED queueSize=${manager.queueList.size}")
                     withContext(Dispatchers.Main) {
                         when (manager.queueList.size) {
                             halfBuffer -> {
@@ -196,6 +199,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     fun stop() {
+        Log.d("TTS", "stop()")
         state.isPlaying.value = false
         updateJob?.cancel()
         manager.stop()
@@ -513,6 +517,7 @@ internal class ReaderTextToSpeech(
     }
 
     private fun setVoicePitch(value: Float) {
+        Log.d("TTS", "setVoicePitch($value)")
         val success = manager.trySetVoicePitch(value)
         if (success) {
             setPreferredVoicePitch(value)
@@ -521,6 +526,7 @@ internal class ReaderTextToSpeech(
     }
 
     private fun setVoiceSpeed(value: Float) {
+        Log.d("TTS", "setVoiceSpeed($value)")
         val success = manager.trySetVoiceSpeed(value)
         if (success) {
             setPreferredVoiceSpeed(value)
@@ -529,15 +535,17 @@ internal class ReaderTextToSpeech(
     }
 
     private fun resumeFromCurrentState() {
+        Log.d("TTS", "resumeFromCurrentState isPlaying=${state.isPlaying.value}")
         if (!state.isPlaying.value) return
         stop()
         start()
-        val state = manager.currentActiveItemState.value
-        if (state.itemPos.chapterIndex > 0) {
+        val currentState = manager.currentActiveItemState.value
+        Log.d("TTS", "resumeFromCurrentState chapterIndex=${currentState.itemPos.chapterIndex}")
+        if (currentState.itemPos.chapterIndex >= 0) {
             coroutineScope.launch {
                 readChapterStartingFromChapterItemPosition(
-                    chapterIndex = state.itemPos.chapterIndex,
-                    chapterItemPosition = state.itemPos.chapterItemPosition
+                    chapterIndex = currentState.itemPos.chapterIndex,
+                    chapterItemPosition = currentState.itemPos.chapterItemPosition
                 )
             }
         }

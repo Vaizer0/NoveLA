@@ -249,7 +249,7 @@ class AppLocalSources @Inject constructor(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Filled.CreateNewFolder, null, tint = Grey25)
+                    Icon(Icons.Filled.CreateNewFolder, null)
                     Text(text = stringResource(R.string.add_local_directory))
                 }
             }

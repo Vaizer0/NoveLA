@@ -23,7 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.core.domain.AppVersion
@@ -42,7 +42,7 @@ fun LibraryAutoUpdate(
             text = "Library updates",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
         SlimListItem(
             modifier = Modifier.clickable {
@@ -55,7 +55,7 @@ fun LibraryAutoUpdate(
                 Icon(
                     Icons.Outlined.AutoMode,
                     null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingContent = {
@@ -65,9 +65,8 @@ fun LibraryAutoUpdate(
                         state.autoUpdateEnabled.value = !state.autoUpdateEnabled.value
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
@@ -86,7 +85,7 @@ fun LibraryAutoUpdate(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.Timer, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Timer, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         )
     }

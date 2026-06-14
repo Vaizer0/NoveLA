@@ -47,16 +47,6 @@ class AppPreferences @Inject constructor(
         }
     }
 
-    val THEME_ID = object : Preference<PreferenceThemes>("THEME_ID") {
-        override var value by SharedPreference_Enum(name, preferences, PreferenceThemes.Light) {
-            enumValueOf(it)
-        }
-    }
-    val THEME_FOLLOW_SYSTEM = object : Preference<Boolean>("THEME_FOLLOW_SYSTEM") {
-        override var value by SharedPreference_Boolean(name, preferences, true)
-    }
-
-    // New theme system
     val APP_THEME = object : Preference<String>("APP_THEME") {
         override var value by SharedPreference_String(name, preferences, "DEFAULT")
     }

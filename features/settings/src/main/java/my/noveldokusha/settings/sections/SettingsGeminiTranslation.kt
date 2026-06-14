@@ -42,7 +42,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
@@ -103,7 +103,7 @@ internal fun SettingsGeminiTranslation(
             text     = stringResource(R.string.translation_services),
             style    = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color    = ColorAccent
+        color    = colorAccent()
         )
 
         // ── Provider picker ───────────────────────────────────────────────────
@@ -157,7 +157,7 @@ internal fun SettingsGeminiTranslation(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier          = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Outlined.Key, null, tint = MaterialTheme.colorScheme.onPrimary)
+                                Icon(Icons.Outlined.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text  = stringResource(R.string.google_pa_api_keys),
@@ -204,7 +204,7 @@ internal fun SettingsGeminiTranslation(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier          = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Outlined.Key, null, tint = MaterialTheme.colorScheme.onPrimary)
+                                Icon(Icons.Outlined.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text  = stringResource(R.string.gemini_api_key),
@@ -371,7 +371,7 @@ private fun ProviderRadioOption(
             selected = selected,
             onClick  = null,
             colors   = RadioButtonDefaults.colors(
-                selectedColor   = ColorAccent,
+                selectedColor   = colorAccent(),
                 unselectedColor = MaterialTheme.colorScheme.onSurface,
             )
         )

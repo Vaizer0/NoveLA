@@ -14,12 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.BaseViewModel
-import my.noveldokusha.coreui.mappers.toDarkMode
-import my.noveldokusha.coreui.mappers.toPreferenceTheme
-import my.noveldokusha.coreui.mappers.toTheme
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.data.AppRepository
@@ -48,7 +44,6 @@ internal class SettingsViewModel @Inject constructor(
     var isCleaningDatabase = mutableStateOf(false)
     var isCleaningImages = mutableStateOf(false)
 
-    private val themeId by appPreferences.THEME_ID.state(viewModelScope)
     private val cloudflareBypassEnabled by appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope)
 
     private val appThemePref = appPreferences.APP_THEME.state(viewModelScope)
@@ -59,8 +54,6 @@ internal class SettingsViewModel @Inject constructor(
         imageFolderSize = stateHandle.asMutableStateOf("imageFolderSize") { "" },
         isCleaningDatabase = isCleaningDatabase,
         isCleaningImages = isCleaningImages,
-        followsSystemTheme = appPreferences.THEME_FOLLOW_SYSTEM.state(viewModelScope),
-        currentTheme = derivedStateOf { themeId.toTheme },
         currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
         currentAppTheme = derivedStateOf {
             try { AppTheme.valueOf(appThemePref.value) }
@@ -91,6 +84,9 @@ internal class SettingsViewModel @Inject constructor(
         geminiModel = appPreferences.TRANSLATION_GEMINI_MODEL.state(viewModelScope),
         translationProvider = appPreferences.TRANSLATION_PROVIDER.state(viewModelScope),
         googlePaApiKeys = appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.state(viewModelScope),
+        scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
+        cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
+        cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
         openAiBaseUrl          = appPreferences.TRANSLATION_OPENAI_BASE_URL.state(viewModelScope),
         openAiApiKeys          = appPreferences.TRANSLATION_OPENAI_API_KEYS.state(viewModelScope),
         openAiModel            = appPreferences.TRANSLATION_OPENAI_MODEL.state(viewModelScope),
@@ -99,9 +95,6 @@ internal class SettingsViewModel @Inject constructor(
         promptUseEnglishLocale = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.state(viewModelScope),
         llmBatchSize           = appPreferences.TRANSLATION_BATCH_SIZE.state(viewModelScope),
         llmMaxOutputTokens     = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.state(viewModelScope),
-        scraperUserAgent = appPreferences.SCRAPER_USER_AGENT.state(viewModelScope),
-        cloudflareBypassEnabled = appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope),
-        cloudflareChallengeTimeoutSeconds = appPreferences.CLOUDFLARE_CHALLENGE_TIMEOUT_SECONDS.state(viewModelScope),
     )
 
     init {
@@ -124,11 +117,10 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
         }
-
     }
 
     fun cleanDatabase() = appScope.launch(Dispatchers.IO) {
-        if (isCleaningDatabase.value) return@launch // Prevent multiple simultaneous calls
+        if (isCleaningDatabase.value) return@launch
 
         try {
             isCleaningDatabase.value = true
@@ -136,9 +128,8 @@ internal class SettingsViewModel @Inject constructor(
 
             appRepository.settings.clearNonLibraryData()
             appRepository.vacuum()
-            // Ждем завершения обновления размера базы данных
             updateDatabaseSizeAndWait()
-            kotlinx.coroutines.delay(500) // Give time for UI update
+            kotlinx.coroutines.delay(500)
 
             toasty.show(R.string.database_cleaned_successfully)
 
@@ -152,14 +143,13 @@ internal class SettingsViewModel @Inject constructor(
 
     private suspend fun updateDatabaseSizeAndWait() {
         val size = appRepository.getDatabaseSizeBytes()
-        // Переключаемся на Main для обновления состояния UI
         withContext(Dispatchers.Main) {
             state.databaseSize.value = Formatter.formatFileSize(appPreferences.context, size)
         }
     }
 
     fun cleanImagesFolder() = appScope.launch(Dispatchers.IO) {
-        if (isCleaningImages.value) return@launch // Prevent multiple simultaneous calls
+        if (isCleaningImages.value) return@launch
 
         try {
             isCleaningImages.value = true
@@ -172,7 +162,6 @@ internal class SettingsViewModel @Inject constructor(
 
             val booksFolder = appRepository.settings.folderBooks
 
-            // Сначала удаляем папки, которые не соответствуют книгам в библиотеке
             val foldersToDelete = booksFolder.listFiles()
                 ?.asSequence()
                 ?.filter { it.isDirectory && it.exists() }
@@ -185,23 +174,19 @@ internal class SettingsViewModel @Inject constructor(
                     folder.deleteRecursively()
                     deletedCount++
                 } catch (e: Exception) {
-                    // Log error but continue with other folders
                     e.printStackTrace()
                 }
             }
 
-            // Очищаем Glide disk cache
             Glide.get(context).clearDiskCache()
-            // Очищаем Coil disk cache (кэш сетевых обложек)
             context.cacheDir.resolve("image_cache").deleteRecursively()
             withContext(Dispatchers.Main) {
                 Glide.get(context).clearMemory()
                 coil.Coil.imageLoader(context).memoryCache?.clear()
             }
 
-            // Обновляем размер папки после удаления
             updateImagesFolderSizeAndWait()
-            kotlinx.coroutines.delay(500) // Give time for UI update
+            kotlinx.coroutines.delay(500)
 
             if (deletedCount > 0) {
                 toasty.show(context.getString(R.string.images_folder_cleaned, deletedCount))
@@ -217,14 +202,6 @@ internal class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun onFollowSystemChange(follow: Boolean) {
-        appPreferences.THEME_FOLLOW_SYSTEM.value = follow
-    }
-
-    fun onThemeChange(themes: Themes) {
-        appPreferences.THEME_ID.value = themes.toPreferenceTheme
-    }
-
     fun onAppThemeChange(appTheme: AppTheme) {
         appPreferences.APP_THEME.value = appTheme.name
         onRestartApp?.invoke()
@@ -238,17 +215,14 @@ internal class SettingsViewModel @Inject constructor(
     fun onLanguageChange(language: AppLanguage) {
         appPreferences.APP_LANGUAGE.value = language
         toasty.show("Language changed to ${language.displayName}")
-        // Restart the app to apply language changes
         onRestartApp?.invoke()
     }
 
     fun onGooglePaApiKeysChange(keys: String) {
         appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value = keys
-        // Сбрасываем кеш чтобы новые ключи проверились при следующем переводе
         appPreferences.TRANSLATION_GOOGLE_PA_CACHED_KEY.value = ""
         appPreferences.TRANSLATION_GOOGLE_PA_KEY_LAST_CHECKED.value = 0L
     }
-
 
     fun onGeminiApiKeyChange(apiKey: String) {
         appPreferences.TRANSLATION_GEMINI_API_KEY.value = apiKey
@@ -316,7 +290,6 @@ internal class SettingsViewModel @Inject constructor(
 
     private suspend fun updateImagesFolderSizeAndWait() {
         val size = getFolderSizeBytes(appRepository.settings.folderBooks)
-        // Переключаемся на Main для обновления состояния UI
         withContext(Dispatchers.Main) {
             state.imageFolderSize.value = Formatter.formatFileSize(appPreferences.context, size)
         }
@@ -355,9 +328,7 @@ internal class SettingsViewModel @Inject constructor(
             dir.walk().forEach { if (it.isFile) total += it.length() }
             return total
         }
-        // Папка с локальными файлами книг (обложки epub и т.д.)
         val booksSize = dirSize(file)
-        // Coil disk cache (кэш сетевых обложек)
         val coilCacheSize = dirSize(context.cacheDir.resolve("image_cache"))
         booksSize + coilCacheSize
     }

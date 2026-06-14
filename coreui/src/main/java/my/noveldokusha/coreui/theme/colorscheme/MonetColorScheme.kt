@@ -1,32 +1,46 @@
 package my.noveldokusha.coreui.theme.colorscheme
 
 import android.content.Context
-import android.os.Build
-import androidx.annotation.RequiresApi
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.graphics.Color
 
 /**
- * Material You dynamic color scheme based on system wallpaper.
- * Falls back to TachiyomiColorScheme on older Android versions.
+ * Dynamic color scheme using Material You (Android 12+).
+ * Extracts colors from the user's wallpaper.
+ * Falls back to Tachiyomi colors on older devices.
+ *
+ * primaryContainer/onPrimaryContainer переопределены для гарантированного
+ * контраста — dynamicColorScheme иногда даёт слишком близкие цвета.
  */
 internal class MonetColorScheme(context: Context) : BaseColorScheme() {
 
-    private val monet = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        MonetDynamicColorScheme(context)
-    } else {
-        TachiyomiColorScheme
-    }
+    private val originalDark = runCatching {
+        dynamicDarkColorScheme(context)
+    }.getOrDefault(TachiyomiColorScheme.darkScheme)
 
-    override val darkScheme
-        get() = monet.darkScheme
+    private val originalLight = runCatching {
+        dynamicLightColorScheme(context)
+    }.getOrDefault(TachiyomiColorScheme.lightScheme)
 
-    override val lightScheme
-        get() = monet.lightScheme
-}
+    override val darkScheme: ColorScheme = originalDark.copy(
+        // primaryContainer = заметно отличающийся от фона цвет с альфа
+        primaryContainer = originalDark.primary.copy(alpha = 0.25f),
+        onPrimaryContainer = originalDark.primary,
+    )
 
-@RequiresApi(Build.VERSION_CODES.S)
-private class MonetDynamicColorScheme(context: Context) : BaseColorScheme() {
-    override val lightScheme = dynamicLightColorScheme(context)
-    override val darkScheme = dynamicDarkColorScheme(context)
+    override val lightScheme: ColorScheme = originalLight.copy(
+        primaryContainer = originalLight.primary.copy(alpha = 0.15f),
+        onPrimaryContainer = originalLight.primary,
+    )
+
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A)
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+    override val readerBackgroundColorDark: Color = darkScheme.background
+    override val readerBackgroundColorLight: Color = lightScheme.background
+    override val readerSelectionColorDark: Color = darkScheme.primary.copy(alpha = 0.25f)
+    override val readerSelectionColorLight: Color = lightScheme.primary.copy(alpha = 0.25f)
 }

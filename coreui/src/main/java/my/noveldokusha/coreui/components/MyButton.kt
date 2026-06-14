@@ -36,8 +36,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.coreui.theme.ifCase
 import my.noveldokusha.coreui.theme.selectableMinHeight
 
@@ -154,9 +154,9 @@ private fun InternalButton(
 @Composable
 fun Preview() {
     Column {
-        for (theme in Themes.entries) InternalTheme(theme) {
+        for (darkMode in DarkMode.entries) InternalTheme(darkMode) {
             MyButton(
-                text = "Theme ${theme.name}",
+                text = "Theme ${darkMode.name}",
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {},
             )

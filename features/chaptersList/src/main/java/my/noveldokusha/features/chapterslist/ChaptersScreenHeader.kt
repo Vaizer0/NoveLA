@@ -170,14 +170,14 @@ internal fun ChaptersScreenHeader(
                         Text(
                             text = sourceCatalogName,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     SelectionContainer {
                         Text(
                             text = stringResource(id = R.string.chapters) + " " + numberOfChapters.toString(),
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

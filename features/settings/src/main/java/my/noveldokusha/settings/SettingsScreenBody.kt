@@ -26,7 +26,6 @@ import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
-import my.noveldokusha.coreui.theme.Themes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
@@ -42,8 +41,6 @@ import my.noveldokusha.settings.sections.SettingsRegexCleanup
 internal fun SettingsScreenBody(
     state: SettingsScreenState,
     modifier: Modifier = Modifier,
-    onFollowSystem: (Boolean) -> Unit,
-    onThemeSelected: (Themes) -> Unit,
     onAppThemeSelected: (AppTheme) -> Unit,
     onDarkModeSelected: (DarkMode) -> Unit,
     onCleanDatabase: () -> Unit,
@@ -162,13 +159,10 @@ internal fun SettingsScreenBody(
 @Composable
 private fun Preview() {
     val isDark = isSystemInDarkTheme()
-    val theme = remember { mutableStateOf(if (isDark) Themes.DARK else Themes.LIGHT) }
-    InternalTheme(theme.value) {
+    InternalTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
             SettingsScreenBody(
                 state = SettingsScreenState(
-                    followsSystemTheme = remember { derivedStateOf { true } },
-                    currentTheme = theme,
                     currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
                     currentDarkMode = remember { mutableStateOf(DarkMode.SYSTEM) },
                     currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
@@ -203,8 +197,6 @@ private fun Preview() {
                     llmBatchSize = remember { derivedStateOf { 60 } },
                     llmMaxOutputTokens = remember { derivedStateOf { 0 } },
                 ),
-                onFollowSystem = { },
-                onThemeSelected = { },
                 onCleanDatabase = { },
                 onCleanImageFolder = { },
                 onMassAddDelayChange = { },

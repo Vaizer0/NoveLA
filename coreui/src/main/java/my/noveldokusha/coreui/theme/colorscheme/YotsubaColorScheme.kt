@@ -14,8 +14,8 @@ internal object YotsubaColorScheme : BaseColorScheme() {
         inversePrimary = Color(0xFFAE3200),
         secondary = Color(0xFFFFB59D),
         onSecondary = Color(0xFF5F1600),
-        secondaryContainer = Color(0xFF862200),
-        onSecondaryContainer = Color(0xFFFFDBCF),
+        secondaryContainer = Color(0xFF382220),
+        onSecondaryContainer = Color(0xFFF0D8CC),
         tertiary = Color(0xFFD7C68D),
         onTertiary = Color(0xFF3A2F05),
         tertiaryContainer = Color(0xFF524619),
@@ -30,7 +30,11 @@ internal object YotsubaColorScheme : BaseColorScheme() {
         inverseSurface = Color(0xFFEDE0DD),
         inverseOnSurface = Color(0xFF211A18),
         outline = Color(0xFFA08C87),
-        surfaceContainerLowest = Color(0xFF2E221F),
+        outlineVariant = Color(0xFF4A3028),
+        scrim = Color(0xFF000000),
+        surfaceBright = Color(0xFF3D2E28),
+        surfaceDim = Color(0xFF150E0C),
+        surfaceContainerLowest = Color(0xFF150E0C),
         surfaceContainerLow = Color(0xFF312521),
         surfaceContainer = Color(0xFF332723),
         surfaceContainerHigh = Color(0xFF413531),
@@ -40,13 +44,13 @@ internal object YotsubaColorScheme : BaseColorScheme() {
     override val lightScheme = lightColorScheme(
         primary = Color(0xFFAE3200),
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFFFDBCF),
+        primaryContainer = Color(0xFFE8B8A0),
         onPrimaryContainer = Color(0xFF3B0A00),
         inversePrimary = Color(0xFFFFB59D),
         secondary = Color(0xFFAE3200),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFEBCDC2),
-        onSecondaryContainer = Color(0xFF3B0A00),
+        secondaryContainer = Color(0xFFF0E8E4),
+        onSecondaryContainer = Color(0xFF4A1800),
         tertiary = Color(0xFF6B5E2F),
         onTertiary = Color(0xFFFFFFFF),
         tertiaryContainer = Color(0xFFF5E2A7),
@@ -61,10 +65,23 @@ internal object YotsubaColorScheme : BaseColorScheme() {
         inverseSurface = Color(0xFF362F2D),
         inverseOnSurface = Color(0xFFFBEEEB),
         outline = Color(0xFF85736E),
-        surfaceContainerLowest = Color(0xFFECE3E0),
-        surfaceContainerLow = Color(0xFFF1E7E4),
+        outlineVariant = Color(0xFFD8C8C0),
+        scrim = Color(0xFF000000),
+        surfaceBright = Color(0xFFFCFCFC),
+        surfaceDim = Color(0xFFE8DCD8),
+        surfaceContainerLowest = Color(0xFFFFFFFF),
+        surfaceContainerLow = Color(0xFFF8F0EC),
         surfaceContainer = Color(0xFFF6EBE7),
         surfaceContainerHigh = Color(0xFFFAF4F2),
         surfaceContainerHighest = Color(0xFFFBF6F4),
     )
+
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A)
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+    override val readerBackgroundColorDark: Color = Color(0xFF211A18)
+    override val readerBackgroundColorLight: Color = Color(0xFFFCFCFC)
+    override val readerSelectionColorDark: Color = Color(0x40FFB59D)
+    override val readerSelectionColorLight: Color = Color(0x40AE3200)
 }

@@ -30,7 +30,11 @@ internal object YinYangColorScheme : BaseColorScheme() {
         inverseSurface = Color(0xFFE6E6E6),
         inverseOnSurface = Color(0xFF1E1E1E),
         outline = Color(0xFF999999),
-        surfaceContainerLowest = Color(0xFF2A2A2A),
+        outlineVariant = Color(0xFF444444),
+        scrim = Color(0xFF000000),
+        surfaceBright = Color(0xFF484848),
+        surfaceDim = Color(0xFF141414),
+        surfaceContainerLowest = Color(0xFF141414),
         surfaceContainerLow = Color(0xFF2D2D2D),
         surfaceContainer = Color(0xFF313131),
         surfaceContainerHigh = Color(0xFF383838),
@@ -61,10 +65,23 @@ internal object YinYangColorScheme : BaseColorScheme() {
         inverseSurface = Color(0xFF333333),
         inverseOnSurface = Color(0xFFF4F4F4),
         outline = Color(0xFF838383),
-        surfaceContainerLowest = Color(0xFFCFCFCF),
-        surfaceContainerLow = Color(0xFFDADADA),
+        outlineVariant = Color(0xFFC8C8C8),
+        scrim = Color(0xFF000000),
+        surfaceBright = Color(0xFFFDFDFD),
+        surfaceDim = Color(0xFFD8D8D8),
+        surfaceContainerLowest = Color(0xFFFFFFFF),
+        surfaceContainerLow = Color(0xFFF4F4F4),
         surfaceContainer = Color(0xFFE8E8E8),
         surfaceContainerHigh = Color(0xFFECECEC),
         surfaceContainerHighest = Color(0xFFEFEFEF),
     )
+
+    override val readerTextColorDark: Color = Color(0xFFE8E8E8)
+    override val readerTextColorLight: Color = Color(0xFF1A1A1A)
+    override val readerTextSecondaryColorDark: Color = Color(0xFFA0A0A0)
+    override val readerTextSecondaryColorLight: Color = Color(0xFF5A5A5A)
+    override val readerBackgroundColorDark: Color = Color(0xFF1E1E1E)
+    override val readerBackgroundColorLight: Color = Color(0xFFFDFDFD)
+    override val readerSelectionColorDark: Color = Color(0x40FFFFFF)
+    override val readerSelectionColorLight: Color = Color(0x40000000)
 }

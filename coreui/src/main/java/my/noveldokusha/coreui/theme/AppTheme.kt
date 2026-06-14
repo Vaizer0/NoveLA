@@ -5,10 +5,10 @@ import my.noveldokusha.coreui.R
 
 enum class AppTheme(
     @StringRes val titleRes: Int,
-    internal val isMonet: Boolean = false,
+    val isMonet: Boolean = false,
 ) {
-    DEFAULT(R.string.theme_name_default),
-    MONET(R.string.theme_name_monet, isMonet = true),
+    DEFAULT(R.string.theme_name_monet, isMonet = true),
+    TACHIYOMI(R.string.theme_name_tachiyomi),
     GREEN_APPLE(R.string.theme_name_green_apple),
     LAVENDER(R.string.theme_name_lavender),
     MIDNIGHT_DUSK(R.string.theme_name_midnight_dusk),

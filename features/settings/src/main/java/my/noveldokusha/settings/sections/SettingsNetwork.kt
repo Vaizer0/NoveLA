@@ -25,7 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.settings.R
 
@@ -43,7 +43,7 @@ internal fun SettingsNetwork(
             text = stringResource(id = R.string.network),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.textPadding(),
-            color = ColorAccent
+            color = colorAccent()
         )
 
         // User-Agent setting - DISABLED (not used yet)
@@ -60,7 +60,7 @@ internal fun SettingsNetwork(
                     scraperUserAgent.value.take(50) + if (scraperUserAgent.value.length > 50) "..." else "")
             },
             leadingContent = {
-                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable { showUserAgentDialog = true }
         )
@@ -131,7 +131,7 @@ internal fun SettingsNetwork(
                 Text(text = stringResource(R.string.cloudflare_bypass_description))
             },
             leadingContent = {
-                Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             trailingContent = {
                 androidx.compose.material3.Switch(
@@ -141,9 +141,8 @@ internal fun SettingsNetwork(
                         // Note: Requires app restart to take effect
                     },
                     colors = androidx.compose.material3.SwitchDefaults.colors(
-                        checkedThumbColor = ColorAccent,
-                        checkedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
                     )
                 )
             }
@@ -161,7 +160,7 @@ internal fun SettingsNetwork(
                     Text(text = stringResource(R.string.seconds_format, cloudflareChallengeTimeoutSeconds.value))
                 },
                 leadingContent = {
-                    Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
                 modifier = Modifier.clickable { showTimeoutDialog = true }
             )
@@ -240,7 +239,7 @@ internal fun SettingsNetwork(
                 }
             },
             leadingContent = {
-                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Outlined.Http, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable {
                 // Cycle through common delay values: 0.5s, 1s, 2s, 3s, 5s

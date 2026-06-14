@@ -40,7 +40,7 @@ import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.core.utils.actionCopyToClipboard
 import my.noveldokusha.coreui.states.IteratorState
-import my.noveldokusha.coreui.theme.ColorAccent
+import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.feature.local_database.BookMetadata
 import my.noveldokusha.scraper.ActiveFilters
 
@@ -117,14 +117,14 @@ internal fun SourceCatalogScreen(
                                             BadgedBox(
                                                 badge = {
                                                     if (hasActiveFilters) {
-                                                        Badge(containerColor = ColorAccent)
+                                                        Badge(containerColor = colorAccent())
                                                     }
                                                 }
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.FilterList,
                                                     contentDescription = stringResource(R.string.filter),
-                                                    tint = if (hasActiveFilters) ColorAccent
+                                                    tint = if (hasActiveFilters) colorAccent()
                                                     else LocalContentColor
                                                 )
                                             }

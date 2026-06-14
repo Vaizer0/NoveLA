@@ -59,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.skydoves.landscapist.glide.GlideImage
@@ -273,20 +274,40 @@ private fun RepositoryUrlDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MyButton(
-                    text = "Cancel",
+                FilledTonalButton(
                     onClick = {
                         viewModel.onEvent(ExtensionsScreenEvent.OnHideRepositoryDialog)
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
                     modifier = Modifier.weight(1f)
-                )
-                MyButton(
-                    text = "Save",
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                FilledTonalButton(
                     onClick = {
                         viewModel.onEvent(ExtensionsScreenEvent.OnUpdateRepositoryUrl(tempUrl))
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Text(
+                        text = "Save",
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     )

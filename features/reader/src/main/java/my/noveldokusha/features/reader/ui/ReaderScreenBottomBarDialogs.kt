@@ -9,7 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.coreui.theme.Themes
+import my.noveldokusha.coreui.theme.AppTheme
+import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.features.reader.ui.settingDialogs.MoreSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.StyleSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.TranslatorSettingDialog
@@ -23,8 +24,8 @@ internal fun ReaderScreenBottomBarDialogs(
     onLineHeightChanged: (Float) -> Unit,
     onParagraphSpacingChanged: (Float) -> Unit,
     onSelectableTextChange: (Boolean) -> Unit,
-    onFollowSystem: (Boolean) -> Unit,
-    onThemeSelected: (Themes) -> Unit,
+    onDarkModeSelected: (DarkMode) -> Unit,
+    onAppThemeSelected: (AppTheme) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
     onFullScreen: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -45,8 +46,8 @@ internal fun ReaderScreenBottomBarDialogs(
                     ReaderScreenState.Settings.Type.Style -> {
                         StyleSettingDialog(
                             state = settings.style,
-                            onFollowSystemChange = onFollowSystem,
-                            onThemeChange = onThemeSelected,
+                            onDarkModeChange = onDarkModeSelected,
+                            onAppThemeChange = onAppThemeSelected,
                             onTextFontChange = onTextFontChanged,
                             onTextSizeChange = onTextSizeChanged,
                             onLineHeightChange = onLineHeightChanged,

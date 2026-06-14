@@ -118,7 +118,7 @@ internal fun LibraryPageBody(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = stringResource(R.string.selected),
-                            tint = MaterialTheme.colorScheme.onPrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .align(Alignment.Center)
                                 .size(48.dp)
