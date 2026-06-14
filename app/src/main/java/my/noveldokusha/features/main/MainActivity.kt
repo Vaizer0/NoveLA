@@ -13,7 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,7 +55,6 @@ import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import my.noveldokusha.coreui.BaseActivity
-import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Theme
@@ -65,6 +65,9 @@ import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
 import my.noveldokusha.libraryexplorer.LibraryScreen
 import my.noveldokusha.settings.SettingsScreen
 import my.noveldokusha.tooling.epub_importer.EpubImportService
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 
 private data class Page(
     @DrawableRes val iconRes: Int,
@@ -78,7 +81,6 @@ private val pages = listOf(
 )
 
 
-@OptIn(ExperimentalAnimationApi::class)
 @AndroidEntryPoint
 open class MainActivity : BaseActivity() {
 
@@ -109,17 +111,72 @@ open class MainActivity : BaseActivity() {
 
             Theme(themeProvider = themeProvider) {
                 Box(Modifier.fillMaxSize()) {
+                    // All three screens live in composition always.
+                    // Switching is instant — only alpha changes via graphicsLayer.
+                    val libraryAlpha by animateFloatAsState(
+                        targetValue = if (activePageIndex == 0) 1f else 0f,
+                        animationSpec = tween(150), label = "libAlpha"
+                    )
+
+                    val finderAlpha by animateFloatAsState(
+                        targetValue = if (activePageIndex == 1) 1f else 0f,
+                        animationSpec = tween(150), label = "finderAlpha"
+                    )
+
+                    val settingsAlpha by animateFloatAsState(
+                        targetValue = if (activePageIndex == 2) 1f else 0f,
+                        animationSpec = tween(150), label = "settingsAlpha"
+                    )
+
                     Box(
                         Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface)
                     ) {
-                        AnimatedTransition(targetState = activePageIndex) {
-                            when (it) {
-                                0 -> LibraryScreen()
-                                1 -> CatalogExplorerScreen()
-                                2 -> SettingsScreen(onRestartApp = { recreate() })
-                            }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = libraryAlpha }
+                                .zIndex(if (activePageIndex == 0) 1f else 0f)
+                                .then(
+                                    if (activePageIndex != 0) Modifier.pointerInput(Unit) {
+                                        awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                                    } else Modifier
+                                )
+                        ) {
+                            LibraryScreen()
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = finderAlpha }
+                                .zIndex(if (activePageIndex == 1) 1f else 0f)
+                                .then(
+                                    if (activePageIndex != 1) Modifier.pointerInput(Unit) {
+                                        awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                                    } else Modifier
+                                )
+                        ) {
+                            CatalogExplorerScreen()
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = settingsAlpha }
+                                .zIndex(if (activePageIndex == 2) 1f else 0f)
+                                .then(
+                                    if (activePageIndex != 2) Modifier.pointerInput(Unit) {
+                                        awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                                    } else Modifier
+                                )
+                        ) {
+                            SettingsScreen(onRestartApp = {
+                                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                                recreate()
+                                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                            })
                         }
                     }
 

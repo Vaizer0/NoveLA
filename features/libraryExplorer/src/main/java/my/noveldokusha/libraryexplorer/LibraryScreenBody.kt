@@ -112,7 +112,7 @@ internal fun LibraryScreenBody(
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             },
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } }
+                            onClick = { scope.launch { pagerState.scrollToPage(index) } }
                         )
                     }
                 }

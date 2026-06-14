@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -50,7 +51,9 @@ internal fun LibraryPageBody(
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(gridColumns.coerceIn(2, 6)),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 100.dp, start = 4.dp, end = 4.dp)
+        contentPadding = PaddingValues(top = 4.dp, bottom = 100.dp, start = 4.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(
             items = list,
@@ -73,11 +76,11 @@ internal fun LibraryPageBody(
                         {
                             Text(
                                 text = notReadCount.toString(),
-                                color = MaterialTheme.colorScheme.surface,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier
                                     .background(
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 12.dp)
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = RoundedCornerShape(topStart = 0.dp, bottomEnd = 12.dp)
                                     )
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall.copy(
@@ -91,11 +94,11 @@ internal fun LibraryPageBody(
                         {
                             Text(
                                 text = stringResource(R.string.local),
-                                color = MaterialTheme.colorScheme.surface,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier
                                     .background(
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = RoundedCornerShape(topEnd = 0.dp, bottomStart = 12.dp)
                                     )
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall.copy(

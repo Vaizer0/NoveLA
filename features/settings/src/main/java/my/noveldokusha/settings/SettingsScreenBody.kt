@@ -147,7 +147,7 @@ internal fun SettingsScreenBody(
                 .fillMaxWidth(),
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(120.dp))

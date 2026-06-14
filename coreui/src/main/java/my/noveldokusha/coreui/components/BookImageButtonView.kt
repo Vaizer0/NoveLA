@@ -64,37 +64,42 @@ fun BookImageButtonView(
     Column(modifier = modifier.testTag(AppTestTags.BOOK_IMAGE_BUTTON_VIEW)) {
         Box(
             Modifier
-                .padding(4.dp)
                 .fillMaxWidth()
                 .aspectRatio(1 / 1.45f)
-                .clip(ImageBorderShape)
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .combinedClickable(
-                    indication = indication,
-                    interactionSource = interactionSource,
-                    role = Role.Button,
-                    onClick = onClick,
-                    onLongClick = onLongClick
-                )
         ) {
-            ImageView(
-                imageModel = coverImageModel,
-                contentDescription = title,
-                modifier = Modifier.fillMaxSize(),
-                error = R.drawable.default_book_cover,
-                forceCache = forceCache,
-            )
+            // Image with clipping — badges must be OUTSIDE this Box
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(ImageBorderShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .combinedClickable(
+                        indication = indication,
+                        interactionSource = interactionSource,
+                        role = Role.Button,
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    )
+            ) {
+                ImageView(
+                    imageModel = coverImageModel,
+                    contentDescription = title,
+                    modifier = Modifier.fillMaxSize(),
+                    error = R.drawable.default_book_cover,
+                    forceCache = forceCache,
+                )
+            }
 
-            // Source text in top-right corner
+            // Source text in top-right corner (on top of image, not clipped)
             sourceText?.let {
                 Text(
                     text = it,
-                    color = MaterialTheme.colorScheme.surface,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .background(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                            shape = RoundedCornerShape(topEnd = 12.dp, bottomStart = 12.dp)
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(topEnd = 0.dp, bottomStart = 12.dp)
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelSmall.copy(
@@ -105,12 +110,12 @@ fun BookImageButtonView(
                 )
             }
 
-            // Top-left badge (count, etc.)
+            // Top-left badge (count, etc.) — not clipped
             topLeftBadge?.let {
                 Box(modifier = Modifier.align(Alignment.TopStart)) { it() }
             }
 
-            // Top-right badge (priority over sourceText)
+            // Top-right badge (priority over sourceText) — not clipped
             if (sourceText == null) topRightBadge?.let {
                 Box(modifier = Modifier.align(Alignment.TopEnd)) { it() }
             }
