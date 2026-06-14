@@ -64,6 +64,8 @@ fun BookImageButtonView(
     Column(modifier = modifier.testTag(AppTestTags.BOOK_IMAGE_BUTTON_VIEW)) {
         Box(
             Modifier
+                .padding(2.dp)
+                .clip(ImageBorderShape)
                 .fillMaxWidth()
                 .aspectRatio(1 / 1.45f)
         ) {
