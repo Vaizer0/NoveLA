@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -193,10 +194,10 @@ internal fun ChaptersScreen(
             }
             AnimatedVisibility(
                 visible = state.isInSelectionMode.value,
-                enter = expandVertically(initialHeight = { it / 2 }, expandFrom = Alignment.Top)
-                        + fadeIn(),
-                exit = shrinkVertically(targetHeight = { it / 2 }, shrinkTowards = Alignment.Top)
-                        + fadeOut(),
+                enter = expandVertically(initialHeight = { it / 8 }, expandFrom = Alignment.Top)
+                        + fadeIn(animationSpec = tween(120)),
+                exit = shrinkVertically(targetHeight = { it / 8 }, shrinkTowards = Alignment.Top)
+                        + fadeOut(animationSpec = tween(120)),
             ) {
                 Surface(color = MaterialTheme.colorScheme.primary) {
                     TopAppBar(
@@ -268,8 +269,8 @@ internal fun ChaptersScreen(
         bottomBar = {
             AnimatedVisibility(
                 visible = state.isInSelectionMode.value,
-                enter = expandVertically(initialHeight = { it / 2 }) + fadeIn(),
-                exit = shrinkVertically(targetHeight = { it / 2 }) + fadeOut(),
+                enter = expandVertically(initialHeight = { it / 8 }) + fadeIn(animationSpec = tween(120)),
+                exit = shrinkVertically(targetHeight = { it / 8 }) + fadeOut(animationSpec = tween(120)),
             ) {
                 BottomAppBar(
                     modifier = Modifier.clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),

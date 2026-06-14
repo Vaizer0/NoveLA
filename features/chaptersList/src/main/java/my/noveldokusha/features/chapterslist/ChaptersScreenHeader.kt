@@ -1,5 +1,6 @@
 package my.noveldokusha.features.chapterslist
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -200,7 +203,7 @@ internal fun ChaptersScreenHeader(
 
             // Жанры — показываем только если есть, с возможностью свернуть/развернуть
             if (genres.isNotEmpty()) {
-                val genresCollapsedCount = 8
+                val genresCollapsedCount = 4
                 var genresExpanded by rememberSaveable { mutableStateOf(false) }
                 val visibleGenres = if (genresExpanded || genres.size <= genresCollapsedCount)
                     genres
@@ -208,8 +211,8 @@ internal fun ChaptersScreenHeader(
                     genres.take(genresCollapsedCount)
 
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .animateContentSize()
@@ -220,44 +223,38 @@ internal fun ChaptersScreenHeader(
                         )
                 ) {
                     visibleGenres.forEach { genre ->
-                        AssistChip(
-                            onClick = {},
-                            enabled = false,
-                            label = {
-                                Text(
-                                    text = genre,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                disabledContainerColor = MaterialTheme.colorScheme.surface,
-                                disabledLabelColor = MaterialTheme.colorScheme.onSurface,
-                            ),
-                            border = AssistChipDefaults.assistChipBorder(
-                                enabled = false,
-                                borderColor = MaterialTheme.colorScheme.outline,
-                            ),
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(Dp.Hairline, MaterialTheme.colorScheme.outline),
+                        ) {
+                            Text(
+                                text = genre,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                     // Чип "ещё N" когда свёрнуто
                     if (!genresExpanded && genres.size > genresCollapsedCount) {
-                        AssistChip(
-                            onClick = { genresExpanded = true },
-                            label = {
-                                Text(
-                                    text = "+${genres.size - genresCollapsedCount}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            border = BorderStroke(Dp.Hairline, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                                onClick = { genresExpanded = true }
                             ),
-                            border = AssistChipDefaults.assistChipBorder(
-                                enabled = true,
-                                borderColor = MaterialTheme.colorScheme.outline,
-                            ),
-                        )
+                        ) {
+                            Text(
+                                text = "+${genres.size - genresCollapsedCount}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
