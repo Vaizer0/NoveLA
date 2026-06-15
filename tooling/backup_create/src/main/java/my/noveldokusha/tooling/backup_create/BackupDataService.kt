@@ -16,6 +16,7 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.coreui.states.removeProgressBar
 import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Boolean
@@ -23,6 +24,8 @@ import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
 import okhttp3.internal.closeQuietly
+import java.io.File
+import org.json.JSONObject
 import timber.log.Timber
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -39,6 +42,9 @@ internal class BackupDataService : Service() {
 
     @Inject
     lateinit var notificationsCenter: NotificationsCenter
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     private val channelName by lazy { getString(R.string.notification_channel_name_backup) }
     private val channelId = "Backup"
@@ -162,6 +168,66 @@ internal class BackupDataService : Service() {
                     it.copyTo(zip)
                 }
                 Timber.d("BackupDataService: Database backed up (${file.length()} bytes)")
+            }
+
+            // Save settings (API keys + categories)
+            notificationsCenter.modifyNotification(
+                notificationBuilder,
+                notificationId = notificationId
+            ) {
+                text = getString(R.string.backup_saving_settings)
+            }
+
+            run {
+                val entry = ZipEntry("settings.json")
+                entry.method = ZipOutputStream.DEFLATED
+                val settingsJson = JSONObject().apply {
+                    put("TRANSLATION_GOOGLE_PA_API_KEYS", appPreferences.TRANSLATION_GOOGLE_PA_API_KEYS.value)
+                    put("TRANSLATION_GEMINI_API_KEY", appPreferences.TRANSLATION_GEMINI_API_KEY.value)
+                    put("TRANSLATION_GEMINI_MODEL", appPreferences.TRANSLATION_GEMINI_MODEL.value)
+                    put("TRANSLATION_OPENAI_BASE_URL", appPreferences.TRANSLATION_OPENAI_BASE_URL.value)
+                    put("TRANSLATION_OPENAI_API_KEYS", appPreferences.TRANSLATION_OPENAI_API_KEYS.value)
+                    put("TRANSLATION_OPENAI_MODEL", appPreferences.TRANSLATION_OPENAI_MODEL.value)
+                    put("LIBRARY_CUSTOM_CATEGORIES", org.json.JSONArray(appPreferences.LIBRARY_CUSTOM_CATEGORIES.value))
+                    put("TRANSLATION_ACTIVE_SYSTEM_PROMPT", appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value)
+                    put("TRANSLATION_PROMPT_PRESETS", org.json.JSONArray(
+                        appPreferences.TRANSLATION_PROMPT_PRESETS.value.map { (name, prompt) ->
+                            org.json.JSONObject().apply {
+                                put("name", name)
+                                put("prompt", prompt)
+                            }
+                        }
+                    ))
+                }.toString()
+                zip.putNextEntry(entry)
+                zip.write(settingsJson.toByteArray())
+                zip.closeEntry()
+                Timber.d("BackupDataService: Settings backed up")
+            }
+
+            // Save lua extension scripts
+            notificationsCenter.modifyNotification(
+                notificationBuilder,
+                notificationId = notificationId
+            ) {
+                text = getString(R.string.copying_images)
+            }
+
+            run {
+                val luaDir = File(this@BackupDataService.filesDir, "lua_extensions")
+                if (luaDir.exists() && luaDir.isDirectory) {
+                    luaDir.listFiles()?.filter { it.isFile && it.extension == "lua" }?.forEach { file ->
+                        val entry = ZipEntry("lua_extensions/${file.name}")
+                        entry.method = ZipOutputStream.DEFLATED
+                        file.inputStream().use {
+                            zip.putNextEntry(entry)
+                            it.copyTo(zip)
+                        }
+                    }
+                    Timber.d("BackupDataService: Lua extensions backed up (${luaDir.listFiles()?.size} files)")
+                } else {
+                    Timber.d("BackupDataService: No lua_extensions directory found")
+                }
             }
 
             // Save books extra data (like images) — only for library books

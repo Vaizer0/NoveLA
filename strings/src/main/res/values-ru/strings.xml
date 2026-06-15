@@ -382,4 +382,16 @@
     <string name="llm_tokens_auto">Авто</string>
     <string name="dark_mode">Тёмный режим</string>
     <string name="color_scheme">Цветовая схема</string>
+
+    <!-- Backup/Restore options -->
+    <string name="restore_options">Опции восстановления</string>
+    <string name="overwrite_plugins">Перезаписать плагины</string>
+    <string name="overwrite_plugins_description">Перезаписать установленные плагины плагинами из резервной копии. Снимьте галочку, чтобы сохранить текущие плагины.</string>
+    <string name="restore_settings">Восстановить настройки</string>
+    <string name="restore_settings_description">Восстановить API-ключи и категории библиотеки из резервной копии.</string>
+    <string name="restoring_plugins">Восстановление плагинов…</string>
+    <string name="restoring_settings">Восстановление настроек…</string>
+    <string name="plugins_restored">Плагины восстановлены (%1$d)</string>
+    <string name="settings_restored">Настройки восстановлены</string>
+    <string name="backup_saving_settings">Сохранение настроек…</string>
 </resources>
