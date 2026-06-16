@@ -62,9 +62,10 @@ class AppLocalSources @Inject constructor(
     override val nameStrId = R.string.source_name_local
     override val baseUrl = "local://"
     override val catalogUrl = "local://"
+    override val isLocalSource = true
     override val language = null
     override val iconUrl: String? = null
-    override val iconResId: Int = R.drawable.epub
+    override val iconResId: Int = R.drawable.ic_epub_fb2
 
 
     override suspend fun getChapterList(bookUrl: String): Response<List<ChapterResult>> {
