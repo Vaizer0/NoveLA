@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import my.noveldokusha.tooling.backup_create.onBackupCreate
 import my.noveldokusha.tooling.backup_restore.onBackupRestore
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +59,9 @@ fun SettingsScreen(
             )
         },
         content = { innerPadding ->
+            BackHandler(enabled = currentScreen == "regex-cleanup") {
+                currentScreen = "main"
+            }
             when (currentScreen) {
                 "main" -> SettingsScreenBody(
                     state = viewModel.state,
