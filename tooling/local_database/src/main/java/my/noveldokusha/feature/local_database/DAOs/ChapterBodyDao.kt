@@ -36,4 +36,7 @@ interface ChapterBodyDao {
         )
     """)
     suspend fun removeChapterBodiesByBookUrls(bookUrls: List<String>)
+
+    @Query("DELETE FROM ChapterBody")
+    suspend fun deleteAll(): Int
 }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
+import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -20,19 +21,25 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Boolean
+import my.noveldokusha.core.utils.Extra_Int
 import my.noveldokusha.core.utils.Extra_Uri
+import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
 import okhttp3.internal.closeQuietly
 import java.io.File
+import java.io.FileNotFoundException
 import org.json.JSONObject
 import timber.log.Timber
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 
 @AndroidEntryPoint
-internal class BackupDataService : Service() {
+class BackupDataService : Service() {
 
     @Inject
     lateinit var appDatabase: AppDatabase
@@ -53,21 +60,76 @@ internal class BackupDataService : Service() {
     private class IntentData : Intent {
         var uri by Extra_Uri()
         var backupImages by Extra_Boolean()
+        var isAutoBackup by Extra_Boolean()
+        var directoryUri by Extra_String()
+        var maxCount by Extra_Int()
 
         constructor(intent: Intent) : super(intent)
-        constructor(ctx: Context, uri: Uri, backupImages: Boolean) : super(
+        constructor(
+            ctx: Context,
+            uri: Uri,
+            backupImages: Boolean,
+            isAutoBackup: Boolean = false,
+            directoryUri: String = "",
+            maxCount: Int = 5
+        ) : super(
             ctx,
             BackupDataService::class.java
         ) {
             this.uri = uri
             this.backupImages = backupImages
+            this.isAutoBackup = isAutoBackup
+            this.directoryUri = directoryUri
+            this.maxCount = maxCount
         }
     }
 
     companion object {
+        private const val AUTO_BACKUP_PREFIX = "auto_backup_"
+
         fun start(ctx: Context, uri: Uri, backupImages: Boolean) {
             if (!isRunning(ctx))
                 ctx.startService(IntentData(ctx, uri, backupImages))
+        }
+
+        fun startAutoBackup(
+            ctx: Context,
+            directoryUri: String,
+            backupImages: Boolean,
+            maxCount: Int
+        ) {
+            if (!isRunning(ctx)) {
+                // Generate filename with timestamp
+                val pattern = "yyyyMMdd_HHmmss"
+                val timestamp = SimpleDateFormat(pattern, Locale.US).format(Date())
+                val fileName = "${AUTO_BACKUP_PREFIX}$timestamp.zip"
+
+                // Create file in the directory using SAF
+                val treeUri = Uri.parse(directoryUri)
+                val docUri = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    DocumentsContract.getTreeDocumentId(treeUri)
+                )
+                val createUri = DocumentsContract.createDocument(
+                    ctx.contentResolver,
+                    docUri,
+                    "application/zip",
+                    fileName
+                )
+
+                if (createUri != null) {
+                    ctx.startService(IntentData(
+                        ctx = ctx,
+                        uri = createUri,
+                        backupImages = backupImages,
+                        isAutoBackup = true,
+                        directoryUri = directoryUri,
+                        maxCount = maxCount
+                    ))
+                } else {
+                    Timber.e("BackupDataService: Failed to create auto backup file")
+                }
+            }
         }
 
         private fun isRunning(context: Context): Boolean =
@@ -104,9 +166,81 @@ internal class BackupDataService : Service() {
             }.onError {
                 Timber.e(it.exception)
             }
+
+            // If auto-backup, run rotation after successful backup
+            if (intentData.isAutoBackup && intentData.directoryUri.isNotEmpty()) {
+                try {
+                    rotateAutoBackups(intentData.directoryUri, intentData.maxCount)
+                } catch (e: Exception) {
+                    Timber.e(e, "BackupDataService: Failed to rotate auto backups")
+                }
+            }
+
             stopSelf(startId)
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Remove old auto-backup files when count exceeds maxCount.
+     * Keeps only the [maxCount] most recent files.
+     */
+    private suspend fun rotateAutoBackups(directoryUri: String, maxCount: Int) = withContext(Dispatchers.IO) {
+        if (maxCount <= 0) return@withContext
+        Timber.d("BackupDataService: Rotating auto backups, maxCount=$maxCount")
+
+        val treeUri = Uri.parse(directoryUri)
+        val docId = DocumentsContract.getTreeDocumentId(treeUri)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+
+        val backupFiles = mutableListOf<Pair<String, Long>>() // (documentId, lastModified)
+
+        try {
+            contentResolver.query(childrenUri, null, null, null, null)?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val docIdChild = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    )
+                    val mimeType = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    )
+                    val displayName = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    )
+                    val lastModified = cursor.getLong(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                    )
+
+                    if (displayName.startsWith(AUTO_BACKUP_PREFIX) && displayName.endsWith(".zip")) {
+                        backupFiles.add(docIdChild to lastModified)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "BackupDataService: Failed to list auto backup files")
+            return@withContext
+        }
+
+        // Sort by last modified ascending (oldest first)
+        backupFiles.sortBy { it.second }
+
+        Timber.d("BackupDataService: Found ${backupFiles.size} auto backup files (max $maxCount)")
+
+        // Delete oldest files if count > maxCount
+        if (backupFiles.size > maxCount) {
+            val toDelete = backupFiles.size - maxCount
+            for (i in 0 until toDelete) {
+                val docIdToDelete = backupFiles[i].first
+                try {
+                    val deleteUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docIdToDelete)
+                    if (DocumentsContract.deleteDocument(contentResolver, deleteUri)) {
+                        Timber.d("BackupDataService: Deleted old backup $docIdToDelete")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "BackupDataService: Failed to delete old backup $docIdToDelete")
+                }
+            }
+        }
     }
 
     /**
@@ -277,6 +411,9 @@ internal class BackupDataService : Service() {
             ) {
                 title = getString(R.string.backup_saved)
             }
+
+            // Update last auto-backup timestamp
+            appPreferences.BACKUP_AUTO_LAST_TIMESTAMP.value = System.currentTimeMillis()
         } ?: notificationsCenter.modifyNotification(
             notificationBuilder,
             notificationId = notificationId

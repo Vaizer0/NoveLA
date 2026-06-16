@@ -394,4 +394,28 @@
     <string name="plugins_restored">Плагины восстановлены (%1$d)</string>
     <string name="settings_restored">Настройки восстановлены</string>
     <string name="backup_saving_settings">Сохранение настроек…</string>
+
+    <!-- Auto Backup -->
+    <string name="auto_backup">Автобекап</string>
+    <string name="auto_backup_description">Автоматическое создание резервных копий по расписанию</string>
+    <string name="auto_backup_switch">Включить автобекап</string>
+    <string name="auto_backup_directory">Папка для бекапов</string>
+    <string name="auto_backup_select_directory">Выбрать папку для бекапов</string>
+    <string name="auto_backup_directory_selected">Папка выбрана</string>
+    <string name="auto_backup_max_count">Максимум файлов</string>
+    <string name="auto_backup_max_count_value">%d файлов</string>
+    <string name="auto_backup_include_images">Включая изображения</string>
+    <string name="auto_backup_include_images_description">Сохранять изображения в автобекапе</string>
+    <string name="auto_backup_enabled">Автобекап включён</string>
+    <string name="auto_backup_interval">Интервал бекапа</string>
+    <string name="auto_backup_disabled">Автобекап выключен</string>
+    <string name="auto_backup_select_directory_first">Сначала выберите папку для бекапов</string>
+    <string name="auto_backup_no_permission">Нет прав на запись в эту папку</string>
+    <string name="auto_backup_interval_updated">Интервал резервного копирования обновлён</string>
+    <string name="auto_backup_last_time">Последний бэкап</string>
+    <string name="auto_backup_never">Никогда</string>
+    <string name="clean_chapter_cache">Очистить кеш глав</string>
+    <string name="cleaning_chapter_cache">Очистка кеша глав…</string>
+    <string name="chapter_cache_cleaned">Кеш глав очищен</string>
+    <string name="chapter_cache_clean_failed">Не удалось очистить кеш глав</string>
 </resources>

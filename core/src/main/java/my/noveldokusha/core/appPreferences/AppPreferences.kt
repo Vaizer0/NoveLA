@@ -401,6 +401,50 @@ class AppPreferences @Inject constructor(
         )
     }
 
+    // ── Auto Backup Preferences ─────────────────────────────────────────────
+
+    // Включён ли автоматический бекап
+    val BACKUP_AUTO_ENABLED = object : Preference<Boolean>("BACKUP_AUTO_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    // URI папки (tree URI) для автобекапов, выбранный через SAF
+    val BACKUP_AUTO_DIRECTORY_URI = object : Preference<String>("BACKUP_AUTO_DIRECTORY_URI") {
+        override var value by SharedPreference_String(name, preferences, "")
+    }
+
+    // Максимальное количество хранимых файлов автобекапа
+    val BACKUP_AUTO_MAX_COUNT = object : Preference<Int>("BACKUP_AUTO_MAX_COUNT") {
+        override var value by SharedPreference_Int(name, preferences, 5)
+    }
+
+    // Интервал между автобекапами в минутах (по умолчанию 1440 = 1 день)
+    val BACKUP_AUTO_INTERVAL_MINUTES = object : Preference<Long>("BACKUP_AUTO_INTERVAL_MINUTES") {
+        override var value by SharedPreference_Serializable(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = 1440L,
+            encode = { it.toString() },
+            decode = { it.toLongOrNull() ?: 1440L }
+        )
+    }
+
+    // Включать ли изображения в автобекап
+    val BACKUP_AUTO_INCLUDE_IMAGES = object : Preference<Boolean>("BACKUP_AUTO_INCLUDE_IMAGES") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    // Unix timestamp (мс) последнего успешного автобекапа
+    val BACKUP_AUTO_LAST_TIMESTAMP = object : Preference<Long>("BACKUP_AUTO_LAST_TIMESTAMP") {
+        override var value by SharedPreference_Serializable(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = 0L,
+            encode = { it.toString() },
+            decode = { it.toLongOrNull() ?: 0L }
+        )
+    }
+
 
     @Deprecated("Removed", level = DeprecationLevel.HIDDEN)
     val LOCAL_SOURCES_URI_DIRECTORIES =

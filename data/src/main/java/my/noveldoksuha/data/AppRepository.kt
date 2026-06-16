@@ -97,6 +97,22 @@ class AppRepository @Inject constructor(
         }
 
         /**
+         * Clears all cached chapter bodies and translations.
+         * Library books, chapters, images and progress are NOT affected.
+         */
+        suspend fun clearChapterCache() = withContext(Dispatchers.IO) {
+            db.chapterBodyDao().deleteAll()
+            db.chapterTranslationDao().deleteAllTranslations()
+        }
+
+        /**
+         * Approximate size (in bytes) of all cached chapter bodies.
+         */
+        suspend fun getChapterCacheSizeBytes(): Long = withContext(Dispatchers.IO) {
+            db.chapterBodyDao().getAll().sumOf { it.body.length.toLong() }
+        }
+
+        /**
          * Folder where additional book data like images is stored.
          * Each subfolder must be an unique folder for each book.
          * Each book folder can have an arbitrary structure internally.

@@ -37,6 +37,17 @@ data class SettingsScreenState(
     // LLM batch / token settings (Gemini + OpenAI only)
     val llmBatchSize: State<Int>,
     val llmMaxOutputTokens: State<Int>,
+    // Auto Backup
+    val autoBackupEnabled: MutableState<Boolean>,
+    val autoBackupDirectoryUri: State<String>,
+    val autoBackupDirectoryDisplayName: State<String>,
+    val autoBackupMaxCount: State<Int>,
+    val autoBackupIntervalMinutes: State<Long>,
+    val autoBackupIncludeImages: State<Boolean>,
+    val autoBackupLastTimestamp: State<Long>,
+    // Chapter cache
+    val chapterCacheSize: MutableState<String>,
+    val isCleaningChapterCache: State<Boolean>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

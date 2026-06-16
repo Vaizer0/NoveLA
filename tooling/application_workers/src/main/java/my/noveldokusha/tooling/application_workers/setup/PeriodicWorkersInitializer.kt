@@ -1,7 +1,9 @@
 package my.noveldokusha.tooling.application_workers.setup
 
+import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.WorkManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -9,6 +11,7 @@ import kotlinx.coroutines.launch
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.domain.LibraryCategory
+import my.noveldokusha.tooling.application_workers.AutoBackupWorker
 import my.noveldokusha.tooling.application_workers.LibraryUpdatesWorker
 import my.noveldokusha.tooling.application_workers.UpdatesCheckerWorker
 import timber.log.Timber
@@ -18,9 +21,12 @@ import javax.inject.Singleton
 @Singleton
 class PeriodicWorkersInitializer @Inject constructor(
     private val appPreferences: AppPreferences,
-    private val workManager: WorkManager,
+    @ApplicationContext private val context: Context,
     private val appCoroutineScope: AppCoroutineScope
 ) {
+
+    private val workManager: WorkManager
+        get() = WorkManager.getInstance(context)
 
     private fun startUpdatesChecker(enabled: Boolean) {
         Timber.d("startUpdatesChecker: called enabled=$enabled")
@@ -73,6 +79,14 @@ class PeriodicWorkersInitializer @Inject constructor(
             ) { enabled, intervalHours ->
                 startLibraryUpdates(enabled, intervalHours)
             }.collect()
+        }
+
+        // Schedule auto backup if enabled (similar to komikku's SetupBackupCreateMigration)
+        val autoBackupEnabled = appPreferences.BACKUP_AUTO_ENABLED.value
+        val autoBackupInterval = appPreferences.BACKUP_AUTO_INTERVAL_MINUTES.value
+        Timber.d("PeriodicWorkersInitializer: autoBackupEnabled=$autoBackupEnabled, autoBackupInterval=$autoBackupInterval")
+        if (autoBackupEnabled) {
+            AutoBackupWorker.setupTask(context, autoBackupInterval)
         }
     }
 }
