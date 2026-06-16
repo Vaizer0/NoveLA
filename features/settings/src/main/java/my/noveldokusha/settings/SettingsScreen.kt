@@ -65,6 +65,7 @@ fun SettingsScreen(
             when (currentScreen) {
                 "main" -> SettingsScreenBody(
                     state = viewModel.state,
+                    onRefreshSizes = viewModel::refreshSizes,
                     onAppThemeSelected = viewModel::onAppThemeChange,
                     onDarkModeSelected = viewModel::onDarkModeChange,
                     onCleanDatabase = viewModel::cleanDatabase,

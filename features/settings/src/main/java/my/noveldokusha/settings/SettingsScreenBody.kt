@@ -13,10 +13,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +45,7 @@ import my.noveldokusha.settings.sections.SettingsRegexCleanup
 internal fun SettingsScreenBody(
     state: SettingsScreenState,
     modifier: Modifier = Modifier,
+    onRefreshSizes: () -> Unit,
     onAppThemeSelected: (AppTheme) -> Unit,
     onDarkModeSelected: (DarkMode) -> Unit,
     onCleanDatabase: () -> Unit,
@@ -72,6 +77,20 @@ internal fun SettingsScreenBody(
     onAutoBackupIntervalMinutesChange: (Long) -> Unit,
     onAutoBackupIncludeImagesChange: (Boolean) -> Unit,
 ) {
+    // Refresh size displays every time the user navigates to this screen
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onRefreshSizes()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
     ) {
@@ -228,6 +247,7 @@ private fun Preview() {
                     autoBackupIncludeImages = remember { derivedStateOf { false } },
                     autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
                 ),
+                onRefreshSizes = { },
                 onCleanDatabase = { },
                 onCleanImageFolder = { },
                 onCleanChapterCache = { },

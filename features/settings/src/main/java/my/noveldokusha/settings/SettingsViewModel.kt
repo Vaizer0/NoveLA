@@ -7,7 +7,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.bumptech.glide.Glide
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +24,6 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
-import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -38,7 +36,6 @@ internal class SettingsViewModel @Inject constructor(
     private val appScope: AppCoroutineScope,
     private val appPreferences: AppPreferences,
     @ApplicationContext private val context: Context,
-    stateHandle: SavedStateHandle,
     private val appFileResolver: AppFileResolver,
     private val appRemoteRepository: AppRemoteRepository,
     private val toasty: Toasty,
@@ -57,8 +54,8 @@ internal class SettingsViewModel @Inject constructor(
     private val darkModePref = appPreferences.THEME_DARK_MODE.state(viewModelScope)
 
     val state = SettingsScreenState(
-        databaseSize = stateHandle.asMutableStateOf("databaseSize") { "" },
-        imageFolderSize = stateHandle.asMutableStateOf("imageFolderSize") { "" },
+        databaseSize = mutableStateOf(""),
+        imageFolderSize = mutableStateOf(""),
         isCleaningDatabase = isCleaningDatabase,
         isCleaningImages = isCleaningImages,
         currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
@@ -372,6 +369,16 @@ internal class SettingsViewModel @Inject constructor(
                 }
             state.updateAppSetting.checkingForNewVersion.value = false
         }
+    }
+
+    /**
+     * Refresh all size displays (database, images, chapter cache).
+     * Called every time the settings screen becomes visible.
+     */
+    fun refreshSizes() {
+        updateDatabaseSize()
+        updateImagesFolderSize()
+        updateChapterCacheSize()
     }
 
     fun onMassAddDelayChange(newDelayMs: Long) {
