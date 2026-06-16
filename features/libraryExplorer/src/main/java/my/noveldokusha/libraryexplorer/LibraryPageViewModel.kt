@@ -70,8 +70,8 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .toState(viewModelScope, emptyMap())
 
-    // Shared base flow — only ONE Room query (JOIN Book+Chapter) instead of 4
-    private val baseLibraryFlow = appRepository.libraryBooks
+    // Shared pre-category-filter flow — all filters EXCEPT category selection
+    private val preCategoryFilterFlow = appRepository.libraryBooks
         .getBooksInLibraryWithContextFlow
         .combine(preferences.LIBRARY_FILTER_READ.flow()) { list, filterRead ->
             when (filterRead) {
@@ -101,7 +101,11 @@ internal class LibraryPageViewModel @Inject constructor(
                     }
                 }
             }
-        }.combine(_selectedCategories) { list, categories ->
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
+
+    // Base flow with category filter — used for the actual filtered list
+    private val baseLibraryFlow = preCategoryFilterFlow
+        .combine(_selectedCategories) { list, categories ->
             if (categories.isEmpty()) list // All
             else {
                 list.filter { book ->
@@ -138,14 +142,14 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .toState(viewModelScope, listOf())
 
-    // Count of items in each category for the chips
-    val categoryCounts = baseLibraryFlow
+    // Count of items in each category for the chips (category → count)
+    // Built from preCategoryFilterFlow so counts are unaffected by which category is selected
+    val categoryCounts = preCategoryFilterFlow
         .map { list ->
-            val reading = list.count { it.book.category == "" || it.book.category == null }
-            val completed = list.count { it.book.category == "Completed" }
-            reading to completed
+            list.groupBy { it.book.category ?: "" }
+                .mapValues { it.value.size }
         }
-        .toState(viewModelScope, 0 to 0)
+        .toState(viewModelScope, emptyMap<String, Int>())
 
     init {
         // Sync the mutable state with the flow
