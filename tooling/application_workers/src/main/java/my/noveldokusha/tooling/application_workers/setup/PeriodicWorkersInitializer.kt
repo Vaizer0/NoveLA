@@ -63,6 +63,23 @@ class PeriodicWorkersInitializer @Inject constructor(
         )
     }
 
+    private fun onAutoBackupChanged(enabled: Boolean, intervalMinutes: Long) {
+        Timber.d("onAutoBackupChanged: enabled=$enabled, intervalMinutes=$intervalMinutes")
+        if (enabled) {
+            AutoBackupWorker.setupTask(context, intervalMinutes)
+            // Если бекапа не было или он устарел — запускаем сразу
+            val lastTimestamp = appPreferences.BACKUP_AUTO_LAST_TIMESTAMP.value
+            val now = System.currentTimeMillis()
+            val intervalMs = intervalMinutes * 60 * 1000L
+            if (lastTimestamp <= 0 || (now - lastTimestamp) >= intervalMs) {
+                Timber.d("onAutoBackupChanged: backup is stale or missing, triggering one-shot")
+                AutoBackupWorker.startNow(context)
+            }
+        } else {
+            AutoBackupWorker.cancelTask(context)
+        }
+    }
+
     fun init() {
         appCoroutineScope.launch {
             appPreferences.GLOBAL_APP_UPDATER_CHECKER_ENABLED
@@ -81,12 +98,15 @@ class PeriodicWorkersInitializer @Inject constructor(
             }.collect()
         }
 
-        // Schedule auto backup if enabled (similar to komikku's SetupBackupCreateMigration)
-        val autoBackupEnabled = appPreferences.BACKUP_AUTO_ENABLED.value
-        val autoBackupInterval = appPreferences.BACKUP_AUTO_INTERVAL_MINUTES.value
-        Timber.d("PeriodicWorkersInitializer: autoBackupEnabled=$autoBackupEnabled, autoBackupInterval=$autoBackupInterval")
-        if (autoBackupEnabled) {
-            AutoBackupWorker.setupTask(context, autoBackupInterval)
+        // Реагируем на изменения настроек автобэкапа.
+        // При старте flow эмитит текущие значения, что эквивалентно проверке при инициализации.
+        appCoroutineScope.launch {
+            combine(
+                appPreferences.BACKUP_AUTO_ENABLED.flow(),
+                appPreferences.BACKUP_AUTO_INTERVAL_MINUTES.flow()
+            ) { enabled, intervalMinutes ->
+                onAutoBackupChanged(enabled, intervalMinutes)
+            }.collect()
         }
     }
 }

@@ -48,10 +48,15 @@ class AutoBackupWorker(
 
     companion object {
         const val TAG = "AutoBackup"
-        private const val TAG_AUTO = "AutoBackup:auto"
+        internal const val TAG_AUTO = "AutoBackup:auto"
         private const val TAG_MANUAL = "AutoBackup:manual"
         private const val MIN_INTERVAL_MINUTES = 60L
         private const val AUTO_BACKUP_PREFIX = "auto_backup_"
+
+        fun cancelTask(context: Context) {
+            Log.d(TAG, "cancelTask: cancelling periodic work")
+            WorkManager.getInstance(context).cancelUniqueWork(TAG_AUTO)
+        }
 
         fun setupTask(context: Context, intervalMinutes: Long) {
             val effectiveInterval = intervalMinutes.coerceAtLeast(MIN_INTERVAL_MINUTES)
