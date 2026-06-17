@@ -4,12 +4,16 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.feature.local_database.AppDatabase
+import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.tables.Book
+import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.feature.local_database.tables.Chapter
 import timber.log.Timber
 import javax.inject.Inject
@@ -24,14 +28,16 @@ class AppRepository @Inject constructor(
     val chapterBody: ChapterBodyRepository,
     private val appFileResolver: AppFileResolver,
     private val epubImporterRepository: EpubImporterRepository,
-    val downloaderRepository: DownloaderRepository
+    val downloaderRepository: DownloaderRepository,
+    private val bookGenreDao: BookGenreDao,
+    private val appCoroutineScope: AppCoroutineScope,
 ) {
     val settings = Settings()
     val eventDataRestored = MutableSharedFlow<Unit>()
 
     suspend fun toggleBookmark(bookUrl: String, bookTitle: String): Boolean {
         val realUrl = appFileResolver.getLocalIfContentType(bookUrl, bookFolderName = bookTitle)
-        return if (bookUrl.isContentUri && libraryBooks.get(realUrl) == null) {
+        val result = if (bookUrl.isContentUri && libraryBooks.get(realUrl) == null) {
             epubImporterRepository.importEpubFromContentUri(
                 contentUri = bookUrl,
                 bookTitle = bookTitle,
@@ -40,6 +46,18 @@ class AppRepository @Inject constructor(
         } else {
             libraryBooks.toggleBookmark(bookUrl = realUrl, bookTitle = bookTitle)
         }
+        // Если книга добавлена в библиотеку — загружаем жанры в фоне
+        if (result && !realUrl.isContentUri) {
+            appCoroutineScope.launch {
+                downloaderRepository.bookGenres(bookUrl = realUrl).onSuccess { genres ->
+                    if (genres.isNotEmpty()) {
+                        bookGenreDao.deleteByBook(realUrl)
+                        bookGenreDao.insert(genres.map { BookGenre(bookUrl = realUrl, genre = it) })
+                    }
+                }
+            }
+        }
+        return result
     }
 
     /**

@@ -11,7 +11,9 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.isLocalUri
+import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.tables.Book
+import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.feature.local_database.tables.Chapter
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
@@ -21,6 +23,7 @@ import javax.inject.Singleton
 class LibraryUpdatesInteractions @Inject constructor(
     private val appRepository: AppRepository,
     private val downloaderRepository: DownloaderRepository,
+    private val bookGenreDao: BookGenreDao,
 ) {
     companion object {
         private const val TAG = "LibraryUpdate"
@@ -128,6 +131,9 @@ class LibraryUpdatesInteractions @Inject constructor(
             }
         }
 
+        // Загружаем и сохраняем жанры книги при каждом обновлении
+        updateBookGenres(book.url)
+
         // ── Выбор стратегии обновления ────────────────────────────────────────
         if (book.chaptersLastPage != null) {
             // parsePage-режим: книга уже была спарсена через parsePage.
@@ -150,6 +156,19 @@ class LibraryUpdatesInteractions @Inject constructor(
 
         currentUpdating.update { it - book }
         countingUpdating.update { it?.copy(updated = it.updated + 1) }
+    }
+
+    /**
+     * Загружает и сохраняет жанры книги в БД.
+     * Вызывается при каждом обновлении книги, чтобы жанры всегда были актуальны.
+     */
+    private suspend fun updateBookGenres(bookUrl: String) {
+        downloaderRepository.bookGenres(bookUrl = bookUrl).onSuccess { genres ->
+            if (genres.isEmpty()) return@onSuccess
+            bookGenreDao.deleteByBook(bookUrl)
+            bookGenreDao.insert(genres.map { BookGenre(bookUrl = bookUrl, genre = it) })
+            Log.d(TAG, "[genres] \"$bookUrl\" — saved ${genres.size} genres")
+        }
     }
 
     /**

@@ -421,4 +421,5 @@
     <string name="cleaning_chapter_cache">Очистка кеша глав…</string>
     <string name="chapter_cache_cleaned">Кеш глав очищен</string>
     <string name="chapter_cache_clean_failed">Не удалось очистить кеш глав</string>
+    <string name="reset_filters">Сбросить</string>
 </resources>

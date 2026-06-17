@@ -379,6 +379,20 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "ai")
     }
 
+    // ── Библиотека: сохранение состояния фильтров (чтобы не сбрасывалось после перезапуска) ──
+
+    val LIBRARY_SELECTED_CATEGORIES = object : Preference<Set<String>>("LIBRARY_SELECTED_CATEGORIES") {
+        override var value by SharedPreference_StringSet(name, preferences, setOf())
+    }
+
+    val LIBRARY_SELECTED_GENRES = object : Preference<Set<String>>("LIBRARY_SELECTED_GENRES") {
+        override var value by SharedPreference_StringSet(name, preferences, setOf())
+    }
+
+    val LIBRARY_SELECTED_SOURCES = object : Preference<Set<String>>("LIBRARY_SELECTED_SOURCES") {
+        override var value by SharedPreference_StringSet(name, preferences, setOf())
+    }
+
     val LIBRARY_CUSTOM_CATEGORIES = object : Preference<List<String>>("LIBRARY_CUSTOM_CATEGORIES") {
         override var value by SharedPreference_Serializable<List<String>>(
             name = name,

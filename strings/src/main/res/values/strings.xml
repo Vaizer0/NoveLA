@@ -480,4 +480,6 @@
     <string name="cleaning_chapter_cache">Clearing chapter cache…</string>
     <string name="chapter_cache_cleaned">Chapter cache cleared</string>
     <string name="chapter_cache_clean_failed">Failed to clear chapter cache</string>
+    <string name="all_sources">All sources</string>
+    <string name="reset_filters">Reset</string>
 </resources>
