@@ -6,7 +6,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
@@ -44,8 +43,5 @@ abstract class LocalDatabaseModule {
         @Singleton
         fun provideChapterTranslationDao(database: AppDatabase): ChapterTranslationDao = database.chapterTranslationDao()
 
-        @Provides
-        @Singleton
-        fun provideBookGenreDao(database: AppDatabase): BookGenreDao = database.bookGenreDao()
     }
 }

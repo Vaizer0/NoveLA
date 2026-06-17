@@ -25,8 +25,9 @@ import my.noveldokusha.core.appPreferences.SortConfig
 import my.noveldokusha.core.appPreferences.SortDirection
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.domain.LibraryCategory
+import my.noveldokusha.core.utils.GenreUtils
 import my.noveldokusha.core.utils.toState
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
+import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.interactor.WorkersInteractions
 import my.noveldokusha.scraper.Scraper
 import javax.inject.Inject
@@ -37,7 +38,7 @@ internal class LibraryPageViewModel @Inject constructor(
     private val preferences: AppPreferences,
     private val toasty: Toasty,
     private val workersInteractions: WorkersInteractions,
-    private val bookGenreDao: BookGenreDao,
+    private val libraryDao: LibraryDao,
     private val scraper: Scraper,
     @ApplicationContext private val context: Context,
 ) : BaseViewModel() {
@@ -60,17 +61,27 @@ internal class LibraryPageViewModel @Inject constructor(
     private val _selectedSources = MutableStateFlow<Set<String>>(emptySet())
     val selectedSources = _selectedSources.asStateFlow()
 
-    // Все доступные жанры в библиотеке — подписываемся сразу при создании VM,
-    // чтобы к моменту открытия BottomSheet данные уже были готовы
-    val availableGenres = bookGenreDao.getAllLibraryGenresFlow()
+    // Все доступные жанры в библиотеке — парсим из поля Book.genres
+    val availableGenres = libraryDao.getAllLibraryGenresRawFlow()
+        .map { rawList ->
+            rawList.flatMap { GenreUtils.parse(it) }
+                .distinct()
+                .sorted()
+        }
         .toState(viewModelScope, emptyList())
 
-    // Полная карта жанр → Set<bookUrl> — один запрос, живёт в памяти
-    // Используется для фильтрации без дополнительных запросов к БД
-    private val genreToBookUrls = bookGenreDao.getAllLibraryGenreBookUrlsFlow()
-        .map { pairs ->
-            pairs.groupBy({ it.genre }, { it.bookUrl })
-                .mapValues { it.value.toSet() }
+    // Полная карта жанр → Set<bookUrl> — парсим из Book.genres
+    private val genreToBookUrls = appRepository.libraryBooks
+        .getBooksInLibraryWithContextFlow
+        .map { list ->
+            val result = mutableMapOf<String, MutableSet<String>>()
+            list.forEach { book ->
+                val genres = GenreUtils.parse(book.book.genres)
+                genres.forEach { genre ->
+                    result.getOrPut(genre) { mutableSetOf() }.add(book.book.url)
+                }
+            }
+            result
         }
         .toState(viewModelScope, emptyMap())
 

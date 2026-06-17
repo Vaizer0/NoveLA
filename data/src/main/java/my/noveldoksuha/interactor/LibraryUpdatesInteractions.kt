@@ -11,9 +11,8 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.isLocalUri
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
+import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
-import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.feature.local_database.tables.Chapter
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
@@ -23,7 +22,7 @@ import javax.inject.Singleton
 class LibraryUpdatesInteractions @Inject constructor(
     private val appRepository: AppRepository,
     private val downloaderRepository: DownloaderRepository,
-    private val bookGenreDao: BookGenreDao,
+    private val libraryDao: LibraryDao,
 ) {
     companion object {
         private const val TAG = "LibraryUpdate"
@@ -165,8 +164,8 @@ class LibraryUpdatesInteractions @Inject constructor(
     private suspend fun updateBookGenres(bookUrl: String) {
         downloaderRepository.bookGenres(bookUrl = bookUrl).onSuccess { genres ->
             if (genres.isEmpty()) return@onSuccess
-            bookGenreDao.deleteByBook(bookUrl)
-            bookGenreDao.insert(genres.map { BookGenre(bookUrl = bookUrl, genre = it) })
+            val normalized = my.noveldokusha.core.utils.GenreUtils.normalize(genres)
+            libraryDao.updateGenres(bookUrl, normalized)
             Log.d(TAG, "[genres] \"$bookUrl\" — saved ${genres.size} genres")
         }
     }

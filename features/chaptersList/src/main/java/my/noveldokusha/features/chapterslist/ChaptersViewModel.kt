@@ -27,12 +27,12 @@ import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.core.isLocalUri
+import my.noveldokusha.core.utils.GenreUtils
 import my.noveldokusha.core.utils.StateExtra_String
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.ChapterWithContext
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
-import my.noveldokusha.feature.local_database.tables.BookGenre
+import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.text_translator.domain.TranslationManager
@@ -55,7 +55,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val downloaderRepository: DownloaderRepository,
     private val chaptersRepository: ChaptersRepository,
     private val epubImporterRepository: EpubImporterRepository,
-    private val bookGenreDao: BookGenreDao,
+    private val libraryDao: LibraryDao,
     private val chapterTranslationDao: ChapterTranslationDao,
     private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
@@ -177,8 +177,8 @@ internal class ChaptersViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            bookGenreDao.getGenresFlow(bookUrl).collect {
-                state.genres.value = it
+            libraryDao.getFlow(bookUrl).collect { book ->
+                state.genres.value = if (book != null) GenreUtils.parse(book.genres) else emptyList()
             }
         }
 
@@ -226,8 +226,8 @@ internal class ChaptersViewModel @Inject constructor(
         if (state.isLocalSource.value) return@launch
         downloaderRepository.bookGenres(bookUrl = bookUrl).onSuccess { genres ->
             if (genres.isEmpty()) return@onSuccess
-            bookGenreDao.deleteByBook(bookUrl)
-            bookGenreDao.insert(genres.map { BookGenre(bookUrl = bookUrl, genre = it) })
+            val normalized = GenreUtils.normalize(genres)
+            libraryDao.updateGenres(bookUrl, normalized)
         }
     }
 

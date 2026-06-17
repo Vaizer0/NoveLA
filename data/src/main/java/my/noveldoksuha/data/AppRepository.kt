@@ -11,9 +11,8 @@ import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.feature.local_database.AppDatabase
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
+import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
-import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.feature.local_database.tables.Chapter
 import timber.log.Timber
 import javax.inject.Inject
@@ -29,7 +28,7 @@ class AppRepository @Inject constructor(
     private val appFileResolver: AppFileResolver,
     private val epubImporterRepository: EpubImporterRepository,
     val downloaderRepository: DownloaderRepository,
-    private val bookGenreDao: BookGenreDao,
+    private val libraryDao: LibraryDao,
     private val appCoroutineScope: AppCoroutineScope,
 ) {
     val settings = Settings()
@@ -51,8 +50,8 @@ class AppRepository @Inject constructor(
             appCoroutineScope.launch {
                 downloaderRepository.bookGenres(bookUrl = realUrl).onSuccess { genres ->
                     if (genres.isNotEmpty()) {
-                        bookGenreDao.deleteByBook(realUrl)
-                        bookGenreDao.insert(genres.map { BookGenre(bookUrl = realUrl, genre = it) })
+                        val normalized = my.noveldokusha.core.utils.GenreUtils.normalize(genres)
+                        libraryDao.updateGenres(realUrl, normalized)
                     }
                 }
             }

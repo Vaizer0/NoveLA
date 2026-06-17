@@ -7,14 +7,12 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import my.noveldokusha.feature.local_database.DAOs.BookGenreDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.DAOs.ExtensionDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
-import my.noveldokusha.feature.local_database.tables.BookGenre
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.feature.local_database.tables.ChapterBody
 import my.noveldokusha.feature.local_database.tables.ChapterTranslation
@@ -28,7 +26,6 @@ interface AppDatabase {
     fun chapterBodyDao(): ChapterBodyDao
     fun chapterTranslationDao(): ChapterTranslationDao
     fun extensionDao(): ExtensionDao
-    fun bookGenreDao(): BookGenreDao
     val name: String
 
     fun closeDatabase()
@@ -66,13 +63,12 @@ interface AppDatabase {
 @Database(
     entities = [
         Book::class,
-        BookGenre::class,
         Chapter::class,
         ChapterBody::class,
         ChapterTranslation::class,
         Extension::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
@@ -81,8 +77,6 @@ internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
     abstract override fun chapterBodyDao(): ChapterBodyDao
     abstract override fun chapterTranslationDao(): ChapterTranslationDao
     abstract override fun extensionDao(): ExtensionDao
-    abstract override fun bookGenreDao(): BookGenreDao
-
     override lateinit var name: String
 
     override suspend fun <T> transaction(block: suspend () -> T): T = withTransaction(block)
