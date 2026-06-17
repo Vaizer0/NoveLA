@@ -44,8 +44,7 @@ class ChapterBodyRepository @Inject constructor(
         return count
     }
 
-    suspend fun getCacheSizeBytes(): Long = chapterBodyDao.getAll()
-        .sumOf { it.body.length.toLong() }
+    suspend fun getCacheSizeBytes(): Long = chapterBodyDao.getCacheSizeBytes()
 
     suspend fun fetchBody(urlChapter: String, tryCache: Boolean = true): Response<String> {
         if (tryCache) chapterBodyDao.get(urlChapter)?.let {

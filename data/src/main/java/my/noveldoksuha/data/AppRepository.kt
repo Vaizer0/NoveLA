@@ -108,9 +108,7 @@ class AppRepository @Inject constructor(
         /**
          * Approximate size (in bytes) of all cached chapter bodies.
          */
-        suspend fun getChapterCacheSizeBytes(): Long = withContext(Dispatchers.IO) {
-            db.chapterBodyDao().getAll().sumOf { it.body.length.toLong() }
-        }
+        suspend fun getChapterCacheSizeBytes(): Long = db.chapterBodyDao().getCacheSizeBytes()
 
         /**
          * Folder where additional book data like images is stored.
