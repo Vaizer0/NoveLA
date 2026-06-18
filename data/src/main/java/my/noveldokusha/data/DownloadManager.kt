@@ -85,7 +85,6 @@ class DownloadManager @Inject constructor(
         private const val CHANNEL_ID = "chapter_downloads"
         private const val CHANNEL_NAME = "Chapter Downloads"
         private const val NOTIFICATION_ID_BASE = 1000
-        private const val MAX_CONSECUTIVE_ERRORS = 5
     }
 
     init {
@@ -196,42 +195,50 @@ class DownloadManager @Inject constructor(
         val uniqueUrls = chapterUrls.distinct()
         if (uniqueUrls.isEmpty()) return
 
-        // Ищем задачу по bookUrl, даже если она завершена — чтобы перезапустить
-        val existingIndex = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-        if (existingIndex >= 0) {
-            val existing = _tasks.value[existingIndex]
-            val newUrls = uniqueUrls.filter { it !in existing.chapterUrls }
-            if (newUrls.isEmpty()) return
-            val updated = existing.copy(
-                chapterUrls = existing.chapterUrls + newUrls,
-                totalCount = existing.totalCount + newUrls.size,
-                // Не сбрасываем currentIndex — продолжаем с того места, где остановились
-                isCompleted = false,
-                isCancelled = false,
-                isPaused = false,
-                errorCount = 0,
-                successCount = 0,
-                translationErrorCount = 0,
-            )
-            _tasks.value = _tasks.value.toMutableList().also { it[existingIndex] = updated }
-            showNotification(updated)
-            startTask(updated)
-            return
-        }
-
-        val task = DownloadTaskState(
-            bookTitle = bookTitle,
-            bookUrl = bookUrl,
-            chapterUrls = uniqueUrls,
-            totalCount = uniqueUrls.size,
-        )
-        _tasks.value = _tasks.value + task
-        // Сохраняем новую задачу в БД
+        // Фильтруем уже скачанные главы в корутине
         scope.launch {
+            val notDownloadedUrls = withContext(Dispatchers.IO) {
+                uniqueUrls.filter { url ->
+                    chapterBodyRepository.getCachedBody(url) == null
+                }
+            }
+            if (notDownloadedUrls.isEmpty()) return@launch
+
+            // Ищем задачу по bookUrl, даже если она завершена — чтобы перезапустить
+            val existingIndex = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+            if (existingIndex >= 0) {
+                val existing = _tasks.value[existingIndex]
+                val newUrls = notDownloadedUrls.filter { it !in existing.chapterUrls }
+                if (newUrls.isEmpty()) return@launch
+                val updated = existing.copy(
+                    chapterUrls = existing.chapterUrls + newUrls,
+                    totalCount = existing.totalCount + newUrls.size,
+                    // Не сбрасываем currentIndex — продолжаем с того места, где остановились
+                    isCompleted = false,
+                    isCancelled = false,
+                    isPaused = false,
+                    errorCount = 0,
+                    successCount = 0,
+                    translationErrorCount = 0,
+                )
+                _tasks.value = _tasks.value.toMutableList().also { it[existingIndex] = updated }
+                showNotification(updated)
+                startTask(updated)
+                return@launch
+            }
+
+            val task = DownloadTaskState(
+                bookTitle = bookTitle,
+                bookUrl = bookUrl,
+                chapterUrls = notDownloadedUrls,
+                totalCount = notDownloadedUrls.size,
+            )
+            _tasks.value = _tasks.value + task
+            // Сохраняем новую задачу в БД
             saveTaskToDatabase(task)
+            showNotification(task)
+            startTask(task)
         }
-        showNotification(task)
-        startTask(task)
     }
 
     fun pause(bookUrl: String) {
@@ -348,11 +355,17 @@ class DownloadManager @Inject constructor(
                     }
 
                     // Загружаем главу с retry
+                    // attempt 0: сразу, attempt 1: 60s, attempt 2: 300s (5 мин), attempt 3: 600s (10 мин)
                     var chapterBody: String? = null
                     var loadSuccess = false
-                    for (attempt in 0 until 3) {
+                    for (attempt in 0 until 4) {
                         if (attempt > 0) {
-                            val backoffMs = (1000L * (1L shl (attempt - 1))).coerceAtMost(5000L)
+                            val backoffMs = when (attempt) {
+                                1 -> 60_000L
+                                2 -> 300_000L
+                                3 -> 600_000L
+                                else -> 600_000L
+                            }
                             android.util.Log.d(TAG, "startTask: retry $attempt for $chapterUrl, waiting ${backoffMs}ms")
                             delay(backoffMs)
                         }
@@ -383,31 +396,27 @@ class DownloadManager @Inject constructor(
                                 translationErrorCount = if (translationSuccess) it.translationErrorCount else it.translationErrorCount + 1,
                             )
                         }
+                        i++
+                        if (i < currentTask.chapterUrls.size) delay(delayMs)
                     } else {
+                        // После 4 неудачных попыток — ставим задачу на паузу
                         updateTask(task.bookUrl) {
                             it.copy(
                                 errorCount = it.errorCount + 1,
                                 consecutiveErrors = it.consecutiveErrors + 1,
+                                isPaused = true,
                             )
                         }
-
-                        // Если слишком много последовательных ошибок — ставим на паузу
-                        val updatedTask = _tasks.value.find { it.bookUrl == task.bookUrl }
-                        if (updatedTask != null && updatedTask.consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                            android.util.Log.w(TAG, "startTask: $MAX_CONSECUTIVE_ERRORS consecutive errors, pausing task")
-                            updateTask(task.bookUrl) { it.copy(isPaused = true) }
-                            val pausedTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
-                            showNotification(pausedTask)
-                            // Ждём пока пользователь не возобновит
-                            while (_tasks.value.find { it.bookUrl == task.bookUrl }?.isPaused == true) {
-                                delay(1000)
-                                if (_tasks.value.find { it.bookUrl == task.bookUrl }?.isCancelled == true) return@launch
-                            }
+                        android.util.Log.w(TAG, "startTask: failed to load $chapterUrl after 4 attempts, pausing task")
+                        val pausedTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
+                        showNotification(pausedTask)
+                        // Ждём пока пользователь не возобновит
+                        while (_tasks.value.find { it.bookUrl == task.bookUrl }?.isPaused == true) {
+                            delay(1000)
+                            if (_tasks.value.find { it.bookUrl == task.bookUrl }?.isCancelled == true) return@launch
                         }
+                        // После возобновления НЕ увеличиваем i — остаёмся на той же главе
                     }
-
-                    i++
-                    if (i < currentTask.chapterUrls.size) delay(delayMs)
                 }
 
                 updateTask(task.bookUrl) { it.copy(isCompleted = true) }
