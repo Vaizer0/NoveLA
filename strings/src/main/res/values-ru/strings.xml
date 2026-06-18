@@ -422,4 +422,16 @@
     <string name="chapter_cache_cleaned">Кеш глав очищен</string>
     <string name="chapter_cache_clean_failed">Не удалось очистить кеш глав</string>
     <string name="reset_filters">Сбросить</string>
+
+    <!-- Download Manager -->
+    <string name="download_added_to_queue">Добавлено в очередь загрузки</string>
+    <string name="download_progress">Загрузка %1$s: %2$s</string>
+    <string name="download_pause">Пауза</string>
+    <string name="download_resume">Продолжить</string>
+    <string name="download_cancel">Отмена</string>
+    <string name="download_dismiss">Закрыть</string>
+    <string name="download_completed">Загрузка завершена</string>
+    <string name="download_error">Ошибка загрузки</string>
+    <string name="download_delay">Задержка между загрузками (мс)</string>
+    <string name="download_delay_description">Задержка между загрузкой глав для избежания блокировки</string>
 </resources>

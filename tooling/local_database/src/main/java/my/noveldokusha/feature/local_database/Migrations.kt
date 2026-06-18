@@ -222,6 +222,26 @@ internal fun databaseMigrations() = arrayOf(
         // 3. Удаляем таблицу BookGenre
         it.execSQL("DROP TABLE IF EXISTS BookGenre")
     },
+    migration(20) {
+        // Персистентное хранение очереди загрузок DownloadManager
+        it.execSQL("""
+            CREATE TABLE IF NOT EXISTS DownloadTask (
+                bookUrl TEXT NOT NULL PRIMARY KEY,
+                bookTitle TEXT NOT NULL,
+                chapterUrlsJson TEXT NOT NULL,
+                currentIndex INTEGER NOT NULL DEFAULT 0,
+                totalCount INTEGER NOT NULL DEFAULT 0,
+                isPaused INTEGER NOT NULL DEFAULT 0,
+                isCancelled INTEGER NOT NULL DEFAULT 0,
+                isCompleted INTEGER NOT NULL DEFAULT 0,
+                errorCount INTEGER NOT NULL DEFAULT 0,
+                successCount INTEGER NOT NULL DEFAULT 0,
+                consecutiveErrors INTEGER NOT NULL DEFAULT 0,
+                skippedCount INTEGER NOT NULL DEFAULT 0,
+                translationErrorCount INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

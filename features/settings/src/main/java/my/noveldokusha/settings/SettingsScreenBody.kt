@@ -52,6 +52,7 @@ internal fun SettingsScreenBody(
     onCleanImageFolder: () -> Unit,
     onCleanChapterCache: () -> Unit,
     onMassAddDelayChange: (Long) -> Unit,
+    onDownloadDelayChange: (Long) -> Unit,
     onBackupData: () -> Unit,
     onRestoreData: () -> Unit,
     onCheckForUpdatesManual: () -> Unit,
@@ -123,7 +124,9 @@ internal fun SettingsScreenBody(
             cloudflareBypassEnabled = state.cloudflareBypassEnabled,
             cloudflareChallengeTimeoutSeconds = state.cloudflareChallengeTimeoutSeconds,
             massAddDelayMs = state.massAddDelayMs,
-            onMassAddDelayChange = onMassAddDelayChange
+            onMassAddDelayChange = onMassAddDelayChange,
+            downloadDelayMs = state.downloadDelayMs,
+            onDownloadDelayChange = onDownloadDelayChange
         )
         HorizontalDivider()
         SettingsBackup(
@@ -224,6 +227,7 @@ private fun Preview() {
                         autoUpdateIntervalHours = remember { mutableIntStateOf(24) },
                     ),
                     massAddDelayMs = remember { derivedStateOf { 2000L } },
+                    downloadDelayMs = remember { derivedStateOf { 2000L } },
                     geminiApiKey = remember { derivedStateOf { "" } },
                     geminiModel = remember { derivedStateOf { "" } },
                     translationProvider = remember { mutableStateOf("GOOGLE_PA") },
@@ -252,6 +256,7 @@ private fun Preview() {
                 onCleanImageFolder = { },
                 onCleanChapterCache = { },
                 onMassAddDelayChange = { },
+                onDownloadDelayChange = { },
                 onBackupData = { },
                 onRestoreData = { },
                 onCheckForUpdatesManual = { },

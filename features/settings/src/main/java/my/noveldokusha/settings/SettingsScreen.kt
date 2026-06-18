@@ -72,6 +72,7 @@ fun SettingsScreen(
                     onCleanImageFolder = viewModel::cleanImagesFolder,
                     onCleanChapterCache = viewModel::cleanChapterCache,
                     onMassAddDelayChange = viewModel::onMassAddDelayChange,
+                    onDownloadDelayChange = viewModel::onDownloadDelayChange,
                     onBackupData = onBackupCreate(),
                     onRestoreData = onBackupRestore(),
                     onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,

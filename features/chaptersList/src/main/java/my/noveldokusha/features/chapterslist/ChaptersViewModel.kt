@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import my.noveldokusha.core.Response
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.data.EpubImporterRepository
 import my.noveldokusha.chapterslist.R
@@ -53,6 +54,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     appFileResolver: AppFileResolver,
     private val downloaderRepository: DownloaderRepository,
+    val downloadManager: DownloadManager,
     private val chaptersRepository: ChaptersRepository,
     private val epubImporterRepository: EpubImporterRepository,
     private val libraryDao: LibraryDao,
@@ -424,26 +426,14 @@ internal class ChaptersViewModel @Inject constructor(
             .filter { selectedUrls.contains(it.chapter.url) }
             .sortedBy { it.chapter.position }
 
-        appScope.launch(Dispatchers.Default) {
-            var successCount = 0
-            var errorCount = 0
-            sortedChapters.forEach { chapter ->
-                appRepository.chapterBody.fetchBody(chapter.chapter.url).onSuccess {
-                    successCount++
-                }.onError {
-                    errorCount++
-                    android.util.Log.w(TAG, "downloadSelected: failed for ${chapter.chapter.title}: ${it.message}")
-                }
-            }
-            if (errorCount > 0) {
-                val msg = if (successCount > 0) {
-                    "Downloaded: $successCount, errors: $errorCount"
-                } else {
-                    "Download error: $errorCount chapters"
-                }
-                toasty.show(msg)
-            }
-        }
+        // Фильтруем уже загруженные главы
+        val chapterUrls = sortedChapters.map { it.chapter.url }
+        downloadManager.enqueue(
+            bookTitle = bookTitle,
+            bookUrl = bookUrl,
+            chapterUrls = chapterUrls
+        )
+        toasty.show(R.string.download_added_to_queue)
     }
 
     fun deleteDownloadsSelected() {
@@ -500,14 +490,12 @@ internal class ChaptersViewModel @Inject constructor(
 
     fun onChapterDownload(chapter: ChapterWithContext) {
         if (state.isLocalSource.value) return
-        appScope.launch {
-            appRepository.chapterBody.fetchBody(chapter.chapter.url).onSuccess {
-                toasty.show(R.string.chapter_downloaded)
-            }.onError {
-                toasty.show("Download error: ${chapter.chapter.title}")
-                android.util.Log.w(TAG, "onChapterDownload: failed for ${chapter.chapter.title}: ${it.message}")
-            }
-        }
+        downloadManager.enqueue(
+            bookTitle = bookTitle,
+            bookUrl = bookUrl,
+            chapterUrls = listOf(chapter.chapter.url)
+        )
+        toasty.show(R.string.download_added_to_queue)
     }
 
     fun unselectAll() {

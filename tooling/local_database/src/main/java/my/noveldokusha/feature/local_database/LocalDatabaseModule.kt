@@ -9,6 +9,7 @@ import dagger.hilt.components.SingletonComponent
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
+import my.noveldokusha.feature.local_database.DAOs.DownloadTaskDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import javax.inject.Singleton
 
@@ -42,6 +43,10 @@ abstract class LocalDatabaseModule {
         @Provides
         @Singleton
         fun provideChapterTranslationDao(database: AppDatabase): ChapterTranslationDao = database.chapterTranslationDao()
+
+        @Provides
+        @Singleton
+        fun provideDownloadTaskDao(database: AppDatabase): DownloadTaskDao = database.downloadTaskDao()
 
     }
 }

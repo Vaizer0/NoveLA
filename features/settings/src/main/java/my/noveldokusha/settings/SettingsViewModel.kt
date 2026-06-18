@@ -84,6 +84,7 @@ internal class SettingsViewModel @Inject constructor(
             )
         ),
         massAddDelayMs = appPreferences.MASS_ADD_DELAY_MS.state(viewModelScope),
+        downloadDelayMs = appPreferences.DOWNLOAD_DELAY_MS.state(viewModelScope),
         geminiApiKey = appPreferences.TRANSLATION_GEMINI_API_KEY.state(viewModelScope),
         geminiModel = appPreferences.TRANSLATION_GEMINI_MODEL.state(viewModelScope),
         translationProvider = appPreferences.TRANSLATION_PROVIDER.state(viewModelScope),
@@ -383,6 +384,10 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onMassAddDelayChange(newDelayMs: Long) {
         appPreferences.MASS_ADD_DELAY_MS.value = newDelayMs
+    }
+
+    fun onDownloadDelayChange(newDelayMs: Long) {
+        appPreferences.DOWNLOAD_DELAY_MS.value = newDelayMs
     }
 
     private suspend fun getFolderSizeBytes(file: File): Long = withContext(Dispatchers.IO) {

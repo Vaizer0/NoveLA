@@ -482,4 +482,16 @@
     <string name="chapter_cache_clean_failed">Failed to clear chapter cache</string>
     <string name="all_sources">All sources</string>
     <string name="reset_filters">Reset</string>
+
+    <!-- Download Manager -->
+    <string name="download_added_to_queue">Added to download queue</string>
+    <string name="download_progress">Downloading %1$s: %2$s</string>
+    <string name="download_pause">Pause</string>
+    <string name="download_resume">Resume</string>
+    <string name="download_cancel">Cancel</string>
+    <string name="download_dismiss">Dismiss</string>
+    <string name="download_completed">Download completed</string>
+    <string name="download_error">Download error</string>
+    <string name="download_delay">Download delay (ms)</string>
+    <string name="download_delay_description">Delay between downloading chapters to avoid rate limiting</string>
 </resources>

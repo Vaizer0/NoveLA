@@ -19,6 +19,7 @@ data class SettingsScreenState(
     val updateAppSetting: UpdateApp,
     val libraryAutoUpdate: LibraryAutoUpdate,
     val massAddDelayMs: State<Long>,
+    val downloadDelayMs: State<Long>,
     val geminiApiKey: State<String>,
     val geminiModel: State<String>,
     val translationProvider: State<String>,

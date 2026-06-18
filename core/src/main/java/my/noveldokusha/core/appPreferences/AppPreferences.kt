@@ -349,6 +349,16 @@ class AppPreferences @Inject constructor(
         )
     }
 
+    val DOWNLOAD_DELAY_MS = object : Preference<Long>("DOWNLOAD_DELAY_MS") {
+        override var value by SharedPreference_Serializable(
+            name = name,
+            sharedPreferences = preferences,
+            defaultValue = 2000L,
+            encode = { it.toString() },
+            decode = { it.toLongOrNull() ?: 2000L }
+        )
+    }
+
     val SCRAPER_USER_AGENT = object : Preference<String>("SCRAPER_USER_AGENT") {
         override var value by SharedPreference_String(name, preferences, "")
     }
