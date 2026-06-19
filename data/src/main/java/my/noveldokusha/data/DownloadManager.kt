@@ -128,6 +128,10 @@ class DownloadManager @Inject constructor(
             _tasks.value = _tasks.value + task
             if (!task.isPaused && !task.isCompleted) {
                 startTask(task)
+            } else if (task.isPaused) {
+                // Показываем notification для приостановленных задач,
+                // чтобы пользователь мог нажать Resume
+                showNotification(task)
             }
         }
     }
@@ -202,30 +206,56 @@ class DownloadManager @Inject constructor(
                     chapterBodyRepository.getCachedBody(url) == null
                 }
             }
-            if (notDownloadedUrls.isEmpty()) return@launch
 
             // Ищем задачу по bookUrl, даже если она завершена — чтобы перезапустить
             val existingIndex = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
             if (existingIndex >= 0) {
                 val existing = _tasks.value[existingIndex]
-                val newUrls = notDownloadedUrls.filter { it !in existing.chapterUrls }
-                if (newUrls.isEmpty()) return@launch
-                val updated = existing.copy(
-                    chapterUrls = existing.chapterUrls + newUrls,
-                    totalCount = existing.totalCount + newUrls.size,
-                    // Не сбрасываем currentIndex — продолжаем с того места, где остановились
-                    isCompleted = false,
-                    isCancelled = false,
-                    isPaused = false,
-                    errorCount = 0,
-                    successCount = 0,
-                    translationErrorCount = 0,
-                )
-                _tasks.value = _tasks.value.toMutableList().also { it[existingIndex] = updated }
-                showNotification(updated)
-                startTask(updated)
-                return@launch
+
+                // Если задача отменена или завершена — удаляем её и создаём новую с нуля
+                if (existing.isCancelled || existing.isCompleted) {
+                    _tasks.value = _tasks.value.toMutableList().also { it.removeAt(existingIndex) }
+                    // Удаляем старый notification
+                    notificationsCenter.close(getNotificationId(bookUrl))
+                    notificationBuilders.remove(bookUrl)
+                    // Удаляем из БД
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            downloadTaskDao.delete(bookUrl)
+                        }
+                    }
+                    // Падаем в код создания новой задачи ниже
+                } else {
+                    val newUrls = notDownloadedUrls.filter { it !in existing.chapterUrls }
+                    if (newUrls.isEmpty()) {
+                        // Все главы уже есть в задаче. Если задача на паузе — снимаем с паузы и перезапускаем.
+                        if (existing.isPaused) {
+                            updateTask(bookUrl) { it.copy(isPaused = false) }
+                            val updated = _tasks.value.find { it.bookUrl == bookUrl } ?: return@launch
+                            showNotification(updated)
+                            startTask(updated)
+                        }
+                        return@launch
+                    }
+                    val updated = existing.copy(
+                        chapterUrls = existing.chapterUrls + newUrls,
+                        totalCount = existing.totalCount + newUrls.size,
+                        // Не сбрасываем currentIndex — продолжаем с того места, где остановились
+                        isCompleted = false,
+                        isCancelled = false,
+                        isPaused = false,
+                        errorCount = 0,
+                        successCount = 0,
+                        translationErrorCount = 0,
+                    )
+                    _tasks.value = _tasks.value.toMutableList().also { it[existingIndex] = updated }
+                    showNotification(updated)
+                    startTask(updated)
+                    return@launch
+                }
             }
+
+            if (notDownloadedUrls.isEmpty()) return@launch
 
             val task = DownloadTaskState(
                 bookTitle = bookTitle,
@@ -242,6 +272,10 @@ class DownloadManager @Inject constructor(
     }
 
     fun pause(bookUrl: String) {
+        // Отменяем job, чтобы освободить семафор домена
+        activeJobs[bookUrl]?.cancel()
+        activeJobs.remove(bookUrl)
+        releaseDomainPermit(bookUrl)
         updateTask(bookUrl) { it.copy(isPaused = true) }
         val task = _tasks.value.find { it.bookUrl == bookUrl } ?: return
         // Пересоздаём notification целиком, чтобы обновить actions (Pause -> Resume)
@@ -252,8 +286,9 @@ class DownloadManager @Inject constructor(
         val task = _tasks.value.find { it.bookUrl == bookUrl } ?: return
         if (!task.isPaused) return
         updateTask(bookUrl) { it.copy(isPaused = false) }
-        startTask(task.copy(isPaused = false))
         val updated = _tasks.value.find { it.bookUrl == bookUrl } ?: return
+        // Создаём новый job, который захватит семафор и продолжит загрузку
+        startTask(updated)
         // Пересоздаём notification целиком, чтобы обновить actions (Resume -> Pause)
         showNotification(updated)
     }
@@ -319,16 +354,7 @@ class DownloadManager @Inject constructor(
                     val currentTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
 
                     if (currentTask.isCancelled) return@launch
-
-                    while (currentTask.isPaused) {
-                        delay(500)
-                        val t = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
-                        if (t.isCancelled) return@launch
-                        if (!t.isPaused) break
-                    }
-
-                    // Если после паузы задача была отменена
-                    if (_tasks.value.find { it.bookUrl == task.bookUrl }?.isCancelled == true) return@launch
+                    if (currentTask.isPaused) return@launch
 
                     if (i >= currentTask.chapterUrls.size) break
 
@@ -399,7 +425,7 @@ class DownloadManager @Inject constructor(
                         i++
                         if (i < currentTask.chapterUrls.size) delay(delayMs)
                     } else {
-                        // После 4 неудачных попыток — ставим задачу на паузу
+                        // После 4 неудачных попыток — ставим задачу на паузу и завершаем job
                         updateTask(task.bookUrl) {
                             it.copy(
                                 errorCount = it.errorCount + 1,
@@ -410,12 +436,9 @@ class DownloadManager @Inject constructor(
                         android.util.Log.w(TAG, "startTask: failed to load $chapterUrl after 4 attempts, pausing task")
                         val pausedTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
                         showNotification(pausedTask)
-                        // Ждём пока пользователь не возобновит
-                        while (_tasks.value.find { it.bookUrl == task.bookUrl }?.isPaused == true) {
-                            delay(1000)
-                            if (_tasks.value.find { it.bookUrl == task.bookUrl }?.isCancelled == true) return@launch
-                        }
-                        // После возобновления НЕ увеличиваем i — остаёмся на той же главе
+                        // Завершаем job — семафор освободится в finally,
+                        // и другая задача с того же домена сможет начать загрузку
+                        return@launch
                     }
                 }
 
