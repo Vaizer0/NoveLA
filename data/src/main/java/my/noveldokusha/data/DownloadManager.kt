@@ -341,6 +341,10 @@ class DownloadManager @Inject constructor(
         if (activeJobs.containsKey(task.bookUrl)) return
 
         val job = scope.launch {
+            // Показываем уведомление сразу после старта job, чтобы задача была видна в шторке,
+            // даже если она будет ждать освобождения семафора домена
+            showNotification(task)
+
             // Per-domain throttling: ждём, пока освободится слот для этого домена
             acquireDomainPermit(task.bookUrl)
 
@@ -455,7 +459,7 @@ class DownloadManager @Inject constructor(
     }
 
     private fun getNotificationId(bookUrl: String): Int =
-        NOTIFICATION_ID_BASE + bookUrl.hashCode().coerceIn(0, Int.MAX_VALUE - NOTIFICATION_ID_BASE)
+        NOTIFICATION_ID_BASE + Math.abs(bookUrl.hashCode())
 
     private fun showNotification(task: DownloadTaskState) {
         val notificationId = getNotificationId(task.bookUrl)
