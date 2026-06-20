@@ -49,7 +49,7 @@ jobs:
           ls -lah release-artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: NoveLA v${{ env.APP_VERSION }}
           tag_name: v${{ env.APP_VERSION }}
