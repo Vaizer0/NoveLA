@@ -1,11 +1,9 @@
 package my.noveldokusha.data
 
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import androidx.core.app.NotificationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -23,7 +21,6 @@ import my.noveldokusha.text_translator.domain.TranslationManager
 import org.json.JSONArray
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Semaphore
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,13 +47,51 @@ data class DownloadTaskState(
 }
 
 /**
- * Менеджер очереди загрузок глав.
- * Позволяет ставить в очередь, приостанавливать, возобновлять и отменять загрузки.
- * Каждая задача обрабатывается последовательно с задержкой между главами.
- * Прогресс отображается в notification в шторке уведомлений.
+ * Per-domain очередь загрузок.
  *
- * Per-domain throttling: на один домен может выполняться только 1 задача одновременно.
- * Это предотвращает бан источника из-за слишком частых запросов.
+ * Один домен = один worker-корутин, обрабатывающий книги последовательно.
+ * Разные домены работают параллельно и независимо.
+ *
+ * Пауза/отмена освобождают домен для следующей книги в очереди.
+ * Это предотвращает бан источника из-за параллельных запросов.
+ */
+private class DomainQueue {
+    /** FIFO-очередь bookUrl для этого домена. */
+    val queue: ArrayDeque<String> = ArrayDeque()
+
+    /** Job активного worker'а. null или завершённый = worker не запущен. */
+    var workerJob: Job? = null
+}
+
+/**
+ * Менеджер очереди загрузок глав.
+ *
+ * Архитектура:
+ * - Каждый домен имеет свою [DomainQueue] с FIFO-очередью книг.
+ * - Worker домена последовательно берёт книги из очереди и скачивает их.
+ * - Пауза задачи немедленно освобождает домен — следующая книга начинает качаться.
+ * - Resume ставит книгу в начало очереди домена (prepend=true).
+ * - Разные домены работают полностью независимо и параллельно.
+ *
+ * Синхронизация:
+ * - [tasksLock] защищает [_tasks], [domainQueues], [activeJobs] — единый lock, без deadlock.
+ * - [notifications] — ConcurrentHashMap, не требует lock (read/write атомарны).
+ *
+ * QA-сценарии покрытые архитектурой:
+ * 1. Две книги с одного домена → вторая ждёт в DomainQueue, не начинает качаться параллельно.
+ * 2. Пауза книги А не останавливает книгу Б с другого домена.
+ * 3. Пауза освобождает домен → следующая книга на этом домене сразу начинает качаться.
+ * 4. Resume вставляет книгу в начало очереди домена (не в конец).
+ * 5. Cancel во время backoff delay → проверка isPaused/isCancelled после delay.
+ * 6. Enqueue уже качающейся книги → добавляет только новые главы, не сбрасывает счётчики.
+ * 7. Enqueue паузнутой книги → resume.
+ * 8. Enqueue завершённой/отменённой книги → создаёт новую задачу.
+ * 9. Перезапуск приложения → задачи восстанавливаются из БД; паузнутые показаны, активные в очереди.
+ * 10. Race condition pause() до регистрации activeJob → CoroutineStart.LAZY фиксит.
+ * 11. Уведомление: прогресс обновляется без мигания (updateProgress, не showDownloading).
+ * 12. Уведомление: завершение → только Dismiss (смахнуть), без Pause/Cancel.
+ * 13. Уведомление: cancel → уведомление исчезает через 2s.
+ * 14. Уведомление: PendingIntent requestCode уникален, не коллидирует между книгами.
  */
 @Singleton
 class DownloadManager @Inject constructor(
@@ -71,87 +106,77 @@ class DownloadManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // Единый lock для _tasks, domainQueues, activeJobs
+    private val tasksLock = Any()
     private val _tasks = MutableStateFlow<List<DownloadTaskState>>(emptyList())
     val tasks: StateFlow<List<DownloadTaskState>> = _tasks.asStateFlow()
 
-    private val activeJobs = mutableMapOf<String, Job>()
-    private val notificationBuilders = mutableMapOf<String, NotificationCompat.Builder>()
+    // activeJobs: bookUrl -> Job скачивания. Доступ только под tasksLock.
+    private val activeJobs = HashMap<String, Job>()
 
-    // Per-domain throttling: 1 задача на домен
-    private val domainSemaphores = ConcurrentHashMap<String, Semaphore>()
+    // Per-domain очереди. Доступ только под tasksLock.
+    private val domainQueues = HashMap<String, DomainQueue>()
+
+    // Уведомления: bookUrl -> BookDownloadNotification.
+    // ConcurrentHashMap — не требует tasksLock, операции атомарны.
+    private val notifications = ConcurrentHashMap<String, BookDownloadNotification>()
 
     companion object {
         private const val TAG = "DownloadManager"
-        private const val CHANNEL_ID = "chapter_downloads"
-        private const val CHANNEL_NAME = "Chapter Downloads"
-        private const val NOTIFICATION_ID_BASE = 1000
     }
 
     init {
-        // Восстанавливаем незавершённые задачи из БД при старте
-        scope.launch {
-            restoreTasksFromDatabase()
-        }
+        scope.launch { restoreTasksFromDatabase() }
     }
 
-    /**
-     * Восстанавливает незавершённые задачи из БД после перезапуска приложения.
-     */
+    // ── Восстановление из БД ─────────────────────────────────────────────────
+
     private suspend fun restoreTasksFromDatabase() {
-        val savedTasks = withContext(Dispatchers.IO) {
-            downloadTaskDao.getAll()
-        }
+        val savedTasks = withContext(Dispatchers.IO) { downloadTaskDao.getAll() }
         for (entity in savedTasks) {
             if (entity.isCompleted || entity.isCancelled) {
-                // Очищаем завершённые задачи
-                withContext(Dispatchers.IO) {
-                    downloadTaskDao.delete(entity.bookUrl)
-                }
+                withContext(Dispatchers.IO) { downloadTaskDao.delete(entity.bookUrl) }
                 continue
             }
-            val chapterUrls = parseChapterUrlsJson(entity.chapterUrlsJson)
-            val task = DownloadTaskState(
-                bookTitle = entity.bookTitle,
-                bookUrl = entity.bookUrl,
-                chapterUrls = chapterUrls,
-                currentIndex = entity.currentIndex,
-                totalCount = entity.totalCount,
-                isPaused = entity.isPaused,
-                isCancelled = entity.isCancelled,
-                isCompleted = entity.isCompleted,
-                errorCount = entity.errorCount,
-                successCount = entity.successCount,
-                consecutiveErrors = entity.consecutiveErrors,
-                skippedCount = entity.skippedCount,
-                translationErrorCount = entity.translationErrorCount,
-            )
-            _tasks.value = _tasks.value + task
-            if (!task.isPaused && !task.isCompleted) {
-                startTask(task)
-            } else if (task.isPaused) {
-                // Показываем notification для приостановленных задач,
-                // чтобы пользователь мог нажать Resume
-                showNotification(task)
+            val task = entity.toState()
+            val notif = createNotification(task)
+
+            synchronized(tasksLock) {
+                _tasks.value = _tasks.value + task
+                if (!task.isPaused) enqueueToWorker(task.bookUrl)
             }
+
+            if (task.isPaused) notif.showPaused(task) else notif.showQueued(task)
         }
     }
 
-    private fun toChapterUrlsJson(urls: List<String>): String {
-        return JSONArray(urls).toString()
+    // ── Сериализация ─────────────────────────────────────────────────────────
+
+    private fun toChapterUrlsJson(urls: List<String>): String = JSONArray(urls).toString()
+
+    private fun parseChapterUrlsJson(json: String): List<String> = try {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { arr.getString(it) }
+    } catch (_: Exception) {
+        emptyList()
     }
 
-    private fun parseChapterUrlsJson(json: String): List<String> {
-        return try {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { arr.getString(it) }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    private fun DownloadTaskEntity.toState() = DownloadTaskState(
+        bookTitle = bookTitle,
+        bookUrl = bookUrl,
+        chapterUrls = parseChapterUrlsJson(chapterUrlsJson),
+        currentIndex = currentIndex,
+        totalCount = totalCount,
+        isPaused = isPaused,
+        isCancelled = isCancelled,
+        isCompleted = isCompleted,
+        errorCount = errorCount,
+        successCount = successCount,
+        consecutiveErrors = consecutiveErrors,
+        skippedCount = skippedCount,
+        translationErrorCount = translationErrorCount,
+    )
 
-    /**
-     * Сохраняет текущее состояние задачи в БД.
-     */
     private suspend fun saveTaskToDatabase(task: DownloadTaskState) {
         withContext(Dispatchers.IO) {
             downloadTaskDao.insert(
@@ -174,87 +199,119 @@ class DownloadManager @Inject constructor(
         }
     }
 
+    // ── Домены ───────────────────────────────────────────────────────────────
+
+    private fun extractDomain(url: String): String = try {
+        URI(url).host ?: "local"
+    } catch (_: Exception) {
+        "local"
+    }
+
     /**
-     * Извлекает домен из URL. Для локальных URL возвращает "local".
+     * Ставит bookUrl в очередь домена и запускает worker если он не активен.
+     * [prepend] = true — вставить в начало (Resume).
+     * Вызывать только под [tasksLock].
      */
-    private fun extractDomain(url: String): String {
-        return try {
-            val uri = URI(url)
-            uri.host ?: "local"
-        } catch (_: Exception) {
-            "local"
+    private fun enqueueToWorker(bookUrl: String, prepend: Boolean = false) {
+        val domain = extractDomain(bookUrl)
+        val dq = domainQueues.getOrPut(domain) { DomainQueue() }
+
+        if (bookUrl !in dq.queue) {
+            if (prepend) dq.queue.addFirst(bookUrl) else dq.queue.addLast(bookUrl)
+        }
+
+        if (dq.workerJob?.isActive != true) {
+            dq.workerJob = scope.launch { runDomainWorker(domain) }
         }
     }
 
     /**
-     * Добавить задачу на скачивание.
-     * Если книга с таким bookUrl уже есть в очереди — главы добавляются к существующей задаче.
+     * Worker домена: последовательно обрабатывает книги из очереди.
+     * Между книгами одного домена нет параллелизма.
      */
+    private suspend fun runDomainWorker(domain: String) {
+        android.util.Log.d(TAG, "worker started: domain=$domain")
+        while (true) {
+            val bookUrl = synchronized(tasksLock) {
+                domainQueues[domain]?.queue?.removeFirstOrNull()
+            } ?: break
+
+            val task = synchronized(tasksLock) {
+                _tasks.value.find { it.bookUrl == bookUrl }
+            }
+
+            if (task == null || task.isCancelled || task.isCompleted || task.isPaused) {
+                android.util.Log.d(TAG, "worker skip $bookUrl: null/cancelled/completed/paused")
+                continue
+            }
+
+            android.util.Log.d(TAG, "worker processing $bookUrl")
+            downloadBook(task)
+            android.util.Log.d(TAG, "worker finished $bookUrl")
+        }
+        android.util.Log.d(TAG, "worker stopped: domain=$domain (queue empty)")
+    }
+
+    // ── Публичный API ────────────────────────────────────────────────────────
+
     fun enqueue(
         bookTitle: String,
         bookUrl: String,
         chapterUrls: List<String>,
     ) {
-        // Фильтруем дубликаты внутри переданного списка
         val uniqueUrls = chapterUrls.distinct()
         if (uniqueUrls.isEmpty()) return
 
-        // Фильтруем уже скачанные главы в корутине
         scope.launch {
+            // Фильтруем уже скачанные до lock — IO-операция
             val notDownloadedUrls = withContext(Dispatchers.IO) {
-                uniqueUrls.filter { url ->
-                    chapterBodyRepository.getCachedBody(url) == null
-                }
+                uniqueUrls.filter { url -> chapterBodyRepository.getCachedBody(url) == null }
             }
 
-            // Ищем задачу по bookUrl, даже если она завершена — чтобы перезапустить
-            val existingIndex = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-            if (existingIndex >= 0) {
-                val existing = _tasks.value[existingIndex]
+            val shouldCreateNew: Boolean = synchronized(tasksLock) {
+                val existingIdx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
 
-                // Если задача отменена или завершена — удаляем её и создаём новую с нуля
-                if (existing.isCancelled || existing.isCompleted) {
-                    _tasks.value = _tasks.value.toMutableList().also { it.removeAt(existingIndex) }
-                    // Удаляем старый notification
-                    notificationsCenter.close(getNotificationId(bookUrl))
-                    notificationBuilders.remove(bookUrl)
-                    // Удаляем из БД
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            downloadTaskDao.delete(bookUrl)
+                if (existingIdx >= 0) {
+                    val existing = _tasks.value[existingIdx]
+
+                    if (existing.isCancelled || existing.isCompleted) {
+                        // Старая завершена/отменена — убираем, создадим новую
+                        _tasks.value = _tasks.value.toMutableList().also { it.removeAt(existingIdx) }
+                        notifications.remove(bookUrl)?.close()
+                        true
+                    } else {
+                        // Задача активна — добавляем только новые главы
+                        val newUrls = notDownloadedUrls.filter { it !in existing.chapterUrls }
+                        if (newUrls.isNotEmpty()) {
+                            val updated = existing.copy(
+                                chapterUrls = existing.chapterUrls + newUrls,
+                                totalCount = existing.totalCount + newUrls.size,
+                                isCompleted = false,
+                                isCancelled = false,
+                            )
+                            _tasks.value = _tasks.value.toMutableList().also { it[existingIdx] = updated }
+                            scope.launch { saveTaskToDatabase(updated) }
+                            notifications[bookUrl]?.updateProgress(updated)
                         }
-                    }
-                    // Падаем в код создания новой задачи ниже
-                } else {
-                    val newUrls = notDownloadedUrls.filter { it !in existing.chapterUrls }
-                    if (newUrls.isEmpty()) {
-                        // Все главы уже есть в задаче. Если задача на паузе — снимаем с паузы и перезапускаем.
                         if (existing.isPaused) {
-                            updateTask(bookUrl) { it.copy(isPaused = false) }
-                            val updated = _tasks.value.find { it.bookUrl == bookUrl } ?: return@launch
-                            showNotification(updated)
-                            startTask(updated)
+                            // Enqueue паузнутой книги = resume
+                            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+                            if (idx >= 0) {
+                                val resumed = _tasks.value[idx].copy(isPaused = false)
+                                _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed }
+                                scope.launch { saveTaskToDatabase(resumed) }
+                                notifications[bookUrl]?.showDownloading(resumed)
+                                enqueueToWorker(bookUrl, prepend = true)
+                            }
                         }
-                        return@launch
+                        false
                     }
-                    val updated = existing.copy(
-                        chapterUrls = existing.chapterUrls + newUrls,
-                        totalCount = existing.totalCount + newUrls.size,
-                        // Не сбрасываем currentIndex — продолжаем с того места, где остановились
-                        isCompleted = false,
-                        isCancelled = false,
-                        isPaused = false,
-                        errorCount = 0,
-                        successCount = 0,
-                        translationErrorCount = 0,
-                    )
-                    _tasks.value = _tasks.value.toMutableList().also { it[existingIndex] = updated }
-                    showNotification(updated)
-                    startTask(updated)
-                    return@launch
+                } else {
+                    true
                 }
             }
 
+            if (!shouldCreateNew) return@launch
             if (notDownloadedUrls.isEmpty()) return@launch
 
             val task = DownloadTaskState(
@@ -263,304 +320,331 @@ class DownloadManager @Inject constructor(
                 chapterUrls = notDownloadedUrls,
                 totalCount = notDownloadedUrls.size,
             )
-            _tasks.value = _tasks.value + task
-            // Сохраняем новую задачу в БД
-            saveTaskToDatabase(task)
-            showNotification(task)
-            startTask(task)
+            val notif = createNotification(task)
+            synchronized(tasksLock) {
+                _tasks.value = _tasks.value + task
+                enqueueToWorker(bookUrl)
+            }
+            scope.launch { saveTaskToDatabase(task) }
+            notif.showQueued(task)
         }
     }
 
     fun pause(bookUrl: String) {
-        // Отменяем job, чтобы освободить семафор домена
-        activeJobs[bookUrl]?.cancel()
-        activeJobs.remove(bookUrl)
-        releaseDomainPermit(bookUrl)
-        updateTask(bookUrl) { it.copy(isPaused = true) }
-        val task = _tasks.value.find { it.bookUrl == bookUrl } ?: return
-        // Пересоздаём notification целиком, чтобы обновить actions (Pause -> Resume)
-        showNotification(task)
+        val paused: DownloadTaskState?
+        synchronized(tasksLock) {
+            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+            if (idx < 0) return
+            val task = _tasks.value[idx]
+            if (task.isPaused || task.isCompleted || task.isCancelled) return
+
+            paused = task.copy(isPaused = true)
+            _tasks.value = _tasks.value.toMutableList().also { it[idx] = paused!! }
+
+            activeJobs.remove(bookUrl)?.cancel()
+            domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
+        }
+        paused ?: return
+        scope.launch { saveTaskToDatabase(paused) }
+        notifications[bookUrl]?.showPaused(paused)
     }
 
     fun resume(bookUrl: String) {
-        val task = _tasks.value.find { it.bookUrl == bookUrl } ?: return
-        if (!task.isPaused) return
-        updateTask(bookUrl) { it.copy(isPaused = false) }
-        val updated = _tasks.value.find { it.bookUrl == bookUrl } ?: return
-        // Создаём новый job, который захватит семафор и продолжит загрузку
-        startTask(updated)
-        // Пересоздаём notification целиком, чтобы обновить actions (Resume -> Pause)
-        showNotification(updated)
+        val resumed: DownloadTaskState?
+        synchronized(tasksLock) {
+            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+            if (idx < 0) return
+            val task = _tasks.value[idx]
+            if (!task.isPaused) return
+
+            resumed = task.copy(isPaused = false)
+            _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed!! }
+            enqueueToWorker(bookUrl, prepend = true)
+        }
+        resumed ?: return
+        scope.launch { saveTaskToDatabase(resumed) }
+        notifications[bookUrl]?.showDownloading(resumed)
     }
 
     fun cancel(bookUrl: String) {
-        activeJobs[bookUrl]?.cancel()
-        activeJobs.remove(bookUrl)
-        updateTask(bookUrl) { it.copy(isCancelled = true, isCompleted = true) }
-        val task = _tasks.value.find { it.bookUrl == bookUrl } ?: return
-        cancelNotification(task)
-        releaseDomainPermit(task.bookUrl)
-    }
-
-    fun dismiss(bookUrl: String) {
-        _tasks.value = _tasks.value.filter { it.bookUrl != bookUrl }
-        notificationBuilders.remove(bookUrl)
-        notificationsCenter.close(getNotificationId(bookUrl))
-        // Удаляем задачу из БД
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                downloadTaskDao.delete(bookUrl)
+        val task: DownloadTaskState?
+        synchronized(tasksLock) {
+            activeJobs.remove(bookUrl)?.cancel()
+            domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
+            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+            task = if (idx >= 0) {
+                _tasks.value[idx].also {
+                    _tasks.value = _tasks.value.toMutableList().also { l -> l.removeAt(idx) }
+                }
+            } else null
+        }
+        task ?: return
+        // showCancelled и auto-close через 2s
+        notifications.remove(bookUrl)?.let { notif ->
+            notif.showCancelled()
+            scope.launch {
+                delay(2_000)
+                notif.close()
             }
         }
+        scope.launch { withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) } }
     }
 
     /**
-     * Захватывает permit для домена. Если permit занят — ждёт освобождения.
+     * Убирает завершённую/паузнутую задачу из UI и закрывает уведомление.
+     * Вызывается пользователем из шторки или по смахиванию уведомления.
      */
-    private suspend fun acquireDomainPermit(bookUrl: String) {
-        val domain = extractDomain(bookUrl)
-        val semaphore = domainSemaphores.computeIfAbsent(domain) { Semaphore(1) }
-        android.util.Log.d(TAG, "acquireDomainPermit: waiting for domain $domain (bookUrl=$bookUrl)")
-        semaphore.acquire()
-        android.util.Log.d(TAG, "acquireDomainPermit: acquired for domain $domain (bookUrl=$bookUrl)")
-    }
-
-    /**
-     * Освобождает permit для домена.
-     */
-    private fun releaseDomainPermit(bookUrl: String) {
-        val domain = extractDomain(bookUrl)
-        val semaphore = domainSemaphores[domain]
-        if (semaphore != null) {
-            semaphore.release()
-            android.util.Log.d(TAG, "releaseDomainPermit: released for domain $domain (bookUrl=$bookUrl)")
+    fun dismiss(bookUrl: String) {
+        synchronized(tasksLock) {
+            _tasks.value = _tasks.value.filter { it.bookUrl != bookUrl }
         }
+        notifications.remove(bookUrl)?.close()
+        scope.launch { withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) } }
     }
 
-    private fun startTask(task: DownloadTaskState) {
-        if (activeJobs.containsKey(task.bookUrl)) return
+    // ── Скачивание книги ─────────────────────────────────────────────────────
 
-        val job = scope.launch {
-            // Показываем уведомление сразу после старта job, чтобы задача была видна в шторке,
-            // даже если она будет ждать освобождения семафора домена
-            showNotification(task)
+    private suspend fun downloadBook(initialTask: DownloadTaskState) {
+        val bookUrl = initialTask.bookUrl
 
-            // Per-domain throttling: ждём, пока освободится слот для этого домена
-            acquireDomainPermit(task.bookUrl)
-
+        // CoroutineStart.LAZY: регистрируем в activeJobs ДО старта корутины.
+        // Устраняет race condition когда pause() приходит до регистрации job.
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val delayMs = appPreferences.DOWNLOAD_DELAY_MS.value
-
-                var i = _tasks.value.find { it.bookUrl == task.bookUrl }?.currentIndex ?: 0
+                var i = synchronized(tasksLock) {
+                    _tasks.value.find { it.bookUrl == bookUrl }?.currentIndex ?: 0
+                }
 
                 while (true) {
-                    // Перечитываем актуальное состояние задачи на каждой итерации
-                    val currentTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
+                    val current = synchronized(tasksLock) {
+                        _tasks.value.find { it.bookUrl == bookUrl }
+                    } ?: return@launch
 
-                    if (currentTask.isCancelled) return@launch
-                    if (currentTask.isPaused) return@launch
+                    if (current.isCancelled || current.isPaused) return@launch
+                    if (i >= current.chapterUrls.size) break
 
-                    if (i >= currentTask.chapterUrls.size) break
+                    val chapterUrl = current.chapterUrls[i]
 
-                    val chapterUrl = currentTask.chapterUrls[i]
+                    // Обновляем индекс и прогресс в уведомлении
+                    val withIndex = updateTask(bookUrl) { it.copy(currentIndex = i + 1) }
+                    if (withIndex != null) notifications[bookUrl]?.updateProgress(withIndex)
 
-                    updateTask(task.bookUrl) { it.copy(currentIndex = i + 1) }
-                    val updated = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
-                    showNotification(updated)
-
-                    // Пропускаем уже загруженные главы
-                    val existingBody = chapterBodyRepository.getCachedBody(chapterUrl)
-                    if (existingBody != null) {
-                        android.util.Log.d(TAG, "startTask: chapter $chapterUrl already downloaded, skipping")
-                        updateTask(task.bookUrl) {
-                            it.copy(
-                                successCount = it.successCount + 1,
-                                skippedCount = it.skippedCount + 1,
-                                consecutiveErrors = 0,
-                            )
-                        }
+                    // Пропускаем уже скачанные — без delay, нет сетевого запроса
+                    if (chapterBodyRepository.getCachedBody(chapterUrl) != null) {
+                        android.util.Log.d(TAG, "skip cached: $chapterUrl")
+                        updateTask(bookUrl) { it.copy(skippedCount = it.skippedCount + 1, consecutiveErrors = 0) }
                         i++
-                        if (i < currentTask.chapterUrls.size) delay(delayMs)
                         continue
                     }
 
-                    // Загружаем главу с retry
-                    // attempt 0: сразу, attempt 1: 60s, attempt 2: 300s (5 мин), attempt 3: 600s (10 мин)
-                    var chapterBody: String? = null
-                    var loadSuccess = false
-                    for (attempt in 0 until 4) {
-                        if (attempt > 0) {
-                            val backoffMs = when (attempt) {
-                                1 -> 60_000L
-                                2 -> 300_000L
-                                3 -> 600_000L
-                                else -> 600_000L
-                            }
-                            android.util.Log.d(TAG, "startTask: retry $attempt for $chapterUrl, waiting ${backoffMs}ms")
-                            delay(backoffMs)
+                    // Загрузка с retry + exponential backoff
+                    when (val fetchResult = fetchWithRetry(bookUrl, chapterUrl)) {
+                        is FetchResult.Interrupted -> {
+                            // Пользователь нажал паузу/отмену во время backoff.
+                            // errorCount НЕ инкрементируем — это не ошибка загрузки.
+                            android.util.Log.d(TAG, "fetch interrupted by user: $chapterUrl")
+                            return@launch
                         }
+                        is FetchResult.Failed -> {
+                            // Все 4 попытки исчерпаны — паузим задачу.
+                            // Домен освобождается для следующей книги.
+                            android.util.Log.w(TAG, "all retries failed, pausing: $bookUrl")
+                            val paused = updateTask(bookUrl) {
+                                it.copy(
+                                    isPaused = true,
+                                    errorCount = it.errorCount + 1,
+                                    consecutiveErrors = it.consecutiveErrors + 1,
+                                )
+                            }
+                            if (paused != null) {
+                                scope.launch { saveTaskToDatabase(paused) }
+                                notifications[bookUrl]?.showPaused(paused)
+                            }
+                            return@launch
+                        }
+                        is FetchResult.Success -> {
+                            // Проверяем паузу перед переводом — он может быть долгим
+                            val taskBeforeTranslate = synchronized(tasksLock) {
+                                _tasks.value.find { it.bookUrl == bookUrl }
+                            }
+                            if (taskBeforeTranslate == null || taskBeforeTranslate.isCancelled || taskBeforeTranslate.isPaused) {
+                                android.util.Log.d(TAG, "interrupted before translate: $chapterUrl")
+                                return@launch
+                            }
 
-                        val result = chapterBodyRepository.fetchBody(chapterUrl)
-                        when (result) {
-                            is my.noveldokusha.core.Response.Success -> {
-                                chapterBody = result.data
-                                if (chapterBody.isNullOrBlank()) {
-                                    android.util.Log.w(TAG, "startTask: empty body for $chapterUrl, retrying...")
-                                    continue
-                                }
-                                loadSuccess = true
-                                break
+                            val translationSuccess = translateAndSave(chapterUrl, fetchResult.body)
+                            updateTask(bookUrl) {
+                                it.copy(
+                                    successCount = it.successCount + 1,
+                                    consecutiveErrors = 0,
+                                    translationErrorCount = if (translationSuccess) it.translationErrorCount
+                                    else it.translationErrorCount + 1,
+                                )
                             }
-                            is my.noveldokusha.core.Response.Error -> {
-                                android.util.Log.w(TAG, "startTask: error loading $chapterUrl: ${result.message}")
-                            }
-                        }
-                    }
+                            i++
 
-                    if (loadSuccess && !chapterBody.isNullOrBlank()) {
-                        val translationSuccess = translateAndSave(chapterUrl, chapterBody)
-                        updateTask(task.bookUrl) {
-                            it.copy(
-                                successCount = it.successCount + 1,
-                                consecutiveErrors = 0,
-                                translationErrorCount = if (translationSuccess) it.translationErrorCount else it.translationErrorCount + 1,
-                            )
+                            // Читаем актуальный размер списка глав — он мог вырасти
+                            // пока мы качали (пользователь добавил новые главы через enqueue)
+                            val actualSize = synchronized(tasksLock) {
+                                _tasks.value.find { it.bookUrl == bookUrl }?.chapterUrls?.size ?: i
+                            }
+                            if (i < actualSize) delay(delayMs)
                         }
-                        i++
-                        if (i < currentTask.chapterUrls.size) delay(delayMs)
-                    } else {
-                        // После 4 неудачных попыток — ставим задачу на паузу и завершаем job
-                        updateTask(task.bookUrl) {
-                            it.copy(
-                                errorCount = it.errorCount + 1,
-                                consecutiveErrors = it.consecutiveErrors + 1,
-                                isPaused = true,
-                            )
-                        }
-                        android.util.Log.w(TAG, "startTask: failed to load $chapterUrl after 4 attempts, pausing task")
-                        val pausedTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
-                        showNotification(pausedTask)
-                        // Завершаем job — семафор освободится в finally,
-                        // и другая задача с того же домена сможет начать загрузку
-                        return@launch
                     }
                 }
 
-                updateTask(task.bookUrl) { it.copy(isCompleted = true) }
-                val finalTask = _tasks.value.find { it.bookUrl == task.bookUrl } ?: return@launch
-                completeNotification(finalTask)
+                // Все главы обработаны
+                val completed = updateTask(bookUrl) { it.copy(isCompleted = true) }
+                if (completed != null) notifications[bookUrl]?.showCompleted(completed)
+                withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) }
+
             } finally {
-                activeJobs.remove(task.bookUrl)
-                releaseDomainPermit(task.bookUrl)
+                synchronized(tasksLock) { activeJobs.remove(bookUrl) }
             }
         }
 
-        activeJobs[task.bookUrl] = job
-    }
-
-    private fun getNotificationId(bookUrl: String): Int =
-        NOTIFICATION_ID_BASE + Math.abs(bookUrl.hashCode())
-
-    private fun showNotification(task: DownloadTaskState) {
-        val notificationId = getNotificationId(task.bookUrl)
-        val builder = notificationsCenter.showNotification(
-            channelId = CHANNEL_ID,
-            channelName = CHANNEL_NAME,
-            notificationId = notificationId,
-            importance = android.app.NotificationManager.IMPORTANCE_LOW,
-        ) {
-            setContentTitle(task.bookTitle)
-            setContentText(
-                when {
-                    task.isPaused -> "Paused: ${task.progressText}"
-                    task.isCompleted -> "Download completed: ${task.successCount}/${task.totalCount}"
-                    else -> "Downloading: ${task.progressText}"
-                }
-            )
-            setOngoing(!task.isPaused && !task.isCompleted)
-            setProgress(task.totalCount, task.currentIndex, false)
-
-            if (task.isPaused) {
-                addAction(android.R.drawable.ic_media_play, "Resume", createPendingIntent(task.bookUrl, DownloadNotificationReceiver.ACTION_RESUME))
-            } else if (!task.isCompleted) {
-                addAction(android.R.drawable.ic_media_pause, "Pause", createPendingIntent(task.bookUrl, DownloadNotificationReceiver.ACTION_PAUSE))
-            }
-            if (!task.isCompleted) {
-                addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", createPendingIntent(task.bookUrl, DownloadNotificationReceiver.ACTION_CANCEL))
-            }
-        }
-        notificationBuilders[task.bookUrl] = builder
-    }
-
-    private fun completeNotification(task: DownloadTaskState) {
-        val builder = notificationBuilders[task.bookUrl] ?: return
-        val notificationId = getNotificationId(task.bookUrl)
-        notificationsCenter.modifyNotification(builder, notificationId) {
-            setContentTitle(task.bookTitle)
-            setContentText("Download completed: ${task.successCount}/${task.totalCount}")
-            setOngoing(false)
-            setProgress(0, 0, false)
-        }
-        notificationBuilders.remove(task.bookUrl)
-    }
-
-    private fun cancelNotification(task: DownloadTaskState) {
-        notificationBuilders.remove(task.bookUrl)
-        notificationsCenter.close(getNotificationId(task.bookUrl))
-    }
-
-    private fun createPendingIntent(bookUrl: String, action: String): PendingIntent {
-        val intent = Intent(context, DownloadNotificationReceiver::class.java).apply {
-            this.action = action
-            putExtra(DownloadNotificationReceiver.EXTRA_BOOK_URL, bookUrl)
-        }
-        // Используем уникальный requestCode на основе bookUrl и action,
-        // чтобы избежать коллизий между разными книгами
-        val requestCode = (bookUrl.hashCode() * 31 + action.hashCode()).coerceIn(0, Int.MAX_VALUE)
-        return PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        synchronized(tasksLock) { activeJobs[bookUrl] = job }
+        job.start()
+        job.join()
     }
 
     /**
-     * Переводит и сохраняет главу.
-     * @return true если перевод успешен или не требуется, false если была ошибка
+     * Результат попытки загрузки главы.
+     *
+     * [Success]     — глава загружена, body непустой.
+     * [Interrupted] — пауза или отмена пользователем во время backoff.
+     *                 NOT ошибка: errorCount не инкрементируется.
+     * [Failed]      — все 4 попытки исчерпаны (сеть, пустой body, etc).
+     *                 errorCount инкрементируется, задача паузится.
      */
+    private sealed class FetchResult {
+        data class Success(val body: String) : FetchResult()
+        object Interrupted : FetchResult()
+        object Failed : FetchResult()
+    }
+
+    /**
+     * Загружает главу с 4 попытками и exponential backoff.
+     *
+     * Backoff: 0s → 60s → 300s → 600s между попытками.
+     * Длинные паузы намеренны — защита от бана источника.
+     *
+     * Возвращает [FetchResult.Interrupted] если задача была паузнута/отменена
+     * во время ожидания — это не считается ошибкой загрузки.
+     */
+    private suspend fun fetchWithRetry(
+        bookUrl: String,
+        chapterUrl: String,
+    ): FetchResult {
+        for (attempt in 0 until 4) {
+            if (attempt > 0) {
+                val backoffMs = when (attempt) {
+                    1 -> 60_000L
+                    2 -> 300_000L
+                    else -> 600_000L
+                }
+                android.util.Log.d(TAG, "retry $attempt for $chapterUrl, wait ${backoffMs}ms")
+                delay(backoffMs)
+
+                // Проверяем статус после ожидания backoff.
+                // Если пауза/отмена — возвращаем Interrupted, не Failed.
+                // downloadBook не будет инкрементировать errorCount.
+                val taskAfterWait = synchronized(tasksLock) {
+                    _tasks.value.find { it.bookUrl == bookUrl }
+                }
+                if (taskAfterWait == null || taskAfterWait.isCancelled || taskAfterWait.isPaused) {
+                    android.util.Log.d(TAG, "interrupted during backoff: $chapterUrl")
+                    return FetchResult.Interrupted
+                }
+            }
+
+            val result = chapterBodyRepository.fetchBody(chapterUrl)
+            when (result) {
+                is my.noveldokusha.core.Response.Success -> {
+                    val body = result.data
+                    if (body.isNullOrBlank()) {
+                        // Пустой body — сайт вернул страницу без контента.
+                        // Считается неудачной попыткой, идём на следующий retry с backoff.
+                        android.util.Log.w(TAG, "empty body attempt=$attempt: $chapterUrl")
+                        continue
+                    }
+                    return FetchResult.Success(body)
+                }
+                is my.noveldokusha.core.Response.Error -> {
+                    android.util.Log.w(TAG, "fetch error attempt=$attempt: $chapterUrl — ${result.message}")
+                    // Не возвращаем Failed сразу — даём шанс следующей попытке
+                }
+            }
+        }
+
+        // Все 4 попытки исчерпаны (ошибки сети или пустой body)
+        android.util.Log.w(TAG, "all retries exhausted: $chapterUrl")
+        return FetchResult.Failed
+    }
+
+    // ── Вспомогательные методы ───────────────────────────────────────────────
+
+    /**
+     * Атомарно обновляет задачу в [_tasks] и возвращает новое состояние.
+     * Не сохраняет в БД — вызывающий сохраняет сам если нужно.
+     */
+    private fun updateTask(
+        bookUrl: String,
+        transform: (DownloadTaskState) -> DownloadTaskState,
+    ): DownloadTaskState? {
+        var result: DownloadTaskState? = null
+        synchronized(tasksLock) {
+            _tasks.value = _tasks.value.map {
+                if (it.bookUrl == bookUrl) transform(it).also { t -> result = t } else it
+            }
+        }
+        return result
+    }
+
+    /**
+     * Создаёт [BookDownloadNotification] для книги и регистрирует в [notifications].
+     * Если для этой книги уже есть уведомление — закрывает старое и создаёт новое.
+     */
+    private fun createNotification(task: DownloadTaskState): BookDownloadNotification {
+        notifications.remove(task.bookUrl)?.close()
+        val notif = BookDownloadNotification(
+            bookUrl = task.bookUrl,
+            bookTitle = task.bookTitle,
+            context = context,
+            notificationsCenter = notificationsCenter,
+        )
+        notifications[task.bookUrl] = notif
+        return notif
+    }
+
+    // ── Перевод ──────────────────────────────────────────────────────────────
+
     private suspend fun translateAndSave(chapterUrl: String, body: String): Boolean {
         val sourceLang = appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.value
         val targetLang = appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.value
         val isEnabled = appPreferences.GLOBAL_TRANSLATION_ENABLED.value
         if (!isEnabled || sourceLang.isBlank() || targetLang.isBlank()) {
-            android.util.Log.d(TAG, "translateAndSave: skipped (enabled=$isEnabled, source='$sourceLang', target='$targetLang')")
+            android.util.Log.d(TAG, "translation skipped (enabled=$isEnabled)")
             return true
         }
 
-        try {
-            android.util.Log.d(TAG, "translateAndSave: translating chapter $chapterUrl ($sourceLang -> $targetLang)")
-
+        return try {
             val paragraphs = body
                 .replace(Regex("<(?!(imgEntry|/imgEntry))[^>]*>"), "")
                 .replace("\r\n", "\n")
                 .replace("\u00A0", " ")
                 .replace(Regex("[ ]+"), " ")
-                .let { cleanText ->
-                    var splitResult = cleanText.split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
-                    if (splitResult.size <= 1 && cleanText.contains("\n")) {
-                        splitResult = cleanText.split("\n").filter { it.isNotBlank() }
-                    }
-                    splitResult.map { it.trim() }.filter { it.isNotBlank() }
+                .let { clean ->
+                    var parts = clean.split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
+                    if (parts.size <= 1 && clean.contains("\n"))
+                        parts = clean.split("\n").filter { it.isNotBlank() }
+                    parts.map { it.trim() }.filter { it.isNotBlank() }
                 }
 
-            if (paragraphs.isEmpty()) {
-                android.util.Log.w(TAG, "translateAndSave: no paragraphs to translate")
-                return true
-            }
+            if (paragraphs.isEmpty()) return true
 
             val translations = translationManager.translateBatch(paragraphs, sourceLang, targetLang)
-
             val entities = paragraphs.mapIndexed { index, original ->
                 my.noveldokusha.feature.local_database.tables.ChapterTranslation(
                     chapterUrl = chapterUrl,
@@ -572,8 +656,6 @@ class DownloadManager @Inject constructor(
                 )
             }.toMutableList()
 
-            // Переводим и сохраняем заголовок главы (отдельный try-catch,
-            // чтобы ошибка перевода заголовка не сломала весь батч)
             try {
                 val chapter = appRepository.bookChapters.get(chapterUrl)
                 if (chapter != null && chapter.title.isNotBlank()) {
@@ -591,33 +673,17 @@ class DownloadManager @Inject constructor(
                                 translatedText = titleTranslated
                             )
                         )
-                        android.util.Log.d(TAG, "translateAndSave: saved title translation: '${chapter.title}' -> '$titleTranslated'")
                     }
                 }
             } catch (e: Exception) {
-                // Ошибка перевода заголовка не критична — логируем и продолжаем
-                android.util.Log.e(TAG, "translateAndSave: title translation failed", e)
+                android.util.Log.e(TAG, "title translation failed", e)
             }
 
             chapterTranslationDao.insertReplace(entities)
-            android.util.Log.d(TAG, "translateAndSave: saved ${entities.size} translations to DB")
-            return true
+            true
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "translateAndSave: failed", e)
-            return false
-        }
-    }
-
-    private fun updateTask(bookUrl: String, transform: (DownloadTaskState) -> DownloadTaskState) {
-        _tasks.value = _tasks.value.map {
-            if (it.bookUrl == bookUrl) transform(it) else it
-        }
-        // Сохраняем обновлённое состояние в БД
-        val updated = _tasks.value.find { it.bookUrl == bookUrl }
-        if (updated != null) {
-            scope.launch {
-                saveTaskToDatabase(updated)
-            }
+            android.util.Log.e(TAG, "translateAndSave failed", e)
+            false
         }
     }
 }
