@@ -46,7 +46,7 @@ androidx-testing-espresso = "3.6.1"
 
 compose-coil = "2.7.0"
 compose-constraintlayout = "1.1.0"
-compose-animation = "1.7.5"
+compose-animation = "1.11.3"
 compose-activity = "1.9.3"
 compose-lazyColumnScrollbar = "2.2.0"
 compose-landscapist-glide = "2.4.4"
