@@ -2,7 +2,7 @@
 
 kotlin = "2.0.21"
 
-plugin-agp = "8.7.3"
+plugin-agp = "8.13.2"
 plugin-autonomousapps = "1.33.0"
 
 hilt = "2.52"
