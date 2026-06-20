@@ -157,18 +157,24 @@ internal class ChaptersViewModel @Inject constructor(
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
 
-            if (!appRepository.bookChapters.hasChapters(bookUrl))
+            val hasChapters = appRepository.bookChapters.hasChapters(bookUrl)
+            val bookInLibrary = appRepository.libraryBooks.get(bookUrl)
+
+            // Загружаем список глав только если их нет локально (первое открытие или битая БД)
+            if (!hasChapters)
                 updateChaptersList()
 
-            if (appRepository.libraryBooks.get(bookUrl) != null)
-                return@launch
-
-            chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
+            // Метаданные (обложка, описание, заголовок) загружаем только если книги нет в библиотеке
+            if (bookInLibrary == null)
+                chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
         }
 
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
-            updateGenres()
+            // Загружаем жанры только если их ещё нет в БД
+            val book = appRepository.libraryBooks.get(bookUrl)
+            if (book == null || book.genres.isNullOrBlank())
+                updateGenres()
         }
 
         viewModelScope.launch {
