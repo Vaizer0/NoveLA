@@ -19,6 +19,7 @@ import my.noveldokusha.core.Response
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloadManager
+import my.noveldokusha.data.EnqueueResult
 import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.data.EpubImporterRepository
 import my.noveldokusha.chapterslist.R
@@ -100,6 +101,7 @@ internal class ChaptersViewModel @Inject constructor(
         isRefreshable = mutableStateOf(rawBookUrl.isContentUri || !bookUrl.isLocalUri),
         genres = mutableStateOf(emptyList()),
         translatedChapterTitles = mutableStateOf(emptyMap()),
+        downloadTask = mutableStateOf(null),
     )
 
     // ─── Перевод названия и описания ──────────────────────────────────────────
@@ -157,30 +159,31 @@ internal class ChaptersViewModel @Inject constructor(
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
 
-            val hasChapters = appRepository.bookChapters.hasChapters(bookUrl)
-            val bookInLibrary = appRepository.libraryBooks.get(bookUrl)
-
-            // Загружаем список глав только если их нет локально (первое открытие или битая БД)
-            if (!hasChapters)
+            if (!appRepository.bookChapters.hasChapters(bookUrl))
                 updateChaptersList()
 
-            // Метаданные (обложка, описание, заголовок) загружаем только если книги нет в библиотеке
-            if (bookInLibrary == null)
-                chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
+            if (appRepository.libraryBooks.get(bookUrl) != null)
+                return@launch
+
+            chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
         }
 
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
-            // Загружаем жанры только если их ещё нет в БД
-            val book = appRepository.libraryBooks.get(bookUrl)
-            if (book == null || book.genres.isNullOrBlank())
-                updateGenres()
+            updateGenres()
         }
 
         viewModelScope.launch {
             chaptersRepository.getChaptersSortedFlow(bookUrl = bookUrl).collect {
                 state.chapters.clear()
                 state.chapters.addAll(it)
+            }
+        }
+
+        // Подписываемся на статус загрузки текущей книги
+        viewModelScope.launch {
+            downloadManager.tasks.collect { tasks ->
+                state.downloadTask.value = tasks.find { it.bookUrl == bookUrl }
             }
         }
 
@@ -432,14 +435,20 @@ internal class ChaptersViewModel @Inject constructor(
             .filter { selectedUrls.contains(it.chapter.url) }
             .sortedBy { it.chapter.position }
 
-        // Фильтруем уже загруженные главы
         val chapterUrls = sortedChapters.map { it.chapter.url }
-        downloadManager.enqueue(
-            bookTitle = bookTitle,
-            bookUrl = bookUrl,
-            chapterUrls = chapterUrls
-        )
-        toasty.show(R.string.download_added_to_queue)
+        viewModelScope.launch {
+            when (val result = downloadManager.enqueue(
+                bookTitle = bookTitle,
+                bookUrl = bookUrl,
+                chapterUrls = chapterUrls,
+            )) {
+                is EnqueueResult.Added -> toasty.show(R.string.download_added_to_queue)
+                is EnqueueResult.ChaptersAdded -> toasty.show(R.string.download_chapters_added)
+                is EnqueueResult.Resumed -> toasty.show(R.string.download_resumed)
+                is EnqueueResult.AlreadyQueued -> toasty.show(R.string.download_already_queued)
+                is EnqueueResult.AllCached -> toasty.show(R.string.download_all_cached)
+            }
+        }
     }
 
     fun deleteDownloadsSelected() {
@@ -496,12 +505,19 @@ internal class ChaptersViewModel @Inject constructor(
 
     fun onChapterDownload(chapter: ChapterWithContext) {
         if (state.isLocalSource.value) return
-        downloadManager.enqueue(
-            bookTitle = bookTitle,
-            bookUrl = bookUrl,
-            chapterUrls = listOf(chapter.chapter.url)
-        )
-        toasty.show(R.string.download_added_to_queue)
+        viewModelScope.launch {
+            when (downloadManager.enqueue(
+                bookTitle = bookTitle,
+                bookUrl = bookUrl,
+                chapterUrls = listOf(chapter.chapter.url),
+            )) {
+                is EnqueueResult.Added -> toasty.show(R.string.download_added_to_queue)
+                is EnqueueResult.ChaptersAdded -> toasty.show(R.string.download_chapters_added)
+                is EnqueueResult.Resumed -> toasty.show(R.string.download_resumed)
+                is EnqueueResult.AlreadyQueued -> toasty.show(R.string.download_already_queued)
+                is EnqueueResult.AllCached -> toasty.show(R.string.download_all_cached)
+            }
+        }
     }
 
     fun unselectAll() {
