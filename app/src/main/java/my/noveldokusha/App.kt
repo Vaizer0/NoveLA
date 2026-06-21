@@ -10,6 +10,7 @@ import dagger.hilt.android.HiltAndroidApp
 import my.noveldokusha.core.LocaleManager
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.di.HiltAppEntryPoint
+import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.tooling.application_workers.setup.PeriodicWorkersInitializer
@@ -25,6 +26,11 @@ class App : Application(), ImageLoaderFactory, Configuration.Provider {
 
     @Inject
     lateinit var periodicWorkersInitializer: PeriodicWorkersInitializer
+
+    // Eager singleton: форсирует создание DownloadManager при старте приложения,
+    // чтобы restoreTasksFromDatabase() запустился сразу, а не при первом открытии книги.
+    @Inject
+    lateinit var downloadManager: DownloadManager
 
     override fun onCreate() {
         super.onCreate()
