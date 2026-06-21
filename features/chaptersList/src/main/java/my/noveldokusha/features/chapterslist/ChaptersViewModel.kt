@@ -168,8 +168,13 @@ internal class ChaptersViewModel @Inject constructor(
             chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
         }
 
+        // Загружаем жанры из БД сразу, если есть, и параллельно обновляем с сети
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
+            val cachedBook = libraryDao.get(bookUrl)
+            if (cachedBook?.genres?.isNotBlank() == true) {
+                state.genres.value = GenreUtils.parse(cachedBook.genres)
+            }
             updateGenres()
         }
 
@@ -184,12 +189,6 @@ internal class ChaptersViewModel @Inject constructor(
         viewModelScope.launch {
             downloadManager.tasks.collect { tasks ->
                 state.downloadTask.value = tasks.find { it.bookUrl == bookUrl }
-            }
-        }
-
-        viewModelScope.launch {
-            libraryDao.getFlow(bookUrl).collect { book ->
-                state.genres.value = if (book != null) GenreUtils.parse(book.genres) else emptyList()
             }
         }
 
@@ -233,12 +232,12 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
-    private fun updateGenres() = viewModelScope.launch {
-        if (state.isLocalSource.value) return@launch
+    private suspend fun updateGenres() {
         downloaderRepository.bookGenres(bookUrl = bookUrl).onSuccess { genres ->
             if (genres.isEmpty()) return@onSuccess
             val normalized = GenreUtils.normalize(genres)
             libraryDao.updateGenres(bookUrl, normalized)
+            state.genres.value = GenreUtils.parse(normalized)
         }
     }
 
