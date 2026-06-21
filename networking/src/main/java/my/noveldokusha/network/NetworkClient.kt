@@ -9,6 +9,7 @@ import my.noveldokusha.network.interceptors.CloudFareVerificationInterceptor
 import my.noveldokusha.network.interceptors.DecodeResponseInterceptor
 import my.noveldokusha.network.interceptors.UserAgentInterceptor
 import okhttp3.Cache
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -55,6 +56,8 @@ class ScraperNetworkClient @Inject constructor(
             cache(Cache(cacheDir, cacheSize))
             connectTimeout(30, TimeUnit.SECONDS)
             readTimeout(30, TimeUnit.SECONDS)
+            // Кастомный DNS resolver через DoH — работает когда системный DNS блокируется Doze mode
+            dns(DnsOverHttps())
         }
         .build()
 

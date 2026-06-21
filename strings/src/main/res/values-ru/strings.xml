@@ -438,4 +438,10 @@
     <string name="download_resumed">Загрузка возобновлена</string>
     <string name="download_already_queued">Уже в очереди</string>
     <string name="download_all_cached">Все главы уже скачаны</string>
+
+    <!-- Battery optimization -->
+    <string name="battery_optimization">Отключить оптимизацию батареи</string>
+    <string name="battery_optimization_description">Необходимо для загрузки глав при выключенном экране. На некоторых устройствах (MIUI/HyperOS) система блокирует сеть в спящем режиме даже с foreground service.</string>
+    <string name="battery_optimization_enabled">Оптимизация батареи включена — нажмите для отключения</string>
+    <string name="battery_optimization_disabled">Оптимизация батареи отключена — фоновые загрузки работают</string>
 </resources>

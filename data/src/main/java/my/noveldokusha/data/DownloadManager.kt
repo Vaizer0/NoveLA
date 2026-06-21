@@ -1,7 +1,10 @@
 package my.noveldokusha.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.PowerManager
+import my.noveldokusha.data.DownloadForegroundService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -151,7 +154,8 @@ class DownloadManager @Inject constructor(
 
         // Константы retry/backoff
         private const val MAX_FETCH_RETRIES = 4
-        private const val NETWORK_RETRY_INTERVAL_MS = 30_000L
+        private const val NETWORK_RETRY_INTERVAL_MS = 15_000L
+        private const val NETWORK_RETRY_FAST_INTERVAL_MS = 5_000L
         private const val TRANSLATION_MAX_RETRIES = 2
     }
 
@@ -167,13 +171,18 @@ class DownloadManager @Inject constructor(
             restoredSignal.complete(Unit)
         }
 
-        // Следим за активными задачами и удерживаем WakeLock пока есть активные загрузки
-        // Это предотвращает Doze mode — иначе delay() в retry не срабатывает когда экран погас
+        // Следим за активными задачами и управляем foreground service
+        // Foreground service — единственный способ гарантировать сетевой доступ в Doze mode
         scope.launch {
             _tasks.map { tasks ->
                 tasks.values.any { !it.isCompleted && !it.isCancelled && !it.isPaused }
             }.distinctUntilChanged().collect { hasActiveTasks ->
                 updateWakeLock(hasActiveTasks)
+                if (hasActiveTasks) {
+                    DownloadForegroundService.start(context)
+                } else {
+                    DownloadForegroundService.stop(context)
+                }
             }
         }
     }
@@ -747,8 +756,28 @@ class DownloadManager @Inject constructor(
     }
 
     /**
+     * Проверяет, есть ли активное сетевое соединение через ConnectivityManager.
+     * Используется в [waitForNetworkThenRetry] для выбора интервала ретрая.
+     */
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return true // если не можем проверить — считаем что сеть есть
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (_: Exception) {
+            true // fallback — пробуем сделать запрос
+        }
+    }
+
+    /**
      * Бесконечный цикл ожидания сети.
-     * Пробует повторно каждые [NETWORK_RETRY_INTERVAL_MS].
+     *
+     * Если ConnectivityManager показывает, что сеть есть — использует
+     * [NETWORK_RETRY_FAST_INTERVAL_MS] (5s), иначе [NETWORK_RETRY_INTERVAL_MS] (15s).
+     * Это позволяет быстрее восстанавливать загрузку после выхода из Doze mode
+     * при разблокировке экрана.
      */
     private suspend fun waitForNetworkThenRetry(
         bookUrl: String,
@@ -761,7 +790,9 @@ class DownloadManager @Inject constructor(
         )
 
         while (true) {
-            delay(NETWORK_RETRY_INTERVAL_MS)
+            val hasNetwork = isNetworkAvailable()
+            val delayMs = if (hasNetwork) NETWORK_RETRY_FAST_INTERVAL_MS else NETWORK_RETRY_INTERVAL_MS
+            delay(delayMs)
 
             // Проверяем статус — могла прийти пауза/отмена
             val task = tasksMutex.withLock { _tasks.value[bookUrl] }
@@ -774,7 +805,7 @@ class DownloadManager @Inject constructor(
                 return FetchResult.Interrupted
             }
 
-            android.util.Log.d(TAG, "network retry for $chapterUrl")
+            android.util.Log.d(TAG, "network retry for $chapterUrl (hasNetwork=$hasNetwork, delay=${delayMs}ms)")
             val result = chapterBodyRepository.fetchBody(chapterUrl)
             when (result) {
                 is my.noveldokusha.core.Response.Success -> {
@@ -792,7 +823,7 @@ class DownloadManager @Inject constructor(
                 }
                 is my.noveldokusha.core.Response.Error -> {
                     if (isNetworkError(result)) {
-                        android.util.Log.d(TAG, "network still down, retrying in 30s: $chapterUrl")
+                        android.util.Log.d(TAG, "network still down, retrying in ${delayMs}ms: $chapterUrl")
                         continue
                     }
                     android.util.Log.w(TAG, "non-network error during network wait: $chapterUrl")

@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -119,7 +120,9 @@ internal fun SettingsScreenBody(
             onCleanChapterCache = onCleanChapterCache,
         )
         HorizontalDivider()
+        val context = LocalContext.current
         SettingsNetwork(
+            context = context,
             scraperUserAgent = state.scraperUserAgent,
             cloudflareBypassEnabled = state.cloudflareBypassEnabled,
             cloudflareChallengeTimeoutSeconds = state.cloudflareChallengeTimeoutSeconds,
