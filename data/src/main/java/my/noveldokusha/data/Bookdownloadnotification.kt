@@ -1,10 +1,14 @@
 package my.noveldokusha.data
 
+import android.Manifest
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import my.noveldokusha.coreui.states.NotificationsCenter
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -46,8 +50,9 @@ class BookDownloadNotification(
 
     /** Книга добавлена в очередь, ещё не качается. */
     fun showQueued(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         builder = build {
-            setContentText("Queued: ${task.progressText}")
+            setContentText("Queued: ${task.progressText}${translationSuffix(task)}")
             setOngoing(true)
             // Pause не имеет смысла пока книга в очереди — только Cancel
             if (task.totalCount > 0) {
@@ -62,8 +67,9 @@ class BookDownloadNotification(
 
     /** Книга активно качается. */
     fun showDownloading(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         builder = build {
-            setContentText("Downloading: ${task.progressText}")
+            setContentText("Downloading: ${task.progressText}${translationSuffix(task)}")
             setOngoing(true)
             if (task.totalCount > 0) {
                 setProgress(task.totalCount, task.currentIndex, false)
@@ -81,13 +87,14 @@ class BookDownloadNotification(
      * Если builder ещё нет (первый вызов) — создаёт полное уведомление.
      */
     fun updateProgress(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         val current = builder
         if (current == null) {
             showDownloading(task)
             return
         }
         notificationsCenter.modifyNotification(current, notificationId) {
-            setContentText("Downloading: ${task.progressText}")
+            setContentText("Downloading: ${task.progressText}${translationSuffix(task)}")
             if (task.totalCount > 0) {
                 setProgress(task.totalCount, task.currentIndex, false)
             } else {
@@ -98,8 +105,9 @@ class BookDownloadNotification(
 
     /** Загрузка поставлена на паузу. */
     fun showPaused(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         builder = build {
-            setContentText("Paused: ${task.progressText}")
+            setContentText("Paused: ${task.progressText}${translationSuffix(task)}")
             setOngoing(false)   // можно смахнуть
             setProgress(task.totalCount, task.currentIndex, false)
             addResumeAction()
@@ -109,8 +117,9 @@ class BookDownloadNotification(
 
     /** Ожидание восстановления сети (DNS/соединение временно недоступно). */
     fun showWaitingForNetwork(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         builder = build {
-            setContentText("Waiting for network: ${task.progressText}")
+            setContentText("Waiting for network: ${task.progressText}${translationSuffix(task)}")
             setOngoing(true)
             setProgress(task.totalCount, task.currentIndex, false)
             // Только Cancel — не Pause, задача продолжает retry
@@ -122,11 +131,11 @@ class BookDownloadNotification(
      * Загрузка завершена успешно.
      * Уведомление остаётся пока пользователь не смахнёт или не нажмёт Dismiss в UI.
      * Кнопок действий нет — задача завершена.
-     * [notificationId] НЕ освобождается здесь — [close] вызовет [DownloadManager] через dismiss().
      */
     fun showCompleted(task: DownloadTaskState) {
+        if (!hasNotificationPermission()) return
         builder = build {
-            setContentText("Completed: ${task.successCount} chapters")
+            setContentText("Completed: ${task.successCount} chapters${translationSuffix(task)}")
             setOngoing(false)
             setProgress(0, 0, false)
             // Кнопок нет — смахнуть или dismiss из UI
@@ -136,9 +145,9 @@ class BookDownloadNotification(
     /**
      * Загрузка отменена.
      * Уведомление автоматически закрывается через 2 секунды.
-     * [notificationId] освобождается сразу — новый enqueue той же книги получит новый ID.
      */
     fun showCancelled() {
+        if (!hasNotificationPermission()) return
         // Не сохраняем в builder — уведомление временное
         notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
@@ -160,6 +169,35 @@ class BookDownloadNotification(
     }
 
     // ── Внутренние хелперы ───────────────────────────────────────────────────
+
+    /**
+     * Проверяет наличие разрешения POST_NOTIFICATIONS на Android 13+.
+     * H4: На Android 13+ (TIRAMISU) без разрешения уведомления не показываются.
+     * Использует NotificationManagerCompat.notify() который тихо игнорирует вызов
+     * при отсутствии разрешения, но для надёжности проверяем явно.
+     */
+    private fun hasNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        val result = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+        if (result != PackageManager.PERMISSION_GRANTED) {
+            android.util.Log.w(TAG, "POST_NOTIFICATIONS denied, skipping notification for $bookUrl")
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Возвращает суффикс для отображения ошибок перевода.
+     * H5: Если translationErrorCount > 0, добавляет предупреждение в текст уведомления.
+     */
+    private fun translationSuffix(task: DownloadTaskState): String {
+        return if (task.translationErrorCount > 0) {
+            " | Translation errors: ${task.translationErrorCount}"
+        } else ""
+    }
 
     /**
      * Создаёт новый builder и сразу показывает уведомление.
@@ -221,6 +259,8 @@ class BookDownloadNotification(
     }
 
     companion object {
+        private const val TAG = "BookDownloadNotification"
+
         const val CHANNEL_ID = "chapter_downloads"
         const val CHANNEL_NAME = "Chapter Downloads"
 

@@ -1,17 +1,26 @@
 package my.noveldokusha.data
 
 import android.content.Context
+import android.os.PowerManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.coreui.states.NotificationsCenter
@@ -19,12 +28,14 @@ import my.noveldokusha.feature.local_database.DAOs.DownloadTaskDao
 import my.noveldokusha.feature.local_database.tables.DownloadTaskEntity
 import my.noveldokusha.text_translator.domain.TranslationManager
 import org.json.JSONArray
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.UnknownHostException
-import java.net.ConnectException
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ssl.SSLException
 
 /**
  * Состояние одной задачи на скачивание.
@@ -67,36 +78,6 @@ private class DomainQueue {
 }
 
 /**
- * Менеджер очереди загрузок глав.
- *
- * Архитектура:
- * - Каждый домен имеет свою [DomainQueue] с FIFO-очередью книг.
- * - Worker домена последовательно берёт книги из очереди и скачивает их.
- * - Пауза задачи немедленно освобождает домен — следующая книга начинает качаться.
- * - Resume ставит книгу в начало очереди домена (prepend=true).
- * - Разные домены работают полностью независимо и параллельно.
- *
- * Синхронизация:
- * - [tasksLock] защищает [_tasks], [domainQueues], [activeJobs] — единый lock, без deadlock.
- * - [notifications] — ConcurrentHashMap, не требует lock (read/write атомарны).
- *
- * QA-сценарии покрытые архитектурой:
- * 1. Две книги с одного домена → вторая ждёт в DomainQueue, не начинает качаться параллельно.
- * 2. Пауза книги А не останавливает книгу Б с другого домена.
- * 3. Пауза освобождает домен → следующая книга на этом домене сразу начинает качаться.
- * 4. Resume вставляет книгу в начало очереди домена (не в конец).
- * 5. Cancel во время backoff delay → проверка isPaused/isCancelled после delay.
- * 6. Enqueue уже качающейся книги → добавляет только новые главы, не сбрасывает счётчики.
- * 7. Enqueue паузнутой книги → resume.
- * 8. Enqueue завершённой/отменённой книги → создаёт новую задачу.
- * 9. Перезапуск приложения → задачи восстанавливаются из БД; паузнутые показаны, активные в очереди.
- * 10. Race condition pause() до регистрации activeJob → CoroutineStart.LAZY фиксит.
- * 11. Уведомление: прогресс обновляется без мигания (updateProgress, не showDownloading).
- * 12. Уведомление: завершение → только Dismiss (смахнуть), без Pause/Cancel.
- * 13. Уведомление: cancel → уведомление исчезает через 2s.
- * 14. Уведомление: PendingIntent requestCode уникален, не коллидирует между книгами.
- */
-/**
  * Результат вызова [DownloadManager.enqueue].
  *
  * [Added]       — новая задача создана, [count] глав добавлено в очередь.
@@ -126,27 +107,97 @@ class DownloadManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Единый lock для _tasks, domainQueues, activeJobs
-    private val tasksLock = Any()
-    private val _tasks = MutableStateFlow<List<DownloadTaskState>>(emptyList())
-    val tasks: StateFlow<List<DownloadTaskState>> = _tasks.asStateFlow()
+    // Mutex — suspend-friendly, не блокирует поток (замена synchronized)
+    private val tasksMutex = Mutex()
 
-    // activeJobs: bookUrl -> Job скачивания. Доступ только под tasksLock.
+    // Внутреннее состояние: Map<bookUrl, Task> для O(1) доступа
+    private val _tasks = MutableStateFlow<Map<String, DownloadTaskState>>(emptyMap())
+
+    // Публичный API: List для обратной совместимости
+    val tasks: StateFlow<List<DownloadTaskState>> = _tasks
+        .map { it.values.toList() }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    // activeJobs: bookUrl -> Job скачивания. Доступ только под tasksMutex.
     private val activeJobs = HashMap<String, Job>()
 
-    // Per-domain очереди. Доступ только под tasksLock.
+    // Per-domain очереди. Доступ только под tasksMutex.
     private val domainQueues = HashMap<String, DomainQueue>()
 
     // Уведомления: bookUrl -> BookDownloadNotification.
-    // ConcurrentHashMap — не требует tasksLock, операции атомарны.
+    // ConcurrentHashMap — не требует tasksMutex, операции атомарны.
     private val notifications = ConcurrentHashMap<String, BookDownloadNotification>()
+
+    // Sequential writer для БД — гарантирует FIFO-порядок записи (fix H2/M5)
+    private val dbWriteChannel = Channel<DownloadTaskState>(capacity = Channel.UNLIMITED)
+
+    // Сигнал готовности restoreTasksFromDatabase (fix H3)
+    private val restoredSignal = CompletableDeferred<Unit>()
+
+    // WakeLock для предотвращения Doze mode во время активных загрузок.
+    // Удерживает CPU активным, чтобы delay() в retry срабатывал даже при выключенном экране.
+    // Не reference-counted — acquire() и release() вызываются сбалансированно,
+    // только при переходе между "есть активные загрузки" и "нет активных загрузок".
+    private val wakeLock: PowerManager.WakeLock? = run {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        powerManager?.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "$TAG:download_wakelock"
+        )
+    }
 
     companion object {
         private const val TAG = "DownloadManager"
+
+        // Константы retry/backoff
+        private const val MAX_FETCH_RETRIES = 4
+        private const val NETWORK_RETRY_INTERVAL_MS = 30_000L
+        private const val TRANSLATION_MAX_RETRIES = 2
     }
 
     init {
-        scope.launch { restoreTasksFromDatabase() }
+        // Sequential writer — гарантирует FIFO порядок записи в БД
+        scope.launch {
+            for (task in dbWriteChannel) {
+                saveTaskToDatabase(task)
+            }
+        }
+        scope.launch {
+            restoreTasksFromDatabase()
+            restoredSignal.complete(Unit)
+        }
+
+        // Следим за активными задачами и удерживаем WakeLock пока есть активные загрузки
+        // Это предотвращает Doze mode — иначе delay() в retry не срабатывает когда экран погас
+        scope.launch {
+            _tasks.map { tasks ->
+                tasks.values.any { !it.isCompleted && !it.isCancelled && !it.isPaused }
+            }.distinctUntilChanged().collect { hasActiveTasks ->
+                updateWakeLock(hasActiveTasks)
+            }
+        }
+    }
+
+    private fun updateWakeLock(hasActiveTasks: Boolean) {
+        val lock = wakeLock ?: return
+        if (hasActiveTasks) {
+            if (!lock.isHeld) {
+                android.util.Log.d(TAG, "acquiring wake lock (active downloads)")
+                lock.acquire()
+            }
+        } else {
+            if (lock.isHeld) {
+                android.util.Log.d(TAG, "releasing wake lock (no active downloads)")
+                lock.release()
+            }
+        }
+    }
+
+    // ── Sequential writer для БД ──────────────────────────────────────────────
+
+    /** Отправляет задачу в sequential writer. Гарантирует порядок FIFO. */
+    private fun scheduleSave(task: DownloadTaskState) {
+        dbWriteChannel.trySend(task)
     }
 
     // ── Восстановление из БД ─────────────────────────────────────────────────
@@ -155,8 +206,6 @@ class DownloadManager @Inject constructor(
         val savedTasks = try {
             withContext(Dispatchers.IO) { downloadTaskDao.getAll() }
         } catch (e: Exception) {
-            // Таблица может не существовать если миграция БД не была применена.
-            // Логируем и выходим — не крашим приложение.
             android.util.Log.e(TAG, "restoreTasksFromDatabase: failed to read DB", e)
             return
         }
@@ -164,20 +213,29 @@ class DownloadManager @Inject constructor(
         android.util.Log.d(TAG, "restoreTasksFromDatabase: found ${savedTasks.size} tasks")
 
         for (entity in savedTasks) {
-            if (entity.isCompleted || entity.isCancelled) {
-                withContext(Dispatchers.IO) { downloadTaskDao.delete(entity.bookUrl) }
-                continue
-            }
-            val task = entity.toState()
-            android.util.Log.d(TAG, "restoreTasksFromDatabase: restoring ${entity.bookUrl} isPaused=${entity.isPaused} isWaitingForNetwork=${entity.isWaitingForNetwork} index=${entity.currentIndex}/${entity.totalCount}")
-            val notif = createNotification(task)
+            try {
+                if (entity.isCompleted || entity.isCancelled) {
+                    withContext(Dispatchers.IO) { downloadTaskDao.delete(entity.bookUrl) }
+                    continue
+                }
+                val task = entity.toState()
+                android.util.Log.d(
+                    TAG,
+                    "restoreTasksFromDatabase: restoring ${entity.bookUrl} " +
+                            "isPaused=${entity.isPaused} isWaitingForNetwork=${entity.isWaitingForNetwork} " +
+                            "index=${entity.currentIndex}/${entity.totalCount}"
+                )
+                val notif = createNotification(task)
 
-            synchronized(tasksLock) {
-                _tasks.value = _tasks.value + task
-                if (!task.isPaused) enqueueToWorker(task.bookUrl)
-            }
+                tasksMutex.withLock {
+                    _tasks.value = _tasks.value + (task.bookUrl to task)
+                    if (!task.isPaused) enqueueToWorker(task.bookUrl)
+                }
 
-            if (task.isPaused) notif.showPaused(task) else notif.showQueued(task)
+                if (task.isPaused) notif.showPaused(task) else notif.showQueued(task)
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "restoreTasksFromDatabase: failed to restore task $entity", e)
+            }
         }
     }
 
@@ -243,7 +301,7 @@ class DownloadManager @Inject constructor(
     /**
      * Ставит bookUrl в очередь домена и запускает worker если он не активен.
      * [prepend] = true — вставить в начало (Resume).
-     * Вызывать только под [tasksLock].
+     * Вызывать только под [tasksMutex].
      */
     private fun enqueueToWorker(bookUrl: String, prepend: Boolean = false) {
         val domain = extractDomain(bookUrl)
@@ -265,12 +323,16 @@ class DownloadManager @Inject constructor(
     private suspend fun runDomainWorker(domain: String) {
         android.util.Log.d(TAG, "worker started: domain=$domain")
         while (true) {
-            val bookUrl = synchronized(tasksLock) {
+            val bookUrl = tasksMutex.withLock {
                 domainQueues[domain]?.queue?.removeFirstOrNull()
+            } ?: run {
+                // M2: очищаем пустой домен из очередей
+                tasksMutex.withLock { domainQueues.remove(domain) }
+                null
             } ?: break
 
-            val task = synchronized(tasksLock) {
-                _tasks.value.find { it.bookUrl == bookUrl }
+            val task = tasksMutex.withLock {
+                _tasks.value[bookUrl]
             }
 
             if (task == null || task.isCancelled || task.isCompleted || task.isPaused) {
@@ -292,13 +354,6 @@ class DownloadManager @Inject constructor(
      *
      * Suspend-функция — возвращает [EnqueueResult] который ViewModel использует
      * для показа правильного тоста. Вызывать из viewModelScope.
-     *
-     * Логика:
-     * - Если задача завершена/отменена — создаём новую.
-     * - Если задача активна — добавляем только главы которых ещё нет в очереди.
-     * - Если задача паузнута — возобновляем.
-     * - Если все главы уже в кеше — возвращаем AllCached.
-     * - Если все главы уже в очереди — возвращаем AlreadyQueued.
      */
     suspend fun enqueue(
         bookTitle: String,
@@ -317,18 +372,16 @@ class DownloadManager @Inject constructor(
 
         data class SyncResult(
             val shouldCreateNew: Boolean,
-            val result: EnqueueResult?,  // не null = уже знаем ответ, выходим
+            val result: EnqueueResult?,
         )
 
-        val syncResult = synchronized(tasksLock) {
-            val existingIdx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
+        val syncResult = tasksMutex.withLock {
+            val existing = _tasks.value[bookUrl]
 
-            if (existingIdx >= 0) {
-                val existing = _tasks.value[existingIdx]
-
+            if (existing != null) {
                 if (existing.isCancelled || existing.isCompleted) {
                     // Старая завершена/отменена — убираем, создадим новую
-                    _tasks.value = _tasks.value.toMutableList().also { it.removeAt(existingIdx) }
+                    _tasks.value = _tasks.value - bookUrl
                     notifications.remove(bookUrl)?.close()
                     SyncResult(shouldCreateNew = true, result = null)
                 } else if (existing.isPaused) {
@@ -341,17 +394,14 @@ class DownloadManager @Inject constructor(
                             isCompleted = false,
                             isCancelled = false,
                         )
-                        _tasks.value = _tasks.value.toMutableList().also { it[existingIdx] = updated }
-                        scope.launch { saveTaskToDatabase(updated) }
+                        _tasks.value = _tasks.value + (bookUrl to updated)
+                        scheduleSave(updated)
                         updated
                     } else existing
 
                     val resumed = base.copy(isPaused = false, isWaitingForNetwork = false)
-                    val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-                    if (idx >= 0) {
-                        _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed }
-                    }
-                    scope.launch { saveTaskToDatabase(resumed) }
+                    _tasks.value = _tasks.value + (bookUrl to resumed)
+                    scheduleSave(resumed)
                     notifications[bookUrl]?.showDownloading(resumed)
                     enqueueToWorker(bookUrl, prepend = true)
                     SyncResult(shouldCreateNew = false, result = EnqueueResult.Resumed)
@@ -365,12 +415,11 @@ class DownloadManager @Inject constructor(
                             isCompleted = false,
                             isCancelled = false,
                         )
-                        _tasks.value = _tasks.value.toMutableList().also { it[existingIdx] = updated }
-                        scope.launch { saveTaskToDatabase(updated) }
+                        _tasks.value = _tasks.value + (bookUrl to updated)
+                        scheduleSave(updated)
                         notifications[bookUrl]?.updateProgress(updated)
                         SyncResult(shouldCreateNew = false, result = EnqueueResult.ChaptersAdded(newUrls.size))
                     } else {
-                        // Все главы уже в очереди
                         SyncResult(shouldCreateNew = false, result = EnqueueResult.AlreadyQueued)
                     }
                 }
@@ -390,85 +439,107 @@ class DownloadManager @Inject constructor(
             totalCount = notDownloadedUrls.size,
         )
         val notif = createNotification(task)
-        synchronized(tasksLock) {
-            _tasks.value = _tasks.value + task
+        tasksMutex.withLock {
+            _tasks.value = _tasks.value + (task.bookUrl to task)
             enqueueToWorker(bookUrl)
         }
-        scope.launch { saveTaskToDatabase(task) }
+        scheduleSave(task)
         notif.showQueued(task)
         return EnqueueResult.Added(notDownloadedUrls.size)
     }
 
+    /**
+     * Поставить задачу на паузу.
+     *
+     * Fire-and-forget: метод асинхронный. Вызов из BroadcastReceiver.onReceive
+     * безопасен — тяжёлая работа уходит в scope.launch.
+     * После переключения в ACT MODE дожидается готовности restore-сигнала.
+     */
     fun pause(bookUrl: String) {
-        val paused: DownloadTaskState?
-        synchronized(tasksLock) {
-            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-            if (idx < 0) return
-            val task = _tasks.value[idx]
-            if (task.isPaused || task.isCompleted || task.isCancelled) return
+        scope.launch {
+            restoredSignal.await()
+            tasksMutex.withLock {
+                val task = _tasks.value[bookUrl] ?: return@withLock
+                if (task.isPaused || task.isCompleted || task.isCancelled) return@withLock
 
-            paused = task.copy(isPaused = true, isWaitingForNetwork = false)
-            _tasks.value = _tasks.value.toMutableList().also { it[idx] = paused!! }
+                val paused = task.copy(isPaused = true, isWaitingForNetwork = false)
+                _tasks.value = _tasks.value + (bookUrl to paused)
 
-            activeJobs.remove(bookUrl)?.cancel()
-            domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
+                activeJobs.remove(bookUrl)?.cancel()
+                domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
+
+                scheduleSave(paused)
+                notifications[bookUrl]?.showPaused(paused)
+            }
         }
-        paused ?: return
-        scope.launch { saveTaskToDatabase(paused) }
-        notifications[bookUrl]?.showPaused(paused)
     }
 
+    /**
+     * Возобновить задачу из паузы.
+     *
+     * Fire-and-forget: метод асинхронный. Вызов из BroadcastReceiver.onReceive
+     * безопасен — тяжёлая работа уходит в scope.launch.
+     */
     fun resume(bookUrl: String) {
-        val resumed: DownloadTaskState?
-        synchronized(tasksLock) {
-            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-            if (idx < 0) return
-            val task = _tasks.value[idx]
-            if (!task.isPaused) return
+        scope.launch {
+            restoredSignal.await()
+            tasksMutex.withLock {
+                val task = _tasks.value[bookUrl] ?: return@withLock
+                if (!task.isPaused) return@withLock
 
-            resumed = task.copy(isPaused = false, isWaitingForNetwork = false)
-            _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed!! }
-            enqueueToWorker(bookUrl, prepend = true)
+                val resumed = task.copy(isPaused = false, isWaitingForNetwork = false)
+                _tasks.value = _tasks.value + (bookUrl to resumed)
+                enqueueToWorker(bookUrl, prepend = true)
+
+                scheduleSave(resumed)
+                notifications[bookUrl]?.showDownloading(resumed)
+            }
         }
-        resumed ?: return
-        scope.launch { saveTaskToDatabase(resumed) }
-        notifications[bookUrl]?.showDownloading(resumed)
     }
 
+    /**
+     * Отменить задачу.
+     *
+     * Fire-and-forget: метод асинхронный. Вызов из BroadcastReceiver.onReceive
+     * безопасен — тяжёлая работа уходит в scope.launch.
+     */
     fun cancel(bookUrl: String) {
-        val task: DownloadTaskState?
-        synchronized(tasksLock) {
-            activeJobs.remove(bookUrl)?.cancel()
-            domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
-            val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
-            task = if (idx >= 0) {
-                _tasks.value[idx].also {
-                    _tasks.value = _tasks.value.toMutableList().also { l -> l.removeAt(idx) }
+        scope.launch {
+            restoredSignal.await()
+            val task: DownloadTaskState?
+            tasksMutex.withLock {
+                activeJobs.remove(bookUrl)?.cancel()
+                domainQueues[extractDomain(bookUrl)]?.queue?.remove(bookUrl)
+                task = _tasks.value[bookUrl]
+                if (task != null) {
+                    _tasks.value = _tasks.value - bookUrl
                 }
-            } else null
-        }
-        task ?: return
-        // showCancelled и auto-close через 2s
-        notifications.remove(bookUrl)?.let { notif ->
-            notif.showCancelled()
-            scope.launch {
+            }
+            task ?: return@launch
+
+            // showCancelled и auto-close через 2s
+            notifications.remove(bookUrl)?.let { notif ->
+                notif.showCancelled()
                 delay(2_000)
                 notif.close()
             }
+            withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) }
         }
-        scope.launch { withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) } }
     }
 
     /**
      * Убирает завершённую/паузнутую задачу из UI и закрывает уведомление.
-     * Вызывается пользователем из шторки или по смахиванию уведомления.
+     *
+     * Fire-and-forget: метод асинхронный.
      */
     fun dismiss(bookUrl: String) {
-        synchronized(tasksLock) {
-            _tasks.value = _tasks.value.filter { it.bookUrl != bookUrl }
+        scope.launch {
+            tasksMutex.withLock {
+                _tasks.value = _tasks.value - bookUrl
+            }
+            notifications.remove(bookUrl)?.close()
+            withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) }
         }
-        notifications.remove(bookUrl)?.close()
-        scope.launch { withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) } }
     }
 
     // ── Скачивание книги ─────────────────────────────────────────────────────
@@ -476,25 +547,22 @@ class DownloadManager @Inject constructor(
     private suspend fun downloadBook(initialTask: DownloadTaskState) {
         val bookUrl = initialTask.bookUrl
 
-        // CoroutineStart.LAZY: регистрируем в activeJobs ДО старта корутины.
-        // Устраняет race condition когда pause() приходит до регистрации job.
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                // Переключаем уведомление с Queued (только Cancel)
-                // на Downloading (Pause + Cancel) в момент реального старта.
-                val startTask = synchronized(tasksLock) {
-                    _tasks.value.find { it.bookUrl == bookUrl }
+                // Переключаем уведомление с Queued на Downloading в момент старта
+                val startTask = tasksMutex.withLock {
+                    _tasks.value[bookUrl]
                 }
                 if (startTask != null) notifications[bookUrl]?.showDownloading(startTask)
 
                 val delayMs = appPreferences.DOWNLOAD_DELAY_MS.value
-                var i = synchronized(tasksLock) {
-                    _tasks.value.find { it.bookUrl == bookUrl }?.currentIndex ?: 0
+                var i = tasksMutex.withLock {
+                    _tasks.value[bookUrl]?.currentIndex ?: 0
                 }
 
                 while (true) {
-                    val current = synchronized(tasksLock) {
-                        _tasks.value.find { it.bookUrl == bookUrl }
+                    val current = tasksMutex.withLock {
+                        _tasks.value[bookUrl]
                     } ?: return@launch
 
                     if (current.isCancelled) return@launch
@@ -506,9 +574,7 @@ class DownloadManager @Inject constructor(
                     // Обновляем индекс, сохраняем в БД и обновляем уведомление
                     val withIndex = updateTask(bookUrl) { it.copy(currentIndex = i + 1) }
                     if (withIndex != null) {
-                        // Сохраняем currentIndex в БД чтобы после перезапуска
-                        // приложения продолжить с нужного места, а не с нуля
-                        scope.launch { saveTaskToDatabase(withIndex) }
+                        scheduleSave(withIndex)
                         notifications[bookUrl]?.updateProgress(withIndex)
                     }
 
@@ -523,20 +589,14 @@ class DownloadManager @Inject constructor(
                     // Загрузка с retry + exponential backoff и ожиданием сети
                     when (val fetchResult = fetchWithRetry(bookUrl, chapterUrl)) {
                         is FetchResult.Interrupted -> {
-                            // Пользователь нажал паузу/отмену во время backoff.
-                            // errorCount НЕ инкрементируем — это не ошибка загрузки.
                             android.util.Log.d(TAG, "fetch interrupted by user: $chapterUrl")
                             return@launch
                         }
                         is FetchResult.WaitingForNetwork -> {
-                            // Сеть недоступна — ждём и пробуем снова.
-                            // Задача остаётся активной, домен не освобождается.
                             android.util.Log.w(TAG, "network unavailable, waiting for connection: $chapterUrl")
                             continue
                         }
                         is FetchResult.Failed -> {
-                            // Все 4 попытки исчерпаны — паузим задачу.
-                            // Домен освобождается для следующей книги.
                             android.util.Log.w(TAG, "all retries failed, pausing: $bookUrl")
                             val paused = updateTask(bookUrl) {
                                 it.copy(
@@ -547,15 +607,15 @@ class DownloadManager @Inject constructor(
                                 )
                             }
                             if (paused != null) {
-                                scope.launch { saveTaskToDatabase(paused) }
+                                scheduleSave(paused)
                                 notifications[bookUrl]?.showPaused(paused)
                             }
                             return@launch
                         }
                         is FetchResult.Success -> {
                             // Проверяем паузу перед переводом — он может быть долгим
-                            val taskBeforeTranslate = synchronized(tasksLock) {
-                                _tasks.value.find { it.bookUrl == bookUrl }
+                            val taskBeforeTranslate = tasksMutex.withLock {
+                                _tasks.value[bookUrl]
                             }
                             if (taskBeforeTranslate == null || taskBeforeTranslate.isCancelled || taskBeforeTranslate.isPaused) {
                                 android.util.Log.d(TAG, "interrupted before translate: $chapterUrl")
@@ -575,8 +635,8 @@ class DownloadManager @Inject constructor(
 
                             // Читаем актуальный размер списка глав — он мог вырасти
                             // пока мы качали (пользователь добавил новые главы через enqueue)
-                            val actualSize = synchronized(tasksLock) {
-                                _tasks.value.find { it.bookUrl == bookUrl }?.chapterUrls?.size ?: i
+                            val actualSize = tasksMutex.withLock {
+                                _tasks.value[bookUrl]?.chapterUrls?.size ?: i
                             }
                             if (i < actualSize) delay(delayMs)
                         }
@@ -589,25 +649,17 @@ class DownloadManager @Inject constructor(
                 withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) }
 
             } finally {
-                synchronized(tasksLock) { activeJobs.remove(bookUrl) }
+                tasksMutex.withLock { activeJobs.remove(bookUrl) }
             }
         }
 
-        synchronized(tasksLock) { activeJobs[bookUrl] = job }
+        tasksMutex.withLock { activeJobs[bookUrl] = job }
         job.start()
         job.join()
     }
 
     /**
      * Результат попытки загрузки главы.
-     *
-     * [Success]           — глава загружена, body непустой.
-     * [Interrupted]       — пауза или отмена пользователем во время backoff.
-     *                       NOT ошибка: errorCount не инкрементируется.
-     * [WaitingForNetwork] — все 4 попытки исчерпаны из-за сетевой/DNS ошибки.
-     *                       Задача не паузится, retry каждые 30 секунд.
-     * [Failed]            — все 4 попытки исчерпаны (не сетевая ошибка).
-     *                       errorCount инкрементируется, задача паузится.
      */
     private sealed class FetchResult {
         data class Success(val body: String) : FetchResult()
@@ -617,36 +669,40 @@ class DownloadManager @Inject constructor(
     }
 
     /**
-     * Определяет, является ли ошибка сетевой (DNS/соединение).
+     * Определяет, является ли ошибка сетевой (DNS/соединение/таймаут/TLS).
+     * M4: добавлены SocketTimeoutException, SSLException как основные критерии,
+     * строковые проверки оставлены как fallback.
      */
     private fun isNetworkError(error: my.noveldokusha.core.Response.Error): Boolean {
         val exception = error.exception
-        if (exception is UnknownHostException) return true
-        if (exception is ConnectException) return true
-        val msg = error.message
-        return msg.contains("Unable to resolve host", ignoreCase = true) ||
-                msg.contains("Failed to connect", ignoreCase = true) ||
-                msg.contains("Network is unreachable", ignoreCase = true) ||
-                msg.contains("hostname", ignoreCase = true)
+        return when (exception) {
+            is UnknownHostException,
+            is ConnectException,
+            is SocketTimeoutException,
+            is SSLException -> true
+            else -> {
+                val msg = error.message
+                msg.contains("Unable to resolve host", ignoreCase = true) ||
+                        msg.contains("Failed to connect", ignoreCase = true) ||
+                        msg.contains("Network is unreachable", ignoreCase = true) ||
+                        msg.contains("hostname", ignoreCase = true)
+            }
+        }
     }
 
     /**
-     * Загружает главу с 4 попытками и exponential backoff.
+     * Загружает главу с [MAX_FETCH_RETRIES] попытками и exponential backoff.
      *
      * Backoff: 0s → 60s → 300s → 600s между попытками.
-     * Длинные паузы намеренны — защита от бана источника.
      *
      * Если на любой попытке обнаружена сетевая ошибка (DNS/соединение),
-     * то сразу переходит в бесконечный цикл с retry каждые 30с без паузы задачи.
-     *
-     * Возвращает [FetchResult.Interrupted] если задача была паузнута/отменена
-     * во время ожидания — это не считается ошибкой загрузки.
+     * то сразу переходит в бесконечный цикл с retry каждые [NETWORK_RETRY_INTERVAL_MS] без паузы задачи.
      */
     private suspend fun fetchWithRetry(
         bookUrl: String,
         chapterUrl: String,
     ): FetchResult {
-        for (attempt in 0 until 4) {
+        for (attempt in 0 until MAX_FETCH_RETRIES) {
             if (attempt > 0) {
                 val backoffMs = when (attempt) {
                     1 -> 60_000L
@@ -657,8 +713,8 @@ class DownloadManager @Inject constructor(
                 delay(backoffMs)
 
                 // Проверяем статус после ожидания backoff.
-                val taskAfterWait = synchronized(tasksLock) {
-                    _tasks.value.find { it.bookUrl == bookUrl }
+                val taskAfterWait = tasksMutex.withLock {
+                    _tasks.value[bookUrl]
                 }
                 if (taskAfterWait == null || taskAfterWait.isCancelled || taskAfterWait.isPaused) {
                     android.util.Log.d(TAG, "interrupted during backoff: $chapterUrl")
@@ -678,45 +734,37 @@ class DownloadManager @Inject constructor(
                 }
                 is my.noveldokusha.core.Response.Error -> {
                     android.util.Log.w(TAG, "fetch error attempt=$attempt: $chapterUrl — ${result.message}")
-                    // Если сетевая ошибка — сразу переходим в ожидание сети, без лишних попыток
                     if (isNetworkError(result)) {
                         android.util.Log.w(TAG, "network error, entering network wait: $chapterUrl")
                         return waitForNetworkThenRetry(bookUrl, chapterUrl)
                     }
-                    // Иначе продолжаем попытки с backoff
                 }
             }
         }
 
-        // Все 4 попытки исчерпаны (не сетевые ошибки — пустой body, 500 и т.д.)
         android.util.Log.w(TAG, "all retries exhausted (non-network): $chapterUrl")
         return FetchResult.Failed
     }
 
     /**
      * Бесконечный цикл ожидания сети.
-     * Пробует повторно каждые 30 секунд.
-     * При успехе возвращает [FetchResult.Success].
-     * При паузе/отмене пользователя возвращает [FetchResult.Interrupted].
+     * Пробует повторно каждые [NETWORK_RETRY_INTERVAL_MS].
      */
     private suspend fun waitForNetworkThenRetry(
         bookUrl: String,
         chapterUrl: String,
     ): FetchResult {
-        // Переводим задачу в статус "ожидание сети"
         updateTask(bookUrl) { it.copy(isWaitingForNetwork = true) }
         notifications[bookUrl]?.showWaitingForNetwork(
-            synchronized(tasksLock) { _tasks.value.find { it.bookUrl == bookUrl } }
+            tasksMutex.withLock { _tasks.value[bookUrl] }
                 ?: return FetchResult.Interrupted
         )
 
         while (true) {
-            delay(30_000L)
+            delay(NETWORK_RETRY_INTERVAL_MS)
 
             // Проверяем статус — могла прийти пауза/отмена
-            val task = synchronized(tasksLock) {
-                _tasks.value.find { it.bookUrl == bookUrl }
-            }
+            val task = tasksMutex.withLock { _tasks.value[bookUrl] }
             if (task == null || task.isCancelled) {
                 android.util.Log.d(TAG, "network wait cancelled: $chapterUrl")
                 return FetchResult.Interrupted
@@ -726,7 +774,6 @@ class DownloadManager @Inject constructor(
                 return FetchResult.Interrupted
             }
 
-            // Пробуем загрузить
             android.util.Log.d(TAG, "network retry for $chapterUrl")
             val result = chapterBodyRepository.fetchBody(chapterUrl)
             when (result) {
@@ -736,10 +783,9 @@ class DownloadManager @Inject constructor(
                         android.util.Log.w(TAG, "network retry empty body: $chapterUrl")
                         continue
                     }
-                    // Сеть восстановилась — сбрасываем флаг ожидания
                     updateTask(bookUrl) { it.copy(isWaitingForNetwork = false) }
                     notifications[bookUrl]?.showDownloading(
-                        synchronized(tasksLock) { _tasks.value.find { it.bookUrl == bookUrl } }
+                        tasksMutex.withLock { _tasks.value[bookUrl] }
                             ?: return FetchResult.Interrupted
                     )
                     return FetchResult.Success(body)
@@ -749,7 +795,6 @@ class DownloadManager @Inject constructor(
                         android.util.Log.d(TAG, "network still down, retrying in 30s: $chapterUrl")
                         continue
                     }
-                    // Не сетевая ошибка — паузим задачу
                     android.util.Log.w(TAG, "non-network error during network wait: $chapterUrl")
                     return FetchResult.Failed
                 }
@@ -761,17 +806,19 @@ class DownloadManager @Inject constructor(
 
     /**
      * Атомарно обновляет задачу в [_tasks] и возвращает новое состояние.
-     * Не сохраняет в БД — вызывающий сохраняет сам если нужно.
+     * Не сохраняет в БД — вызывающий сохраняет сам через scheduleSave.
+     * O(1) — прямое обращение по ключу в Map.
      */
-    private fun updateTask(
+    private suspend fun updateTask(
         bookUrl: String,
         transform: (DownloadTaskState) -> DownloadTaskState,
     ): DownloadTaskState? {
         var result: DownloadTaskState? = null
-        synchronized(tasksLock) {
-            _tasks.value = _tasks.value.map {
-                if (it.bookUrl == bookUrl) transform(it).also { t -> result = t } else it
-            }
+        tasksMutex.withLock {
+            val existing = _tasks.value[bookUrl] ?: return@withLock
+            val updated = transform(existing)
+            _tasks.value = _tasks.value + (bookUrl to updated)
+            result = updated
         }
         return result
     }
@@ -794,6 +841,12 @@ class DownloadManager @Inject constructor(
 
     // ── Перевод ──────────────────────────────────────────────────────────────
 
+    /**
+     * Переводит и сохраняет главу.
+     * H5: Добавлен retry-цикл для translateBatch (2 попытки с backoff).
+     * При полном провале возвращает false — глава засчитывается как успешно скачанная,
+     * но translationErrorCount инкрементируется.
+     */
     private suspend fun translateAndSave(chapterUrl: String, body: String): Boolean {
         val sourceLang = appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.value
         val targetLang = appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.value
@@ -818,7 +871,10 @@ class DownloadManager @Inject constructor(
 
             if (paragraphs.isEmpty()) return true
 
-            val translations = translationManager.translateBatch(paragraphs, sourceLang, targetLang)
+            // H5: Retry-цикл для translateBatch
+            val translations = translateBatchWithRetry(paragraphs, sourceLang, targetLang)
+                ?: return false // Все попытки исчерпаны
+
             val entities = paragraphs.mapIndexed { index, original ->
                 my.noveldokusha.feature.local_database.tables.ChapterTranslation(
                     chapterUrl = chapterUrl,
@@ -830,6 +886,7 @@ class DownloadManager @Inject constructor(
                 )
             }.toMutableList()
 
+            // Перевод заголовка главы
             try {
                 val chapter = appRepository.bookChapters.get(chapterUrl)
                 if (chapter != null && chapter.title.isNotBlank()) {
@@ -859,5 +916,34 @@ class DownloadManager @Inject constructor(
             android.util.Log.e(TAG, "translateAndSave failed", e)
             false
         }
+    }
+
+    /**
+     * Переводит batch параграфов с retry-циклом.
+     * H5: [TRANSLATION_MAX_RETRIES] попыток с exponential backoff.
+     * Возвращает null если все попытки исчерпаны.
+     */
+    private suspend fun translateBatchWithRetry(
+        paragraphs: List<String>,
+        sourceLang: String,
+        targetLang: String,
+    ): Map<String, String>? {
+        var lastError: Exception? = null
+        for (attempt in 0 until TRANSLATION_MAX_RETRIES) {
+            try {
+                if (attempt > 0) {
+                    val backoffMs = 1_000L * (attempt + 1) // 1s, 2s
+                    delay(backoffMs)
+                    // Проверяем не отменена ли задача
+                    // (пауза/отмена проверяется выше в downloadBook перед вызовом)
+                }
+                return translationManager.translateBatch(paragraphs, sourceLang, targetLang)
+            } catch (e: Exception) {
+                lastError = e
+                android.util.Log.w(TAG, "translateBatch attempt=$attempt failed: ${e.message}")
+            }
+        }
+        android.util.Log.e(TAG, "translateBatch exhausted after $TRANSLATION_MAX_RETRIES attempts", lastError)
+        return null
     }
 }
