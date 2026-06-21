@@ -107,6 +107,17 @@ class BookDownloadNotification(
         }
     }
 
+    /** Ожидание восстановления сети (DNS/соединение временно недоступно). */
+    fun showWaitingForNetwork(task: DownloadTaskState) {
+        builder = build {
+            setContentText("Waiting for network: ${task.progressText}")
+            setOngoing(true)
+            setProgress(task.totalCount, task.currentIndex, false)
+            // Только Cancel — не Pause, задача продолжает retry
+            addCancelAction()
+        }
+    }
+
     /**
      * Загрузка завершена успешно.
      * Уведомление остаётся пока пользователь не смахнёт или не нажмёт Dismiss в UI.

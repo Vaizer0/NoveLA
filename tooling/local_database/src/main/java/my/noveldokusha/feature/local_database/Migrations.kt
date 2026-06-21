@@ -242,6 +242,10 @@ internal fun databaseMigrations() = arrayOf(
             )
         """)
     },
+    migration(21) {
+        // isWaitingForNetwork: показывает что задача ждёт восстановления сети (DNS/соединение)
+        it.addColumnIfNotExists("DownloadTask", "isWaitingForNetwork", "INTEGER NOT NULL DEFAULT 0")
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

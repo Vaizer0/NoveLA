@@ -20,6 +20,8 @@ import my.noveldokusha.feature.local_database.tables.DownloadTaskEntity
 import my.noveldokusha.text_translator.domain.TranslationManager
 import org.json.JSONArray
 import java.net.URI
+import java.net.UnknownHostException
+import java.net.ConnectException
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +38,7 @@ data class DownloadTaskState(
     val isPaused: Boolean = false,
     val isCancelled: Boolean = false,
     val isCompleted: Boolean = false,
+    val isWaitingForNetwork: Boolean = false,
     val errorCount: Int = 0,
     val successCount: Int = 0,
     val consecutiveErrors: Int = 0,
@@ -166,7 +169,7 @@ class DownloadManager @Inject constructor(
                 continue
             }
             val task = entity.toState()
-            android.util.Log.d(TAG, "restoreTasksFromDatabase: restoring ${entity.bookUrl} isPaused=${entity.isPaused} index=${entity.currentIndex}/${entity.totalCount}")
+            android.util.Log.d(TAG, "restoreTasksFromDatabase: restoring ${entity.bookUrl} isPaused=${entity.isPaused} isWaitingForNetwork=${entity.isWaitingForNetwork} index=${entity.currentIndex}/${entity.totalCount}")
             val notif = createNotification(task)
 
             synchronized(tasksLock) {
@@ -198,6 +201,7 @@ class DownloadManager @Inject constructor(
         isPaused = isPaused,
         isCancelled = isCancelled,
         isCompleted = isCompleted,
+        isWaitingForNetwork = isWaitingForNetwork,
         errorCount = errorCount,
         successCount = successCount,
         consecutiveErrors = consecutiveErrors,
@@ -217,6 +221,7 @@ class DownloadManager @Inject constructor(
                     isPaused = task.isPaused,
                     isCancelled = task.isCancelled,
                     isCompleted = task.isCompleted,
+                    isWaitingForNetwork = task.isWaitingForNetwork,
                     errorCount = task.errorCount,
                     successCount = task.successCount,
                     consecutiveErrors = task.consecutiveErrors,
@@ -341,7 +346,7 @@ class DownloadManager @Inject constructor(
                         updated
                     } else existing
 
-                    val resumed = base.copy(isPaused = false)
+                    val resumed = base.copy(isPaused = false, isWaitingForNetwork = false)
                     val idx = _tasks.value.indexOfFirst { it.bookUrl == bookUrl }
                     if (idx >= 0) {
                         _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed }
@@ -402,7 +407,7 @@ class DownloadManager @Inject constructor(
             val task = _tasks.value[idx]
             if (task.isPaused || task.isCompleted || task.isCancelled) return
 
-            paused = task.copy(isPaused = true)
+            paused = task.copy(isPaused = true, isWaitingForNetwork = false)
             _tasks.value = _tasks.value.toMutableList().also { it[idx] = paused!! }
 
             activeJobs.remove(bookUrl)?.cancel()
@@ -421,7 +426,7 @@ class DownloadManager @Inject constructor(
             val task = _tasks.value[idx]
             if (!task.isPaused) return
 
-            resumed = task.copy(isPaused = false)
+            resumed = task.copy(isPaused = false, isWaitingForNetwork = false)
             _tasks.value = _tasks.value.toMutableList().also { it[idx] = resumed!! }
             enqueueToWorker(bookUrl, prepend = true)
         }
@@ -492,7 +497,8 @@ class DownloadManager @Inject constructor(
                         _tasks.value.find { it.bookUrl == bookUrl }
                     } ?: return@launch
 
-                    if (current.isCancelled || current.isPaused) return@launch
+                    if (current.isCancelled) return@launch
+                    if (current.isPaused) return@launch
                     if (i >= current.chapterUrls.size) break
 
                     val chapterUrl = current.chapterUrls[i]
@@ -514,13 +520,19 @@ class DownloadManager @Inject constructor(
                         continue
                     }
 
-                    // Загрузка с retry + exponential backoff
+                    // Загрузка с retry + exponential backoff и ожиданием сети
                     when (val fetchResult = fetchWithRetry(bookUrl, chapterUrl)) {
                         is FetchResult.Interrupted -> {
                             // Пользователь нажал паузу/отмену во время backoff.
                             // errorCount НЕ инкрементируем — это не ошибка загрузки.
                             android.util.Log.d(TAG, "fetch interrupted by user: $chapterUrl")
                             return@launch
+                        }
+                        is FetchResult.WaitingForNetwork -> {
+                            // Сеть недоступна — ждём и пробуем снова.
+                            // Задача остаётся активной, домен не освобождается.
+                            android.util.Log.w(TAG, "network unavailable, waiting for connection: $chapterUrl")
+                            continue
                         }
                         is FetchResult.Failed -> {
                             // Все 4 попытки исчерпаны — паузим задачу.
@@ -529,6 +541,7 @@ class DownloadManager @Inject constructor(
                             val paused = updateTask(bookUrl) {
                                 it.copy(
                                     isPaused = true,
+                                    isWaitingForNetwork = false,
                                     errorCount = it.errorCount + 1,
                                     consecutiveErrors = it.consecutiveErrors + 1,
                                 )
@@ -571,7 +584,7 @@ class DownloadManager @Inject constructor(
                 }
 
                 // Все главы обработаны
-                val completed = updateTask(bookUrl) { it.copy(isCompleted = true) }
+                val completed = updateTask(bookUrl) { it.copy(isCompleted = true, isWaitingForNetwork = false) }
                 if (completed != null) notifications[bookUrl]?.showCompleted(completed)
                 withContext(Dispatchers.IO) { downloadTaskDao.delete(bookUrl) }
 
@@ -588,16 +601,33 @@ class DownloadManager @Inject constructor(
     /**
      * Результат попытки загрузки главы.
      *
-     * [Success]     — глава загружена, body непустой.
-     * [Interrupted] — пауза или отмена пользователем во время backoff.
-     *                 NOT ошибка: errorCount не инкрементируется.
-     * [Failed]      — все 4 попытки исчерпаны (сеть, пустой body, etc).
-     *                 errorCount инкрементируется, задача паузится.
+     * [Success]           — глава загружена, body непустой.
+     * [Interrupted]       — пауза или отмена пользователем во время backoff.
+     *                       NOT ошибка: errorCount не инкрементируется.
+     * [WaitingForNetwork] — все 4 попытки исчерпаны из-за сетевой/DNS ошибки.
+     *                       Задача не паузится, retry каждые 30 секунд.
+     * [Failed]            — все 4 попытки исчерпаны (не сетевая ошибка).
+     *                       errorCount инкрементируется, задача паузится.
      */
     private sealed class FetchResult {
         data class Success(val body: String) : FetchResult()
         object Interrupted : FetchResult()
+        object WaitingForNetwork : FetchResult()
         object Failed : FetchResult()
+    }
+
+    /**
+     * Определяет, является ли ошибка сетевой (DNS/соединение).
+     */
+    private fun isNetworkError(error: my.noveldokusha.core.Response.Error): Boolean {
+        val exception = error.exception
+        if (exception is UnknownHostException) return true
+        if (exception is ConnectException) return true
+        val msg = error.message
+        return msg.contains("Unable to resolve host", ignoreCase = true) ||
+                msg.contains("Failed to connect", ignoreCase = true) ||
+                msg.contains("Network is unreachable", ignoreCase = true) ||
+                msg.contains("hostname", ignoreCase = true)
     }
 
     /**
@@ -605,6 +635,9 @@ class DownloadManager @Inject constructor(
      *
      * Backoff: 0s → 60s → 300s → 600s между попытками.
      * Длинные паузы намеренны — защита от бана источника.
+     *
+     * Если на любой попытке обнаружена сетевая ошибка (DNS/соединение),
+     * то сразу переходит в бесконечный цикл с retry каждые 30с без паузы задачи.
      *
      * Возвращает [FetchResult.Interrupted] если задача была паузнута/отменена
      * во время ожидания — это не считается ошибкой загрузки.
@@ -624,8 +657,6 @@ class DownloadManager @Inject constructor(
                 delay(backoffMs)
 
                 // Проверяем статус после ожидания backoff.
-                // Если пауза/отмена — возвращаем Interrupted, не Failed.
-                // downloadBook не будет инкрементировать errorCount.
                 val taskAfterWait = synchronized(tasksLock) {
                     _tasks.value.find { it.bookUrl == bookUrl }
                 }
@@ -640,8 +671,6 @@ class DownloadManager @Inject constructor(
                 is my.noveldokusha.core.Response.Success -> {
                     val body = result.data
                     if (body.isNullOrBlank()) {
-                        // Пустой body — сайт вернул страницу без контента.
-                        // Считается неудачной попыткой, идём на следующий retry с backoff.
                         android.util.Log.w(TAG, "empty body attempt=$attempt: $chapterUrl")
                         continue
                     }
@@ -649,14 +678,83 @@ class DownloadManager @Inject constructor(
                 }
                 is my.noveldokusha.core.Response.Error -> {
                     android.util.Log.w(TAG, "fetch error attempt=$attempt: $chapterUrl — ${result.message}")
-                    // Не возвращаем Failed сразу — даём шанс следующей попытке
+                    // Если сетевая ошибка — сразу переходим в ожидание сети, без лишних попыток
+                    if (isNetworkError(result)) {
+                        android.util.Log.w(TAG, "network error, entering network wait: $chapterUrl")
+                        return waitForNetworkThenRetry(bookUrl, chapterUrl)
+                    }
+                    // Иначе продолжаем попытки с backoff
                 }
             }
         }
 
-        // Все 4 попытки исчерпаны (ошибки сети или пустой body)
-        android.util.Log.w(TAG, "all retries exhausted: $chapterUrl")
+        // Все 4 попытки исчерпаны (не сетевые ошибки — пустой body, 500 и т.д.)
+        android.util.Log.w(TAG, "all retries exhausted (non-network): $chapterUrl")
         return FetchResult.Failed
+    }
+
+    /**
+     * Бесконечный цикл ожидания сети.
+     * Пробует повторно каждые 30 секунд.
+     * При успехе возвращает [FetchResult.Success].
+     * При паузе/отмене пользователя возвращает [FetchResult.Interrupted].
+     */
+    private suspend fun waitForNetworkThenRetry(
+        bookUrl: String,
+        chapterUrl: String,
+    ): FetchResult {
+        // Переводим задачу в статус "ожидание сети"
+        updateTask(bookUrl) { it.copy(isWaitingForNetwork = true) }
+        notifications[bookUrl]?.showWaitingForNetwork(
+            synchronized(tasksLock) { _tasks.value.find { it.bookUrl == bookUrl } }
+                ?: return FetchResult.Interrupted
+        )
+
+        while (true) {
+            delay(30_000L)
+
+            // Проверяем статус — могла прийти пауза/отмена
+            val task = synchronized(tasksLock) {
+                _tasks.value.find { it.bookUrl == bookUrl }
+            }
+            if (task == null || task.isCancelled) {
+                android.util.Log.d(TAG, "network wait cancelled: $chapterUrl")
+                return FetchResult.Interrupted
+            }
+            if (task.isPaused) {
+                android.util.Log.d(TAG, "network wait paused: $chapterUrl")
+                return FetchResult.Interrupted
+            }
+
+            // Пробуем загрузить
+            android.util.Log.d(TAG, "network retry for $chapterUrl")
+            val result = chapterBodyRepository.fetchBody(chapterUrl)
+            when (result) {
+                is my.noveldokusha.core.Response.Success -> {
+                    val body = result.data
+                    if (body.isNullOrBlank()) {
+                        android.util.Log.w(TAG, "network retry empty body: $chapterUrl")
+                        continue
+                    }
+                    // Сеть восстановилась — сбрасываем флаг ожидания
+                    updateTask(bookUrl) { it.copy(isWaitingForNetwork = false) }
+                    notifications[bookUrl]?.showDownloading(
+                        synchronized(tasksLock) { _tasks.value.find { it.bookUrl == bookUrl } }
+                            ?: return FetchResult.Interrupted
+                    )
+                    return FetchResult.Success(body)
+                }
+                is my.noveldokusha.core.Response.Error -> {
+                    if (isNetworkError(result)) {
+                        android.util.Log.d(TAG, "network still down, retrying in 30s: $chapterUrl")
+                        continue
+                    }
+                    // Не сетевая ошибка — паузим задачу
+                    android.util.Log.w(TAG, "non-network error during network wait: $chapterUrl")
+                    return FetchResult.Failed
+                }
+            }
+        }
     }
 
     // ── Вспомогательные методы ───────────────────────────────────────────────
