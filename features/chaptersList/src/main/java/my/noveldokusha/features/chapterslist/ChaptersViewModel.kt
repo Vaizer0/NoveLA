@@ -168,12 +168,13 @@ internal class ChaptersViewModel @Inject constructor(
             chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
         }
 
-        // Загружаем жанры из БД сразу, если есть, и параллельно обновляем с сети
+        // Берём жанры из БД. Если их нет — загружаем с сети.
         viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
             val cachedBook = libraryDao.get(bookUrl)
             if (cachedBook?.genres?.isNotBlank() == true) {
                 state.genres.value = GenreUtils.parse(cachedBook.genres)
+                return@launch
             }
             updateGenres()
         }
