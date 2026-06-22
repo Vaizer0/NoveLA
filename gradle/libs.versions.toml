@@ -41,7 +41,7 @@ androidx-testing-core = "1.6.1"
 androidx-testing-runner = "1.6.2"
 androidx-testing-rules = "1.6.1"
 androidx-testing-orchestrator = "1.5.1"
-androidx-testing-junit = "1.2.1"
+androidx-testing-junit = "1.3.0"
 androidx-testing-espresso = "3.6.1"
 
 compose-coil = "2.7.0"
