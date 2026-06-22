@@ -73,7 +73,7 @@ okhttp-interceptor-logging = "5.0.0-alpha.14"
 okhttp-glideIntegration = "4.16.0"
 
 readability4j = "1.0.8"
-retrofit = "2.11.0"
+retrofit = "2.12.0"
 
 timber = "5.0.1"
 junitVersion = "1.2.1"
