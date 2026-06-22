@@ -96,6 +96,7 @@ internal fun ChaptersScreen(
     onChangeCover: () -> Unit,
     onOpenInBrowser: (url: String) -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
+    onDownloadAllChapters: () -> Unit,
     translatedTitle: String?,
     translatedDescription: String?,
     isTranslatingInfo: Boolean,
@@ -184,6 +185,7 @@ internal fun ChaptersScreen(
                                         onSearchBookInDatabase = onSearchBookInDatabase,
                                         onResumeReading = onResumeReading,
                                         onChangeCover = onChangeCover,
+                                        onDownloadAllChapters = onDownloadAllChapters,
                                     )
                                 }
                             }

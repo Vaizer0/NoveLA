@@ -438,6 +438,7 @@
     <string name="download_resumed">Загрузка возобновлена</string>
     <string name="download_already_queued">Уже в очереди</string>
     <string name="download_all_cached">Все главы уже скачаны</string>
+    <string name="download_all_chapters">Скачать все главы</string>
 
     <!-- Battery optimization -->
     <string name="battery_optimization">Отключить оптимизацию батареи</string>

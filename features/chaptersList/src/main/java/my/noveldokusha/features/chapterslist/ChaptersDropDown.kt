@@ -1,6 +1,7 @@
 package my.noveldokusha.features.chapterslist
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Public
@@ -19,6 +20,7 @@ internal fun ChaptersDropDown(
     onSearchBookInDatabase: () -> Unit,
     onResumeReading: () -> Unit,
     onChangeCover: () -> Unit,
+    onDownloadAllChapters: () -> Unit,
 ) {
     if (!isLocalSource) DropdownMenuItem(
         onClick = openInBrowser,
@@ -62,6 +64,18 @@ internal fun ChaptersDropDown(
             Icon(
                 Icons.Filled.Image,
                 stringResource(R.string.change_cover),
+            )
+        }
+    )
+    if (!isLocalSource) DropdownMenuItem(
+        onClick = onDownloadAllChapters,
+        text = {
+            Text(text = stringResource(R.string.download_all_chapters))
+        },
+        leadingIcon = {
+            Icon(
+                Icons.Filled.CloudDownload,
+                stringResource(R.string.download_all_chapters),
             )
         }
     )

@@ -79,6 +79,7 @@ class ChaptersActivity : BaseActivity() {
                     onChangeCover = onDoAskForImage { viewModel.saveImageAsCover(it) },
                     onOpenInBrowser = { navigationRoutes.webView(this, url = it).let(::startActivity) },
                     onGlobalSearchClick = { navigationRoutes.globalSearch(this, text = it).let(::startActivity) },
+                    onDownloadAllChapters = viewModel::downloadAllChapters,
                     translatedTitle = viewModel.translatedTitle.value,
                     translatedDescription = viewModel.translatedDescription.value,
                     isTranslatingInfo = viewModel.isTranslatingInfo.value,
