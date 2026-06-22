@@ -16,7 +16,7 @@ kotlinx-serialization-json = "1.7.3"
 
 testing-mockito-kotlin = "5.4.0"
 
-androidTools = "31.7.3"
+androidTools = "31.13.2"
 
 androidx-navigation-ui-ktx = "2.8.4"
 androidx-navigation-fragment-ktx = "2.8.4"
