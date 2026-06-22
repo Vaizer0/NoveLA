@@ -1,6 +1,8 @@
 package my.noveldokusha.data
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -37,7 +39,26 @@ class DownloadForegroundService : android.app.Service() {
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
         acquireWakeLock()
+    }
+
+    /**
+     * Создаёт notification channel для foreground service notification.
+     * Без этого Android 14+ кидает CannotPostForegroundServiceNotificationException
+     * при вызове startForeground().
+     *
+     * Channel ID должен совпадать с BookDownloadNotification.CHANNEL_ID,
+     * чтобы foreground notification был совместим с уведомлениями загрузок.
+     */
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            BookDownloadNotification.CHANNEL_ID,
+            BookDownloadNotification.CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(channel)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
