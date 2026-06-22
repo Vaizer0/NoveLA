@@ -29,6 +29,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.feature.local_database.DAOs.DownloadTaskDao
 import my.noveldokusha.feature.local_database.tables.DownloadTaskEntity
+import my.noveldokusha.scraper.utils.normalizeBookUrl
 import my.noveldokusha.text_translator.domain.TranslationManager
 import org.json.JSONArray
 import java.net.ConnectException
@@ -221,7 +222,18 @@ class DownloadManager @Inject constructor(
 
         android.util.Log.d(TAG, "restoreTasksFromDatabase: found ${savedTasks.size} tasks")
 
+        // Deduplicate by normalized URL in case the database has legacy duplicates
+        // (e.g. same book saved with and without trailing slash).
+        val seenUrls = mutableSetOf<String>()
         for (entity in savedTasks) {
+            val normalizedUrl = normalizeBookUrl(entity.bookUrl)
+            if (normalizedUrl in seenUrls) {
+                android.util.Log.w(TAG, "restoreTasksFromDatabase: duplicate found, " +
+                        "removing $normalizedUrl (original=${entity.bookUrl})")
+                withContext(Dispatchers.IO) { downloadTaskDao.delete(entity.bookUrl) }
+                continue
+            }
+            seenUrls.add(normalizedUrl)
             try {
                 if (entity.isCompleted || entity.isCancelled) {
                     withContext(Dispatchers.IO) { downloadTaskDao.delete(entity.bookUrl) }
@@ -369,6 +381,7 @@ class DownloadManager @Inject constructor(
         bookUrl: String,
         chapterUrls: List<String>,
     ): EnqueueResult {
+        val normalizedUrl = normalizeBookUrl(bookUrl)
         val uniqueUrls = chapterUrls.distinct()
         if (uniqueUrls.isEmpty()) return EnqueueResult.AllCached
 
@@ -385,13 +398,13 @@ class DownloadManager @Inject constructor(
         )
 
         val syncResult = tasksMutex.withLock {
-            val existing = _tasks.value[bookUrl]
+            val existing = _tasks.value[normalizedUrl]
 
             if (existing != null) {
                 if (existing.isCancelled || existing.isCompleted) {
                     // Старая завершена/отменена — убираем, создадим новую
-                    _tasks.value = _tasks.value - bookUrl
-                    notifications.remove(bookUrl)?.close()
+                    _tasks.value = _tasks.value - normalizedUrl
+                    notifications.remove(normalizedUrl)?.close()
                     SyncResult(shouldCreateNew = true, result = null)
                 } else if (existing.isPaused) {
                     // Паузнутая задача — добавляем новые главы если есть, потом resume
@@ -403,16 +416,16 @@ class DownloadManager @Inject constructor(
                             isCompleted = false,
                             isCancelled = false,
                         )
-                        _tasks.value = _tasks.value + (bookUrl to updated)
+                        _tasks.value = _tasks.value + (normalizedUrl to updated)
                         scheduleSave(updated)
                         updated
                     } else existing
 
                     val resumed = base.copy(isPaused = false, isWaitingForNetwork = false)
-                    _tasks.value = _tasks.value + (bookUrl to resumed)
+                    _tasks.value = _tasks.value + (normalizedUrl to resumed)
                     scheduleSave(resumed)
-                    notifications[bookUrl]?.showDownloading(resumed)
-                    enqueueToWorker(bookUrl, prepend = true)
+                    notifications[normalizedUrl]?.showDownloading(resumed)
+                    enqueueToWorker(normalizedUrl, prepend = true)
                     SyncResult(shouldCreateNew = false, result = EnqueueResult.Resumed)
                 } else {
                     // Задача активно качается — добавляем только новые главы
@@ -424,9 +437,9 @@ class DownloadManager @Inject constructor(
                             isCompleted = false,
                             isCancelled = false,
                         )
-                        _tasks.value = _tasks.value + (bookUrl to updated)
+                        _tasks.value = _tasks.value + (normalizedUrl to updated)
                         scheduleSave(updated)
-                        notifications[bookUrl]?.updateProgress(updated)
+                        notifications[normalizedUrl]?.updateProgress(updated)
                         SyncResult(shouldCreateNew = false, result = EnqueueResult.ChaptersAdded(newUrls.size))
                     } else {
                         SyncResult(shouldCreateNew = false, result = EnqueueResult.AlreadyQueued)
@@ -443,14 +456,14 @@ class DownloadManager @Inject constructor(
 
         val task = DownloadTaskState(
             bookTitle = bookTitle,
-            bookUrl = bookUrl,
+            bookUrl = normalizedUrl,
             chapterUrls = notDownloadedUrls,
             totalCount = notDownloadedUrls.size,
         )
         val notif = createNotification(task)
         tasksMutex.withLock {
             _tasks.value = _tasks.value + (task.bookUrl to task)
-            enqueueToWorker(bookUrl)
+            enqueueToWorker(normalizedUrl)
         }
         scheduleSave(task)
         notif.showQueued(task)

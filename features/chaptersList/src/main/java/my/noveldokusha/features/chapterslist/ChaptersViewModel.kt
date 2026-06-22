@@ -37,6 +37,7 @@ import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
+import my.noveldokusha.scraper.utils.normalizeBookUrl
 import my.noveldokusha.text_translator.domain.TranslationManager
 import javax.inject.Inject
 
@@ -71,7 +72,9 @@ internal class ChaptersViewModel @Inject constructor(
     override val rawBookUrl by StateExtra_String(stateHandle)
     override val bookTitle by StateExtra_String(stateHandle)
 
-    private val bookUrl = appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+    private val bookUrl = normalizeBookUrl(
+        appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+    )
 
     @Volatile
     private var loadChaptersJob: Job? = null
