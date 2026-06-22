@@ -320,7 +320,7 @@ class ReaderActivity : BaseActivity() {
                         finish()
                     },
                     onOpenChapterInWeb = {
-                        val url = viewModel.state.readerInfo.chapterUrl.value
+                        val url = viewModel.chapterUrl
                         if (url.isNotBlank()) {
                             navigationRoutes.webView(this, url = url).let(::startActivity)
                         }
