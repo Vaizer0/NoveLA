@@ -9,6 +9,8 @@ import my.noveldokusha.network.interceptors.CloudFareVerificationInterceptor
 import my.noveldokusha.network.interceptors.DecodeResponseInterceptor
 import my.noveldokusha.network.interceptors.UserAgentInterceptor
 import okhttp3.Cache
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,7 +38,7 @@ class ScraperNetworkClient @Inject constructor(
 ) : NetworkClient {
 
     private val cacheDir = File(appContext.cacheDir, "network_cache")
-    private val cacheSize = 5L * 1024 * 1024
+    private val cacheSize = 50L * 1024 * 1024
 
     override val cookieJar = ScraperCookieJar()
 
@@ -52,6 +54,8 @@ class ScraperNetworkClient @Inject constructor(
             if (appPreferences.CLOUDFLARE_BYPASS_ENABLED.value) {
                 addInterceptor(CloudFareVerificationInterceptor(appContext, appPreferences))
             }
+            connectionPool(ConnectionPool(15, 5, TimeUnit.MINUTES))
+            dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
             cookieJar(cookieJar)
             cache(Cache(cacheDir, cacheSize))
             connectTimeout(30, TimeUnit.SECONDS)
