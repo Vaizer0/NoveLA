@@ -35,6 +35,7 @@ internal data class ChaptersScreenState(
         val inLibrary: Boolean = false,
         val coverImageUrl: String? = null,
         val description: String = "",
+        val category: String = "",
     ) {
         constructor(book: Book) : this(
             title = book.title,
@@ -44,6 +45,7 @@ internal data class ChaptersScreenState(
             inLibrary = book.inLibrary,
             coverImageUrl = book.coverImageUrl,
             description = book.description,
+            category = book.category,
         )
     }
 }

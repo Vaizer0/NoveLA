@@ -219,6 +219,16 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
+    fun getCategories(): List<String> =
+        listOf("", "Completed") + appPreferences.LIBRARY_CUSTOM_CATEGORIES.value
+
+    fun updateBookCategory(category: String) {
+        viewModelScope.launch {
+            val isCompleted = category == "Completed"
+            libraryDao.updateCategoryAndCompleted(bookUrl, category, isCompleted)
+        }
+    }
+
     fun onPullRefresh() {
         if (!state.isRefreshable.value) {
             toasty.show(R.string.local_book_nothing_to_update)

@@ -80,6 +80,8 @@ class ChaptersActivity : BaseActivity() {
                     onOpenInBrowser = { navigationRoutes.webView(this, url = it).let(::startActivity) },
                     onGlobalSearchClick = { navigationRoutes.globalSearch(this, text = it).let(::startActivity) },
                     onDownloadAllChapters = viewModel::downloadAllChapters,
+                    categories = viewModel::getCategories,
+                    onUpdateCategory = viewModel::updateBookCategory,
                     translatedTitle = viewModel.translatedTitle.value,
                     translatedDescription = viewModel.translatedDescription.value,
                     isTranslatingInfo = viewModel.isTranslatingInfo.value,
