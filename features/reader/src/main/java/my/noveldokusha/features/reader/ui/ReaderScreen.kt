@@ -78,6 +78,7 @@ internal fun ReaderScreen(
     onDarkModeSelected: (DarkMode) -> Unit,
     onAppThemeChanged: (AppTheme) -> Unit,
     onFullScreen: (Boolean) -> Unit,
+    onSingleTapToOpenSettingsChange: (Boolean) -> Unit,
     onTextFontChanged: (String) -> Unit,
     onTextSizeChanged: (Float) -> Unit,
     onLineHeightChanged: (Float) -> Unit,
@@ -181,6 +182,7 @@ internal fun ReaderScreen(
                         onAppThemeSelected = onAppThemeChanged,
                         onKeepScreenOn = onKeepScreenOn,
                         onFullScreen = onFullScreen,
+                        onSingleTapToOpenSettingsChange = onSingleTapToOpenSettingsChange,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     BottomAppBar(
@@ -355,6 +357,7 @@ private fun ViewsPreview(
                         style = style,
                         selectedSetting = remember { mutableStateOf(data.selectedSetting) },
                         fullScreen = remember { mutableStateOf(false) },
+                        isSingleTapToOpenSettings = remember { mutableStateOf(false) },
                     ),
                     showInvalidChapterDialog = remember { mutableStateOf(false) }
                 ),
@@ -370,6 +373,7 @@ private fun ViewsPreview(
                 readerContent = {},
                 onKeepScreenOn = {},
                 onFullScreen = {},
+                onSingleTapToOpenSettingsChange = {},
             )
         }
     }

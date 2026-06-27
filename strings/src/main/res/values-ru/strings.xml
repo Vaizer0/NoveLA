@@ -267,6 +267,7 @@
     <string name="cloudfare_firewall_failed_bypass">Не удалось обойти Cloudflare firewall</string>
     <string name="tried_but_failed_to_bypass_cloudfare_firewall">Пытались, но не удалось обойти Cloudflare firewall</string>
     <string name="features_reader_full_screen">Полноэкранный режим</string>
+    <string name="single_tap_to_open_settings">Открывать меню одним тапом</string>
     <string name="move_to">Отправить в</string>
     <string name="reading">Читаю</string>
     <string name="add_category">Добавить раздел</string>

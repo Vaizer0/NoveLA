@@ -128,12 +128,16 @@ class ReaderActivity : BaseActivity() {
                         .let(::startActivity)
                 },
                 onClick = {
-                    val now = System.currentTimeMillis()
-                    if (now - lastTapTime < doubleTapThresholdMs) {
+                    if (appPreferences.READER_SINGLE_TAP_TO_OPEN_SETTINGS.value) {
                         viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
-                        lastTapTime = 0L
                     } else {
-                        lastTapTime = now
+                        val now = System.currentTimeMillis()
+                        if (now - lastTapTime < doubleTapThresholdMs) {
+                            viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
+                            lastTapTime = 0L
+                        } else {
+                            lastTapTime = now
+                        }
                     }
                 },
             )
@@ -317,6 +321,7 @@ class ReaderActivity : BaseActivity() {
                     onDarkModeSelected = { appPreferences.THEME_DARK_MODE.value = it.name },
                     onAppThemeChanged = { appPreferences.APP_THEME.value = it.name },
                     onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it },
+                    onSingleTapToOpenSettingsChange = { appPreferences.READER_SINGLE_TAP_TO_OPEN_SETTINGS.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
                         finish()
