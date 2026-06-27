@@ -73,7 +73,6 @@ class TranslationManagerComposite(
             provider == "OPENAI"      -> openAiManager.getTranslator(source, target)
             provider == "GEMINI"      -> buildGeminiTranslator(source, target)
             provider == "GOOGLE_FREE" -> googleFreeManager.getTranslator(source, target)
-            source == "auto"          -> googleFreeManager.getTranslator(source, target)
             else                      -> googlePAManager.getTranslator(source, target)
         }
     }
@@ -130,9 +129,10 @@ class TranslationManagerComposite(
     }
 
     /**
-     * Translates a single chapter title using free Google endpoints only.
-     * Tries Google PA first (better quality), falls back to Google Free.
-     * Never touches Gemini or OpenAI — no tokens spent on a title.
+     * Translates a single chapter title.
+     * Uses the active provider if it is GOOGLE_FREE or GOOGLE_PA.
+     * For GEMINI or OPENAI falls back to Google PA then Google Free
+     * to avoid spending API tokens on short titles.
      */
     override suspend fun translateTitle(
         title: String,
@@ -147,33 +147,58 @@ class TranslationManagerComposite(
             sourceLanguage
         }
 
-        // Try Google PA first
-        try {
-            val result = googlePAManager.translateBatch(
-                listOf(title), resolvedSource, targetLanguage
-            )[title]
-            if (!result.isNullOrBlank() && result != title) {
-                Log.d(TAG, "translateTitle: PA succeeded")
-                return@withContext result
+        when (activeProvider()) {
+            "GOOGLE_FREE" -> {
+                Log.d(TAG, "translateTitle: using Google Free")
+                try {
+                    return@withContext googleFreeManager.translateBatch(
+                        listOf(title), resolvedSource, targetLanguage
+                    )[title]?.takeIf { !it.isNullOrBlank() && it != title }
+                } catch (e: Exception) {
+                    Log.w(TAG, "translateTitle: Free failed (${e.message})")
+                    null
+                }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "translateTitle: PA failed (${e.message}), trying Free")
-        }
-
-        // Fallback to Google Free
-        try {
-            val result = googleFreeManager.translateBatch(
-                listOf(title), resolvedSource, targetLanguage
-            )[title]
-            if (!result.isNullOrBlank() && result != title) {
-                Log.d(TAG, "translateTitle: Free succeeded")
-                return@withContext result
+            "GOOGLE_PA" -> {
+                Log.d(TAG, "translateTitle: using Google PA")
+                try {
+                    return@withContext googlePAManager.translateBatch(
+                        listOf(title), resolvedSource, targetLanguage
+                    )[title]?.takeIf { !it.isNullOrBlank() && it != title }
+                } catch (e: Exception) {
+                    Log.w(TAG, "translateTitle: PA failed (${e.message})")
+                    null
+                }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "translateTitle: Free also failed (${e.message})")
-        }
+            else -> {
+                // GEMINI or OPENAI — PA → Free fallback
+                try {
+                    val result = googlePAManager.translateBatch(
+                        listOf(title), resolvedSource, targetLanguage
+                    )[title]
+                    if (!result.isNullOrBlank() && result != title) {
+                        Log.d(TAG, "translateTitle: PA succeeded")
+                        return@withContext result
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "translateTitle: PA failed (${e.message}), trying Free")
+                }
 
-        null
+                try {
+                    val result = googleFreeManager.translateBatch(
+                        listOf(title), resolvedSource, targetLanguage
+                    )[title]
+                    if (!result.isNullOrBlank() && result != title) {
+                        Log.d(TAG, "translateTitle: Free succeeded")
+                        return@withContext result
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "translateTitle: Free also failed (${e.message})")
+                }
+
+                null
+            }
+        }
     }
 
     override suspend fun detectLanguage(text: String): String? {

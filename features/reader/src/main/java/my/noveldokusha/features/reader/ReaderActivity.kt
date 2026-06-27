@@ -178,7 +178,7 @@ class ReaderActivity : BaseActivity() {
         readerViewHandlersActions.maintainStartPosition = {
             withContext(Dispatchers.Main.immediate) {
                 it()
-                val titleIndex = (0..viewAdapter.listView.count)
+                val titleIndex = (0 until viewAdapter.listView.count)
                     .indexOfFirst { viewAdapter.listView.getItem(it) is ReaderItem.Title }
 
                 if (titleIndex != -1) {
