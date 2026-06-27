@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.AbsListView
 import androidx.activity.compose.setContent
@@ -657,6 +659,21 @@ class ReaderActivity : BaseActivity() {
         // Explicitly save to database when app pauses
         viewModel.saveCurrentReadingPosition()
         super.onPause()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (event != null) {
+            Log.d("MediaCallback", "onKeyDown: keyCode=$keyCode action=${event.action}")
+        }
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_HEADSETHOOK) {
+            if (viewModel.readerSpeaker.isSpeaking.value) {
+                viewModel.readerSpeaker.state.setPlaying(false)
+            } else {
+                viewModel.readerSpeaker.state.setPlaying(true)
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onResume() {

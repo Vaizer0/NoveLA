@@ -3,6 +3,7 @@ package my.noveldokusha.features.reader.ui.settingDialogs
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -220,6 +223,64 @@ internal fun VoiceReaderSettingDialog(
                             isDialogOpen = openVoicesDialog,
                             setDialogOpen = { openVoicesDialog = it }
                         )
+                    }
+                }
+
+                // Timer / duration estimation card
+                val wpm = state.estimatedWpm.value
+                val totalSeconds = state.estimatedTotalSeconds.value
+                val remainingSeconds = state.estimatedRemainingSeconds.value
+
+                val totalDurationStr = formatDuration(totalSeconds, stringResource(R.string.tts_hours_abbr), stringResource(R.string.tts_minutes_abbr), stringResource(R.string.tts_seconds_abbr))
+                val remainingDurationStr = formatDuration(remainingSeconds, stringResource(R.string.tts_hours_abbr), stringResource(R.string.tts_minutes_abbr), stringResource(R.string.tts_seconds_abbr))
+
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = stringResource(R.string.tts_estimated_time_left),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(
+                                text = remainingDurationStr,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = "$wpm ${stringResource(R.string.tts_wpm)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${stringResource(R.string.tts_total_chapter)}: $totalDurationStr",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
 
@@ -615,6 +676,18 @@ private fun DropdownCustomSavedVoices(
             },
         )
     }
+}
+
+private fun formatDuration(seconds: Int, hoursLabel: String, minutesLabel: String, secondsLabel: String): String {
+    if (seconds <= 0) return "0$secondsLabel"
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return buildString {
+        if (h > 0) append("$h$hoursLabel ")
+        if (m > 0 || h > 0) append("$m$minutesLabel ")
+        if (s > 0 || (h == 0 && m == 0)) append("$s$secondsLabel")
+    }.trim()
 }
 
 @Preview(group = "dialog")
