@@ -46,8 +46,8 @@ android {
 
     defaultConfig {
         applicationId = "my.novela"
-        versionCode = 32
-        versionName = "1.3.1"
+        versionCode = 33
+        versionName = "1.3.2"
         base.archivesName.set("NoveLA_v$versionName")
     }
 
