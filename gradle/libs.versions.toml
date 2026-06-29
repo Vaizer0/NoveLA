@@ -30,7 +30,7 @@ androidx-runtime-livedata = "1.7.5"
 androidx-documentfile = "1.0.1"
 androidx-media = "1.7.0"
 androidx-lifecycle = "2.8.7"
-androidx-workmanager = "2.10.0"
+androidx-workmanager = "2.11.2"
 androidx-startup = "1.2.0"
 
 androidx-constraintLayout = "2.2.0"
