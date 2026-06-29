@@ -128,11 +128,12 @@ internal class ReaderLiveTranslation(
             }
             else -> {
                 try {
-                    Log.d(TAG, "updateTranslatorState: creating translator")
+                    val systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
+                    Log.d(TAG, "updateTranslatorState: creating translator, override='${systemPromptOverride?.take(200)}'")
                     translationManager.getTranslator(
                         source = source.language,
                         target = target.language,
-                        systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
+                        systemPromptOverride = systemPromptOverride
                     ).also {
                         Log.d(TAG, "updateTranslatorState: translator created successfully")
                     }
@@ -204,6 +205,7 @@ internal class ReaderLiveTranslation(
     }
 
     private fun onNovelPromptChange(prompt: String) {
+        Log.d(TAG, "onNovelPromptChange: prompt='${prompt.take(200)}'")
         state.novelPrompt.value = prompt
         if (bookUrl.isNotBlank()) {
             val current = appPreferences.TRANSLATION_NOVEL_PROMPTS.value.toMutableMap()
@@ -214,6 +216,8 @@ internal class ReaderLiveTranslation(
             }
             appPreferences.TRANSLATION_NOVEL_PROMPTS.value = current
         }
+        Log.d(TAG, "onNovelPromptChange: calling onRedoTranslation()")
+        onRedoTranslation()
     }
 
     private fun onProviderChange(provider: String) {
@@ -232,7 +236,7 @@ internal class ReaderLiveTranslation(
     private fun onRedoTranslation() {
         scope.launch {
             try {
-                Log.d(TAG, "onRedoTranslation: starting")
+                Log.d(TAG, "onRedoTranslation: starting, state.novelPrompt='${state.novelPrompt.value.take(200)}'")
                 val source = state.source.value?.language ?: run {
                     Log.w(TAG, "onRedoTranslation: source is null")
                     return@launch
@@ -293,8 +297,9 @@ internal class ReaderLiveTranslation(
         }
         val source = currentState.source
         val target = currentState.target
-        val systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
-        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target), novelPrompt=${systemPromptOverride != null}")
+        val novelPromptRaw = state.novelPrompt.value
+        val systemPromptOverride = novelPromptRaw.takeIf { it.isNotBlank() }
+        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target), novelPrompt='${novelPromptRaw.take(200)}', hasOverride=${systemPromptOverride != null}")
         return { texts ->
             translationManager.translateBatch(texts, source, target, systemPromptOverride)
         }

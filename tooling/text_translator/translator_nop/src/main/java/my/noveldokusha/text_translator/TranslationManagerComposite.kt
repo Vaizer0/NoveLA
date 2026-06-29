@@ -97,6 +97,7 @@ class TranslationManagerComposite(
         targetLanguage: String,
         systemPromptOverride: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
+        Log.d(TAG, "translateBatch: $sourceLanguage → $targetLanguage, override='${systemPromptOverride?.take(200)}', texts=${texts.size}")
         if (texts.isEmpty()) return@withContext emptyMap()
 
         val resolvedSource = if (sourceLanguage == "auto") {
@@ -114,7 +115,7 @@ class TranslationManagerComposite(
                 openAiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }
             "GEMINI" -> {
-                Log.d(TAG, "translateBatch: using Gemini")
+                Log.d(TAG, "translateBatch: using Gemini, passing override='${systemPromptOverride?.take(200)}'")
                 // No fallback — let exception propagate with descriptive message
                 geminiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }

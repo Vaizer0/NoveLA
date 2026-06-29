@@ -80,9 +80,14 @@ class TranslationManagerOpenAI(
         get() = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
 
     private fun resolveTemplatePrompt(systemPromptOverride: String?): String {
-        if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) return systemPromptOverride
-        return appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+        if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) {
+            Log.d(TAG, "resolveTemplatePrompt: using override '${systemPromptOverride.take(200)}'")
+            return systemPromptOverride
+        }
+        val fallback = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+        Log.d(TAG, "resolveTemplatePrompt: no override, using fallback '${fallback.take(200)}'")
+        return fallback
     }
 
     override val available = true
@@ -150,9 +155,10 @@ class TranslationManagerOpenAI(
             return@withContext merged
         }
 
-        Log.d(TAG, "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage")
+        Log.d(TAG, "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage, override='${systemPromptOverride?.take(200)}'")
 
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage, systemPromptOverride)
+        Log.d(TAG, "translateBatch: systemPrompt='${systemPrompt.take(200)}'")
 
         // All format instructions are in the system prompt.
         // User message contains only the numbered text — clean and simple.
@@ -182,6 +188,8 @@ class TranslationManagerOpenAI(
         var lastException: Exception? = null
 
         val retryPolicy = RetryPolicy(maxAttempts = keys.size, baseDelayMs = 250L, maxDelayMs = 1500L)
+        Log.d(TAG, "sendWithKeyRotation: systemPrompt='${systemPrompt.take(200)}'")
+
         for (attempt in 0 until retryPolicy.maxAttempts) {
             val currentKey = keys[(startIndex + attempt) % keys.size]
             val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
