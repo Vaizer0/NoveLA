@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 
 import my.noveldokusha.coreui.theme.AppTheme
@@ -261,12 +262,13 @@ internal fun SettingsScreenBody(
                 )
             },
             confirmButton = {
-                Button(
+                OutlinedButton(
                     onClick = onConfirmClean,
-                    colors = ButtonDefaults.buttonColors(
+                    colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                 ) {
                     Text(stringResource(id = android.R.string.ok))
                 }
