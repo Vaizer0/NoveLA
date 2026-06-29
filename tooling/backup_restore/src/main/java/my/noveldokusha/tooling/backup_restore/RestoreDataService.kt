@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.states.NotificationsCenter
@@ -75,6 +76,46 @@ class RestoreDataService : Service() {
         constructor(ctx: Context, uri: Uri, overwritePlugins: Boolean) : super(ctx, RestoreDataService::class.java) {
             this.uri = uri
             this.overwritePlugins = overwritePlugins
+        }
+    }
+
+    private fun getHeapUsedPercent(): Double {
+        val max = Runtime.getRuntime().maxMemory()
+        val used = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+        return used.toDouble() / max * 100
+    }
+
+    private suspend fun <T> processInChunks(
+        total: Int,
+        initialChunkSize: Int,
+        label: String,
+        fetchChunk: suspend (limit: Int, offset: Int) -> List<T>,
+        processChunk: suspend (List<T>) -> Unit,
+    ) {
+        var chunkSize = initialChunkSize
+        var offset = 0
+        while (offset < total) {
+            val actualSize = minOf(chunkSize, total - offset)
+            val chunk = fetchChunk(actualSize, offset)
+            processChunk(chunk)
+            offset += chunk.size
+
+            val usedPercent = getHeapUsedPercent()
+            when {
+                usedPercent > 85 -> {
+                    System.gc()
+                    delay(500)
+                    val newPercent = getHeapUsedPercent()
+                    if (newPercent > 85 && chunkSize > 50) {
+                        chunkSize = maxOf(50, chunkSize / 2)
+                        Timber.w("processInChunks($label): heap ${"%.1f".format(newPercent)}%, chunk reduced to $chunkSize")
+                    }
+                }
+                usedPercent > 70 -> {
+                    System.gc()
+                    delay(200)
+                }
+            }
         }
     }
 
@@ -257,91 +298,102 @@ class RestoreDataService : Service() {
                     }
                 }
 
-                // Restore library books
-                val allBooksFromBackup = backupDatabase.libraryBooks.getAll()
-                Timber.d("mergeToDatabase: Backup contains ${allBooksFromBackup.size} total books")
-
-                val libraryBooksToRestore = allBooksFromBackup.filter { it.inLibrary }
-                Timber.d("mergeToDatabase: Restoring ${libraryBooksToRestore.size} library books (skipping ${allBooksFromBackup.size - libraryBooksToRestore.size} non-library books)")
-
-                val validBooks = libraryBooksToRestore.filter { book ->
-                    book.url.matches("""^(https?|local)://.*""".toRegex())
-                }
-
-                if (validBooks.size < libraryBooksToRestore.size) {
-                    Timber.w("mergeToDatabase: Filtered ${libraryBooksToRestore.size - validBooks.size} invalid URLs")
-                }
-
+                // Restore library books — chunked
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.adding_books)
                 }
-
-                try {
-                    appRepository.libraryBooks.insertReplace(validBooks)
-                    Timber.d("mergeToDatabase: Inserted ${validBooks.size} books")
-                } catch (e: Exception) {
-                    Timber.e(e, "mergeToDatabase: Bulk insert failed, trying individual")
-                    validBooks.forEach { book ->
-                        try { appRepository.libraryBooks.insertReplace(listOf(book)) }
-                        catch (bookError: Exception) {
-                            Timber.w(bookError, "Failed to insert book: ${book.title}")
+                val restoredBookUrls = mutableSetOf<String>()
+                val totalBooks = backupDatabase.libraryBooks.count()
+                Timber.d("mergeToDatabase: Backup contains $totalBooks total books")
+                processInChunks(
+                    total = totalBooks, initialChunkSize = 500, label = "books",
+                    fetchChunk = { limit, offset -> backupDatabase.libraryBooks.getChunk(limit, offset) },
+                    processChunk = { chunk ->
+                        val valid = chunk
+                            .filter { it.inLibrary }
+                            .filter { it.url.matches("""^(https?|local)://.*""".toRegex()) }
+                        if (valid.isNotEmpty()) {
+                            try {
+                                appRepository.libraryBooks.insertReplace(valid)
+                            } catch (e: Exception) {
+                                Timber.e(e, "mergeToDatabase: Bulk book insert failed, trying individual")
+                                valid.forEach { book ->
+                                    try { appRepository.libraryBooks.insertReplace(listOf(book)) }
+                                    catch (bookError: Exception) {
+                                        Timber.w(bookError, "Failed to insert book: ${book.title}")
+                                    }
+                                }
+                            }
+                            valid.forEach { restoredBookUrls.add(it.url) }
                         }
                     }
-                }
+                )
 
-                // Restore chapters
-                val restoredBookUrls = validBooks.map { it.url }.toSet()
-                val allChapters = backupDatabase.bookChapters.getAll()
-                val validChapters = allChapters.filter { chapter ->
-                    chapter.bookUrl in restoredBookUrls &&
-                            chapter.url.matches("""^(https?|local)://.*""".toRegex())
-                }
-                Timber.d("mergeToDatabase: Restoring ${validChapters.size} chapters (of ${allChapters.size} total in backup)")
-
+                // Restore chapters — chunked
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.adding_chapters)
                 }
-
-                try {
-                    appRepository.bookChapters.insert(validChapters)
-                } catch (e: Exception) {
-                    validChapters.forEach { chapter ->
-                        try { appRepository.bookChapters.insert(listOf(chapter)) }
-                        catch (chapterError: Exception) {
-                            Timber.w(chapterError, "Failed to insert chapter: ${chapter.title}")
+                val restoredChapterUrls = mutableSetOf<String>()
+                val totalChapters = backupDatabase.bookChapters.count()
+                Timber.d("mergeToDatabase: Backup contains $totalChapters total chapters")
+                processInChunks(
+                    total = totalChapters, initialChunkSize = 5000, label = "chapters",
+                    fetchChunk = { limit, offset -> backupDatabase.bookChapters.getChunk(limit, offset) },
+                    processChunk = { chunk ->
+                        val valid = chunk.filter { chapter ->
+                            chapter.bookUrl in restoredBookUrls &&
+                            chapter.url.matches("""^(https?|local)://.*""".toRegex())
+                        }
+                        if (valid.isNotEmpty()) {
+                            try {
+                                appRepository.bookChapters.insert(valid)
+                            } catch (e: Exception) {
+                                valid.forEach { chapter ->
+                                    try { appRepository.bookChapters.insert(listOf(chapter)) }
+                                    catch (chapterError: Exception) {
+                                        Timber.w(chapterError, "Failed to insert chapter: ${chapter.title}")
+                                    }
+                                }
+                            }
+                            valid.forEach { restoredChapterUrls.add(it.url) }
                         }
                     }
-                }
+                )
 
-                // Restore chapter bodies
-                val restoredChapterUrls = validChapters.map { it.url }.toSet()
-                val allBodies = backupDatabase.chapterBody.getAll()
-                val validBodies = allBodies.filter { it.url in restoredChapterUrls }
-                Timber.d("mergeToDatabase: Restoring ${validBodies.size} chapter bodies (of ${allBodies.size} total in backup)")
-
+                // Restore chapter bodies — chunked
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
                 ) {
                     text = getString(R.string.adding_chapters_text)
                 }
-
-                try {
-                    appRepository.chapterBody.insertReplace(validBodies)
-                } catch (e: Exception) {
-                    validBodies.forEach { body ->
-                        try { appRepository.chapterBody.insertReplace(listOf(body)) }
-                        catch (bodyError: Exception) {
-                            Timber.w(bodyError, "Failed to insert chapter body")
+                val totalBodies = backupDatabase.chapterBody.count()
+                Timber.d("mergeToDatabase: Backup contains $totalBodies total chapter bodies")
+                processInChunks(
+                    total = totalBodies, initialChunkSize = 500, label = "bodies",
+                    fetchChunk = { limit, offset -> backupDatabase.chapterBody.getChunk(limit, offset) },
+                    processChunk = { chunk ->
+                        val valid = chunk.filter { it.url in restoredChapterUrls }
+                        if (valid.isNotEmpty()) {
+                            try {
+                                appRepository.chapterBody.insertReplace(valid)
+                            } catch (e: Exception) {
+                                valid.forEach { body ->
+                                    try { appRepository.chapterBody.insertReplace(listOf(body)) }
+                                    catch (bodyError: Exception) {
+                                        Timber.w(bodyError, "Failed to insert chapter body")
+                                    }
+                                }
+                            }
                         }
                     }
-                }
+                )
 
                 // Restore extensions (plugins)
                 notificationsCenter.modifyNotification(

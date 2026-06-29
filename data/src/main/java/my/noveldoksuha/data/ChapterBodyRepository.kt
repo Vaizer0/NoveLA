@@ -40,6 +40,9 @@ class ChapterBodyRepository @Inject constructor(
         insertReplace(chapterBody)
     }
 
+    suspend fun count() = chapterBodyDao.count()
+    suspend fun getChunk(limit: Int, offset: Int) = chapterBodyDao.getChunk(limit, offset)
+
     suspend fun clearAllCache(): Int {
         val count = chapterBodyDao.deleteAll()
         chapterTranslationDao.deleteAllTranslations()
