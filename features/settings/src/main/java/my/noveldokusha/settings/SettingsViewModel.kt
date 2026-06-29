@@ -111,6 +111,7 @@ internal class SettingsViewModel @Inject constructor(
         autoBackupLastTimestamp = appPreferences.BACKUP_AUTO_LAST_TIMESTAMP.state(viewModelScope),
         chapterCacheSize = mutableStateOf("…"),
         isCleaningChapterCache = isCleaningChapterCache,
+        cleanConfirmationType = mutableStateOf(null),
     )
 
     init {
@@ -147,7 +148,11 @@ internal class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun cleanDatabase() = appScope.launch(Dispatchers.IO) {
+    fun requestCleanDatabase() {
+        state.cleanConfirmationType.value = CleanConfirmationType.DATABASE
+    }
+
+    private fun cleanDatabase() = appScope.launch(Dispatchers.IO) {
         if (isCleaningDatabase.value) return@launch
 
         try {
@@ -176,7 +181,11 @@ internal class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun cleanImagesFolder() = appScope.launch(Dispatchers.IO) {
+    fun requestCleanImageFolder() {
+        state.cleanConfirmationType.value = CleanConfirmationType.IMAGES_FOLDER
+    }
+
+    private fun cleanImagesFolder() = appScope.launch(Dispatchers.IO) {
         if (isCleaningImages.value) return@launch
 
         try {
@@ -334,7 +343,11 @@ internal class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun cleanChapterCache() = appScope.launch(Dispatchers.IO) {
+    fun requestCleanChapterCache() {
+        state.cleanConfirmationType.value = CleanConfirmationType.CHAPTER_CACHE
+    }
+
+    private fun cleanChapterCache() = appScope.launch(Dispatchers.IO) {
         if (isCleaningChapterCache.value) return@launch
 
         try {
@@ -352,6 +365,20 @@ internal class SettingsViewModel @Inject constructor(
         } finally {
             isCleaningChapterCache.value = false
         }
+    }
+
+    fun confirmCleanAction() {
+        when (state.cleanConfirmationType.value) {
+            CleanConfirmationType.DATABASE -> cleanDatabase()
+            CleanConfirmationType.IMAGES_FOLDER -> cleanImagesFolder()
+            CleanConfirmationType.CHAPTER_CACHE -> cleanChapterCache()
+            null -> return
+        }
+        state.cleanConfirmationType.value = null
+    }
+
+    fun dismissCleanAction() {
+        state.cleanConfirmationType.value = null
     }
 
     fun onCheckForUpdatesManual() {

@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Ostatnia kopia zapasowa</string>
     <string name="auto_backup_never">Nigdy</string>
     <string name="clean_chapter_cache">Wyczyść pamięć podręczną rozdziałów</string>
+    <string name="clean_database_confirmation">Czy na pewno chcesz wyczyścić bazę danych? Spowoduje to usunięcie wszystkich książek spoza biblioteki i ich danych.</string>
+    <string name="clean_images_folder_confirmation">Czy na pewno chcesz wyczyścić folder obrazów? Spowoduje to usunięcie obrazów książek spoza biblioteki.</string>
+    <string name="clean_chapter_cache_confirmation">Czy na pewno chcesz wyczyścić pamięć podręczną rozdziałów? Spowoduje to usunięcie buforowanych treści rozdziałów i tłumaczeń.</string>
     <string name="cleaning_chapter_cache">Czyszczenie pamięci podręcznej rozdziałów…</string>
     <string name="chapter_cache_cleaned">Pamięć podręczna rozdziałów wyczyszczona</string>
     <string name="chapter_cache_clean_failed">Nie udało się wyczyścić pamięci podręcznej rozdziałów</string>

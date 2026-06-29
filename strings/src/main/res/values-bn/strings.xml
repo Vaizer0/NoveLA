@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">সর্বশেষ ব্যাকআপ</string>
     <string name="auto_backup_never">কখনই নয়</string>
     <string name="clean_chapter_cache">অধ্যায় ক্যাশে সাফ করুন</string>
+    <string name="clean_database_confirmation">আপনি কি ডাটাবেস পরিষ্কার করতে চান? এটি লাইব্রেরির বাইরের সমস্ত বই এবং তাদের ডেটা মুছে ফেলবে।</string>
+    <string name="clean_images_folder_confirmation">আপনি কি ছবির ফোল্ডার পরিষ্কার করতে চান? এটি লাইব্রেরির বাইরের বইগুলির ছবি মুছে ফেলবে।</string>
+    <string name="clean_chapter_cache_confirmation">আপনি কি অধ্যায় ক্যাশে সাফ করতে চান? এটি ক্যাশে করা অধ্যায়ের বিষয়বস্তু এবং অনুবাদগুলি মুছে ফেলবে।</string>
     <string name="cleaning_chapter_cache">অধ্যায় ক্যাশে সাফ করা হচ্ছে…</string>
     <string name="chapter_cache_cleaned">অধ্যায় ক্যাশে সাফ করা হয়েছে</string>
     <string name="chapter_cache_clean_failed">অধ্যায় ক্যাশে সাফ করতে ব্যর্থ</string>

@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">สำรองล่าสุด</string>
     <string name="auto_backup_never">ไม่เคย</string>
     <string name="clean_chapter_cache">ล้างแคชบท</string>
+    <string name="clean_database_confirmation">คุณแน่ใจหรือไม่ว่าต้องการล้างฐานข้อมูล? การดำเนินการนี้จะลบหนังสือที่ไม่อยู่ในคลังและข้อมูลทั้งหมด</string>
+    <string name="clean_images_folder_confirmation">คุณแน่ใจหรือไม่ว่าต้องการล้างโฟลเดอร์รูปภาพ? การดำเนินการนี้จะลบรูปภาพของหนังสือที่ไม่อยู่ในคลัง</string>
+    <string name="clean_chapter_cache_confirmation">คุณแน่ใจหรือไม่ว่าต้องการล้างแคชบท? การดำเนินการนี้จะลบเนื้อหาบทและคำแปลที่ถูกแคชไว้</string>
     <string name="cleaning_chapter_cache">กำลังล้างแคชบท…</string>
     <string name="chapter_cache_cleaned">ล้างแคชบทแล้ว</string>
     <string name="chapter_cache_clean_failed">ล้างแคชบทล้มเหลว</string>

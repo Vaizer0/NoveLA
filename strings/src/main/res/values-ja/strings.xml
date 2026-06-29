@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">最終バックアップ</string>
     <string name="auto_backup_never">なし</string>
     <string name="clean_chapter_cache">チャプターキャッシュをクリア</string>
+    <string name="clean_database_confirmation">データベースをクリーンしてもよろしいですか？ライブラリにないすべての本とそのデータが削除されます。</string>
+    <string name="clean_images_folder_confirmation">画像フォルダをクリーンしてもよろしいですか？ライブラリにない本の画像が削除されます。</string>
+    <string name="clean_chapter_cache_confirmation">チャプターキャッシュをクリアしてもよろしいですか？キャッシュされたチャプター本文と翻訳が削除されます。</string>
     <string name="cleaning_chapter_cache">チャプターキャッシュをクリア中…</string>
     <string name="chapter_cache_cleaned">チャプターキャッシュをクリアしました</string>
     <string name="chapter_cache_clean_failed">チャプターキャッシュのクリアに失敗しました</string>

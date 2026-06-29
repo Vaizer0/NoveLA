@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +27,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,9 +55,11 @@ internal fun SettingsScreenBody(
     onRefreshSizes: () -> Unit,
     onAppThemeSelected: (AppTheme) -> Unit,
     onDarkModeSelected: (DarkMode) -> Unit,
-    onCleanDatabase: () -> Unit,
-    onCleanImageFolder: () -> Unit,
-    onCleanChapterCache: () -> Unit,
+    onRequestCleanDatabase: () -> Unit,
+    onRequestCleanImageFolder: () -> Unit,
+    onRequestCleanChapterCache: () -> Unit,
+    onConfirmClean: () -> Unit,
+    onDismissClean: () -> Unit,
     onMassAddDelayChange: (Long) -> Unit,
     onDownloadDelayChange: (Long) -> Unit,
     onBackupData: () -> Unit,
@@ -120,9 +127,9 @@ internal fun SettingsScreenBody(
             isCleaningDatabase = state.isCleaningDatabase.value,
             isCleaningImages = state.isCleaningImages.value,
             isCleaningChapterCache = state.isCleaningChapterCache.value,
-            onCleanDatabase = onCleanDatabase,
-            onCleanImageFolder = onCleanImageFolder,
-            onCleanChapterCache = onCleanChapterCache,
+            onRequestCleanDatabase = onRequestCleanDatabase,
+            onRequestCleanImageFolder = onRequestCleanImageFolder,
+            onRequestCleanChapterCache = onRequestCleanChapterCache,
         )
         HorizontalDivider()
         val context = LocalContext.current
@@ -204,6 +211,56 @@ internal fun SettingsScreenBody(
         )
         Spacer(modifier = Modifier.height(120.dp))
     }
+
+    val confirmationType = state.cleanConfirmationType.value
+    if (confirmationType != null) {
+        val titleRes = when (confirmationType) {
+            CleanConfirmationType.DATABASE -> R.string.clean_database
+            CleanConfirmationType.IMAGES_FOLDER -> R.string.clean_images_folder
+            CleanConfirmationType.CHAPTER_CACHE -> R.string.clean_chapter_cache
+        }
+        val textRes = when (confirmationType) {
+            CleanConfirmationType.DATABASE -> R.string.clean_database_confirmation
+            CleanConfirmationType.IMAGES_FOLDER -> R.string.clean_images_folder_confirmation
+            CleanConfirmationType.CHAPTER_CACHE -> R.string.clean_chapter_cache_confirmation
+        }
+        AlertDialog(
+            onDismissRequest = onDismissClean,
+            title = {
+                Text(
+                    text = stringResource(id = titleRes),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(id = textRes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = onConfirmClean,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text(stringResource(id = android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = onDismissClean,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
 }
 
 
@@ -258,11 +315,14 @@ private fun Preview() {
                     autoBackupIntervalMinutes = remember { derivedStateOf { 60L } },
                     autoBackupIncludeImages = remember { derivedStateOf { false } },
                     autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
+                    cleanConfirmationType = remember { mutableStateOf(null) },
                 ),
                 onRefreshSizes = { },
-                onCleanDatabase = { },
-                onCleanImageFolder = { },
-                onCleanChapterCache = { },
+                onRequestCleanDatabase = { },
+                onRequestCleanImageFolder = { },
+                onRequestCleanChapterCache = { },
+                onConfirmClean = { },
+                onDismissClean = { },
                 onMassAddDelayChange = { },
                 onDownloadDelayChange = { },
                 onBackupData = { },

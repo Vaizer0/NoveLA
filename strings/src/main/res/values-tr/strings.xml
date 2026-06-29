@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Son yedek</string>
     <string name="auto_backup_never">Hiçbir zaman</string>
     <string name="clean_chapter_cache">Bölüm önbelleğini temizle</string>
+    <string name="clean_database_confirmation">Veritabanını temizlemek istediğinize emin misiniz? Bu, kütüphane dışındaki tüm kitapları ve verilerini silecektir.</string>
+    <string name="clean_images_folder_confirmation">Resim klasörünü temizlemek istediğinize emin misiniz? Bu, kütüphane dışındaki kitapların resimlerini silecektir.</string>
+    <string name="clean_chapter_cache_confirmation">Bölüm önbelleğini temizlemek istediğinize emin misiniz? Bu, önbelleğe alınmış bölüm metinlerini ve çevirileri silecektir.</string>
     <string name="cleaning_chapter_cache">Bölüm önbelleği temizleniyor…</string>
     <string name="chapter_cache_cleaned">Bölüm önbelleği temizlendi</string>
     <string name="chapter_cache_clean_failed">Bölüm önbelleği temizlenemedi</string>

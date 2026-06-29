@@ -9,6 +9,8 @@ import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
 
+enum class CleanConfirmationType { DATABASE, IMAGES_FOLDER, CHAPTER_CACHE }
+
 data class SettingsScreenState(
     val databaseSize: MutableState<String>,
     val imageFolderSize: MutableState<String>,
@@ -50,6 +52,7 @@ data class SettingsScreenState(
     // Chapter cache
     val chapterCacheSize: MutableState<String>,
     val isCleaningChapterCache: State<Boolean>,
+    val cleanConfirmationType: MutableState<CleanConfirmationType?>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

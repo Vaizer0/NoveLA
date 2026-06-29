@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">上次备份</string>
     <string name="auto_backup_never">从未</string>
     <string name="clean_chapter_cache">清除章节缓存</string>
+    <string name="clean_database_confirmation">您确定要清理数据库吗？这将删除所有不在图书馆的书籍及其数据。</string>
+    <string name="clean_images_folder_confirmation">您确定要清理图片文件夹吗？这将删除不在图书馆的书籍的图片。</string>
+    <string name="clean_chapter_cache_confirmation">您确定要清除章节缓存吗？这将删除缓存的章节内容和翻译。</string>
     <string name="cleaning_chapter_cache">正在清除章节缓存…</string>
     <string name="chapter_cache_cleaned">章节缓存已清除</string>
     <string name="chapter_cache_clean_failed">清除章节缓存失败</string>

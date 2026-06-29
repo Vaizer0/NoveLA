@@ -425,7 +425,10 @@
     <string name="auto_backup_interval_updated">Интервал резервного копирования обновлён</string>
     <string name="auto_backup_last_time">Последний бэкап</string>
     <string name="auto_backup_never">Никогда</string>
-    <string name="clean_chapter_cache">Очистить кеш глав</string>
+    <string name="clean_chapter_cache">Очистить кеш глав</string>
+    <string name="clean_database_confirmation">Вы уверены, что хотите очистить базу данных? Это удалит все книги не из библиотеки и их данные.</string>
+    <string name="clean_images_folder_confirmation">Вы уверены, что хотите очистить папку изображений? Это удалит изображения книг не из библиотеки.</string>
+    <string name="clean_chapter_cache_confirmation">Вы уверены, что хотите очистить кеш глав? Это удалит кешированные тексты глав и переводы.</string>
     <string name="cleaning_chapter_cache">Очистка кеша глав…</string>
     <string name="chapter_cache_cleaned">Кеш глав очищен</string>
     <string name="chapter_cache_clean_failed">Не удалось очистить кеш глав</string>

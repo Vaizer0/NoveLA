@@ -28,9 +28,9 @@ internal fun SettingsData(
     isCleaningDatabase: Boolean,
     isCleaningImages: Boolean,
     isCleaningChapterCache: Boolean,
-    onCleanDatabase: () -> Unit,
-    onCleanImageFolder: () -> Unit,
-    onCleanChapterCache: () -> Unit,
+    onRequestCleanDatabase: () -> Unit,
+    onRequestCleanImageFolder: () -> Unit,
+    onRequestCleanChapterCache: () -> Unit,
 ) {
     Column {
         Text(
@@ -58,7 +58,7 @@ internal fun SettingsData(
                     Icon(Icons.Outlined.DataArray, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            modifier = Modifier.clickable(enabled = !isCleaningDatabase) { onCleanDatabase() }
+            modifier = Modifier.clickable(enabled = !isCleaningDatabase) { onRequestCleanDatabase() }
         )
         SlimListItem(
             headlineContent = {
@@ -79,7 +79,7 @@ internal fun SettingsData(
                     Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            modifier = Modifier.clickable(enabled = !isCleaningImages) { onCleanImageFolder() }
+            modifier = Modifier.clickable(enabled = !isCleaningImages) { onRequestCleanImageFolder() }
         )
         SlimListItem(
             headlineContent = {
@@ -100,7 +100,7 @@ internal fun SettingsData(
                     Icon(Icons.Outlined.DeleteSweep, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            modifier = Modifier.clickable(enabled = !isCleaningChapterCache) { onCleanChapterCache() }
+            modifier = Modifier.clickable(enabled = !isCleaningChapterCache) { onRequestCleanChapterCache() }
         )
     }
 }

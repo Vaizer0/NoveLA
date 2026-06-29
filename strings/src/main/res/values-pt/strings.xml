@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Último backup</string>
     <string name="auto_backup_never">Nunca</string>
     <string name="clean_chapter_cache">Limpar cache de capítulos</string>
+    <string name="clean_database_confirmation">Tem certeza de que deseja limpar o banco de dados? Isso removerá todos os livros fora da biblioteca e seus dados.</string>
+    <string name="clean_images_folder_confirmation">Tem certeza de que deseja limpar a pasta de imagens? Isso removerá imagens de livros fora da biblioteca.</string>
+    <string name="clean_chapter_cache_confirmation">Tem certeza de que deseja limpar o cache de capítulos? Isso removerá os corpos dos capítulos e traduções em cache.</string>
     <string name="cleaning_chapter_cache">A limpar cache de capítulos…</string>
     <string name="chapter_cache_cleaned">Cache de capítulos limpa</string>
     <string name="chapter_cache_clean_failed">Falha ao limpar cache de capítulos</string>

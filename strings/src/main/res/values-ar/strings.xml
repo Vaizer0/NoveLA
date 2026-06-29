@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">آخر نسخ احتياطي</string>
     <string name="auto_backup_never">أبداً</string>
     <string name="clean_chapter_cache">مسح ذاكرة التخزين المؤقت للفصول</string>
+    <string name="clean_database_confirmation">هل أنت متأكد أنك تريد تنظيف قاعدة البيانات؟ سيؤدي هذا إلى إزالة جميع الكتب غير الموجودة في المكتبة وبياناتها.</string>
+    <string name="clean_images_folder_confirmation">هل أنت متأكد أنك تريد تنظيف مجلد الصور؟ سيؤدي هذا إلى إزالة صور الكتب غير الموجودة في المكتبة.</string>
+    <string name="clean_chapter_cache_confirmation">هل أنت متأكد أنك تريد مسح ذاكرة التخزين المؤقت للفصول؟ سيؤدي هذا إلى إزالة نصوص الفصول والترجمات المخزنة مؤقتًا.</string>
     <string name="cleaning_chapter_cache">جاري مسح ذاكرة التخزين المؤقت للفصول…</string>
     <string name="chapter_cache_cleaned">تم مسح ذاكرة التخزين المؤقت للفصول</string>
     <string name="chapter_cache_clean_failed">فشل مسح ذاكرة التخزين المؤقت للفصول</string>

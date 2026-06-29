@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Sao lưu lần cuối</string>
     <string name="auto_backup_never">Không bao giờ</string>
     <string name="clean_chapter_cache">Xóa bộ nhớ đệm chương</string>
+    <string name="clean_database_confirmation">Bạn có chắc chắn muốn dọn dẹp cơ sở dữ liệu? Thao tác này sẽ xóa tất cả sách không có trong thư viện và dữ liệu của chúng.</string>
+    <string name="clean_images_folder_confirmation">Bạn có chắc chắn muốn dọn dẹp thư mục hình ảnh? Thao tác này sẽ xóa hình ảnh của những sách không có trong thư viện.</string>
+    <string name="clean_chapter_cache_confirmation">Bạn có chắc chắn muốn xóa bộ nhớ đệm chương? Thao tác này sẽ xóa nội dung chương và bản dịch đã được lưu trong bộ nhớ đệm.</string>
     <string name="cleaning_chapter_cache">Đang xóa bộ nhớ đệm chương…</string>
     <string name="chapter_cache_cleaned">Đã xóa bộ nhớ đệm chương</string>
     <string name="chapter_cache_clean_failed">Xóa bộ nhớ đệm chương thất bại</string>

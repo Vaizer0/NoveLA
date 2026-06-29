@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Sandaran terakhir</string>
     <string name="auto_backup_never">Tidak pernah</string>
     <string name="clean_chapter_cache">Kosongkan cache bab</string>
+    <string name="clean_database_confirmation">Adakah anda pasti mahu membersihkan pangkalan data? Ini akan mengalih keluar semua buku bukan perpustakaan dan data mereka.</string>
+    <string name="clean_images_folder_confirmation">Adakah anda pasti mahu membersihkan folder imej? Ini akan mengalih keluar imej buku bukan perpustakaan.</string>
+    <string name="clean_chapter_cache_confirmation">Adakah anda pasti mahu mengosongkan cache bab? Ini akan mengalih keluar teks bab dan terjemahan yang dicache.</string>
     <string name="cleaning_chapter_cache">Mengosongkan cache bab…</string>
     <string name="chapter_cache_cleaned">Cache bab dikosongkan</string>
     <string name="chapter_cache_clean_failed">Gagal mengosongkan cache bab</string>

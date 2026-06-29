@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Dernière sauvegarde</string>
     <string name="auto_backup_never">Jamais</string>
     <string name="clean_chapter_cache">Vider le cache des chapitres</string>
+    <string name="clean_database_confirmation">Êtes-vous sûr de vouloir nettoyer la base de données ? Cela supprimera tous les livres hors bibliothèque et leurs données.</string>
+    <string name="clean_images_folder_confirmation">Êtes-vous sûr de vouloir nettoyer le dossier d\'images ? Cela supprimera les images des livres hors bibliothèque.</string>
+    <string name="clean_chapter_cache_confirmation">Êtes-vous sûr de vouloir vider le cache des chapitres ? Cela supprimera les corps de chapitres et les traductions mis en cache.</string>
     <string name="cleaning_chapter_cache">Vidage du cache des chapitres…</string>
     <string name="chapter_cache_cleaned">Cache des chapitres vidé</string>
     <string name="chapter_cache_clean_failed">Échec du vidage du cache des chapitres</string>

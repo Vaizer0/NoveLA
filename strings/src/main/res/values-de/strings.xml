@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Letztes Backup</string>
     <string name="auto_backup_never">Nie</string>
     <string name="clean_chapter_cache">Kapitel-Cache leeren</string>
+    <string name="clean_database_confirmation">Sind Sie sicher, dass Sie die Datenbank bereinigen möchten? Dadurch werden alle Nicht-Bibliotheksbücher und deren Daten entfernt.</string>
+    <string name="clean_images_folder_confirmation">Sind Sie sicher, dass Sie den Bilderordner bereinigen möchten? Dadurch werden Bilder von Nicht-Bibliotheksbüchern entfernt.</string>
+    <string name="clean_chapter_cache_confirmation">Sind Sie sicher, dass Sie den Kapitel-Cache leeren möchten? Dadurch werden zwischengespeicherte Kapitelinhalte und Übersetzungen entfernt.</string>
     <string name="cleaning_chapter_cache">Kapitel-Cache wird gelöscht…</string>
     <string name="chapter_cache_cleaned">Kapitel-Cache gelöscht</string>
     <string name="chapter_cache_clean_failed">Kapitel-Cache konnte nicht gelöscht werden</string>

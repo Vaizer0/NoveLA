@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">마지막 백업</string>
     <string name="auto_backup_never">없음</string>
     <string name="clean_chapter_cache">화 캐시 지우기</string>
+    <string name="clean_database_confirmation">데이터베이스를 정리하시겠습니까? 라이브러리에 없는 모든 책과 해당 데이터가 제거됩니다.</string>
+    <string name="clean_images_folder_confirmation">이미지 폴더를 정리하시겠습니까? 라이브러리에 없는 책의 이미지가 제거됩니다.</string>
+    <string name="clean_chapter_cache_confirmation">챕터 캐시를 지우시겠습니까? 캐시된 챕터 본문과 번역이 제거됩니다.</string>
     <string name="cleaning_chapter_cache">화 캐시 지우는 중…</string>
     <string name="chapter_cache_cleaned">화 캐시 지워짐</string>
     <string name="chapter_cache_clean_failed">화 캐시 지우기 실패</string>

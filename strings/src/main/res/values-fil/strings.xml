@@ -485,6 +485,9 @@
     <string name="auto_backup_last_time">Huling backup</string>
     <string name="auto_backup_never">Hindi kailanman</string>
     <string name="clean_chapter_cache">I-clear ang cache ng kabanata</string>
+    <string name="clean_database_confirmation">Sigurado ka bang gusto mong linisin ang database? Aalisin nito ang lahat ng aklat na wala sa library at ang kanilang datos.</string>
+    <string name="clean_images_folder_confirmation">Sigurado ka bang gusto mong linisin ang folder ng mga larawan? Aalisin nito ang mga larawan ng mga aklat na wala sa library.</string>
+    <string name="clean_chapter_cache_confirmation">Sigurado ka bang gusto mong i-clear ang cache ng kabanata? Aalisin nito ang mga naka-cache na nilalaman ng kabanata at mga pagsasalin.</string>
     <string name="cleaning_chapter_cache">Ni-clear ang cache ng kabanata…</string>
     <string name="chapter_cache_cleaned">Na-clear ang cache ng kabanata</string>
     <string name="chapter_cache_clean_failed">Nabigo ang pag-clear ng cache ng kabanata</string>
