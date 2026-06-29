@@ -52,6 +52,8 @@ import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.features.reader.tools.FontsLoader
 import my.noveldokusha.features.reader.ui.ReaderScreen
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
+import my.noveldokusha.core.LocaleManager
+import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.navigation.NavigationRoutes
 import my.noveldokusha.reader.R
 import my.noveldokusha.reader.databinding.ActivityReaderBinding
@@ -161,6 +163,11 @@ class ReaderActivity : BaseActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val language = AppLanguageProvider.fromCode(appPreferences.APP_LANGUAGE_CODE.value)
+            ?: AppLanguageProvider.supportedLanguages.first()
+        LocaleManager.applyLocale(this, language)
+
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
         viewBind.listView.adapter = viewAdapter.listView
 

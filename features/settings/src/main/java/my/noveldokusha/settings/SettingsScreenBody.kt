@@ -32,6 +32,7 @@ import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.core.appPreferences.AppLanguage
+import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
 import my.noveldokusha.settings.sections.SettingsBackup
@@ -96,9 +97,13 @@ internal fun SettingsScreenBody(
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
     ) {
+        val currentLanguageObj = remember(state.currentLanguage.value) {
+            AppLanguageProvider.fromCode(state.currentLanguage.value)
+                ?: AppLanguageProvider.supportedLanguages.first()
+        }
         SettingsLanguage(
-            currentLanguage = state.currentLanguage.value,
-            onLanguageChange = onLanguageChange
+            currentLanguage = currentLanguageObj,
+            onLanguageChange = onLanguageChange,
         )
         HorizontalDivider()
         SettingsTheme(
@@ -212,7 +217,7 @@ private fun Preview() {
                 state = SettingsScreenState(
                     currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
                     currentDarkMode = remember { mutableStateOf(DarkMode.SYSTEM) },
-                    currentLanguage = remember { derivedStateOf { AppLanguage.ENGLISH } },
+                    currentLanguage = remember { mutableStateOf("en") },
                     databaseSize = remember { mutableStateOf("1 MB") },
                     imageFolderSize = remember { mutableStateOf("10 MB") },
                     isCleaningDatabase = remember { mutableStateOf(false) },

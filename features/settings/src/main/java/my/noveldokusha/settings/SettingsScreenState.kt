@@ -7,6 +7,7 @@ import my.noveldokusha.core.domain.RemoteAppVersion
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
+import my.noveldokusha.core.appPreferences.AppLanguageProvider
 
 data class SettingsScreenState(
     val databaseSize: MutableState<String>,
@@ -15,7 +16,7 @@ data class SettingsScreenState(
     val isCleaningImages: State<Boolean>,
     val currentAppTheme: State<AppTheme>,
     val currentDarkMode: State<DarkMode>,
-    val currentLanguage: State<AppLanguage>,
+    val currentLanguage: MutableState<String>,
     val updateAppSetting: UpdateApp,
     val libraryAutoUpdate: LibraryAutoUpdate,
     val massAddDelayMs: State<Long>,

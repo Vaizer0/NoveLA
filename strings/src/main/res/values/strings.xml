@@ -509,4 +509,8 @@
     <string name="battery_optimization_description">Required for downloading chapters when screen is off. On some devices (MIUI/HyperOS) the system blocks network in sleep mode even with foreground service.</string>
     <string name="battery_optimization_enabled">Battery optimization is enabled — tap to disable</string>
     <string name="battery_optimization_disabled">Battery optimization is disabled — background downloads work</string>
+
+    <!-- Language settings -->
+    <string name="follow_system_language">Follow system</string>
+    <string name="language_changed_to">Language changed to %s</string>
 </resources>

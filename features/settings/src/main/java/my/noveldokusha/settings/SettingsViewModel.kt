@@ -58,7 +58,7 @@ internal class SettingsViewModel @Inject constructor(
         imageFolderSize = mutableStateOf(""),
         isCleaningDatabase = isCleaningDatabase,
         isCleaningImages = isCleaningImages,
-        currentLanguage = appPreferences.APP_LANGUAGE.state(viewModelScope),
+        currentLanguage = appPreferences.APP_LANGUAGE_CODE.state(viewModelScope),
         currentAppTheme = derivedStateOf {
             try { AppTheme.valueOf(appThemePref.value) }
             catch (_: Exception) { AppTheme.DEFAULT }
@@ -241,8 +241,8 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     fun onLanguageChange(language: AppLanguage) {
-        appPreferences.APP_LANGUAGE.value = language
-        toasty.show("Language changed to ${language.displayName}")
+        appPreferences.APP_LANGUAGE_CODE.value = language.code
+        toasty.show(context.getString(R.string.language_changed_to, language.getDisplayName()))
         onRestartApp?.invoke()
     }
 

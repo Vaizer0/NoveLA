@@ -59,6 +59,7 @@ import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.coreui.theme.ThemeProvider
+import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.R
 import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
@@ -92,15 +93,11 @@ open class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         // Apply saved language preference
-        val language = appPreferences.APP_LANGUAGE.value
+        val language = AppLanguageProvider.fromCode(appPreferences.APP_LANGUAGE_CODE.value)
+            ?: AppLanguageProvider.supportedLanguages.first()
         LocaleManager.applyLocale(this, language)
 
         requestPushNotificationPermission()
-
-        // Check if language was changed and recreate if needed
-        if (savedInstanceState == null) { // Only on first creation
-            // This is handled by the system
-        }
 
         setContent {
             var activePageIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -173,9 +170,7 @@ open class MainActivity : BaseActivity() {
                                 )
                         ) {
                             SettingsScreen(onRestartApp = {
-                                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
                                 recreate()
-                                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
                             })
                         }
                     }

@@ -22,7 +22,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import my.noveldokusha.core.LanguageCode
 import my.noveldokusha.core.SharedPreference_Boolean
-import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.SharedPreference_Enum
 import my.noveldokusha.core.SharedPreference_Float
 import my.noveldokusha.core.SharedPreference_Int
@@ -41,9 +40,36 @@ class AppPreferences @Inject constructor(
     private val preferencesChangeListeners =
         mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
 
-    val APP_LANGUAGE = object : Preference<AppLanguage>("APP_LANGUAGE") {
-        override var value by SharedPreference_Enum(name, preferences, AppLanguage.DEFAULT) {
-            enumValueOf(it)
+    val APP_LANGUAGE_CODE = object : Preference<String>("APP_LANGUAGE_CODE") {
+        override var value by SharedPreference_String(name, preferences, "en")
+    }
+
+    val IS_FIRST_LAUNCH_DONE = object : Preference<Boolean>("IS_FIRST_LAUNCH_DONE") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    val IS_FOLLOW_SYSTEM_LANGUAGE = object : Preference<Boolean>("IS_FOLLOW_SYSTEM_LANGUAGE") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    init {
+        migrateAppLanguage()
+    }
+
+    private fun migrateAppLanguage() {
+        if (preferences.contains("APP_LANGUAGE") && !preferences.contains("APP_LANGUAGE_CODE")) {
+            val oldValue = preferences.getString("APP_LANGUAGE", null)
+            if (oldValue != null) {
+                val code = when (oldValue) {
+                    "ENGLISH" -> "en"
+                    "RUSSIAN" -> "ru"
+                    else -> null
+                }
+                if (code != null) {
+                    APP_LANGUAGE_CODE.value = code
+                }
+            }
+            IS_FIRST_LAUNCH_DONE.value = true
         }
     }
 

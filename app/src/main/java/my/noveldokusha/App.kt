@@ -1,14 +1,17 @@
 package my.noveldokusha
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
-import androidx.work.Configuration
+import androidx.work.Configuration as WorkConfiguration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import dagger.hilt.EntryPoints
 import dagger.hilt.android.HiltAndroidApp
 import my.noveldokusha.core.LocaleManager
 import my.noveldokusha.core.appPreferences.AppLanguage
+import my.noveldokusha.core.appPreferences.AppLanguageProvider
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.network.NetworkClient
@@ -16,10 +19,11 @@ import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.tooling.application_workers.setup.PeriodicWorkersInitializer
 import timber.log.Timber
 import javax.inject.Inject
+import java.util.Locale
 
 
 @HiltAndroidApp
-class App : Application(), ImageLoaderFactory, Configuration.Provider {
+class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
 
     @Inject
     lateinit var networkClient: NetworkClient
@@ -36,15 +40,7 @@ class App : Application(), ImageLoaderFactory, Configuration.Provider {
         super.onCreate()
 
         val appPreferences = EntryPoints.get(this, HiltAppEntryPoint::class.java).appPreferences()
-        var language = appPreferences.APP_LANGUAGE.value
-
-        // If using default value (English) and this is first launch,
-        // determine system language and set it
-        if (language == AppLanguage.DEFAULT) {
-            language = LocaleManager.getSystemLocale(this)
-            appPreferences.APP_LANGUAGE.value = language
-        }
-
+        val language = resolveAppLanguage(appPreferences)
         LocaleManager.applyLocale(this, language)
 
         try {
@@ -86,13 +82,36 @@ class App : Application(), ImageLoaderFactory, Configuration.Provider {
         }
     }
 
+    private fun resolveAppLanguage(appPreferences: AppPreferences): AppLanguage {
+        if (appPreferences.IS_FOLLOW_SYSTEM_LANGUAGE.value || !appPreferences.IS_FIRST_LAUNCH_DONE.value) {
+            val systemLocale = getSystemLocale()
+            val detected = AppLanguageProvider.fromLocale(systemLocale)
+            if (!appPreferences.IS_FIRST_LAUNCH_DONE.value) {
+                appPreferences.APP_LANGUAGE_CODE.value = detected.code
+                appPreferences.IS_FIRST_LAUNCH_DONE.value = true
+            }
+            return detected
+        }
+        return AppLanguageProvider.fromCode(appPreferences.APP_LANGUAGE_CODE.value)
+            ?: AppLanguageProvider.supportedLanguages.first()
+    }
+
+    private fun getSystemLocale(): Locale {
+        return if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            resources.configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            resources.configuration.locale
+        }
+    }
+
     // WorkManager — custom factory for @HiltWorker workers (LibraryUpdates, UpdatesChecker)
-    override val workManagerConfiguration: Configuration by lazy {
+    override val workManagerConfiguration: WorkConfiguration by lazy {
         val appWorkerFactory = EntryPoints
             .get(this, HiltAppEntryPoint::class.java)
             .workerFactory()
 
-        Configuration.Builder()
+        WorkConfiguration.Builder()
             .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.DEBUG else Log.INFO)
             .setWorkerFactory(appWorkerFactory)
             .build()
