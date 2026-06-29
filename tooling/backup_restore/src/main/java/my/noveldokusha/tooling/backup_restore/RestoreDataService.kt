@@ -20,6 +20,7 @@ import my.noveldokusha.coreui.states.removeProgressBar
 import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.NovelPromptData
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.BookChaptersRepository
 import my.noveldokusha.data.ChapterBodyRepository
@@ -554,6 +555,25 @@ class RestoreDataService : Service() {
                     }
                     appPreferences.TRANSLATION_PROMPT_PRESETS.value = presetsList
                     Timber.d("mergeToSettings: Restored ${presetsList.size} prompt presets")
+                }
+
+                // Restore per-novel prompts (старый формат: строка, новый: {"title":"...","prompt":"..."})
+                if (settingsJson.has("TRANSLATION_NOVEL_PROMPTS")) {
+                    val promptsObj = settingsJson.getJSONObject("TRANSLATION_NOVEL_PROMPTS")
+                    val promptsMap = mutableMapOf<String, NovelPromptData>()
+                    for (key in promptsObj.keys()) {
+                        val value = promptsObj.get(key)
+                        promptsMap[key] = when (value) {
+                            is String -> NovelPromptData(prompt = value)
+                            is JSONObject -> NovelPromptData(
+                                title = value.optString("title", ""),
+                                prompt = value.optString("prompt", ""),
+                            )
+                            else -> NovelPromptData(prompt = value.toString())
+                        }
+                    }
+                    appPreferences.TRANSLATION_NOVEL_PROMPTS.value = promptsMap
+                    Timber.d("mergeToSettings: Restored ${promptsMap.size} novel prompts")
                 }
 
                 Timber.d("mergeToSettings: Settings merge completed")

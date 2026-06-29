@@ -8,6 +8,7 @@ import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
+import my.noveldokusha.core.appPreferences.NovelPromptData
 
 enum class CleanConfirmationType { DATABASE, IMAGES_FOLDER, CHAPTER_CACHE }
 
@@ -41,6 +42,8 @@ data class SettingsScreenState(
     // LLM batch / token settings (Gemini + OpenAI only)
     val llmBatchSize: State<Int>,
     val llmMaxOutputTokens: State<Int>,
+    // Per-novel prompt overrides
+    val translationNovelPrompts: State<Map<String, NovelPromptData>>,
     // Auto Backup
     val autoBackupEnabled: MutableState<Boolean>,
     val autoBackupDirectoryUri: State<String>,

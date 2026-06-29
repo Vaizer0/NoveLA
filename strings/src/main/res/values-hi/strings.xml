@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">सिस्टम का अनुसरण करें</string>
     <string name="language_changed_to">भाषा %s में बदल गई</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">प्रदाता: %s</string>
+    <string name="language_selection">भाषा</string>
+    <string name="language_search">भाषा चुनें</string>
+    <string name="language_search_hint">भाषाएँ खोजें…</string>
+    <string name="language_no_results">कोई भाषा नहीं मिली</string>
+    <string name="novel_prompt_title">उपन्यास-विशिष्ट प्रॉम्प्ट</string>
+    <string name="novel_prompt_placeholder">वैकल्पिक: इस उपन्यास के लिए कस्टम सिस्टम प्रॉम्प्ट</string>
+    <string name="novel_prompt_description_reader">इस उपन्यास के लिए कस्टम सिस्टम प्रॉम्प्ट सेट करें</string>
+    <string name="novel_prompt_llm_only">केवल Gemini/OpenAI</string>
+    <string name="novel_prompts_title">उपन्यास-विशिष्ट प्रॉम्प्ट</string>
+    <string name="novel_prompts_search">प्रॉम्प्ट खोजें</string>
+    <string name="novel_prompts_description">रीडर सेटिंग्स में प्रति उपन्यास सेट किए गए कस्टम अनुवाद प्रॉम्प्ट</string>
+    <string name="novel_prompts_count">%d उपन्यास</string>
 </resources>

@@ -66,12 +66,12 @@ class TranslationManagerComposite(
         else          -> "Google Translate (Enhanced)"
     }
 
-    override fun getTranslator(source: String, target: String): TranslatorState {
+    override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
         val provider = activeProvider()
-        Log.d(TAG, "getTranslator: source=$source, target=$target, provider=$provider")
+        Log.d(TAG, "getTranslator: source=$source, target=$target, provider=$provider, override=${systemPromptOverride != null}")
         return when {
-            provider == "OPENAI"      -> openAiManager.getTranslator(source, target)
-            provider == "GEMINI"      -> buildGeminiTranslator(source, target)
+            provider == "OPENAI"      -> openAiManager.getTranslator(source, target, systemPromptOverride)
+            provider == "GEMINI"      -> buildGeminiTranslator(source, target, systemPromptOverride)
             provider == "GOOGLE_FREE" -> googleFreeManager.getTranslator(source, target)
             else                      -> googlePAManager.getTranslator(source, target)
         }
@@ -82,8 +82,8 @@ class TranslationManagerComposite(
      * If Gemini fails (no key, rate limit, API error), the exception propagates
      * to ReaderChaptersLoader which shows it as a ReaderItem.Error.
      */
-    private fun buildGeminiTranslator(source: String, target: String): TranslatorState {
-        val geminiTranslator = geminiManager.getTranslator(source, target)
+    private fun buildGeminiTranslator(source: String, target: String, systemPromptOverride: String? = null): TranslatorState {
+        val geminiTranslator = geminiManager.getTranslator(source, target, systemPromptOverride)
         return TranslatorState(
             source = source,
             target = target,
@@ -94,7 +94,8 @@ class TranslationManagerComposite(
     override suspend fun translateBatch(
         texts: List<String>,
         sourceLanguage: String,
-        targetLanguage: String
+        targetLanguage: String,
+        systemPromptOverride: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
@@ -110,12 +111,12 @@ class TranslationManagerComposite(
         when (activeProvider()) {
             "OPENAI" -> {
                 Log.d(TAG, "translateBatch: using OpenAI-compatible API")
-                openAiManager.translateBatch(texts, resolvedSource, targetLanguage)
+                openAiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }
             "GEMINI" -> {
                 Log.d(TAG, "translateBatch: using Gemini")
                 // No fallback — let exception propagate with descriptive message
-                geminiManager.translateBatch(texts, resolvedSource, targetLanguage)
+                geminiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }
             "GOOGLE_FREE" -> {
                 Log.d(TAG, "translateBatch: using Google Free")

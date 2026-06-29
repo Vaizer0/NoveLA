@@ -87,27 +87,33 @@ class TranslationManagerGemini(
         return models.firstOrNull { it.language == language }
     }
 
-    override fun getTranslator(source: String, target: String): TranslatorState {
-        Log.d(TAG, "getTranslator: source=$source, target=$target, apiKeysConfigured=${apiKeys.size}")
+    override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
+        Log.d(TAG, "getTranslator: source=$source, target=$target, apiKeysConfigured=${apiKeys.size}, override=${systemPromptOverride != null}")
         return TranslatorState(
             source = source,
             target = target,
-            translate = { input -> translateWithGemini(input, source, target) }
+            translate = { input -> translateWithGemini(input, source, target, systemPromptOverride = systemPromptOverride) }
         )
+    }
+
+    private fun resolveTemplatePrompt(systemPromptOverride: String?): String {
+        if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) return systemPromptOverride
+        return appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
     }
 
     private suspend fun translateWithGemini(
         text: String,
         sourceLanguage: String,
         targetLanguage: String,
-        retryCount: Int = 3
+        retryCount: Int = 3,
+        systemPromptOverride: String? = null,
     ): String = withContext(Dispatchers.IO) {
         val keys = apiKeys
         if (keys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
-        val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
-            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+        val templatePrompt = resolveTemplatePrompt(systemPromptOverride)
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
         val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
@@ -189,7 +195,8 @@ class TranslationManagerGemini(
     override suspend fun translateBatch(
         texts: List<String>,
         sourceLanguage: String,
-        targetLanguage: String
+        targetLanguage: String,
+        systemPromptOverride: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
@@ -209,8 +216,7 @@ class TranslationManagerGemini(
         if (availableKeys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
-        val templatePrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
-            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+        val templatePrompt = resolveTemplatePrompt(systemPromptOverride)
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
 
         // Numbered input keeps Gemini aligned to the existing batch parser with minimal overhead.

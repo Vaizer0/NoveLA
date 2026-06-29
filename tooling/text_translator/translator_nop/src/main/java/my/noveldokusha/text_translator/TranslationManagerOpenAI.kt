@@ -76,12 +76,14 @@ class TranslationManagerOpenAI(
         get() = appPreferences.TRANSLATION_OPENAI_MODEL.value
             .ifBlank { "gpt-4o-mini" }
 
-    private val systemPromptTemplate: String
-        get() = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
-            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
-
     private val useEnglishLocale: Boolean
         get() = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
+
+    private fun resolveTemplatePrompt(systemPromptOverride: String?): String {
+        if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) return systemPromptOverride
+        return appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
+    }
 
     override val available = true
     override val isUsingOnlineTranslation = true
@@ -105,12 +107,12 @@ class TranslationManagerOpenAI(
     override suspend fun hasModelDownloaded(language: String): TranslationModelState? =
         models.firstOrNull { it.language == language }
 
-    override fun getTranslator(source: String, target: String): TranslatorState {
-        Log.d(TAG, "getTranslator: source=$source, target=$target")
+    override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
+        Log.d(TAG, "getTranslator: source=$source, target=$target, override=${systemPromptOverride != null}")
         return TranslatorState(
             source = source,
             target = target,
-            translate = { input -> translateSingle(input, source, target) }
+            translate = { input -> translateSingle(input, source, target, systemPromptOverride) }
         )
     }
 
@@ -119,9 +121,10 @@ class TranslationManagerOpenAI(
     private suspend fun translateSingle(
         text: String,
         sourceLanguage: String,
-        targetLanguage: String
+        targetLanguage: String,
+        systemPromptOverride: String? = null,
     ): String = withContext(Dispatchers.IO) {
-        val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
+        val systemPrompt = buildPrompt(sourceLanguage, targetLanguage, systemPromptOverride)
         val responseText = sendWithKeyRotation(systemPrompt, text)
         responseText.trim().ifEmpty { text }
     }
@@ -131,7 +134,8 @@ class TranslationManagerOpenAI(
     override suspend fun translateBatch(
         texts: List<String>,
         sourceLanguage: String,
-        targetLanguage: String
+        targetLanguage: String,
+        systemPromptOverride: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
@@ -141,14 +145,14 @@ class TranslationManagerOpenAI(
         if (normalizedTexts.size > maxBatchItemsPerRequest) {
             val merged = mutableMapOf<String, String>()
             normalizedTexts.chunked(maxBatchItemsPerRequest).forEach { chunk ->
-                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage))
+                merged.putAll(translateBatch(chunk, sourceLanguage, targetLanguage, systemPromptOverride))
             }
             return@withContext merged
         }
 
         Log.d(TAG, "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage")
 
-        val systemPrompt = buildPrompt(sourceLanguage, targetLanguage)
+        val systemPrompt = buildPrompt(sourceLanguage, targetLanguage, systemPromptOverride)
 
         // All format instructions are in the system prompt.
         // User message contains only the numbered text — clean and simple.
@@ -280,8 +284,8 @@ class TranslationManagerOpenAI(
 
     // ─── Prompt building ───────────────────────────────────────────────────────
 
-    private fun buildPrompt(sourceLanguage: String, targetLanguage: String): String =
-        buildSystemPrompt(systemPromptTemplate, sourceLanguage, targetLanguage, useEnglishLocale)
+    private fun buildPrompt(sourceLanguage: String, targetLanguage: String, systemPromptOverride: String? = null): String =
+        buildSystemPrompt(resolveTemplatePrompt(systemPromptOverride), sourceLanguage, targetLanguage, useEnglishLocale)
 
     // ─── Response parsing ──────────────────────────────────────────────────────
 

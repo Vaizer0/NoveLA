@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">Seguir sistema</string>
     <string name="language_changed_to">Idioma alterado para %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">Fornecedor: %s</string>
+    <string name="language_selection">Idioma</string>
+    <string name="language_search">Selecionar idioma</string>
+    <string name="language_search_hint">Pesquisar idiomas…</string>
+    <string name="language_no_results">Nenhum idioma encontrado</string>
+    <string name="novel_prompt_title">Prompt específico da novela</string>
+    <string name="novel_prompt_placeholder">Opcional: prompt de sistema personalizado para esta novela</string>
+    <string name="novel_prompt_description_reader">Definir um prompt de sistema personalizado para esta novela</string>
+    <string name="novel_prompt_llm_only">Apenas Gemini/OpenAI</string>
+    <string name="novel_prompts_title">Prompts específicos de novelas</string>
+    <string name="novel_prompts_search">Pesquisar prompts</string>
+    <string name="novel_prompts_description">Prompts de tradução personalizados definidos por novela nas configurações do leitor</string>
+    <string name="novel_prompts_count">%d novela(s)</string>
 </resources>

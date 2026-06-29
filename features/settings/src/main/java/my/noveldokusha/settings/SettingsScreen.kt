@@ -102,6 +102,7 @@ fun SettingsScreen(
                     onAutoBackupIntervalMinutesChange = viewModel::onAutoBackupIntervalMinutesChange,
                     onAutoBackupEnabledChange = viewModel::onAutoBackupEnabledChange,
                     onAutoBackupIncludeImagesChange = viewModel::onAutoBackupIncludeImagesChange,
+                    onDeleteNovelPrompt = viewModel::onDeleteNovelPrompt,
                     modifier = Modifier.padding(innerPadding),
                 )
                 "regex-cleanup" -> {

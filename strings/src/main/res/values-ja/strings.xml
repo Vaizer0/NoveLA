@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">システムに従う</string>
     <string name="language_changed_to">言語を %s に変更しました</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">プロバイダー: %s</string>
+    <string name="language_selection">言語</string>
+    <string name="language_search">言語を選択</string>
+    <string name="language_search_hint">言語を検索…</string>
+    <string name="language_no_results">言語が見つかりません</string>
+    <string name="novel_prompt_title">小説固有のプロンプト</string>
+    <string name="novel_prompt_placeholder">オプション: この小説用のカスタムシステムプロンプト</string>
+    <string name="novel_prompt_description_reader">この小説用のカスタムシステムプロンプトを設定</string>
+    <string name="novel_prompt_llm_only">Gemini/OpenAIのみ</string>
+    <string name="novel_prompts_title">小説固有のプロンプト</string>
+    <string name="novel_prompts_search">プロンプトを検索</string>
+    <string name="novel_prompts_description">リーダー設定で小説ごとに設定されたカスタム翻訳プロンプト</string>
+    <string name="novel_prompts_count">%d 小説</string>
 </resources>

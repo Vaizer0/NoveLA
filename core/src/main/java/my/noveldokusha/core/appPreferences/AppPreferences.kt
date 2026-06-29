@@ -29,8 +29,15 @@ import my.noveldokusha.core.SharedPreference_Serializable
 import my.noveldokusha.core.SharedPreference_String
 import my.noveldokusha.core.SharedPreference_StringSet
 import my.noveldokusha.core.models.RegexRule
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
+
+@Serializable
+data class NovelPromptData(
+    val title: String = "",
+    val prompt: String = "",
+)
 
 @Singleton
 class AppPreferences @Inject constructor(
@@ -354,6 +361,46 @@ class AppPreferences @Inject constructor(
     val TRANSLATION_PROMPT_USE_ENGLISH_LOCALE =
         object : Preference<Boolean>("TRANSLATION_PROMPT_USE_ENGLISH_LOCALE") {
             override var value by SharedPreference_Boolean(name, preferences, true)
+        }
+
+    // Персональные промпты для новелл: Map<bookUrl, NovelPromptData>.
+    // Сериализуется как JSON-объект { "bookUrl1": {"title":"...","prompt":"..."}, ... }.
+    // Обратная совместимость: старый формат { "bookUrl1": "prompt1" } тоже читается.
+    val TRANSLATION_NOVEL_PROMPTS =
+        object : Preference<Map<String, NovelPromptData>>("TRANSLATION_NOVEL_PROMPTS") {
+            override var value by SharedPreference_Serializable<Map<String, NovelPromptData>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { map ->
+                    val obj = org.json.JSONObject()
+                    map.forEach { (url, data) ->
+                        obj.put(url, org.json.JSONObject().apply {
+                            put("title", data.title)
+                            put("prompt", data.prompt)
+                        })
+                    }
+                    obj.toString()
+                },
+                decode = { raw ->
+                    try {
+                        val obj = org.json.JSONObject(raw)
+                        val result = mutableMapOf<String, NovelPromptData>()
+                        for (key in obj.keys()) {
+                            val value = obj.get(key)
+                            result[key] = when (value) {
+                                is String -> NovelPromptData(prompt = value)
+                                is org.json.JSONObject -> NovelPromptData(
+                                    title = value.optString("title", ""),
+                                    prompt = value.optString("prompt", ""),
+                                )
+                                else -> NovelPromptData(prompt = value.toString())
+                            }
+                        }
+                        result
+                    } catch (_: Exception) { emptyMap() }
+                }
+            )
         }
 
     // Количество параграфов в одном LLM-запросе (только Gemini и OpenAI).

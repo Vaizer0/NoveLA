@@ -332,6 +332,14 @@ class BackupDataService : Service() {
                             }
                         }
                     ))
+                    put("TRANSLATION_NOVEL_PROMPTS", org.json.JSONObject().apply {
+                        appPreferences.TRANSLATION_NOVEL_PROMPTS.value.forEach { (url, data) ->
+                            put(url, org.json.JSONObject().apply {
+                                put("title", data.title)
+                                put("prompt", data.prompt)
+                            })
+                        }
+                    })
                 }.toString()
                 zip.putNextEntry(entry)
                 zip.write(settingsJson.toByteArray())

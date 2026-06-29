@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">Theo hệ thống</string>
     <string name="language_changed_to">Ngôn ngữ đã đổi thành %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">Nhà cung cấp: %s</string>
+    <string name="language_selection">Ngôn ngữ</string>
+    <string name="language_search">Chọn ngôn ngữ</string>
+    <string name="language_search_hint">Tìm kiếm ngôn ngữ…</string>
+    <string name="language_no_results">Không tìm thấy ngôn ngữ nào</string>
+    <string name="novel_prompt_title">Lời nhắc dành riêng cho tiểu thuyết</string>
+    <string name="novel_prompt_placeholder">Tùy chọn: lời nhắc hệ thống tùy chỉnh cho tiểu thuyết này</string>
+    <string name="novel_prompt_description_reader">Đặt lời nhắc hệ thống tùy chỉnh cho tiểu thuyết này</string>
+    <string name="novel_prompt_llm_only">Chỉ Gemini/OpenAI</string>
+    <string name="novel_prompts_title">Lời nhắc dành riêng cho tiểu thuyết</string>
+    <string name="novel_prompts_search">Tìm kiếm lời nhắc</string>
+    <string name="novel_prompts_description">Lời nhắc dịch tùy chỉnh được đặt cho mỗi tiểu thuyết trong cài đặt trình đọc</string>
+    <string name="novel_prompts_count">%d tiểu thuyết</string>
 </resources>

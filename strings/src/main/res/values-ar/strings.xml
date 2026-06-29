@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">اتباع النظام</string>
     <string name="language_changed_to">تم تغيير اللغة إلى %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">المزود: %s</string>
+    <string name="language_selection">اللغة</string>
+    <string name="language_search">اختر اللغة</string>
+    <string name="language_search_hint">البحث عن لغات…</string>
+    <string name="language_no_results">لم يتم العثور على لغات</string>
+    <string name="novel_prompt_title">موجه خاص بالرواية</string>
+    <string name="novel_prompt_placeholder">اختياري: موجه نظام مخصص لهذه الرواية</string>
+    <string name="novel_prompt_description_reader">تعيين موجه نظام مخصص لهذه الرواية</string>
+    <string name="novel_prompt_llm_only">Gemini/OpenAI فقط</string>
+    <string name="novel_prompts_title">موجهات خاصة بالروايات</string>
+    <string name="novel_prompts_search">البحث عن الموجهات</string>
+    <string name="novel_prompts_description">موجهات ترجمة مخصصة محددة لكل رواية في إعدادات القارئ</string>
+    <string name="novel_prompts_count">%d رواية</string>
 </resources>

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.NovelPromptData
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
@@ -31,18 +32,30 @@ internal data class LiveTranslationSettingData(
     val onTargetChange: (TranslationModelState?) -> Unit,
     val onDownloadTranslationModel: (language: String) -> Unit,
     val onRedoTranslation: () -> Unit,
+    val bookUrl: String = "",
+    val bookTitle: String = "",
+    val novelPrompt: MutableState<String>,
+    val onNovelPromptChange: (String) -> Unit,
+    val currentProvider: MutableState<String>,
+    val onProviderChange: (String) -> Unit,
 )
 
 internal class ReaderLiveTranslation(
     private val translationManager: TranslationManager,
     private val appPreferences: AppPreferences,
     private val chapterTranslationDao: ChapterTranslationDao? = null,
+    private val bookUrl: String = "",
+    private val bookTitleInitial: String = "",
     private val scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default + CoroutineName("LiveTranslator")
     )
 ) {
+    internal var bookTitle: String = bookTitleInitial
     // Callback to clear chapter cache (set by ReaderSession)
     var onClearChapterCache: (() -> Unit)? = null
+
+    private fun resolveNovelPrompt(): String =
+        appPreferences.TRANSLATION_NOVEL_PROMPTS.value[bookUrl]?.prompt ?: ""
 
     val state = LiveTranslationSettingData(
         isAvailable = translationManager.available,
@@ -54,7 +67,13 @@ internal class ReaderLiveTranslation(
         onSourceChange = ::onSourceChange,
         onTargetChange = ::onTargetChange,
         onDownloadTranslationModel = translationManager::downloadModel,
-        onRedoTranslation = ::onRedoTranslation
+        onRedoTranslation = ::onRedoTranslation,
+        bookUrl = bookUrl,
+        bookTitle = bookTitleInitial,
+        novelPrompt = mutableStateOf(resolveNovelPrompt()),
+        onNovelPromptChange = ::onNovelPromptChange,
+        currentProvider = mutableStateOf(appPreferences.TRANSLATION_PROVIDER.value),
+        onProviderChange = ::onProviderChange,
     )
 
     var translatorState: TranslatorState? = null
@@ -112,7 +131,8 @@ internal class ReaderLiveTranslation(
                     Log.d(TAG, "updateTranslatorState: creating translator")
                     translationManager.getTranslator(
                         source = source.language,
-                        target = target.language
+                        target = target.language,
+                        systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
                     ).also {
                         Log.d(TAG, "updateTranslatorState: translator created successfully")
                     }
@@ -180,6 +200,28 @@ internal class ReaderLiveTranslation(
         } catch (e: Exception) {
             Log.e(TAG, "onTargetChange: error", e)
             throw e
+        }
+    }
+
+    private fun onNovelPromptChange(prompt: String) {
+        state.novelPrompt.value = prompt
+        if (bookUrl.isNotBlank()) {
+            val current = appPreferences.TRANSLATION_NOVEL_PROMPTS.value.toMutableMap()
+            if (prompt.isBlank()) {
+                current.remove(bookUrl)
+            } else {
+                current[bookUrl] = NovelPromptData(title = bookTitle, prompt = prompt)
+            }
+            appPreferences.TRANSLATION_NOVEL_PROMPTS.value = current
+        }
+    }
+
+    private fun onProviderChange(provider: String) {
+        appPreferences.TRANSLATION_PROVIDER.value = provider
+        state.currentProvider.value = provider
+        val update = updateTranslatorState()
+        if (update) scope.launch {
+            _onTranslatorChanged.emit(Unit)
         }
     }
 
@@ -251,9 +293,10 @@ internal class ReaderLiveTranslation(
         }
         val source = currentState.source
         val target = currentState.target
-        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target)")
+        val systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
+        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target), novelPrompt=${systemPromptOverride != null}")
         return { texts ->
-            translationManager.translateBatch(texts, source, target)
+            translationManager.translateBatch(texts, source, target, systemPromptOverride)
         }
     }
 

@@ -100,6 +100,7 @@ internal class SettingsViewModel @Inject constructor(
         promptUseEnglishLocale = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.state(viewModelScope),
         llmBatchSize           = appPreferences.TRANSLATION_BATCH_SIZE.state(viewModelScope),
         llmMaxOutputTokens     = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.state(viewModelScope),
+        translationNovelPrompts = appPreferences.TRANSLATION_NOVEL_PROMPTS.state(viewModelScope),
         autoBackupEnabled = appPreferences.BACKUP_AUTO_ENABLED.state(viewModelScope),
         autoBackupDirectoryUri = appPreferences.BACKUP_AUTO_DIRECTORY_URI.state(viewModelScope),
         autoBackupDirectoryDisplayName = mutableStateOf(
@@ -319,6 +320,12 @@ internal class SettingsViewModel @Inject constructor(
     }
     fun onTranslationProviderChange(provider: String) {
         appPreferences.TRANSLATION_PROVIDER.value = provider
+    }
+
+    fun onDeleteNovelPrompt(bookUrl: String) {
+        val current = appPreferences.TRANSLATION_NOVEL_PROMPTS.value.toMutableMap()
+        current.remove(bookUrl)
+        appPreferences.TRANSLATION_NOVEL_PROMPTS.value = current
     }
 
     private fun updateDatabaseSize() = viewModelScope.launch {

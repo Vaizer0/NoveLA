@@ -460,4 +460,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">Как в системе</string>
     <string name="language_changed_to">Язык изменён на %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">Провайдер: %s</string>
+    <string name="language_selection">Язык</string>
+    <string name="language_search">Выбрать язык</string>
+    <string name="language_search_hint">Поиск языков…</string>
+    <string name="language_no_results">Языки не найдены</string>
+    <string name="novel_prompt_title">Промпт для новеллы</string>
+    <string name="novel_prompt_placeholder">Опционально: кастомный системный промпт для этой новеллы</string>
+    <string name="novel_prompt_description_reader">Задать кастомный системный промпт для этой новеллы</string>
+    <string name="novel_prompt_llm_only">Только Gemini/OpenAI</string>
+    <string name="novel_prompts_title">Промпты новелл</string>
+    <string name="novel_prompts_search">Поиск промптов</string>
+    <string name="novel_prompts_description">Пользовательские промпты перевода, заданные для новелл в настройках ридера</string>
+    <string name="novel_prompts_count">%d новелл(а)</string>
 </resources>

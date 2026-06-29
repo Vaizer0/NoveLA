@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">Zgodne z systemem</string>
     <string name="language_changed_to">Zmieniono język na %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">Dostawca: %s</string>
+    <string name="language_selection">Język</string>
+    <string name="language_search">Wybierz język</string>
+    <string name="language_search_hint">Szukaj języków…</string>
+    <string name="language_no_results">Nie znaleziono języków</string>
+    <string name="novel_prompt_title">Prompt specyficzny dla noweli</string>
+    <string name="novel_prompt_placeholder">Opcjonalnie: niestandardowy prompt systemowy dla tej noweli</string>
+    <string name="novel_prompt_description_reader">Ustaw niestandardowy prompt systemowy dla tej noweli</string>
+    <string name="novel_prompt_llm_only">Tylko Gemini/OpenAI</string>
+    <string name="novel_prompts_title">Prompty specyficzne dla nowel</string>
+    <string name="novel_prompts_search">Szukaj promptów</string>
+    <string name="novel_prompts_description">Niestandardowe prompty tłumaczenia ustawione dla nowel w ustawieniach czytnika</string>
+    <string name="novel_prompts_count">%d nowel(a)</string>
 </resources>

@@ -275,7 +275,11 @@ private fun ViewsPreview(
         onEnable = {},
         onSourceChange = {},
         onDownloadTranslationModel = {}
-        , onRedoTranslation = {}
+        , onRedoTranslation = {},
+        novelPrompt = remember { mutableStateOf("") },
+        onNovelPromptChange = {},
+        currentProvider = remember { mutableStateOf("GOOGLE_PA") },
+        onProviderChange = {},
     )
 
     val textToSpeechSettingData = TextToSpeechSettingData(

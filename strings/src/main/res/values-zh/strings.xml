@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">跟随系统</string>
     <string name="language_changed_to">语言已更改为 %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">提供商: %s</string>
+    <string name="language_selection">语言</string>
+    <string name="language_search">选择语言</string>
+    <string name="language_search_hint">搜索语言…</string>
+    <string name="language_no_results">未找到语言</string>
+    <string name="novel_prompt_title">小说专属提示</string>
+    <string name="novel_prompt_placeholder">可选：此小说的自定义系统提示</string>
+    <string name="novel_prompt_description_reader">为此小说设置自定义系统提示</string>
+    <string name="novel_prompt_llm_only">仅 Gemini/OpenAI</string>
+    <string name="novel_prompts_title">小说专属提示</string>
+    <string name="novel_prompts_search">搜索提示</string>
+    <string name="novel_prompts_description">在阅读器设置中为每部小说设置的自定义翻译提示</string>
+    <string name="novel_prompts_count">%d 部小说</string>
 </resources>

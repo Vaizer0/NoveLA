@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">Ikuti sistem</string>
     <string name="language_changed_to">Bahasa diubah ke %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">Penyedia: %s</string>
+    <string name="language_selection">Bahasa</string>
+    <string name="language_search">Pilih bahasa</string>
+    <string name="language_search_hint">Cari bahasa…</string>
+    <string name="language_no_results">Tidak ada bahasa ditemukan</string>
+    <string name="novel_prompt_title">Prompt khusus untuk novel</string>
+    <string name="novel_prompt_placeholder">Opsional: prompt sistem kustom untuk novel ini</string>
+    <string name="novel_prompt_description_reader">Tetapkan prompt sistem kustom untuk novel ini</string>
+    <string name="novel_prompt_llm_only">Hanya Gemini/OpenAI</string>
+    <string name="novel_prompts_title">Prompt khusus untuk novel</string>
+    <string name="novel_prompts_search">Cari prompt</string>
+    <string name="novel_prompts_description">Prompt terjemahan kustom yang ditetapkan per novel di pengaturan pembaca</string>
+    <string name="novel_prompts_count">%d novel</string>
 </resources>

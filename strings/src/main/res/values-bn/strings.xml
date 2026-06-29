@@ -516,4 +516,19 @@
     <!-- Language settings -->
     <string name="follow_system_language">সিস্টেম অনুসরণ করুন</string>
     <string name="language_changed_to">ভাষা পরিবর্তন করা হয়েছে %s</string>
+
+    <!-- ── Translation UI (reader dialog) ────────────────────────────────── -->
+    <string name="provider_name">প্রদানকারী: %s</string>
+    <string name="language_selection">ভাষা</string>
+    <string name="language_search">ভাষা নির্বাচন</string>
+    <string name="language_search_hint">ভাষা অনুসন্ধান…</string>
+    <string name="language_no_results">কোনো ভাষা পাওয়া যায়নি</string>
+    <string name="novel_prompt_title">নভেল-নির্দিষ্ট প্রম্পট</string>
+    <string name="novel_prompt_placeholder">ঐচ্ছিক: এই নভেলের জন্য কাস্টম সিস্টেম প্রম্পট</string>
+    <string name="novel_prompt_description_reader">এই নভেলের জন্য একটি কাস্টম সিস্টেম প্রম্পট সেট করুন</string>
+    <string name="novel_prompt_llm_only">শুধুমাত্র Gemini/OpenAI</string>
+    <string name="novel_prompts_title">নভেল-নির্দিষ্ট প্রম্পটসমূহ</string>
+    <string name="novel_prompts_search">প্রম্পট অনুসন্ধান</string>
+    <string name="novel_prompts_description">রিডার সেটিংসে নভেল প্রতি সেট করা কাস্টম অনুবাদ প্রম্পট</string>
+    <string name="novel_prompts_count">%d নভেল</string>
 </resources>
