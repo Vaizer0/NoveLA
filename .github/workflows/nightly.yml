@@ -1,0 +1,85 @@
+name: Nightly Build
+
+on:
+  push:
+    branches:
+      - default
+    paths-ignore:
+      - '**.md'
+      - 'screenshots/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build nightly APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK environment
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Setup APK signing
+        run: |
+          echo -n ${{ secrets.SIGNING_KEY }} | base64 -d > app/storeFile.jks
+          echo storeFile=storeFile.jks          > custom.properties
+          echo storePassword=${{ secrets.KEY_STORE_PASSWORD }} >> custom.properties
+          echo keyAlias=${{ secrets.ALIAS }}    >> custom.properties
+          echo keyPassword=${{ secrets.KEY_PASSWORD }} >> custom.properties
+
+      - name: Remove local Java home from gradle.properties
+        run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease -PlocalPropertiesFilePath=custom.properties
+
+      - name: Set app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\(.*\)"$/\1/p' app/build.gradle.kts | head -n 1)" >> "$GITHUB_ENV"
+
+      - name: Set short SHA
+        run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Collect APKs
+        run: |
+          mkdir -p release-artifacts
+          find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' \
+            -exec cp {} release-artifacts/ \;
+          ls -lah release-artifacts
+
+      - name: Delete old nightly assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view nightly --json assets --jq '.assets[].name' 2>/dev/null | \
+            xargs -r -I{} gh release delete-asset nightly "{}" --yes || true
+
+      - name: Create/update nightly release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: NoveLA nightly v${{ env.APP_VERSION }} (${{ env.SHORT_SHA }})
+          tag_name: nightly
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          draft: false
+          generate_release_notes: true
+          body: |
+            ⚠️ Автоматическая сборка из последнего коммита на ветке `${{ github.ref_name }}`.
+            Коммит: ${{ github.sha }}
+            Не является стабильным релизом — может содержать баги.
+          files: release-artifacts/*.apk
