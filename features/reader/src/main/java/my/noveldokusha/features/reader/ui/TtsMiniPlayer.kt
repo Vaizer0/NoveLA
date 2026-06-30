@@ -144,7 +144,7 @@ internal fun TtsMiniPlayer(
     }
 }
 
-private fun formatDurationCompact(seconds: Int): String {
+internal fun formatDurationCompact(seconds: Int): String {
     if (seconds <= 0) return "0s"
     val h = seconds / 3600
     val m = (seconds % 3600) / 60

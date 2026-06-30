@@ -96,6 +96,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.formatDurationCompact
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -226,29 +227,19 @@ internal fun VoiceReaderSettingDialog(
                     }
                 }
 
-                // Timer / duration estimation card
-                val wpm = state.estimatedWpm.value
                 val totalSeconds = state.estimatedTotalSeconds.value
                 val remainingSeconds = state.estimatedRemainingSeconds.value
-
-                val totalDurationStr = formatDuration(totalSeconds, stringResource(R.string.tts_hours_abbr), stringResource(R.string.tts_minutes_abbr), stringResource(R.string.tts_seconds_abbr))
-                val remainingDurationStr = formatDuration(remainingSeconds, stringResource(R.string.tts_hours_abbr), stringResource(R.string.tts_minutes_abbr), stringResource(R.string.tts_seconds_abbr))
+                val wpm = state.estimatedWpm.value
 
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -259,7 +250,7 @@ internal fun VoiceReaderSettingDialog(
                                 color = MaterialTheme.colorScheme.secondary
                             )
                             Text(
-                                text = remainingDurationStr,
+                                text = formatDurationCompact(remainingSeconds),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -276,7 +267,7 @@ internal fun VoiceReaderSettingDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${stringResource(R.string.tts_total_chapter)}: $totalDurationStr",
+                                text = formatDurationCompact(totalSeconds),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
@@ -678,17 +669,6 @@ private fun DropdownCustomSavedVoices(
     }
 }
 
-private fun formatDuration(seconds: Int, hoursLabel: String, minutesLabel: String, secondsLabel: String): String {
-    if (seconds <= 0) return "0$secondsLabel"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return buildString {
-        if (h > 0) append("$h$hoursLabel ")
-        if (m > 0 || h > 0) append("$m$minutesLabel ")
-        if (s > 0 || (h == 0 && m == 0)) append("$s$secondsLabel")
-    }.trim()
-}
 
 @Preview(group = "dialog")
 @Composable
