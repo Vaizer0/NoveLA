@@ -9,6 +9,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -88,13 +92,41 @@ internal fun ReaderScreen(
     readerContent: @Composable (paddingValues: PaddingValues) -> Unit,
 ) {
     val showReaderInfo by state.showReaderInfo
+    val selectedSetting by state.settings.selectedSetting
+    val fullScreen by state.settings.fullScreen
+
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val navBarHeightDp = remember {
+        val id = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        if (id > 0) {
+            context.resources.getDimensionPixelSize(id)
+                .let { px -> with(density) { px.toDp() } }
+        } else 0.dp
+    }
+    val bottomPadding = if (fullScreen) navBarHeightDp + 8.dp else 8.dp
 
     // Capture back action when viewing info
     BackHandler(enabled = showReaderInfo) {
         state.showReaderInfo.value = false
     }
 
-    Scaffold(
+    val miniPlayerDismissed = remember { mutableStateOf(false) }
+
+    LaunchedEffect(showReaderInfo) {
+        if (!showReaderInfo) {
+            state.settings.selectedSetting.value = Type.None
+        }
+    }
+
+    LaunchedEffect(selectedSetting) {
+        if (selectedSetting == Type.TextToSpeech) {
+            miniPlayerDismissed.value = false
+        }
+    }
+
+    Box {
+        Scaffold(
         topBar = {
             val fullScreen by rememberUpdatedState(showReaderInfo)
             AnimatedVisibility(
@@ -112,7 +144,6 @@ internal fun ReaderScreen(
                         modifier = if (fullScreen) Modifier.displayCutoutPadding() else Modifier
                     ) {
                         val chapterTitle by state.readerInfo.chapterTitle
-                        val selectedSetting by state.settings.selectedSetting
 
                         val toggleOrSet = { type: Type ->
                             state.settings.selectedSetting.value = if (selectedSetting == type) Type.None else type
@@ -164,7 +195,6 @@ internal fun ReaderScreen(
         },
         content = readerContent,
         bottomBar = {
-            val selectedSetting by state.settings.selectedSetting
             AnimatedVisibility(
                 visible = showReaderInfo,
                 enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
@@ -221,7 +251,32 @@ internal fun ReaderScreen(
                 }
             }
         }
-    )
+        )
+
+        val showMiniPlayer = !showReaderInfo &&
+            selectedSetting == Type.None &&
+            state.settings.textToSpeech.isThereActiveItem.value &&
+            !miniPlayerDismissed.value
+
+        AnimatedVisibility(
+            visible = showMiniPlayer,
+            enter = expandVertically(initialHeight = { 0 }) + fadeIn(),
+            exit = shrinkVertically(targetHeight = { 0 }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomPadding)
+        ) {
+            TtsMiniPlayer(
+                state = state.settings.textToSpeech,
+                onClose = {
+                    state.settings.textToSpeech.setPlaying(false)
+                    miniPlayerDismissed.value = true
+                },
+                chapterCurrentNumber = state.readerInfo.chapterCurrentNumber.value,
+                chaptersCount = state.readerInfo.chaptersCount.value,
+            )
+        }
+    }
 }
 
 @Composable
