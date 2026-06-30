@@ -568,6 +568,7 @@ class RestoreDataService : Service() {
                             is JSONObject -> NovelPromptData(
                                 title = value.optString("title", ""),
                                 prompt = value.optString("prompt", ""),
+                                appendMode = value.optBoolean("appendMode", false),
                             )
                             else -> NovelPromptData(prompt = value.toString())
                         }

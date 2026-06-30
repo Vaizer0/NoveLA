@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">Opsional: prompt sistem kustom untuk novel ini</string>
     <string name="novel_prompt_description_reader">Tetapkan prompt sistem kustom untuk novel ini</string>
     <string name="novel_prompt_llm_only">Hanya Gemini/OpenAI</string>
+    <string name="novel_prompt_append_mode">Tambahkan ke prompt global</string>
     <string name="novel_prompts_title">Prompt khusus untuk novel</string>
     <string name="novel_prompts_search">Cari prompt</string>
     <string name="novel_prompts_description">Prompt terjemahan kustom yang ditetapkan per novel di pengaturan pembaca</string>

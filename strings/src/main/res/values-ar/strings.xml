@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">اختياري: موجه نظام مخصص لهذه الرواية</string>
     <string name="novel_prompt_description_reader">تعيين موجه نظام مخصص لهذه الرواية</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI فقط</string>
+    <string name="novel_prompt_append_mode">إضافة إلى البرومبت العام</string>
     <string name="novel_prompts_title">موجهات خاصة بالروايات</string>
     <string name="novel_prompts_search">البحث عن الموجهات</string>
     <string name="novel_prompts_description">موجهات ترجمة مخصصة محددة لكل رواية في إعدادات القارئ</string>

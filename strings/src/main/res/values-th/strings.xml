@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">ไม่บังคับ: ข้อความแจ้งระบบที่กำหนดเองสำหรับนิยายนี้</string>
     <string name="novel_prompt_description_reader">ตั้งค่าข้อความแจ้งระบบที่กำหนดเองสำหรับนิยายนี้</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI เท่านั้น</string>
+    <string name="novel_prompt_append_mode">เพิ่มไปยังพรอมต์ส่วนกลาง</string>
     <string name="novel_prompts_title">ข้อความแจ้งเฉพาะนิยาย</string>
     <string name="novel_prompts_search">ค้นหาข้อความแจ้ง</string>
     <string name="novel_prompts_description">ข้อความแจ้งการแปลที่กำหนดเองซึ่งตั้งค่าต่อนิยายในการตั้งค่าผู้อ่าน</string>

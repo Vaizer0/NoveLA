@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">Opcional: prompt de sistema personalizado para esta novela</string>
     <string name="novel_prompt_description_reader">Establecer un prompt de sistema personalizado para esta novela</string>
     <string name="novel_prompt_llm_only">Solo Gemini/OpenAI</string>
+    <string name="novel_prompt_append_mode">Añadir al prompt global</string>
     <string name="novel_prompts_title">Prompts específicos para novelas</string>
     <string name="novel_prompts_search">Buscar prompts</string>
     <string name="novel_prompts_description">Prompts de traducción personalizados por novela en ajustes del lector</string>

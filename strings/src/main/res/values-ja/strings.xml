@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">オプション: この小説用のカスタムシステムプロンプト</string>
     <string name="novel_prompt_description_reader">この小説用のカスタムシステムプロンプトを設定</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAIのみ</string>
+    <string name="novel_prompt_append_mode">グローバルプロンプトに追加</string>
     <string name="novel_prompts_title">小説固有のプロンプト</string>
     <string name="novel_prompts_search">プロンプトを検索</string>
     <string name="novel_prompts_description">リーダー設定で小説ごとに設定されたカスタム翻訳プロンプト</string>

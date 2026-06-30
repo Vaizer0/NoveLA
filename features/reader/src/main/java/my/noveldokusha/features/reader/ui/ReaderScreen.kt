@@ -278,6 +278,8 @@ private fun ViewsPreview(
         , onRedoTranslation = {},
         novelPrompt = remember { mutableStateOf("") },
         onNovelPromptChange = {},
+        novelPromptAppendMode = remember { mutableStateOf(false) },
+        onNovelPromptAppendModeChange = {},
         currentProvider = remember { mutableStateOf("GOOGLE_PA") },
         onProviderChange = {},
     )

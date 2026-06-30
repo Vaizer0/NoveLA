@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">Optional: eigener System-Prompt für diesen Roman</string>
     <string name="novel_prompt_description_reader">Eigenen System-Prompt für diesen Roman festlegen</string>
     <string name="novel_prompt_llm_only">Nur Gemini/OpenAI</string>
+    <string name="novel_prompt_append_mode">Zum globalen Prompt hinzufügen</string>
     <string name="novel_prompts_title">Romanspezifische Prompts</string>
     <string name="novel_prompts_search">Prompts suchen</string>
     <string name="novel_prompts_description">Eigene Übersetzungs-Prompts, pro Roman in den Readereinstellungen</string>

@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">Opsyonal: custom system prompt para sa nobelang ito</string>
     <string name="novel_prompt_description_reader">Magtakda ng custom system prompt para sa nobelang ito</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI lang</string>
+    <string name="novel_prompt_append_mode">Idagdag sa global prompt</string>
     <string name="novel_prompts_title">Mga prompt na tiyak sa nobela</string>
     <string name="novel_prompts_search">Maghanap ng mga prompt</string>
     <string name="novel_prompts_description">Mga custom na prompt ng pagsasalin na itinakda bawat nobela sa mga setting ng reader</string>

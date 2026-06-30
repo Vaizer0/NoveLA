@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">Facultatif : invite système personnalisée pour ce roman</string>
     <string name="novel_prompt_description_reader">Définir une invite système personnalisée pour ce roman</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI uniquement</string>
+    <string name="novel_prompt_append_mode">Ajouter au prompt global</string>
     <string name="novel_prompts_title">Invites spécifiques aux romans</string>
     <string name="novel_prompts_search">Rechercher des invites</string>
     <string name="novel_prompts_description">Invites de traduction personnalisées définies par roman dans les réglages du lecteur</string>

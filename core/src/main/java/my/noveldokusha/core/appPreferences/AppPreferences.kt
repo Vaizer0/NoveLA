@@ -37,6 +37,7 @@ import javax.inject.Singleton
 data class NovelPromptData(
     val title: String = "",
     val prompt: String = "",
+    val appendMode: Boolean = false,
 )
 
 @Singleton
@@ -378,6 +379,7 @@ class AppPreferences @Inject constructor(
                         obj.put(url, org.json.JSONObject().apply {
                             put("title", data.title)
                             put("prompt", data.prompt)
+                            put("appendMode", data.appendMode)
                         })
                     }
                     obj.toString()
@@ -393,6 +395,7 @@ class AppPreferences @Inject constructor(
                                 is org.json.JSONObject -> NovelPromptData(
                                     title = value.optString("title", ""),
                                     prompt = value.optString("prompt", ""),
+                                    appendMode = value.optBoolean("appendMode", false),
                                 )
                                 else -> NovelPromptData(prompt = value.toString())
                             }

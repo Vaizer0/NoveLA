@@ -439,15 +439,34 @@ private fun NovelPromptSection(state: LiveTranslationSettingData) {
                         cursorColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
-                Spacer(Modifier.height(4.dp))
-                Button(
-                    onClick = {
-                        state.onNovelPromptChange(promptText)
-                        showEditor = false
-                    },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(stringResource(R.string.save))
+                    Button(
+                        onClick = {
+                            state.onNovelPromptChange(promptText)
+                            showEditor = false
+                        },
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.novel_prompt_append_mode),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = state.novelPromptAppendMode.value,
+                        onCheckedChange = { state.onNovelPromptAppendModeChange(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colorAccent(),
+                            checkedTrackColor = colorAccent().copy(alpha = 0.3f),
+                        ),
+                    )
                 }
             }
         }

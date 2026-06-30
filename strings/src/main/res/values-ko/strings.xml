@@ -527,6 +527,7 @@
     <string name="novel_prompt_placeholder">선택 사항: 이 소설의 맞춤 시스템 프롬프트</string>
     <string name="novel_prompt_description_reader">이 소설의 맞춤 시스템 프롬프트 설정</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI만</string>
+    <string name="novel_prompt_append_mode">전역 프롬프트에 추가</string>
     <string name="novel_prompts_title">소설별 프롬프트</string>
     <string name="novel_prompts_search">프롬프트 검색</string>
     <string name="novel_prompts_description">리더 설정에서 소설별로 설정된 사용자 정의 번역 프롬프트</string>

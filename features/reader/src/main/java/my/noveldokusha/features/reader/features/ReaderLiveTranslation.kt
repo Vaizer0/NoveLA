@@ -36,6 +36,8 @@ internal data class LiveTranslationSettingData(
     val bookTitle: String = "",
     val novelPrompt: MutableState<String>,
     val onNovelPromptChange: (String) -> Unit,
+    val novelPromptAppendMode: MutableState<Boolean>,
+    val onNovelPromptAppendModeChange: (Boolean) -> Unit,
     val currentProvider: MutableState<String>,
     val onProviderChange: (String) -> Unit,
 )
@@ -57,6 +59,9 @@ internal class ReaderLiveTranslation(
     private fun resolveNovelPrompt(): String =
         appPreferences.TRANSLATION_NOVEL_PROMPTS.value[bookUrl]?.prompt ?: ""
 
+    private fun resolveNovelPromptAppendMode(): Boolean =
+        appPreferences.TRANSLATION_NOVEL_PROMPTS.value[bookUrl]?.appendMode ?: false
+
     val state = LiveTranslationSettingData(
         isAvailable = translationManager.available,
         listOfAvailableModels = translationManager.models,
@@ -72,6 +77,8 @@ internal class ReaderLiveTranslation(
         bookTitle = bookTitleInitial,
         novelPrompt = mutableStateOf(resolveNovelPrompt()),
         onNovelPromptChange = ::onNovelPromptChange,
+        novelPromptAppendMode = mutableStateOf(resolveNovelPromptAppendMode()),
+        onNovelPromptAppendModeChange = ::onNovelPromptAppendModeChange,
         currentProvider = mutableStateOf(appPreferences.TRANSLATION_PROVIDER.value),
         onProviderChange = ::onProviderChange,
     )
@@ -128,7 +135,7 @@ internal class ReaderLiveTranslation(
             }
             else -> {
                 try {
-                    val systemPromptOverride = state.novelPrompt.value.takeIf { it.isNotBlank() }
+                    val systemPromptOverride = resolveSystemPromptOverride()
                     Log.d(TAG, "updateTranslatorState: creating translator, override='${systemPromptOverride?.take(200)}'")
                     translationManager.getTranslator(
                         source = source.language,
@@ -212,12 +219,41 @@ internal class ReaderLiveTranslation(
             if (prompt.isBlank()) {
                 current.remove(bookUrl)
             } else {
-                current[bookUrl] = NovelPromptData(title = bookTitle, prompt = prompt)
+                current[bookUrl] = NovelPromptData(
+                    title = bookTitle,
+                    prompt = prompt,
+                    appendMode = state.novelPromptAppendMode.value,
+                )
             }
             appPreferences.TRANSLATION_NOVEL_PROMPTS.value = current
         }
         Log.d(TAG, "onNovelPromptChange: calling onRedoTranslation()")
         onRedoTranslation()
+    }
+
+    private fun onNovelPromptAppendModeChange(appendMode: Boolean) {
+        Log.d(TAG, "onNovelPromptAppendModeChange: appendMode=$appendMode")
+        state.novelPromptAppendMode.value = appendMode
+        if (bookUrl.isNotBlank()) {
+            val current = appPreferences.TRANSLATION_NOVEL_PROMPTS.value.toMutableMap()
+            val existing = current[bookUrl] ?: NovelPromptData(title = bookTitle)
+            current[bookUrl] = existing.copy(appendMode = appendMode)
+            appPreferences.TRANSLATION_NOVEL_PROMPTS.value = current
+        }
+        Log.d(TAG, "onNovelPromptAppendModeChange: calling onRedoTranslation()")
+        onRedoTranslation()
+    }
+
+    private fun resolveSystemPromptOverride(): String? {
+        val novelPrompt = state.novelPrompt.value
+        if (novelPrompt.isBlank()) return null
+        return if (state.novelPromptAppendMode.value) {
+            val globalPrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
+            if (globalPrompt.isNotBlank()) "$globalPrompt\n\n$novelPrompt"
+            else novelPrompt
+        } else {
+            novelPrompt
+        }
     }
 
     private fun onProviderChange(provider: String) {
@@ -297,9 +333,8 @@ internal class ReaderLiveTranslation(
         }
         val source = currentState.source
         val target = currentState.target
-        val novelPromptRaw = state.novelPrompt.value
-        val systemPromptOverride = novelPromptRaw.takeIf { it.isNotBlank() }
-        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target), novelPrompt='${novelPromptRaw.take(200)}', hasOverride=${systemPromptOverride != null}")
+        val systemPromptOverride = resolveSystemPromptOverride()
+        Log.d(TAG, "getBatchTranslator: returning batch translator ($source → $target), appendMode=${state.novelPromptAppendMode.value}, hasOverride=${systemPromptOverride != null}")
         return { texts ->
             translationManager.translateBatch(texts, source, target, systemPromptOverride)
         }

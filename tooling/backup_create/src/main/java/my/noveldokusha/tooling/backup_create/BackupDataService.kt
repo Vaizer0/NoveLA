@@ -337,6 +337,7 @@ class BackupDataService : Service() {
                             put(url, org.json.JSONObject().apply {
                                 put("title", data.title)
                                 put("prompt", data.prompt)
+                                put("appendMode", data.appendMode)
                             })
                         }
                     })
