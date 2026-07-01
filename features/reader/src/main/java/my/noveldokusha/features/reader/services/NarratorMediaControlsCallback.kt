@@ -63,11 +63,11 @@ internal class NarratorMediaControlsCallback(
     }
 
     override fun onSkipToNext() {
-        readerTextToSpeech.state.playNextChapter()
+        readerTextToSpeech.state.playNextItem()
     }
 
     override fun onSkipToPrevious() {
-        readerTextToSpeech.state.playPreviousChapter()
+        readerTextToSpeech.state.playPreviousItem()
     }
 
     override fun onRewind() {
