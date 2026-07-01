@@ -72,7 +72,7 @@ interface AppDatabase {
         DownloadTaskEntity::class,
         Extension::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {

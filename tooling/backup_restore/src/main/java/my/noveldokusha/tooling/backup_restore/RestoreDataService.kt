@@ -396,6 +396,37 @@ class RestoreDataService : Service() {
                     }
                 )
 
+                // Restore chapter translations — chunked
+                notificationsCenter.modifyNotification(
+                    notificationBuilder,
+                    notificationId = notificationId
+                ) {
+                    text = getString(R.string.adding_chapters_text)
+                }
+                val totalTranslations = backupDatabase.newDatabase.chapterTranslationDao().count()
+                Timber.d("mergeToDatabase: Backup contains $totalTranslations total chapter translations")
+                processInChunks(
+                    total = totalTranslations, initialChunkSize = 500, label = "translations",
+                    fetchChunk = { limit, offset ->
+                        backupDatabase.newDatabase.chapterTranslationDao().getChunk(limit, offset)
+                    },
+                    processChunk = { chunk ->
+                        val valid = chunk.filter { it.chapterUrl in restoredChapterUrls }
+                        if (valid.isNotEmpty()) {
+                            try {
+                                appDatabase.chapterTranslationDao().insertReplace(valid)
+                            } catch (e: Exception) {
+                                valid.forEach { translation ->
+                                    try { appDatabase.chapterTranslationDao().insertReplace(translation) }
+                                    catch (translationError: Exception) {
+                                        Timber.w(translationError, "Failed to insert chapter translation")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+
                 // Restore extensions (plugins)
                 notificationsCenter.modifyNotification(
                     notificationBuilder,

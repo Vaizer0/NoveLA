@@ -919,42 +919,34 @@ class DownloadManager @Inject constructor(
             val translations = translateBatchWithRetry(paragraphs, sourceLang, targetLang)
                 ?: return false // Все попытки исчерпаны
 
-            val entities = paragraphs.mapIndexed { index, original ->
-                my.noveldokusha.feature.local_database.tables.ChapterTranslation(
-                    chapterUrl = chapterUrl,
-                    sourceLang = sourceLang,
-                    targetLang = targetLang,
-                    paragraphIndex = index,
-                    originalText = original,
-                    translatedText = translations[original] ?: original
-                )
-            }.toMutableList()
+            val translatedParagraphs = org.json.JSONArray(
+                paragraphs.map { translations[it] ?: it }
+            ).toString()
 
-            // Перевод заголовка главы
+            var titleTranslation = ""
             try {
                 val chapter = appRepository.bookChapters.get(chapterUrl)
                 if (chapter != null && chapter.title.isNotBlank()) {
-                    val titleTranslated = translationManager.translateTitle(
+                    val translated = translationManager.translateTitle(
                         chapter.title, sourceLang, targetLang
                     )
-                    if (titleTranslated != null) {
-                        entities.add(
-                            my.noveldokusha.feature.local_database.tables.ChapterTranslation(
-                                chapterUrl = chapterUrl,
-                                sourceLang = sourceLang,
-                                targetLang = targetLang,
-                                paragraphIndex = -1,
-                                originalText = chapter.title,
-                                translatedText = titleTranslated
-                            )
-                        )
+                    if (translated != null) {
+                        titleTranslation = translated
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "title translation failed", e)
             }
 
-            chapterTranslationDao.insertReplace(entities)
+            chapterTranslationDao.insertReplace(
+                my.noveldokusha.feature.local_database.tables.ChapterTranslation(
+                    chapterUrl = chapterUrl,
+                    sourceLang = sourceLang,
+                    targetLang = targetLang,
+                    translatedParagraphs = translatedParagraphs,
+                    titleTranslation = titleTranslation,
+                )
+            )
             true
         } catch (e: Exception) {
             android.util.Log.e(TAG, "translateAndSave failed", e)
