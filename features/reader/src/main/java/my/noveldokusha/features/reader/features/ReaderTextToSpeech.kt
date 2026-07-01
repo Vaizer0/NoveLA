@@ -90,6 +90,11 @@ internal class ReaderTextToSpeech(
     private val setPreferredVoiceSpeed: (voiceId: Float) -> Unit,
     private val onBufferLow: (() -> Unit)? = null,
 ) {
+    private val DECORATIVE_CHARS = """\-=*_~+#·•°─-┿"""
+    private val SEPARATOR_ONLY = Regex("""^\s*[$DECORATIVE_CHARS]{3,}\s*$""")
+    private val LEADING_DECORATIVE = Regex("""^[$DECORATIVE_CHARS]{3,}\s*""")
+    private val TRAILING_DECORATIVE = Regex("""\s*[$DECORATIVE_CHARS]{3,}$""")
+
     private val halfBuffer = 5
     private var updateJob: Job? = null
     private val manager = TextToSpeechManager(
@@ -734,11 +739,32 @@ internal class ReaderTextToSpeech(
             .toList()
     }
 
+    private fun isOnlyDecorators(text: String): Boolean {
+        if (text.isBlank()) return true
+        return text.lines().all { line ->
+            line.isBlank() || SEPARATOR_ONLY.matches(line)
+        }
+    }
+
+    private fun cleanTextForTts(text: String): String {
+        return text.lines().joinToString("\n") { line ->
+            line.replace(LEADING_DECORATIVE, "")
+                .replace(TRAILING_DECORATIVE, "")
+                .trim()
+        }
+    }
+
     private fun speakItem(item: ReaderItem) {
         when (item) {
             is ReaderItem.Text -> {
+                val displayText = item.textToDisplay
+                if (isOnlyDecorators(displayText)) return
+
+                val cleanText = cleanTextForTts(displayText)
+                if (cleanText.isBlank()) return
+
                 manager.speak(
-                    text = item.textToDisplay,
+                    text = cleanText,
                     textSynthesis = TextSynthesis(
                         itemPos = item,
                         playState = Utterance.PlayState.PLAYING
