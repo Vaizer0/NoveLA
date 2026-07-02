@@ -3,14 +3,12 @@ package my.noveldokusha.data
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import my.noveldokusha.coreui.states.NotificationsCenter
 import javax.inject.Inject
@@ -65,18 +63,13 @@ class DownloadForegroundService : android.app.Service() {
         // startForeground() ДОЛЖЕН быть первой операцией в onStartCommand
         // Android даёт ~5 секунд на вызов, иначе — ForegroundServiceDidNotStartInTimeException
         startForeground(NOTIFICATION_ID, createNotification())
-
-        if (intent?.action == ACTION_STOP) {
-            stopForegroundAndSelf()
-            return START_NOT_STICKY
-        }
-
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
         releaseWakeLock()
         super.onDestroy()
     }
@@ -89,11 +82,6 @@ class DownloadForegroundService : android.app.Service() {
             .setOngoing(true)
             .setProgress(0, 0, true)
             .build()
-    }
-
-    private fun stopForegroundAndSelf() {
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     private fun acquireWakeLock() {
@@ -120,7 +108,6 @@ class DownloadForegroundService : android.app.Service() {
     companion object {
         private const val TAG = "DownloadFgService"
         const val NOTIFICATION_ID = 999
-        const val ACTION_STOP = "my.noveldokusha.action.DOWNLOAD_FG_STOP"
 
         fun start(context: Context) {
             val intent = Intent(context, DownloadForegroundService::class.java)
@@ -132,10 +119,7 @@ class DownloadForegroundService : android.app.Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, DownloadForegroundService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            context.stopService(Intent(context, DownloadForegroundService::class.java))
         }
     }
 }
