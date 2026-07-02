@@ -692,14 +692,7 @@ class ReaderActivity : BaseActivity() {
         super.onResume()
 
         if (viewModel.readerSpeaker.isSpeaking.value) {
-            viewBind.listView.post {
-                val itemPos = viewModel.readerSpeaker.getActualPlayingPosition()
-                    ?: return@post
-                scrollToReadingPositionSmooth(
-                    chapterIndex = itemPos.chapterIndex,
-                    chapterItemPosition = itemPos.chapterItemPosition
-                )
-            }
+            viewModel.readerSpeaker.forceUpdateCurrentItemState()
         }
     }
 

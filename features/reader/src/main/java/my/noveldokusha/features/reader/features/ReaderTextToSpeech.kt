@@ -473,6 +473,21 @@ internal class ReaderTextToSpeech(
         return null
     }
 
+    /**
+     * Forces the currentActiveItemState to reflect the actual playing position
+     * from the TTS queue. This ensures that after screen unlock, the LiveData
+     * observer receives the up-to-date position instead of a stale one.
+     */
+    fun forceUpdateCurrentItemState() {
+        val playingItem = manager.queueList.values
+            .firstOrNull { it.playState == Utterance.PlayState.PLAYING }
+            ?: manager.queueList.values
+                .firstOrNull { it.playState == Utterance.PlayState.LOADING }
+        if (playingItem != null) {
+            manager.setCurrentSpeakState(playingItem)
+        }
+    }
+
     @Synchronized
     private fun playFirstVisibleItem() {
         stop()
