@@ -59,6 +59,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -112,6 +117,8 @@ internal fun ReaderScreen(
     }
 
     val miniPlayerDismissed = remember { mutableStateOf(false) }
+    val miniPlayerOffsetX = remember { mutableStateOf(0f) }
+    val miniPlayerOffsetY = remember { mutableStateOf(0f) }
 
     LaunchedEffect(showReaderInfo) {
         if (!showReaderInfo) {
@@ -265,6 +272,16 @@ internal fun ReaderScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = bottomPadding)
+                .offset { IntOffset(miniPlayerOffsetX.value.roundToInt(), miniPlayerOffsetY.value.roundToInt()) }
+                .pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            miniPlayerOffsetX.value += dragAmount.x
+                            miniPlayerOffsetY.value += dragAmount.y
+                        }
+                    )
+                }
         ) {
             TtsMiniPlayer(
                 state = state.settings.textToSpeech,
@@ -272,6 +289,7 @@ internal fun ReaderScreen(
                     state.settings.textToSpeech.setPlaying(false)
                     miniPlayerDismissed.value = true
                 },
+                onStartHere = { state.settings.textToSpeech.playFirstVisibleItem() },
                 chapterCurrentNumber = state.readerInfo.chapterCurrentNumber.value,
                 chaptersCount = state.readerInfo.chaptersCount.value,
             )
