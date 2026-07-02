@@ -449,24 +449,28 @@ internal class ReaderTextToSpeech(
      * Returns the actual current playing position directly from the TTS manager.
      * Unlike currentTextPlaying.value.itemPos which may be stale when app is backgrounded,
      * this always returns the up-to-date position from the underlying utterance state.
+     *
+     * Returns null if there is no actively playing/loading item (i.e. TTS is
+     * between chapters or has finished all content). Callers should fall back
+     * to waiting for the next currentReaderItem emission.
      */
-    fun getActualPlayingPosition(): ReaderItem.Position {
-        // Try to find currently playing item from queue
+    fun getActualPlayingPosition(): ReaderItem.Position? {
+        // All items in the queue are non-finished — the first one is the current
         val playingItem = manager.queueList.values
             .firstOrNull { it.playState == Utterance.PlayState.PLAYING }
         if (playingItem != null) {
             return playingItem.itemPos
         }
-        
-        // Fallback to LOADING item
-        val loadingItem = manager.queueList.values
-            .firstOrNull { it.playState == Utterance.PlayState.LOADING }
-        if (loadingItem != null) {
-            return loadingItem.itemPos
+
+        // Queue is empty — check if currentActiveItemState is still active
+        val currentState = currentTextPlaying.value
+        if (currentState.playState != Utterance.PlayState.FINISHED) {
+            return currentState.itemPos
         }
-        
-        // Fallback to currentActiveItemState
-        return manager.currentActiveItemState.value.itemPos
+
+        // Queue empty and state is FINISHED: TTS is between items/chapters.
+        // Don't return a stale position — let the caller wait for the next emission.
+        return null
     }
 
     @Synchronized

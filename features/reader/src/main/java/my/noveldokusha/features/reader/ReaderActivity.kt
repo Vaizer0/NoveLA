@@ -692,43 +692,13 @@ class ReaderActivity : BaseActivity() {
         super.onResume()
 
         if (viewModel.readerSpeaker.isSpeaking.value) {
-            // Get actual position directly from TTS manager to avoid stale state
-            val itemPos = viewModel.readerSpeaker.getActualPlayingPosition()
-            if (itemPos.chapterIndex >= 0) {
-                viewBind.listView.post {
-                    val firstVisible = viewBind.listView.firstVisiblePosition
-                    val lastVisible = viewBind.listView.lastVisiblePosition
-
-                    // Ищем первый видимый элемент который является Position
-                    // (Padding/Divider/BookStart не имеют позиции чтения)
-                    val firstVisiblePositionItem = (firstVisible..lastVisible)
-                        .asSequence()
-                        .mapNotNull { pos ->
-                            val idx = viewAdapter.listView.fromPositionToIndex(pos)
-                            viewModel.items.getOrNull(idx)
-                        }
-                        .filterIsInstance<ReaderItem.Position>()
-                        .firstOrNull()
-
-                    val readerIsAhead = if (firstVisiblePositionItem != null) {
-                        when {
-                            firstVisiblePositionItem.chapterIndex > itemPos.chapterIndex -> true
-                            firstVisiblePositionItem.chapterIndex == itemPos.chapterIndex ->
-                                firstVisiblePositionItem.chapterItemPosition >= itemPos.chapterItemPosition
-                            else -> false
-                        }
-                    } else {
-                        // Список ещё не перерисован после разблокировки — скроллим к TTS позиции
-                        false
-                    }
-
-                    if (!readerIsAhead) {
-                        scrollToReadingPositionSmooth(
-                            chapterIndex = itemPos.chapterIndex,
-                            chapterItemPosition = itemPos.chapterItemPosition
-                        )
-                    }
-                }
+            viewBind.listView.post {
+                val itemPos = viewModel.readerSpeaker.getActualPlayingPosition()
+                    ?: return@post
+                scrollToReadingPositionSmooth(
+                    chapterIndex = itemPos.chapterIndex,
+                    chapterItemPosition = itemPos.chapterItemPosition
+                )
             }
         }
     }
