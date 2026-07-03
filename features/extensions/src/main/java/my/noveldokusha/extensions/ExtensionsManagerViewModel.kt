@@ -354,11 +354,12 @@ class ExtensionsManagerViewModel @Inject constructor(
             state.copy(
                 availableExtensions = state.availableExtensions.map { ext ->
                     val installedVer = getInstalledVersion(ext.id)
-                    ext.copy(
-                        isInstalled       = installedVer != null,
-                        isEnabled         = isEnabled(ext.id),
-                        isUpdateAvailable = isUpdateAvailable(ext.remoteVersion, installedVer)
-                    )
+                ext.copy(
+                    isInstalled       = installedVer != null,
+                    isEnabled         = isEnabled(ext.id),
+                    version           = installedVer ?: ext.version,
+                    isUpdateAvailable = isUpdateAvailable(ext.remoteVersion, installedVer)
+                )
                 }
             )
         }
