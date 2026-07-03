@@ -596,5 +596,7 @@
     <string name="languages">Diller</string>
     <string name="refresh">Yenile</string>
     <string name="repository_settings">Depo ayarları</string>
+    <string name="installed">Yüklendi</string>
+    <string name="available">Kullanılabilir</string>
 
 </resources>

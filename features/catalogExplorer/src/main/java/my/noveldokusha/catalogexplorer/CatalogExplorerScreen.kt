@@ -4,18 +4,27 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AltRoute
+import androidx.compose.material.icons.automirrored.outlined.AltRoute
 import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,13 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import my.noveldokusha.strings.R
 import androidx.compose.ui.zIndex
+import my.noveldokusha.strings.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import my.noveldokusha.coreui.components.ChipOption
@@ -139,7 +147,14 @@ fun CatalogExplorerScreen(
                     }
                 )
 
-                // Tab Row - Browse and Extensions tabs (same style as Library)
+                // Tab row with icons
+                val selectedColor = MaterialTheme.colorScheme.onSurface
+                val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                val tabTitles = listOf(
+                    R.string.title_browse to Icons.Outlined.Explore,
+                    R.string.title_extensions to Icons.Outlined.Extension,
+                    R.string.migration_tab to Icons.AutoMirrored.Outlined.AltRoute,
+                )
                 TabRow(
                     selectedTabIndex = uiState.selectedTabIndex,
                     containerColor = MaterialTheme.colorScheme.background,
@@ -150,50 +165,42 @@ fun CatalogExplorerScreen(
                                 .tabIndicatorOffset(tabPos)
                                 .fillMaxSize()
                                 .padding(4.dp)
-                                .background(MaterialTheme.colorScheme.surfaceContainer, my.noveldokusha.coreui.theme.shapes.small)
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    RoundedCornerShape(4.dp)
+                                )
                                 .zIndex(-1f)
                         )
                     },
-                    divider = {}
+                    divider = {},
                 ) {
-                    val selectedColor = MaterialTheme.colorScheme.onSurface
-                    val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    Tab(
-                        selected = uiState.selectedTabIndex == 0,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
-                        onClick = { viewModel.setTabIndex(0) },
-                        text = {
-                            Text(
-                                text = stringResource(R.string.title_browse),
-                                color = if (uiState.selectedTabIndex == 0) selectedColor else unselectedColor,
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                    tabTitles.forEachIndexed { index, (titleRes, icon) ->
+                        Tab(
+                            selected = uiState.selectedTabIndex == index,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
+                            onClick = { viewModel.setTabIndex(index) },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    icon, null, Modifier.size(18.dp),
+                                    tint = if (uiState.selectedTabIndex == index) selectedColor else unselectedColor
+                                )
+                                Spacer(Modifier.width(2.dp))
+                                Text(
+                                    stringResource(titleRes),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    color = if (uiState.selectedTabIndex == index) selectedColor else unselectedColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
-                    )
-                    Tab(
-                        selected = uiState.selectedTabIndex == 1,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
-                        onClick = { viewModel.setTabIndex(1) },
-                        text = {
-                            Text(
-                                text = stringResource(R.string.title_extensions),
-                                color = if (uiState.selectedTabIndex == 1) selectedColor else unselectedColor,
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    )
-                    Tab(
-                        selected = uiState.selectedTabIndex == 2,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
-                        onClick = { viewModel.setTabIndex(2) },
-                        text = {
-                            Text(
-                                text = stringResource(R.string.migration_tab),
-                                color = if (uiState.selectedTabIndex == 2) selectedColor else unselectedColor,
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    )
+                    }
                 }
 
                 // Language filter chips row

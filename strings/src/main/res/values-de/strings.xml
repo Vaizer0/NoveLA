@@ -596,5 +596,7 @@
     <string name="languages">Sprachen</string>
     <string name="refresh">Aktualisieren</string>
     <string name="repository_settings">Repository-Einstellungen</string>
+    <string name="installed">Installiert</string>
+    <string name="available">Verfügbar</string>
 
 </resources>

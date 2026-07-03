@@ -596,5 +596,7 @@
     <string name="languages">Bahasa</string>
     <string name="refresh">Segarkan</string>
     <string name="repository_settings">Pengaturan repositori</string>
+    <string name="installed">Terinstal</string>
+    <string name="available">Tersedia</string>
 
 </resources>

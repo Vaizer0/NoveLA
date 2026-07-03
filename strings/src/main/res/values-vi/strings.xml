@@ -596,5 +596,7 @@
     <string name="languages">Ngôn ngữ</string>
     <string name="refresh">Làm mới</string>
     <string name="repository_settings">Cài đặt kho</string>
+    <string name="installed">Đã cài đặt</string>
+    <string name="available">Khả dụng</string>
 
 </resources>

@@ -596,5 +596,7 @@
     <string name="languages">ভাষাসমূহ</string>
     <string name="refresh">রিফ্রেশ</string>
     <string name="repository_settings">রিপোজিটরি সেটিংস</string>
+    <string name="installed">ইনস্টল করা</string>
+    <string name="available">উপলব্ধ</string>
 
 </resources>

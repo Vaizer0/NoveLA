@@ -596,5 +596,7 @@
     <string name="languages">언어</string>
     <string name="refresh">새로고침</string>
     <string name="repository_settings">저장소 설정</string>
+    <string name="installed">설치됨</string>
+    <string name="available">사용 가능</string>
 
 </resources>

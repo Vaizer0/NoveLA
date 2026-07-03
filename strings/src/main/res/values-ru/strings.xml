@@ -1,4 +1,4 @@
-﻿﻿<resources>
+﻿<resources>
     <string name="app_name">NoveLA</string>
     <string name="title_library">Библиотека</string>
     <string name="title_finder">Поиск</string>
@@ -535,6 +535,8 @@
     <string name="languages">Языки</string>
     <string name="refresh">Обновить</string>
     <string name="repository_settings">Настройки репозитория</string>
+    <string name="installed">Установлено</string>
+    <string name="available">Доступно</string>
 
 </resources>
 

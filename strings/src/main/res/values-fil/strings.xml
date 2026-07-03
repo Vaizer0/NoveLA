@@ -596,5 +596,7 @@
     <string name="languages">Mga Wika</string>
     <string name="refresh">I-refresh</string>
     <string name="repository_settings">Mga setting ng repository</string>
+    <string name="installed">Naka-install</string>
+    <string name="available">Available</string>
 
 </resources>

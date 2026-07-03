@@ -596,5 +596,7 @@
     <string name="languages">ภาษา</string>
     <string name="refresh">รีเฟรช</string>
     <string name="repository_settings">การตั้งค่าที่เก็บ</string>
+    <string name="installed">ติดตั้งแล้ว</string>
+    <string name="available">พร้อมใช้งาน</string>
 
 </resources>

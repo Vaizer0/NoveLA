@@ -596,5 +596,7 @@
     <string name="languages">言語</string>
     <string name="refresh">更新</string>
     <string name="repository_settings">リポジトリ設定</string>
+    <string name="installed">インストール済み</string>
+    <string name="available">利用可能</string>
 
 </resources>
