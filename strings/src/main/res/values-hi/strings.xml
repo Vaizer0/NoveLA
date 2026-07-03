@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">प्रॉम्प्ट खोजें</string>
     <string name="novel_prompts_description">रीडर सेटिंग्स में प्रति उपन्यास सेट किए गए कस्टम अनुवाद प्रॉम्प्ट</string>
     <string name="novel_prompts_count">%d उपन्यास</string>
+
+    <!-- Migration -->
+    <string name="migration_title">माइग्रेशन</string>
+    <string name="migration_tab">माइग्रेशन</string>
+    <string name="migration_books_count">%1$d पुस्तकें</string>
+    <string name="migration_history">इतिहास</string>
+    <string name="migration_select_books">%1$s से पुस्तकें चुनें</string>
+    <string name="migration_search_matches">मिलान खोजें</string>
+    <string name="migration_no_match">कोई मिलान नहीं मिला</string>
+    <string name="migration_searching">खोज रहा है…</string>
+    <string name="migration_search_manually">मैन्युअली खोजें</string>
+    <string name="migration_skip">छोड़ें</string>
+    <string name="migration_migrate_now">अभी माइग्रेट करें</string>
+    <string name="migration_migrate_all">सभी माइग्रेट करें</string>
+    <string name="migration_progress">माइग्रेट हो रहा है %1$d/%2$d</string>
+    <string name="migration_complete">माइग्रेशन पूर्ण</string>
+    <string name="migration_chapters_matched">%1$d / %2$d अध्याय मिले</string>
+    <string name="migration_success">सफल: %1$d, छोड़े गए: %2$d, विफल: %3$d</string>
+    <string name="migration_return_to_library">लाइब्रेरी पर वापस जाएँ</string>
+    <string name="migration_select_source">स्रोत चुनें</string>
+    <string name="migration_reading_progress">पढ़ने की प्रगति</string>
+    <string name="migration_downloaded_chapters">डाउनलोड किए गए अध्याय</string>
+    <string name="migration_translations">अनुवाद</string>
+    <string name="migration_delete_old_book">पुरानी पुस्तक हटाएँ</string>
+    <string name="migration_latest_chapter">नवीनतम: %1$s</string>
+    <string name="migration_unknown_latest">अज्ञात</string>
+    <string name="migration_select_destination">गंतव्य चुनें</string>
+    <string name="migration_confirm_migrate">पुस्तक को %1$s में माइग्रेट करें?</string>
+    <string name="migration_no_books_found">इस स्रोत में कोई पुस्तक नहीं मिली</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">लोड हो रहा है…</string>
+    <string name="download_progress_title">डाउनलोड</string>
+    <string name="download_chapters_added">अध्याय कतार में जोड़े गए</string>
+    <string name="download_resumed">डाउनलोड फिर से शुरू</string>
+    <string name="download_already_queued">पहले से कतार में है</string>
+    <string name="download_all_cached">सभी अध्याय पहले ही डाउनलोड हो चुके हैं</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">कोई स्रोत उपलब्ध नहीं</string>
+    <string name="migration_no_matches_found">कोई मिलान नहीं मिला</string>
+    <string name="migration_failed_to_load_chapters">अध्याय लोड करने में विफल</string>
+    <string name="migration_unknown_error">अज्ञात त्रुटि</string>
+    <string name="migration_no_book_selected">कोई पुस्तक चयनित नहीं</string>
+    <string name="migration_chapter_matching_not_ready">अध्याय मिलान अभी तैयार नहीं</string>
+    <string name="migration_no_sources_with_books">पुस्तकों वाला कोई स्रोत नहीं</string>
+    <string name="migration_searching_progress">%2$d में से %1$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d अ.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d अ.)</string>
+    <string name="migration_no_history">कोई माइग्रेशन इतिहास नहीं</string>
+    <string name="migration_completed_count">पूर्ण: %1$d</string>
+    <string name="migration_partial_count">आंशिक: %1$d</string>
+    <string name="migration_migrate_to">%1$s में माइग्रेट करें</string>
+    <string name="migration_clear_selection">चयन साफ़ करें</string>
+    <string name="migration_old_book_not_found">पुरानी पुस्तक नहीं मिली</string>
+    <string name="migration_no_matching_source">कोई मेल खाने वाला स्रोत नहीं</string>
+    <string name="migration_migrate_src">दूसरे स्रोत में माइग्रेट करें</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">ब्राउज़ करें</string>
+    <string name="search">खोजें</string>
+    <string name="languages">भाषाएँ</string>
+    <string name="refresh">ताज़ा करें</string>
+    <string name="repository_settings">रिपॉजिटरी सेटिंग्स</string>
+
 </resources>

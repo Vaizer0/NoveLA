@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">Maghanap ng mga prompt</string>
     <string name="novel_prompts_description">Mga custom na prompt ng pagsasalin na itinakda bawat nobela sa mga setting ng reader</string>
     <string name="novel_prompts_count">%d nobela</string>
+
+    <!-- Migration -->
+    <string name="migration_title">Migrasyon</string>
+    <string name="migration_tab">Migrasyon</string>
+    <string name="migration_books_count">%1$d aklat</string>
+    <string name="migration_history">Kasaysayan</string>
+    <string name="migration_select_books">Pumili ng mga aklat mula sa %1$s</string>
+    <string name="migration_search_matches">Maghanap ng mga tugma</string>
+    <string name="migration_no_match">Walang nakitang tugma</string>
+    <string name="migration_searching">Naghahanap…</string>
+    <string name="migration_search_manually">Maghanap nang manu-mano</string>
+    <string name="migration_skip">Laktawan</string>
+    <string name="migration_migrate_now">Mag-migrate na</string>
+    <string name="migration_migrate_all">I-migrate lahat</string>
+    <string name="migration_progress">Nagmi-migrate %1$d/%2$d</string>
+    <string name="migration_complete">Tapos na ang migrasyon</string>
+    <string name="migration_chapters_matched">%1$d / %2$d kabanata ang natugma</string>
+    <string name="migration_success">Matagumpay: %1$d, Nilaktawan: %2$d, Nabigo: %3$d</string>
+    <string name="migration_return_to_library">Bumalik sa Library</string>
+    <string name="migration_select_source">Pumili ng source</string>
+    <string name="migration_reading_progress">Pag-unlad sa pagbasa</string>
+    <string name="migration_downloaded_chapters">Mga na-download na kabanata</string>
+    <string name="migration_translations">Mga pagsasalin</string>
+    <string name="migration_delete_old_book">Burahin ang lumang aklat</string>
+    <string name="migration_latest_chapter">Pinakabago: %1$s</string>
+    <string name="migration_unknown_latest">Hindi alam</string>
+    <string name="migration_select_destination">Pumili ng destinasyon</string>
+    <string name="migration_confirm_migrate">I-migrate ang aklat sa %1$s?</string>
+    <string name="migration_no_books_found">Walang nakitang aklat sa source na ito</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">Naglo-load…</string>
+    <string name="download_progress_title">Mga Download</string>
+    <string name="download_chapters_added">Idinagdag ang mga kabanata sa pila</string>
+    <string name="download_resumed">Ipinagpatuloy ang download</string>
+    <string name="download_already_queued">Nasa pila na</string>
+    <string name="download_all_cached">Na-download na lahat ng kabanata</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">Walang available na source</string>
+    <string name="migration_no_matches_found">Walang nakitang tugma</string>
+    <string name="migration_failed_to_load_chapters">Hindi na-load ang mga kabanata</string>
+    <string name="migration_unknown_error">Hindi kilalang error</string>
+    <string name="migration_no_book_selected">Walang napiling aklat</string>
+    <string name="migration_chapter_matching_not_ready">Hindi pa handa ang pagtutugma ng kabanata</string>
+    <string name="migration_no_sources_with_books">Walang source na may aklat</string>
+    <string name="migration_searching_progress">%1$d sa %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d kab.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d kab.)</string>
+    <string name="migration_no_history">Walang kasaysayan ng migrasyon</string>
+    <string name="migration_completed_count">Nakumpleto: %1$d</string>
+    <string name="migration_partial_count">Bahagyang: %1$d</string>
+    <string name="migration_migrate_to">Mag-migrate sa %1$s</string>
+    <string name="migration_clear_selection">Alisin ang pinili</string>
+    <string name="migration_old_book_not_found">Hindi nahanap ang lumang aklat</string>
+    <string name="migration_no_matching_source">Walang tumutugmang source</string>
+    <string name="migration_migrate_src">Mag-migrate sa ibang source</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">Mag-browse</string>
+    <string name="search">Maghanap</string>
+    <string name="languages">Mga Wika</string>
+    <string name="refresh">I-refresh</string>
+    <string name="repository_settings">Mga setting ng repository</string>
+
 </resources>

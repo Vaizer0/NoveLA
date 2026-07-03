@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">プロンプトを検索</string>
     <string name="novel_prompts_description">リーダー設定で小説ごとに設定されたカスタム翻訳プロンプト</string>
     <string name="novel_prompts_count">%d 小説</string>
+
+    <!-- Migration -->
+    <string name="migration_title">移行</string>
+    <string name="migration_tab">移行</string>
+    <string name="migration_books_count">%1$d冊</string>
+    <string name="migration_history">履歴</string>
+    <string name="migration_select_books">%1$sから本を選択</string>
+    <string name="migration_search_matches">一致を検索</string>
+    <string name="migration_no_match">一致が見つかりません</string>
+    <string name="migration_searching">検索中…</string>
+    <string name="migration_search_manually">手動で検索</string>
+    <string name="migration_skip">スキップ</string>
+    <string name="migration_migrate_now">今すぐ移行</string>
+    <string name="migration_migrate_all">すべて移行</string>
+    <string name="migration_progress">移行中 %1$d/%2$d</string>
+    <string name="migration_complete">移行完了</string>
+    <string name="migration_chapters_matched">%1$d / %2$d 章が一致</string>
+    <string name="migration_success">成功: %1$d、スキップ: %2$d、失敗: %3$d</string>
+    <string name="migration_return_to_library">ライブラリに戻る</string>
+    <string name="migration_select_source">ソースを選択</string>
+    <string name="migration_reading_progress">読書進捗</string>
+    <string name="migration_downloaded_chapters">ダウンロード済みの章</string>
+    <string name="migration_translations">翻訳</string>
+    <string name="migration_delete_old_book">古い本を削除</string>
+    <string name="migration_latest_chapter">最新: %1$s</string>
+    <string name="migration_unknown_latest">不明</string>
+    <string name="migration_select_destination">移行先を選択</string>
+    <string name="migration_confirm_migrate">本を%1$sに移行しますか？</string>
+    <string name="migration_no_books_found">このソースに本が見つかりません</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">読み込み中…</string>
+    <string name="download_progress_title">ダウンロード</string>
+    <string name="download_chapters_added">章がキューに追加されました</string>
+    <string name="download_resumed">ダウンロードを再開</string>
+    <string name="download_already_queued">すでにキューにあります</string>
+    <string name="download_all_cached">すべての章がすでにダウンロード済みです</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">利用可能なソースがありません</string>
+    <string name="migration_no_matches_found">一致するものが見つかりません</string>
+    <string name="migration_failed_to_load_chapters">章の読み込みに失敗しました</string>
+    <string name="migration_unknown_error">不明なエラー</string>
+    <string name="migration_no_book_selected">本が選択されていません</string>
+    <string name="migration_chapter_matching_not_ready">章のマッチングがまだ準備できていません</string>
+    <string name="migration_no_sources_with_books">本のあるソースがありません</string>
+    <string name="migration_searching_progress">%1$d/%2$d：%3$s</string>
+    <string name="migration_chapters_count">%1$d章</string>
+    <string name="migration_source_with_chapters">%1$s（%2$d章）</string>
+    <string name="migration_no_history">移行履歴がありません</string>
+    <string name="migration_completed_count">完了：%1$d</string>
+    <string name="migration_partial_count">一部：%1$d</string>
+    <string name="migration_migrate_to">%1$sに移行</string>
+    <string name="migration_clear_selection">選択をクリア</string>
+    <string name="migration_old_book_not_found">古い本が見つかりません</string>
+    <string name="migration_no_matching_source">一致するソースがありません</string>
+    <string name="migration_migrate_src">別のソースに移行</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">ブラウズ</string>
+    <string name="search">検索</string>
+    <string name="languages">言語</string>
+    <string name="refresh">更新</string>
+    <string name="repository_settings">リポジトリ設定</string>
+
 </resources>

@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">প্রম্পট অনুসন্ধান</string>
     <string name="novel_prompts_description">রিডার সেটিংসে নভেল প্রতি সেট করা কাস্টম অনুবাদ প্রম্পট</string>
     <string name="novel_prompts_count">%d নভেল</string>
+
+    <!-- Migration -->
+    <string name="migration_title">মাইগ্রেশন</string>
+    <string name="migration_tab">মাইগ্রেশন</string>
+    <string name="migration_books_count">%1$dটি বই</string>
+    <string name="migration_history">ইতিহাস</string>
+    <string name="migration_select_books">%1$s থেকে বই নির্বাচন করুন</string>
+    <string name="migration_search_matches">মিল খুঁজুন</string>
+    <string name="migration_no_match">কোনো মিল পাওয়া যায়নি</string>
+    <string name="migration_searching">খুঁজছে…</string>
+    <string name="migration_search_manually">নিজে খুঁজুন</string>
+    <string name="migration_skip">এড়িয়ে যান</string>
+    <string name="migration_migrate_now">এখনই মাইগ্রেট করুন</string>
+    <string name="migration_migrate_all">সব মাইগ্রেট করুন</string>
+    <string name="migration_progress">মাইগ্রেট হচ্ছে %1$d/%2$d</string>
+    <string name="migration_complete">মাইগ্রেশন সম্পন্ন</string>
+    <string name="migration_chapters_matched">%1$d / %2$dটি অধ্যায় মিলেছে</string>
+    <string name="migration_success">সফল: %1$d, এড়িয়ে যাওয়া: %2$d, ব্যর্থ: %3$d</string>
+    <string name="migration_return_to_library">লাইব্রেরিতে ফিরুন</string>
+    <string name="migration_select_source">উৎস নির্বাচন করুন</string>
+    <string name="migration_reading_progress">পড়ার অগ্রগতি</string>
+    <string name="migration_downloaded_chapters">ডাউনলোড করা অধ্যায়</string>
+    <string name="migration_translations">অনুবাদ</string>
+    <string name="migration_delete_old_book">পুরনো বই মুছুন</string>
+    <string name="migration_latest_chapter">সর্বশেষ: %1$s</string>
+    <string name="migration_unknown_latest">অজানা</string>
+    <string name="migration_select_destination">গন্তব্য নির্বাচন করুন</string>
+    <string name="migration_confirm_migrate">বইটি %1$s-এ মাইগ্রেট করবেন?</string>
+    <string name="migration_no_books_found">এই উৎসে কোনো বই পাওয়া যায়নি</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">লোড হচ্ছে…</string>
+    <string name="download_progress_title">ডাউনলোড</string>
+    <string name="download_chapters_added">অধ্যায়গুলি সারিতে যুক্ত করা হয়েছে</string>
+    <string name="download_resumed">ডাউনলোড পুনরায় শুরু হয়েছে</string>
+    <string name="download_already_queued">ইতিমধ্যে সারিতে আছে</string>
+    <string name="download_all_cached">সমস্ত অধ্যায় ইতিমধ্যে ডাউনলোড করা হয়েছে</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">কোনো উৎস উপলব্ধ নেই</string>
+    <string name="migration_no_matches_found">কোনো মিল পাওয়া যায়নি</string>
+    <string name="migration_failed_to_load_chapters">অধ্যায় লোড করতে ব্যর্থ</string>
+    <string name="migration_unknown_error">অজানা ত্রুটি</string>
+    <string name="migration_no_book_selected">কোনো বই নির্বাচিত নয়</string>
+    <string name="migration_chapter_matching_not_ready">অধ্যায় মিলানো এখনও প্রস্তুত নয়</string>
+    <string name="migration_no_sources_with_books">বইসহ কোনো উৎস নেই</string>
+    <string name="migration_searching_progress">%2$d এর মধ্যে %1$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d অ.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d অ.)</string>
+    <string name="migration_no_history">কোনো মাইগ্রেশন ইতিহাস নেই</string>
+    <string name="migration_completed_count">সম্পন্ন: %1$d</string>
+    <string name="migration_partial_count">আংশিক: %1$d</string>
+    <string name="migration_migrate_to">%1$s-এ মাইগ্রেট করুন</string>
+    <string name="migration_clear_selection">নির্বাচন মুছুন</string>
+    <string name="migration_old_book_not_found">পুরোনো বই পাওয়া যায়নি</string>
+    <string name="migration_no_matching_source">কোনো মিলে যাওয়া উৎস নেই</string>
+    <string name="migration_migrate_src">অন্য উৎসে মাইগ্রেট করুন</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">ব্রাউজ করুন</string>
+    <string name="search">অনুসন্ধান</string>
+    <string name="languages">ভাষাসমূহ</string>
+    <string name="refresh">রিফ্রেশ</string>
+    <string name="repository_settings">রিপোজিটরি সেটিংস</string>
+
 </resources>

@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">ค้นหาข้อความแจ้ง</string>
     <string name="novel_prompts_description">ข้อความแจ้งการแปลที่กำหนดเองซึ่งตั้งค่าต่อนิยายในการตั้งค่าผู้อ่าน</string>
     <string name="novel_prompts_count">%d นิยาย</string>
+
+    <!-- Migration -->
+    <string name="migration_title">การย้ายข้อมูล</string>
+    <string name="migration_tab">การย้ายข้อมูล</string>
+    <string name="migration_books_count">%1$d เล่ม</string>
+    <string name="migration_history">ประวัติ</string>
+    <string name="migration_select_books">เลือกหนังสือจาก %1$s</string>
+    <string name="migration_search_matches">ค้นหาคู่ที่ตรงกัน</string>
+    <string name="migration_no_match">ไม่พบคู่ที่ตรงกัน</string>
+    <string name="migration_searching">กำลังค้นหา…</string>
+    <string name="migration_search_manually">ค้นหาด้วยตนเอง</string>
+    <string name="migration_skip">ข้าม</string>
+    <string name="migration_migrate_now">ย้ายตอนนี้</string>
+    <string name="migration_migrate_all">ย้ายทั้งหมด</string>
+    <string name="migration_progress">กำลังย้าย %1$d/%2$d</string>
+    <string name="migration_complete">การย้ายเสร็จสมบูรณ์</string>
+    <string name="migration_chapters_matched">ตรงกัน %1$d / %2$d บท</string>
+    <string name="migration_success">สำเร็จ: %1$d, ข้าม: %2$d, ล้มเหลว: %3$d</string>
+    <string name="migration_return_to_library">กลับไปยังคลังหนังสือ</string>
+    <string name="migration_select_source">เลือกแหล่งที่มา</string>
+    <string name="migration_reading_progress">ความคืบหน้าการอ่าน</string>
+    <string name="migration_downloaded_chapters">บทที่ดาวน์โหลดแล้ว</string>
+    <string name="migration_translations">คำแปล</string>
+    <string name="migration_delete_old_book">ลบหนังสือเก่า</string>
+    <string name="migration_latest_chapter">ล่าสุด: %1$s</string>
+    <string name="migration_unknown_latest">ไม่ทราบ</string>
+    <string name="migration_select_destination">เลือกปลายทาง</string>
+    <string name="migration_confirm_migrate">ย้ายหนังสือไปยัง %1$s?</string>
+    <string name="migration_no_books_found">ไม่พบหนังสือในแหล่งที่มานี้</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">กำลังโหลด…</string>
+    <string name="download_progress_title">การดาวน์โหลด</string>
+    <string name="download_chapters_added">เพิ่มบทในคิวแล้ว</string>
+    <string name="download_resumed">ดาวน์โหลดต่อแล้ว</string>
+    <string name="download_already_queued">อยู่ในคิวแล้ว</string>
+    <string name="download_all_cached">ทุกบทถูกดาวน์โหลดแล้ว</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">ไม่มีแหล่งที่มาที่พร้อมใช้งาน</string>
+    <string name="migration_no_matches_found">ไม่พบรายการที่ตรงกัน</string>
+    <string name="migration_failed_to_load_chapters">ไม่สามารถโหลดบทได้</string>
+    <string name="migration_unknown_error">ข้อผิดพลาดที่ไม่ทราบสาเหตุ</string>
+    <string name="migration_no_book_selected">ไม่ได้เลือกหนังสือ</string>
+    <string name="migration_chapter_matching_not_ready">การจับคู่บทยังไม่พร้อม</string>
+    <string name="migration_no_sources_with_books">ไม่มีแหล่งที่มาที่มีหนังสือ</string>
+    <string name="migration_searching_progress">%1$d จาก %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d บท</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d บท)</string>
+    <string name="migration_no_history">ไม่มีประวัติการย้ายข้อมูล</string>
+    <string name="migration_completed_count">เสร็จสมบูรณ์: %1$d</string>
+    <string name="migration_partial_count">บางส่วน: %1$d</string>
+    <string name="migration_migrate_to">ย้ายไปยัง %1$s</string>
+    <string name="migration_clear_selection">ล้างการเลือก</string>
+    <string name="migration_old_book_not_found">ไม่พบหนังสือเก่า</string>
+    <string name="migration_no_matching_source">ไม่มีแหล่งที่มาที่ตรงกัน</string>
+    <string name="migration_migrate_src">ย้ายไปยังแหล่งอื่น</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">เรียกดู</string>
+    <string name="search">ค้นหา</string>
+    <string name="languages">ภาษา</string>
+    <string name="refresh">รีเฟรช</string>
+    <string name="repository_settings">การตั้งค่าที่เก็บ</string>
+
 </resources>

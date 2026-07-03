@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.filled.AddLink
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -35,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.strings.R
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +50,7 @@ import my.noveldokusha.catalogexplorer.AddByUrlDialog
 import my.noveldokusha.extensions.ExtensionsScreen
 import my.noveldokusha.extensions.ExtensionsManagerViewModel
 import my.noveldokusha.extensions.ExtensionsScreenEvent
+import my.noveldokusha.tooling.novel_migration.ui.MigrationTabContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +94,15 @@ fun CatalogExplorerScreen(
         }
     }
 
+    val onMigrationSourceClick = remember(context) {
+        { source: my.noveldokusha.scraper.SourceInterface.Catalog ->
+            navigationRouteViewModel.massMigration(
+                context,
+                sourceBaseUrl = source.baseUrl
+            ).let(context::startActivity)
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -96,25 +110,30 @@ fun CatalogExplorerScreen(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                     ),
-                    title = {
-                        Text(
-                            text = "Finder",
-                            style = MaterialTheme.typography.headlineMedium
-                        )
+                        title = {
+                            Text(
+                                text = stringResource(R.string.title_finder),
+                                style = MaterialTheme.typography.headlineMedium
+                            )
                     },
                     actions = {
                         // Show different actions based on selected tab
-                        if (uiState.selectedTabIndex == 0) {
-                            BrowseTabActions(
+                        when (uiState.selectedTabIndex) {
+                            0 -> BrowseTabActions(
                                 onAddByUrlClick = { viewModel.setShowAddByUrlDialog(true) },
                                 onGlobalSearchClick = onGlobalSearchClick,
                                 onToggleLanguageChips = viewModel::toggleLanguageChips,
                             )
-                        } else {
-                            ExtensionsTabActions(
+                            1 -> ExtensionsTabActions(
                                 onRefresh = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnRefresh) },
                                 onShowRepositoryDialog = { extensionsViewModel.onEvent(ExtensionsScreenEvent.OnShowRepositoryDialog) },
                                 onToggleLanguageChips = { extensionsChipsVisible = !extensionsChipsVisible },
+                            )
+                            2 -> MigrationTabActions(
+                                onHistoryClick = {
+                                    navigationRouteViewModel.migrationHistory(context).let(context::startActivity)
+                                },
+                                onGlobalSearchClick = onGlobalSearchClick,
                             )
                         }
                     }
@@ -145,7 +164,7 @@ fun CatalogExplorerScreen(
                         onClick = { viewModel.setTabIndex(0) },
                         text = {
                             Text(
-                                text = "Browse",
+                                text = stringResource(R.string.title_browse),
                                 color = if (uiState.selectedTabIndex == 0) selectedColor else unselectedColor,
                                 style = MaterialTheme.typography.labelLarge
                             )
@@ -157,8 +176,20 @@ fun CatalogExplorerScreen(
                         onClick = { viewModel.setTabIndex(1) },
                         text = {
                             Text(
-                                text = "Extensions",
+                                text = stringResource(R.string.title_extensions),
                                 color = if (uiState.selectedTabIndex == 1) selectedColor else unselectedColor,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = uiState.selectedTabIndex == 2,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)),
+                        onClick = { viewModel.setTabIndex(2) },
+                        text = {
+                            Text(
+                                text = stringResource(R.string.migration_tab),
+                                color = if (uiState.selectedTabIndex == 2) selectedColor else unselectedColor,
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -219,6 +250,17 @@ fun CatalogExplorerScreen(
                         }
                     )
                 }
+                2 -> {
+                    // Migration tab content
+                    MigrationTabContent(
+                        innerPadding = innerPadding,
+                        onSourceClick = onMigrationSourceClick,
+                        onHistoryClick = {
+                            navigationRouteViewModel.migrationHistory(context).let(context::startActivity)
+                        },
+                        onGlobalSearchClick = onGlobalSearchClick,
+                    )
+                }
             }
         }
     )
@@ -246,13 +288,13 @@ private fun BrowseTabActions(
         IconButton(onClick = onAddByUrlClick) {
             Icon(
                 Icons.Filled.AddLink,
-                contentDescription = "Add by URL"
+                contentDescription = stringResource(R.string.add_by_url)
             )
         }
         IconButton(onClick = onGlobalSearchClick) {
             Icon(
                 imageVector = Icons.Filled.Search,
-                contentDescription = "Search"
+                contentDescription = stringResource(R.string.search)
             )
         }
 
@@ -260,8 +302,31 @@ private fun BrowseTabActions(
         IconButton(onClick = onToggleLanguageChips) {
             Icon(
                 painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                contentDescription = "Languages",
+                contentDescription = stringResource(R.string.languages),
                 modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun MigrationTabActions(
+    onHistoryClick: () -> Unit,
+    onGlobalSearchClick: () -> Unit,
+) {
+    Row {
+        IconButton(onClick = onHistoryClick) {
+            Icon(
+                imageVector = Icons.Default.History,
+                contentDescription = stringResource(R.string.migration_history),
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        IconButton(onClick = onGlobalSearchClick) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.AltRoute,
+                contentDescription = stringResource(R.string.search),
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -279,7 +344,7 @@ private fun ExtensionsTabActions(
         IconButton(onClick = onRefresh) {
             Icon(
                 imageVector = Icons.Default.Refresh,
-                contentDescription = "Refresh",
+                contentDescription = stringResource(R.string.refresh),
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -288,7 +353,7 @@ private fun ExtensionsTabActions(
         IconButton(onClick = onShowRepositoryDialog) {
             Icon(
                 imageVector = Icons.Default.Settings,
-                contentDescription = "Repository Settings",
+                contentDescription = stringResource(R.string.repository_settings),
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -297,7 +362,7 @@ private fun ExtensionsTabActions(
         IconButton(onClick = onToggleLanguageChips) {
             Icon(
                 painter = painterResource(id = my.noveldokusha.coreui.R.drawable.ic_baseline_languages_24),
-                contentDescription = "Languages",
+                contentDescription = stringResource(R.string.languages),
                 modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.onSurface
             )

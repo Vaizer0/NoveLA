@@ -247,6 +247,7 @@ internal fun databaseMigrations() = arrayOf(
         it.addColumnIfNotExists("DownloadTask", "isWaitingForNetwork", "INTEGER NOT NULL DEFAULT 0")
     },
     migration(22) { db ->
+        // Migrate ChapterTranslation from per-paragraph to per-chapter storage
         // Migrate ChapterTranslation from per-paragraph to per-chapter storage:
         //   (chapterUrl, sourceLang, targetLang, paragraphIndex, originalText, translatedText, timestamp)
         //   →
@@ -325,6 +326,29 @@ internal fun databaseMigrations() = arrayOf(
             CREATE UNIQUE INDEX IF NOT EXISTS index_ChapterTranslation_chapterUrl_sourceLang_targetLang
             ON ChapterTranslation (chapterUrl, sourceLang, targetLang)
         """)
+    },
+    migration(23) { db ->
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS migration_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                oldBookUrl TEXT NOT NULL,
+                newBookUrl TEXT NOT NULL,
+                oldSourceId TEXT NOT NULL,
+                newSourceId TEXT NOT NULL,
+                status TEXT NOT NULL,
+                chaptersTotal INTEGER NOT NULL,
+                chaptersMatched INTEGER NOT NULL,
+                chaptersWithProgress INTEGER NOT NULL,
+                chaptersWithBody INTEGER NOT NULL,
+                migratedAt INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_migration_records_oldBookUrl ON migration_records (oldBookUrl)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_migration_records_newBookUrl ON migration_records (newBookUrl)")
+    },
+    migration(24) {
+        // Empty migration to recalculate Room identity hash
+        // (entity annotations changed from initial v24 release)
     },
 )
 

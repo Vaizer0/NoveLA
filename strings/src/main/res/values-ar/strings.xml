@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">البحث عن الموجهات</string>
     <string name="novel_prompts_description">موجهات ترجمة مخصصة محددة لكل رواية في إعدادات القارئ</string>
     <string name="novel_prompts_count">%d رواية</string>
+
+    <!-- Migration -->
+    <string name="migration_title">ترحيل</string>
+    <string name="migration_tab">ترحيل</string>
+    <string name="migration_books_count">%1$d كتاب</string>
+    <string name="migration_history">السجل</string>
+    <string name="migration_select_books">اختر الكتب من %1$s</string>
+    <string name="migration_search_matches">البحث عن تطابقات</string>
+    <string name="migration_no_match">لم يتم العثور على تطابق</string>
+    <string name="migration_searching">جارٍ البحث…</string>
+    <string name="migration_search_manually">البحث يدويًا</string>
+    <string name="migration_skip">تخطي</string>
+    <string name="migration_migrate_now">ترحيل الآن</string>
+    <string name="migration_migrate_all">ترحيل الكل</string>
+    <string name="migration_progress">جارٍ الترحيل %1$d/%2$d</string>
+    <string name="migration_complete">اكتمل الترحيل</string>
+    <string name="migration_chapters_matched">%1$d / %2$d فصل متطابق</string>
+    <string name="migration_success">نجاح: %1$d، تم التخطي: %2$d، فشل: %3$d</string>
+    <string name="migration_return_to_library">العودة إلى المكتبة</string>
+    <string name="migration_select_source">اختر المصدر</string>
+    <string name="migration_reading_progress">تقدم القراءة</string>
+    <string name="migration_downloaded_chapters">الفصول التي تم تنزيلها</string>
+    <string name="migration_translations">الترجمات</string>
+    <string name="migration_delete_old_book">حذف الكتاب القديم</string>
+    <string name="migration_latest_chapter">الأحدث: %1$s</string>
+    <string name="migration_unknown_latest">غير معروف</string>
+    <string name="migration_select_destination">اختر الوجهة</string>
+    <string name="migration_confirm_migrate">ترحيل الكتاب إلى %1$s؟</string>
+    <string name="migration_no_books_found">لم يتم العثور على كتب في هذا المصدر</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">جارٍ التحميل…</string>
+    <string name="download_progress_title">التنزيلات</string>
+    <string name="download_chapters_added">تمت إضافة الفصول إلى قائمة الانتظار</string>
+    <string name="download_resumed">تم استئناف التنزيل</string>
+    <string name="download_already_queued">موجود بالفعل في قائمة الانتظار</string>
+    <string name="download_all_cached">جميع الفصول تم تنزيلها بالفعل</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">لا توجد مصادر متاحة</string>
+    <string name="migration_no_matches_found">لم يتم العثور على تطابقات</string>
+    <string name="migration_failed_to_load_chapters">فشل تحميل الفصول</string>
+    <string name="migration_unknown_error">خطأ غير معروف</string>
+    <string name="migration_no_book_selected">لم يتم تحديد كتاب</string>
+    <string name="migration_chapter_matching_not_ready">مطابقة الفصول ليست جاهزة بعد</string>
+    <string name="migration_no_sources_with_books">لا توجد مصادر تحتوي على كتب</string>
+    <string name="migration_searching_progress">%1$d من %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d ف.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d ف.)</string>
+    <string name="migration_no_history">لا يوجد سجل ترحيل</string>
+    <string name="migration_completed_count">مكتمل: %1$d</string>
+    <string name="migration_partial_count">جزئي: %1$d</string>
+    <string name="migration_migrate_to">الترحيل إلى %1$s</string>
+    <string name="migration_clear_selection">مسح التحديد</string>
+    <string name="migration_old_book_not_found">الكتاب القديم غير موجود</string>
+    <string name="migration_no_matching_source">لا يوجد مصدر مطابق</string>
+    <string name="migration_migrate_src">الترحيل إلى مصدر آخر</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">تصفح</string>
+    <string name="search">بحث</string>
+    <string name="languages">اللغات</string>
+    <string name="refresh">تحديث</string>
+    <string name="repository_settings">إعدادات المستودع</string>
+
 </resources>

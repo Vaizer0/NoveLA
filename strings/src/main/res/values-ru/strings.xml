@@ -476,4 +476,65 @@
     <string name="novel_prompts_search">Поиск промптов</string>
     <string name="novel_prompts_description">Пользовательские промпты перевода, заданные для новелл в настройках ридера</string>
     <string name="novel_prompts_count">%d новелл(а)</string>
-</resources>
+
+    <!-- Migration -->
+    <string name="migration_title">Миграция</string>
+    <string name="migration_tab">Миграция</string>
+    <string name="migration_books_count">%1$d книг</string>
+    <string name="migration_history">История</string>
+    <string name="migration_select_books">Выбрать книги из %1$s</string>
+    <string name="migration_search_matches">Поиск совпадений</string>
+    <string name="migration_no_match">Совпадений не найдено</string>
+    <string name="migration_searching">Поиск…</string>
+    <string name="migration_search_manually">Поиск вручную</string>
+    <string name="migration_skip">Пропустить</string>
+    <string name="migration_migrate_now">Мигрировать</string>
+    <string name="migration_migrate_all">Мигрировать все</string>
+    <string name="migration_progress">Миграция %1$d/%2$d</string>
+    <string name="migration_complete">Миграция завершена</string>
+    <string name="migration_chapters_matched">Совпало %1$d / %2$d глав</string>
+    <string name="migration_success">Успешно: %1$d, Пропущено: %2$d, Ошибок: %3$d</string>
+    <string name="migration_return_to_library">Вернуться в библиотеку</string>
+    <string name="migration_select_source">Выбрать источник</string>
+    <string name="migration_reading_progress">Прогресс чтения</string>
+    <string name="migration_downloaded_chapters">Загруженные главы</string>
+    <string name="migration_translations">Переводы</string>
+    <string name="migration_delete_old_book">Удалить старую книгу</string>
+    <string name="migration_latest_chapter">Последняя: %1$s</string>
+    <string name="migration_unknown_latest">Неизвестно</string>
+    <string name="migration_select_destination">Выбрать назначение</string>
+    <string name="migration_confirm_migrate">Мигрировать книгу в %1$s?</string>
+    <string name="migration_no_books_found">Книги не найдены в этом источнике</string>
+
+    <!-- Missing translations for existing strings -->
+    <string name="title_extensions">Расширения</string>
+    <string name="all_sources">Все источники</string>
+    <!-- New migration strings (extracted from hardcoded Kotlin) -->
+    <string name="migration_no_sources_available">Нет доступных источников</string>
+    <string name="migration_no_matches_found">Совпадений не найдено</string>
+    <string name="migration_failed_to_load_chapters">Не удалось загрузить главы: %s</string>
+    <string name="migration_unknown_error">Неизвестная ошибка</string>
+    <string name="migration_no_book_selected">Книга не выбрана</string>
+    <string name="migration_chapter_matching_not_ready">Сопоставление глав ещё не готово</string>
+    <string name="migration_no_sources_with_books">Нет источников с книгами в библиотеке</string>
+    <string name="migration_searching_progress">%1$d из %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d гл.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d гл.)</string>
+    <string name="migration_no_history">Нет истории миграции</string>
+    <string name="migration_completed_count">Завершено: %1$d</string>
+    <string name="migration_partial_count">Частично: %1$d</string>
+    <string name="migration_migrate_to">Мигрировать в:</string>
+    <string name="migration_clear_selection">Очистить</string>
+    <string name="migration_migrate_src">Мигрировать в другой источник</string>
+    <string name="migration_old_book_not_found">Старая книга не найдена в библиотеке</string>
+    <string name="migration_no_matching_source">Подходящий источник не найден</string>
+
+    <!-- Finder / Catalog Explorer -->
+    <string name="title_browse">Обзор</string>
+    <string name="search">Поиск</string>
+    <string name="languages">Языки</string>
+    <string name="refresh">Обновить</string>
+    <string name="repository_settings">Настройки репозитория</string>
+
+</resources>
+

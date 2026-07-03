@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">搜索提示</string>
     <string name="novel_prompts_description">在阅读器设置中为每部小说设置的自定义翻译提示</string>
     <string name="novel_prompts_count">%d 部小说</string>
+
+    <!-- Migration -->
+    <string name="migration_title">迁移</string>
+    <string name="migration_tab">迁移</string>
+    <string name="migration_books_count">%1$d 本书</string>
+    <string name="migration_history">历史</string>
+    <string name="migration_select_books">从 %1$s 选择书籍</string>
+    <string name="migration_search_matches">搜索匹配项</string>
+    <string name="migration_no_match">未找到匹配项</string>
+    <string name="migration_searching">搜索中…</string>
+    <string name="migration_search_manually">手动搜索</string>
+    <string name="migration_skip">跳过</string>
+    <string name="migration_migrate_now">立即迁移</string>
+    <string name="migration_migrate_all">迁移全部</string>
+    <string name="migration_progress">迁移中 %1$d/%2$d</string>
+    <string name="migration_complete">迁移完成</string>
+    <string name="migration_chapters_matched">%1$d / %2$d 章已匹配</string>
+    <string name="migration_success">成功: %1$d，跳过: %2$d，失败: %3$d</string>
+    <string name="migration_return_to_library">返回书库</string>
+    <string name="migration_select_source">选择源</string>
+    <string name="migration_reading_progress">阅读进度</string>
+    <string name="migration_downloaded_chapters">已下载章节</string>
+    <string name="migration_translations">翻译</string>
+    <string name="migration_delete_old_book">删除旧书</string>
+    <string name="migration_latest_chapter">最新: %1$s</string>
+    <string name="migration_unknown_latest">未知</string>
+    <string name="migration_select_destination">选择目标</string>
+    <string name="migration_confirm_migrate">将书迁移到 %1$s？</string>
+    <string name="migration_no_books_found">此源中未找到书籍</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">加载中…</string>
+    <string name="download_progress_title">下载</string>
+    <string name="download_chapters_added">章节已添加到队列</string>
+    <string name="download_resumed">下载已恢复</string>
+    <string name="download_already_queued">已在队列中</string>
+    <string name="download_all_cached">所有章节已下载完成</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">没有可用的来源</string>
+    <string name="migration_no_matches_found">未找到匹配项</string>
+    <string name="migration_failed_to_load_chapters">加载章节失败</string>
+    <string name="migration_unknown_error">未知错误</string>
+    <string name="migration_no_book_selected">未选择书籍</string>
+    <string name="migration_chapter_matching_not_ready">章节匹配尚未就绪</string>
+    <string name="migration_no_sources_with_books">没有包含书籍的来源</string>
+    <string name="migration_searching_progress">%1$d/%2$d：%3$s</string>
+    <string name="migration_chapters_count">%1$d 章</string>
+    <string name="migration_source_with_chapters">%1$s（%2$d 章）</string>
+    <string name="migration_no_history">没有迁移历史</string>
+    <string name="migration_completed_count">已完成：%1$d</string>
+    <string name="migration_partial_count">部分：%1$d</string>
+    <string name="migration_migrate_to">迁移到 %1$s</string>
+    <string name="migration_clear_selection">清除选择</string>
+    <string name="migration_old_book_not_found">未找到旧书</string>
+    <string name="migration_no_matching_source">没有匹配的来源</string>
+    <string name="migration_migrate_src">迁移到其他来源</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">浏览</string>
+    <string name="search">搜索</string>
+    <string name="languages">语言</string>
+    <string name="refresh">刷新</string>
+    <string name="repository_settings">仓库设置</string>
+
 </resources>

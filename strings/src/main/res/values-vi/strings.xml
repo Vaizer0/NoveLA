@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">Tìm kiếm lời nhắc</string>
     <string name="novel_prompts_description">Lời nhắc dịch tùy chỉnh được đặt cho mỗi tiểu thuyết trong cài đặt trình đọc</string>
     <string name="novel_prompts_count">%d tiểu thuyết</string>
+
+    <!-- Migration -->
+    <string name="migration_title">Di chuyển</string>
+    <string name="migration_tab">Di chuyển</string>
+    <string name="migration_books_count">%1$d cuốn</string>
+    <string name="migration_history">Lịch sử</string>
+    <string name="migration_select_books">Chọn sách từ %1$s</string>
+    <string name="migration_search_matches">Tìm kiếm kết quả phù hợp</string>
+    <string name="migration_no_match">Không tìm thấy kết quả phù hợp</string>
+    <string name="migration_searching">Đang tìm kiếm…</string>
+    <string name="migration_search_manually">Tìm kiếm thủ công</string>
+    <string name="migration_skip">Bỏ qua</string>
+    <string name="migration_migrate_now">Di chuyển ngay</string>
+    <string name="migration_migrate_all">Di chuyển tất cả</string>
+    <string name="migration_progress">Đang di chuyển %1$d/%2$d</string>
+    <string name="migration_complete">Di chuyển hoàn tất</string>
+    <string name="migration_chapters_matched">%1$d / %2$d chương khớp</string>
+    <string name="migration_success">Thành công: %1$d, Đã bỏ qua: %2$d, Thất bại: %3$d</string>
+    <string name="migration_return_to_library">Quay lại thư viện</string>
+    <string name="migration_select_source">Chọn nguồn</string>
+    <string name="migration_reading_progress">Tiến trình đọc</string>
+    <string name="migration_downloaded_chapters">Chương đã tải xuống</string>
+    <string name="migration_translations">Bản dịch</string>
+    <string name="migration_delete_old_book">Xóa sách cũ</string>
+    <string name="migration_latest_chapter">Mới nhất: %1$s</string>
+    <string name="migration_unknown_latest">Không xác định</string>
+    <string name="migration_select_destination">Chọn đích đến</string>
+    <string name="migration_confirm_migrate">Di chuyển sách sang %1$s?</string>
+    <string name="migration_no_books_found">Không tìm thấy sách nào trên nguồn này</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">Đang tải…</string>
+    <string name="download_progress_title">Tải xuống</string>
+    <string name="download_chapters_added">Các chương đã được thêm vào hàng đợi</string>
+    <string name="download_resumed">Đã tiếp tục tải xuống</string>
+    <string name="download_already_queued">Đã có trong hàng đợi</string>
+    <string name="download_all_cached">Tất cả chương đã được tải xuống</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">Không có nguồn nào khả dụng</string>
+    <string name="migration_no_matches_found">Không tìm thấy kết quả phù hợp</string>
+    <string name="migration_failed_to_load_chapters">Không thể tải chương</string>
+    <string name="migration_unknown_error">Lỗi không xác định</string>
+    <string name="migration_no_book_selected">Chưa chọn sách</string>
+    <string name="migration_chapter_matching_not_ready">Việc so khớp chương chưa sẵn sàng</string>
+    <string name="migration_no_sources_with_books">Không có nguồn nào có sách</string>
+    <string name="migration_searching_progress">%1$d trên %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d ch.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d ch.)</string>
+    <string name="migration_no_history">Không có lịch sử di chuyển</string>
+    <string name="migration_completed_count">Đã hoàn thành: %1$d</string>
+    <string name="migration_partial_count">Một phần: %1$d</string>
+    <string name="migration_migrate_to">Di chuyển sang %1$s</string>
+    <string name="migration_clear_selection">Xóa lựa chọn</string>
+    <string name="migration_old_book_not_found">Không tìm thấy sách cũ</string>
+    <string name="migration_no_matching_source">Không có nguồn phù hợp</string>
+    <string name="migration_migrate_src">Di chuyển sang nguồn khác</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">Duyệt</string>
+    <string name="search">Tìm kiếm</string>
+    <string name="languages">Ngôn ngữ</string>
+    <string name="refresh">Làm mới</string>
+    <string name="repository_settings">Cài đặt kho</string>
+
 </resources>

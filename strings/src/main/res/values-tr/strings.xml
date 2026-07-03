@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">İstemleri ara</string>
     <string name="novel_prompts_description">Okuyucu ayarlarında roman başına belirlenen özel çeviri istemleri</string>
     <string name="novel_prompts_count">%d roman</string>
+
+    <!-- Migration -->
+    <string name="migration_title">Taşıma</string>
+    <string name="migration_tab">Taşıma</string>
+    <string name="migration_books_count">%1$d kitap</string>
+    <string name="migration_history">Geçmiş</string>
+    <string name="migration_select_books">%1$s kaynağından kitap seç</string>
+    <string name="migration_search_matches">Eşleşme ara</string>
+    <string name="migration_no_match">Eşleşme bulunamadı</string>
+    <string name="migration_searching">Aranıyor…</string>
+    <string name="migration_search_manually">Elle ara</string>
+    <string name="migration_skip">Atla</string>
+    <string name="migration_migrate_now">Şimdi taşı</string>
+    <string name="migration_migrate_all">Tümünü taşı</string>
+    <string name="migration_progress">Taşınıyor %1$d/%2$d</string>
+    <string name="migration_complete">Taşıma tamamlandı</string>
+    <string name="migration_chapters_matched">%1$d / %2$d bölüm eşleşti</string>
+    <string name="migration_success">Başarılı: %1$d, Atlandı: %2$d, Başarısız: %3$d</string>
+    <string name="migration_return_to_library">Kütüphaneye dön</string>
+    <string name="migration_select_source">Kaynak seç</string>
+    <string name="migration_reading_progress">Okuma ilerlemesi</string>
+    <string name="migration_downloaded_chapters">İndirilen bölümler</string>
+    <string name="migration_translations">Çeviriler</string>
+    <string name="migration_delete_old_book">Eski kitabı sil</string>
+    <string name="migration_latest_chapter">Son: %1$s</string>
+    <string name="migration_unknown_latest">Bilinmiyor</string>
+    <string name="migration_select_destination">Hedef seç</string>
+    <string name="migration_confirm_migrate">Kitap %1$s adresine taşınsın mı?</string>
+    <string name="migration_no_books_found">Bu kaynakta kitap bulunamadı</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">Yükleniyor…</string>
+    <string name="download_progress_title">İndirmeler</string>
+    <string name="download_chapters_added">Bölümler kuyruğa eklendi</string>
+    <string name="download_resumed">İndirme devam ettirildi</string>
+    <string name="download_already_queued">Zaten kuyrukta</string>
+    <string name="download_all_cached">Tüm bölümler zaten indirildi</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">Kullanılabilir kaynak yok</string>
+    <string name="migration_no_matches_found">Eşleşme bulunamadı</string>
+    <string name="migration_failed_to_load_chapters">Bölümler yüklenemedi</string>
+    <string name="migration_unknown_error">Bilinmeyen hata</string>
+    <string name="migration_no_book_selected">Kitap seçilmedi</string>
+    <string name="migration_chapter_matching_not_ready">Bölüm eşleştirme henüz hazır değil</string>
+    <string name="migration_no_sources_with_books">Kitabı olan kaynak yok</string>
+    <string name="migration_searching_progress">%1$d / %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d böl.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d böl.)</string>
+    <string name="migration_no_history">Geçmişte taşıma yok</string>
+    <string name="migration_completed_count">Tamamlandı: %1$d</string>
+    <string name="migration_partial_count">Kısmi: %1$d</string>
+    <string name="migration_migrate_to">%1$s adresine taşı</string>
+    <string name="migration_clear_selection">Seçimi temizle</string>
+    <string name="migration_old_book_not_found">Eski kitap bulunamadı</string>
+    <string name="migration_no_matching_source">Eşleşen kaynak yok</string>
+    <string name="migration_migrate_src">Başka bir kaynağa taşı</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">Gözat</string>
+    <string name="search">Ara</string>
+    <string name="languages">Diller</string>
+    <string name="refresh">Yenile</string>
+    <string name="repository_settings">Depo ayarları</string>
+
 </resources>

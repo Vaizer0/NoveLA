@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">Cari prompt</string>
     <string name="novel_prompts_description">Prompt terjemahan kustom yang ditetapkan per novel di pengaturan pembaca</string>
     <string name="novel_prompts_count">%d novel</string>
+
+    <!-- Migration -->
+    <string name="migration_title">Migrasi</string>
+    <string name="migration_tab">Migrasi</string>
+    <string name="migration_books_count">%1$d buku</string>
+    <string name="migration_history">Riwayat</string>
+    <string name="migration_select_books">Pilih buku dari %1$s</string>
+    <string name="migration_search_matches">Cari kecocokan</string>
+    <string name="migration_no_match">Tidak ditemukan kecocokan</string>
+    <string name="migration_searching">Mencari…</string>
+    <string name="migration_search_manually">Cari manual</string>
+    <string name="migration_skip">Lewati</string>
+    <string name="migration_migrate_now">Migrasi sekarang</string>
+    <string name="migration_migrate_all">Migrasi semua</string>
+    <string name="migration_progress">Migrasi %1$d/%2$d</string>
+    <string name="migration_complete">Migrasi selesai</string>
+    <string name="migration_chapters_matched">%1$d / %2$d bab cocok</string>
+    <string name="migration_success">Berhasil: %1$d, Dilewati: %2$d, Gagal: %3$d</string>
+    <string name="migration_return_to_library">Kembali ke perpustakaan</string>
+    <string name="migration_select_source">Pilih sumber</string>
+    <string name="migration_reading_progress">Progres membaca</string>
+    <string name="migration_downloaded_chapters">Bab yang diunduh</string>
+    <string name="migration_translations">Terjemahan</string>
+    <string name="migration_delete_old_book">Hapus buku lama</string>
+    <string name="migration_latest_chapter">Terbaru: %1$s</string>
+    <string name="migration_unknown_latest">Tidak diketahui</string>
+    <string name="migration_select_destination">Pilih tujuan</string>
+    <string name="migration_confirm_migrate">Migrasi buku ke %1$s?</string>
+    <string name="migration_no_books_found">Tidak ada buku ditemukan di sumber ini</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">Memuat…</string>
+    <string name="download_progress_title">Unduhan</string>
+    <string name="download_chapters_added">Bab ditambahkan ke antrean</string>
+    <string name="download_resumed">Unduhan dilanjutkan</string>
+    <string name="download_already_queued">Sudah dalam antrean</string>
+    <string name="download_all_cached">Semua bab sudah diunduh</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">Tidak ada sumber tersedia</string>
+    <string name="migration_no_matches_found">Tidak ada kecocokan ditemukan</string>
+    <string name="migration_failed_to_load_chapters">Gagal memuat bab</string>
+    <string name="migration_unknown_error">Kesalahan tidak diketahui</string>
+    <string name="migration_no_book_selected">Tidak ada buku dipilih</string>
+    <string name="migration_chapter_matching_not_ready">Pencocokan bab belum siap</string>
+    <string name="migration_no_sources_with_books">Tidak ada sumber dengan buku</string>
+    <string name="migration_searching_progress">%1$d dari %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d bab</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d bab)</string>
+    <string name="migration_no_history">Tidak ada riwayat migrasi</string>
+    <string name="migration_completed_count">Selesai: %1$d</string>
+    <string name="migration_partial_count">Sebagian: %1$d</string>
+    <string name="migration_migrate_to">Migrasi ke %1$s</string>
+    <string name="migration_clear_selection">Hapus pilihan</string>
+    <string name="migration_old_book_not_found">Buku lama tidak ditemukan</string>
+    <string name="migration_no_matching_source">Tidak ada sumber yang cocok</string>
+    <string name="migration_migrate_src">Migrasi ke sumber lain</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">Jelajahi</string>
+    <string name="search">Cari</string>
+    <string name="languages">Bahasa</string>
+    <string name="refresh">Segarkan</string>
+    <string name="repository_settings">Pengaturan repositori</string>
+
 </resources>

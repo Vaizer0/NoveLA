@@ -532,4 +532,69 @@
     <string name="novel_prompts_search">Prompts suchen</string>
     <string name="novel_prompts_description">Eigene Übersetzungs-Prompts, pro Roman in den Readereinstellungen</string>
     <string name="novel_prompts_count">%d Roman(e)</string>
+
+    <!-- Migration -->
+    <string name="migration_title">Migration</string>
+    <string name="migration_tab">Migration</string>
+    <string name="migration_books_count">%1$d Bücher</string>
+    <string name="migration_history">Verlauf</string>
+    <string name="migration_select_books">Bücher aus %1$s auswählen</string>
+    <string name="migration_search_matches">Nach Übereinstimmungen suchen</string>
+    <string name="migration_no_match">Keine Übereinstimmung gefunden</string>
+    <string name="migration_searching">Suche…</string>
+    <string name="migration_search_manually">Manuell suchen</string>
+    <string name="migration_skip">Überspringen</string>
+    <string name="migration_migrate_now">Jetzt migrieren</string>
+    <string name="migration_migrate_all">Alle migrieren</string>
+    <string name="migration_progress">Migriere %1$d/%2$d</string>
+    <string name="migration_complete">Migration abgeschlossen</string>
+    <string name="migration_chapters_matched">%1$d / %2$d Kapitel zugeordnet</string>
+    <string name="migration_success">Erfolg: %1$d, Übersprungen: %2$d, Fehler: %3$d</string>
+    <string name="migration_return_to_library">Zurück zur Bibliothek</string>
+    <string name="migration_select_source">Quelle auswählen</string>
+    <string name="migration_reading_progress">Lesefortschritt</string>
+    <string name="migration_downloaded_chapters">Heruntergeladene Kapitel</string>
+    <string name="migration_translations">Übersetzungen</string>
+    <string name="migration_delete_old_book">Altes Buch löschen</string>
+    <string name="migration_latest_chapter">Neuestes: %1$s</string>
+    <string name="migration_unknown_latest">Unbekannt</string>
+    <string name="migration_select_destination">Ziel auswählen</string>
+    <string name="migration_confirm_migrate">Buch zu %1$s migrieren?</string>
+    <string name="migration_no_books_found">Keine Bücher in dieser Quelle gefunden</string>
+
+    <!-- CoreUI unique -->
+    <string name="loading">Laden…</string>
+    <string name="download_progress_title">Downloads</string>
+    <string name="download_chapters_added">Kapitel zur Warteschlange hinzugefügt</string>
+    <string name="download_resumed">Download fortgesetzt</string>
+    <string name="download_already_queued">Bereits in der Warteschlange</string>
+    <string name="download_all_cached">Alle Kapitel bereits heruntergeladen</string>
+
+    <!-- Migration from hardcoded strings -->
+    <string name="migration_no_sources_available">Keine Quellen verfügbar</string>
+    <string name="migration_no_matches_found">Keine Übereinstimmungen gefunden</string>
+    <string name="migration_failed_to_load_chapters">Kapitel konnten nicht geladen werden</string>
+    <string name="migration_unknown_error">Unbekannter Fehler</string>
+    <string name="migration_no_book_selected">Kein Buch ausgewählt</string>
+    <string name="migration_chapter_matching_not_ready">Kapitelabgleich noch nicht bereit</string>
+    <string name="migration_no_sources_with_books">Keine Quellen mit Büchern</string>
+    <string name="migration_searching_progress">%1$d von %2$d: %3$s</string>
+    <string name="migration_chapters_count">%1$d Kap.</string>
+    <string name="migration_source_with_chapters">%1$s (%2$d Kap.)</string>
+    <string name="migration_no_history">Keine Migrationen in der Historie</string>
+    <string name="migration_completed_count">Abgeschlossen: %1$d</string>
+    <string name="migration_partial_count">Teilweise: %1$d</string>
+    <string name="migration_migrate_to">Migrieren zu %1$s</string>
+    <string name="migration_clear_selection">Auswahl aufheben</string>
+    <string name="migration_old_book_not_found">Altes Buch nicht gefunden</string>
+    <string name="migration_no_matching_source">Keine passende Quelle</string>
+    <string name="migration_migrate_src">Zu einer anderen Quelle migrieren</string>
+
+    <!-- Finder / Catalog -->
+    <string name="title_browse">Durchsuchen</string>
+    <string name="search">Suche</string>
+    <string name="languages">Sprachen</string>
+    <string name="refresh">Aktualisieren</string>
+    <string name="repository_settings">Repository-Einstellungen</string>
+
 </resources>

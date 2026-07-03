@@ -86,4 +86,7 @@ interface ChapterTranslationDao {
 
     @Query("SELECT * FROM ChapterTranslation LIMIT :limit OFFSET :offset")
     suspend fun getChunk(limit: Int, offset: Int): List<ChapterTranslation>
+
+    @Query("SELECT * FROM ChapterTranslation WHERE chapterUrl IN (:chapterUrls)")
+    suspend fun getTranslationsByChapterUrls(chapterUrls: List<String>): List<ChapterTranslation>
 }
