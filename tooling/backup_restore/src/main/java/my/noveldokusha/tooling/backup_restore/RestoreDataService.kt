@@ -439,17 +439,15 @@ class RestoreDataService : Service() {
                 if (backupExtensions.isNotEmpty()) {
                     Timber.d("mergeToDatabase: Found ${backupExtensions.size} extensions in backup, overwritePlugins=$overwritePlugins")
                     if (overwritePlugins) {
-                        appDatabase.extensionDao().insert(backupExtensions)
-                        Timber.d("mergeToDatabase: Overwritten ${backupExtensions.size} extensions")
-                    } else {
-                        val currentExtensionIds = appDatabase.extensionDao().getAll().map { it.id }.toSet()
-                        val newExtensions = backupExtensions.filter { it.id !in currentExtensionIds }
-                        if (newExtensions.isNotEmpty()) {
-                            appDatabase.extensionDao().insert(newExtensions)
-                            Timber.d("mergeToDatabase: Added ${newExtensions.size} new extensions (kept existing)")
-                        } else {
-                            Timber.d("mergeToDatabase: No new extensions to add")
+                        backupExtensions.forEach { backupExt ->
+                            val current = appDatabase.extensionDao().get(backupExt.id)
+                            if (current == null || compareVersions(backupExt.version, current.version) > 0) {
+                                appDatabase.extensionDao().insert(backupExt)
+                            }
                         }
+                        Timber.d("mergeToDatabase: Processed ${backupExtensions.size} extensions with version check")
+                    } else {
+                        Timber.d("mergeToDatabase: Skipping all extensions (overwritePlugins=false)")
                     }
                 } else {
                     Timber.d("mergeToDatabase: No extensions in backup")
@@ -668,7 +666,8 @@ class RestoreDataService : Service() {
                             when {
                                 entry.name == "database.sqlite3" -> mergeToDatabase(zipStream)
                                 entry.name == "settings.json" -> mergeToSettings(zipStream)
-                                entry.name.startsWith("lua_extensions/") -> mergeToLuaExtensions(entry, zipStream)
+                                entry.name.startsWith("lua_extensions/") && overwritePlugins -> mergeToLuaExtensions(entry, zipStream)
+                                entry.name.startsWith("lua_extensions/") -> Timber.d("restoreData: Skipping plugin (overwritePlugins=false): ${entry.name}")
                                 entry.name.startsWith("books/") -> mergeToBookFolder(entry, zipStream)
                                 else -> Timber.w("restoreData: Skipping unknown entry: ${entry.name}")
                             }
@@ -723,5 +722,15 @@ class RestoreDataService : Service() {
         } catch (e: Exception) {
             Timber.e(e, "restoreData: Failed to restart Activity")
         }
+    }
+
+    private fun compareVersions(v1: String, v2: String): Int {
+        val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
+        val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(parts1.size, parts2.size)) {
+            val cmp = (parts1.getOrElse(i) { 0 }).compareTo(parts2.getOrElse(i) { 0 })
+            if (cmp != 0) return cmp
+        }
+        return 0
     }
 }

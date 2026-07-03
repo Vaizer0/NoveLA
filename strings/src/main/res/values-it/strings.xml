@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Opzioni di ripristino</string>
     <string name="overwrite_plugins">Sovrascrivi plugin</string>
-    <string name="overwrite_plugins_description">Sovrascrivi i plugin installati con quelli del backup. Deseleziona per mantenere i tuoi plugin attuali.</string>
+    <string name="overwrite_plugins_description">Installa nuovi plugin e aggiorna quelli esistenti solo se la versione del backup è più recente. Deseleziona per saltare tutti i dati dei plugin.</string>
     <string name="restore_settings">Ripristina impostazioni</string>
     <string name="restore_settings_description">Ripristina chiavi API e categorie libreria dal backup.</string>
     <string name="restoring_plugins">Ripristino plugin in corso...</string>

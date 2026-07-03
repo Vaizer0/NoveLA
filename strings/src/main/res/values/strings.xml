@@ -470,7 +470,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Restore options</string>
     <string name="overwrite_plugins">Overwrite plugins</string>
-    <string name="overwrite_plugins_description">Overwrite installed plugins with those from the backup. Uncheck to keep your current plugins.</string>
+    <string name="overwrite_plugins_description">Install new and update existing plugins from backup only if the backup version is newer. Uncheck to skip all plugin data.</string>
     <string name="restore_settings">Restore settings</string>
     <string name="restore_settings_description">Restore API keys and library categories from the backup.</string>
     <string name="restoring_plugins">Restoring plugins…</string>

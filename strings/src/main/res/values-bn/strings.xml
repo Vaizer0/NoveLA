@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">পুনরুদ্ধার বিকল্প</string>
     <string name="overwrite_plugins">প্লাগইন ওভাররাইট করুন</string>
-    <string name="overwrite_plugins_description">ব্যাকআপ থেকে ইনস্টল করা প্লাগইন ওভাররাইট করুন। আপনার বর্তমান প্লাগইন রাখতে আনচেক করুন।</string>
+    <string name="overwrite_plugins_description">শুধুমাত্র যখন ব্যাকআপ সংস্করণ নতুন হয় তখন নতুন প্লাগইন ইনস্টল করুন এবং বিদ্যমান প্লাগইন আপডেট করুন। সমস্ত প্লাগইন ডেটা এড়িয়ে যেতে আনচেক করুন।</string>
     <string name="restore_settings">সেটিংস পুনরুদ্ধার</string>
     <string name="restore_settings_description">ব্যাকআপ থেকে API কী এবং লাইব্রেরি বিভাগ পুনরুদ্ধার করুন।</string>
     <string name="restoring_plugins">প্লাগইন পুনরুদ্ধার করা হচ্ছে…</string>

@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">복원 옵션</string>
     <string name="overwrite_plugins">플러그인 덮어쓰기</string>
-    <string name="overwrite_plugins_description">설치된 플러그인을 백업의 플러그인으로 덮어씁니다. 체크 해제하면 현재 플러그인을 유지합니다.</string>
+    <string name="overwrite_plugins_description">백업 버전이 더 새로운 경우에만 새 플러그인을 설치하고 기존 플러그인을 업데이트합니다. 체크 해제하면 모든 플러그인 데이터를 건너뜁니다.</string>
     <string name="restore_settings">설정 복원</string>
     <string name="restore_settings_description">백업에서 API 키 및 라이브러리 카테고리를 복원합니다.</string>
     <string name="restoring_plugins">플러그인 복원 중…</string>

@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">पुनर्स्थापना विकल्प</string>
     <string name="overwrite_plugins">प्लगइन अधिलेखित करें</string>
-    <string name="overwrite_plugins_description">बैकअप से इंस्टॉल किए गए प्लगइन को अधिलेखित करें। अपने वर्तमान प्लगइन रखने के लिए अनचेक करें।</string>
+    <string name="overwrite_plugins_description">नए प्लगइन इंस्टॉल करें और मौजूदा प्लगइन को केवल तब अपडेट करें जब बैकअप संस्करण नया हो। सभी प्लगइन डेटा को छोड़ने के लिए अनचेक करें।</string>
     <string name="restore_settings">सेटिंग्स पुनर्स्थापित करें</string>
     <string name="restore_settings_description">बैकअप से API कुंजियाँ और लाइब्रेरी श्रेणियाँ पुनर्स्थापित करें।</string>
     <string name="restoring_plugins">प्लगइन पुनर्स्थापित हो रहे हैं…</string>

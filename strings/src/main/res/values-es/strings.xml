@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Opciones de restauración</string>
     <string name="overwrite_plugins">Sobrescribir plugins</string>
-    <string name="overwrite_plugins_description">Sobrescribe los plugins instalados con los de la copia de seguridad. Desmarca para conservar tus plugins actuales.</string>
+    <string name="overwrite_plugins_description">Instalar nuevos plugins y actualizar los existentes solo si la versión de la copia de seguridad es más nueva. Desmarca para omitir todos los datos de plugins.</string>
     <string name="restore_settings">Restaurar ajustes</string>
     <string name="restore_settings_description">Restaurar claves API y categorías de biblioteca desde la copia de seguridad.</string>
     <string name="restoring_plugins">Restaurando plugins…</string>

@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Options de restauration</string>
     <string name="overwrite_plugins">Écraser les plugins</string>
-    <string name="overwrite_plugins_description">Écraser les plugins installés par ceux de la sauvegarde. Décochez pour conserver vos plugins actuels.</string>
+    <string name="overwrite_plugins_description">Installer les nouveaux plugins et mettre à jour les existants uniquement si la version de sauvegarde est plus récente. Décochez pour ignorer toutes les données des plugins.</string>
     <string name="restore_settings">Restaurer les paramètres</string>
     <string name="restore_settings_description">Restaurer les clés API et les catégories de bibliothèque depuis la sauvegarde.</string>
     <string name="restoring_plugins">Restauration des plugins…</string>

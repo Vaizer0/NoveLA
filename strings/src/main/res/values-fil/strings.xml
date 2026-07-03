@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Mga opsyon sa pag-restore</string>
     <string name="overwrite_plugins">I-overwrite ang mga plugin</string>
-    <string name="overwrite_plugins_description">I-overwrite ang mga naka-install na plugin gamit ang mga mula sa backup. Alisan ng check upang panatilihin ang iyong kasalukuyang mga plugin.</string>
+    <string name="overwrite_plugins_description">Mag-install ng mga bagong plugin at i-update ang mga umiiral na plugin kung mas bago ang bersyon ng backup. Alisan ng check upang laktawan ang lahat ng data ng plugin.</string>
     <string name="restore_settings">I-restore ang mga setting</string>
     <string name="restore_settings_description">I-restore ang mga API key at kategorya ng aklatan mula sa backup.</string>
     <string name="restoring_plugins">Ini-restore ang mga plugin…</string>

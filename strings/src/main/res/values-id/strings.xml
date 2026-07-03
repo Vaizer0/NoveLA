@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Opsi pemulihan</string>
     <string name="overwrite_plugins">Timpa plugin</string>
-    <string name="overwrite_plugins_description">Timpa plugin yang terinstal dengan yang dari cadangan. Hapus centang untuk mempertahankan plugin Anda saat ini.</string>
+    <string name="overwrite_plugins_description">Instal plugin baru dan perbarui yang sudah ada hanya jika versi cadangan lebih baru. Hapus centang untuk melewati semua data plugin.</string>
     <string name="restore_settings">Pulihkan pengaturan</string>
     <string name="restore_settings_description">Pulihkan kunci API dan kategori perpustakaan dari cadangan.</string>
     <string name="restoring_plugins">Memulihkan plugin…</string>

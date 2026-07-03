@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Pilihan pemulihan</string>
     <string name="overwrite_plugins">Tulis ganti plugin</string>
-    <string name="overwrite_plugins_description">Tulis ganti plugin yang dipasang dengan plugin dari sandaran. Nyah tanda untuk kekalkan plugin semasa.</string>
+    <string name="overwrite_plugins_description">Pasang plugin baharu dan kemas kini yang sedia ada hanya jika versi sandaran lebih baharu. Nyah tanda untuk langkau semua data plugin.</string>
     <string name="restore_settings">Pulihkan tetapan</string>
     <string name="restore_settings_description">Pulihkan kunci API dan kategori perpustakaan dari sandaran.</string>
     <string name="restoring_plugins">Memulihkan plugin…</string>

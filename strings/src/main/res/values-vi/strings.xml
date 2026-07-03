@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Tùy chọn khôi phục</string>
     <string name="overwrite_plugins">Ghi đè plugin</string>
-    <string name="overwrite_plugins_description">Ghi đè plugin đã cài đặt bằng plugin từ bản sao lưu. Bỏ chọn để giữ plugin hiện tại của bạn.</string>
+    <string name="overwrite_plugins_description">Chỉ cài đặt plugin mới và cập nhật plugin hiện có nếu phiên bản trong bản sao lưu mới hơn. Bỏ chọn để bỏ qua tất cả dữ liệu plugin.</string>
     <string name="restore_settings">Khôi phục cài đặt</string>
     <string name="restore_settings_description">Khôi phục khóa API và danh mục thư viện từ bản sao lưu.</string>
     <string name="restoring_plugins">Đang khôi phục plugin…</string>

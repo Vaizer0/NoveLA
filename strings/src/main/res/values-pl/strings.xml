@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Opcje przywracania</string>
     <string name="overwrite_plugins">Nadpisz wtyczki</string>
-    <string name="overwrite_plugins_description">Nadpisz zainstalowane wtyczki tymi z kopii zapasowej. Odznacz, aby zachować bieżące wtyczki.</string>
+    <string name="overwrite_plugins_description">Instaluj nowe wtyczki i aktualizuj istniejące tylko wtedy, gdy wersja z kopii zapasowej jest nowsza. Odznacz, aby pominąć wszystkie dane wtyczek.</string>
     <string name="restore_settings">Przywróć ustawienia</string>
     <string name="restore_settings_description">Przywróć klucze API i kategorie biblioteki z kopii zapasowej.</string>
     <string name="restoring_plugins">Przywracanie wtyczek…</string>

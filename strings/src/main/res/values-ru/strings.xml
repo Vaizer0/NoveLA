@@ -1,4 +1,4 @@
-<resources>
+﻿﻿<resources>
     <string name="app_name">NoveLA</string>
     <string name="title_library">Библиотека</string>
     <string name="title_finder">Поиск</string>
@@ -397,7 +397,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Опции восстановления</string>
     <string name="overwrite_plugins">Перезаписать плагины</string>
-    <string name="overwrite_plugins_description">Перезаписать установленные плагины плагинами из резервной копии. Снимьте галочку, чтобы сохранить текущие плагины.</string>
+    <string name="overwrite_plugins_description">Установить новые плагины из бэкапа и обновить существующие, только если версия в бэкапе новее. Снимите галочку, чтобы полностью пропустить плагины.</string>
     <string name="restore_settings">Восстановить настройки</string>
     <string name="restore_settings_description">Восстановить API-ключи и категории библиотеки из резервной копии.</string>
     <string name="restoring_plugins">Восстановление плагинов…</string>

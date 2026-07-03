@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">Geri yükleme seçenekleri</string>
     <string name="overwrite_plugins">Eklentilerin üzerine yaz</string>
-    <string name="overwrite_plugins_description">Yüklü eklentilerin üzerine yedekteki eklentileri yaz. Mevcut eklentilerinizi korumak için işaretini kaldırın.</string>
+    <string name="overwrite_plugins_description">Yalnızca yedekteki sürüm daha yeniyse yeni eklentileri kurun ve mevcut olanları güncelleyin. Tüm eklenti verilerini atlamak için işareti kaldırın.</string>
     <string name="restore_settings">Ayarları geri yükle</string>
     <string name="restore_settings_description">API anahtarlarını ve kütüphane kategorilerini yedekten geri yükle.</string>
     <string name="restoring_plugins">Eklentiler geri yükleniyor…</string>

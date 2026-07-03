@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">خيارات الاستعادة</string>
     <string name="overwrite_plugins">استبدال الإضافات</string>
-    <string name="overwrite_plugins_description">استبدال الإضافات المثبتة بتلك الموجودة في النسخة الاحتياطية. قم بإلغاء التحديد للاحتفاظ بإضافاتك الحالية.</string>
+    <string name="overwrite_plugins_description">تثبيت إضافات جديدة وتحديث الموجود منها فقط إذا كانت النسخة الاحتياطية أحدث. قم بإلغاء التحديد لتخطي جميع بيانات الإضافات.</string>
     <string name="restore_settings">استعادة الإعدادات</string>
     <string name="restore_settings_description">استعادة مفاتيح API وتصنيفات المكتبة من النسخة الاحتياطية.</string>
     <string name="restoring_plugins">جاري استعادة الإضافات…</string>

@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">恢复选项</string>
     <string name="overwrite_plugins">覆盖插件</string>
-    <string name="overwrite_plugins_description">用备份中的插件覆盖已安装的插件。取消勾选以保留当前插件。</string>
+    <string name="overwrite_plugins_description">仅当备份版本更新时，安装新插件并更新现有插件。取消勾选以跳过所有插件数据。</string>
     <string name="restore_settings">恢复设置</string>
     <string name="restore_settings_description">从备份恢复 API 密钥和书库分类。</string>
     <string name="restoring_plugins">正在恢复插件…</string>

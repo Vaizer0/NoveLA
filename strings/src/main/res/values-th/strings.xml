@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">ตัวเลือกการกู้คืน</string>
     <string name="overwrite_plugins">เขียนทับปลั๊กอิน</string>
-    <string name="overwrite_plugins_description">เขียนทับปลั๊กอินที่ติดตั้งด้วยปลั๊กอินจากข้อมูลสำรอง ยกเลิกการเลือกเพื่อเก็บปลั๊กอินปัจจุบันของคุณ</string>
+    <string name="overwrite_plugins_description">ติดตั้งปลั๊กอินใหม่และอัปเดตปลั๊กอินที่มีอยู่เฉพาะเมื่อเวอร์ชันในข้อมูลสำรองใหม่กว่าเท่านั้น ยกเลิกการเลือกเพื่อข้ามข้อมูลปลั๊กอินทั้งหมด</string>
     <string name="restore_settings">กู้คืนการตั้งค่า</string>
     <string name="restore_settings_description">กู้คืนคีย์ API และหมวดหมู่ห้องสมุดจากข้อมูลสำรอง</string>
     <string name="restoring_plugins">กำลังกู้คืนปลั๊กอิน…</string>

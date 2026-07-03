@@ -456,7 +456,7 @@
     <!-- Backup/Restore options -->
     <string name="restore_options">復元オプション</string>
     <string name="overwrite_plugins">プラグインを上書き</string>
-    <string name="overwrite_plugins_description">インストールされているプラグインをバックアップのもので上書きします。チェックを外すと現在のプラグインを保持します。</string>
+    <string name="overwrite_plugins_description">バックアップのバージョンが新しい場合のみ、新しいプラグインをインストールし、既存のプラグインを更新します。チェックを外すとすべてのプラグインデータをスキップします。</string>
     <string name="restore_settings">設定を復元</string>
     <string name="restore_settings_description">APIキーとライブラリカテゴリをバックアップから復元します。</string>
     <string name="restoring_plugins">プラグインを復元中…</string>
