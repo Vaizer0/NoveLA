@@ -693,6 +693,16 @@ class ReaderActivity : BaseActivity() {
 
         if (viewModel.readerSpeaker.isSpeaking.value) {
             viewModel.readerSpeaker.forceUpdateCurrentItemState()
+            val position = viewModel.readerSpeaker.getActualPlayingPosition() ?: return
+            val itemIndex = indexOfReaderItem(
+                list = viewModel.items,
+                chapterIndex = position.chapterIndex,
+                chapterItemPosition = position.chapterItemPosition
+            )
+            if (itemIndex == -1) return
+            val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
+            val newOffsetPx = 200.dpToPx(this)
+            viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 500)
         }
     }
 
