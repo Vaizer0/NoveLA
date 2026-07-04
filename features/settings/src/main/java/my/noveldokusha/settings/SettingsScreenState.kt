@@ -51,6 +51,8 @@ data class SettingsScreenState(
     val autoBackupMaxCount: State<Int>,
     val autoBackupIntervalMinutes: State<Long>,
     val autoBackupIncludeImages: State<Boolean>,
+    val autoBackupIncludeSettings: State<Boolean>,
+    val autoBackupIncludePlugins: State<Boolean>,
     val autoBackupLastTimestamp: State<Long>,
     // Chapter cache
     val chapterCacheSize: MutableState<String>,

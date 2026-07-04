@@ -477,6 +477,9 @@
     <string name="restoring_settings">Restoring settings…</string>
     <string name="plugins_restored">Plugins restored (%1$d)</string>
     <string name="settings_restored">Settings restored</string>
+    <string name="save_settings">Save settings</string>
+    <string name="save_plugins">Save plugins</string>
+    <string name="copying_plugins">Copying plugins…</string>
     <string name="backup_saving_settings">Saving settings…</string>
 
     <!-- Auto Backup -->
@@ -490,6 +493,10 @@
     <string name="auto_backup_max_count_value">%d files</string>
     <string name="auto_backup_include_images">Include images</string>
     <string name="auto_backup_include_images_description">Save images in auto backup</string>
+    <string name="auto_backup_include_settings">Include settings</string>
+    <string name="auto_backup_include_settings_description">Save API keys and preferences in auto backup</string>
+    <string name="auto_backup_include_plugins">Include plugins</string>
+    <string name="auto_backup_include_plugins_description">Save Lua scraper plugins in auto backup</string>
     <string name="auto_backup_enabled">Auto backup enabled</string>
     <string name="auto_backup_interval">Backup interval</string>
     <string name="auto_backup_disabled">Auto backup disabled</string>

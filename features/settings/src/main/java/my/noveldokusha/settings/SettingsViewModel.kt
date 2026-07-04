@@ -109,6 +109,8 @@ internal class SettingsViewModel @Inject constructor(
         autoBackupMaxCount = appPreferences.BACKUP_AUTO_MAX_COUNT.state(viewModelScope),
         autoBackupIntervalMinutes = appPreferences.BACKUP_AUTO_INTERVAL_MINUTES.state(viewModelScope),
         autoBackupIncludeImages = appPreferences.BACKUP_AUTO_INCLUDE_IMAGES.state(viewModelScope),
+        autoBackupIncludeSettings = appPreferences.BACKUP_AUTO_INCLUDE_SETTINGS.state(viewModelScope),
+        autoBackupIncludePlugins = appPreferences.BACKUP_AUTO_INCLUDE_PLUGINS.state(viewModelScope),
         autoBackupLastTimestamp = appPreferences.BACKUP_AUTO_LAST_TIMESTAMP.state(viewModelScope),
         chapterCacheSize = mutableStateOf("…"),
         isCleaningChapterCache = isCleaningChapterCache,
@@ -117,12 +119,14 @@ internal class SettingsViewModel @Inject constructor(
 
     init {
         updateDatabaseSize()
-        updateImagesFolderSize()
+        // TODO: properly implement images saving
+        // updateImagesFolderSize()
         updateChapterCacheSize()
         viewModelScope.launch {
             appRepository.eventDataRestored.collect {
                 updateDatabaseSize()
-                updateImagesFolderSize()
+                // TODO: properly implement images saving
+                // updateImagesFolderSize()
             }
         }
 
@@ -541,5 +545,13 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onAutoBackupIncludeImagesChange(include: Boolean) {
         appPreferences.BACKUP_AUTO_INCLUDE_IMAGES.value = include
+    }
+
+    fun onAutoBackupIncludeSettingsChange(include: Boolean) {
+        appPreferences.BACKUP_AUTO_INCLUDE_SETTINGS.value = include
+    }
+
+    fun onAutoBackupIncludePluginsChange(include: Boolean) {
+        appPreferences.BACKUP_AUTO_INCLUDE_PLUGINS.value = include
     }
 }

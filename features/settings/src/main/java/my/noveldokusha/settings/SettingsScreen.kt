@@ -108,6 +108,8 @@ fun SettingsScreen(
                     onAutoBackupIntervalMinutesChange = viewModel::onAutoBackupIntervalMinutesChange,
                     onAutoBackupEnabledChange = viewModel::onAutoBackupEnabledChange,
                     onAutoBackupIncludeImagesChange = viewModel::onAutoBackupIncludeImagesChange,
+                    onAutoBackupIncludeSettingsChange = viewModel::onAutoBackupIncludeSettingsChange,
+                    onAutoBackupIncludePluginsChange = viewModel::onAutoBackupIncludePluginsChange,
                     onDeleteNovelPrompt = viewModel::onDeleteNovelPrompt,
                     modifier = Modifier.padding(innerPadding),
                 )

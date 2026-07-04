@@ -98,6 +98,8 @@ internal fun SettingsScreenBody(
     onAutoBackupMaxCountChange: (Int) -> Unit,
     onAutoBackupIntervalMinutesChange: (Long) -> Unit,
     onAutoBackupIncludeImagesChange: (Boolean) -> Unit,
+    onAutoBackupIncludeSettingsChange: (Boolean) -> Unit,
+    onAutoBackupIncludePluginsChange: (Boolean) -> Unit,
 ) {
     // Refresh size displays every time the user navigates to this screen
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -172,6 +174,10 @@ internal fun SettingsScreenBody(
             onAutoBackupIntervalMinutesChange = onAutoBackupIntervalMinutesChange,
             autoBackupIncludeImages = state.autoBackupIncludeImages.value,
             onAutoBackupIncludeImagesChange = onAutoBackupIncludeImagesChange,
+            autoBackupIncludeSettings = state.autoBackupIncludeSettings.value,
+            onAutoBackupIncludeSettingsChange = onAutoBackupIncludeSettingsChange,
+            autoBackupIncludePlugins = state.autoBackupIncludePlugins.value,
+            onAutoBackupIncludePluginsChange = onAutoBackupIncludePluginsChange,
             autoBackupLastTimestamp = state.autoBackupLastTimestamp.value,
         )
         SettingsGeminiTranslation(
@@ -338,6 +344,8 @@ private fun Preview() {
                     autoBackupMaxCount = remember { derivedStateOf { 5 } },
                     autoBackupIntervalMinutes = remember { derivedStateOf { 60L } },
                     autoBackupIncludeImages = remember { derivedStateOf { false } },
+                    autoBackupIncludeSettings = remember { derivedStateOf { true } },
+                    autoBackupIncludePlugins = remember { derivedStateOf { true } },
                     autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
                     translationNovelPrompts = remember { derivedStateOf { emptyMap<String, NovelPromptData>() } },
                     cleanConfirmationType = remember { mutableStateOf(null) },
@@ -375,6 +383,8 @@ private fun Preview() {
                     onAutoBackupMaxCountChange = { },
                     onAutoBackupIntervalMinutesChange = { },
                     onAutoBackupIncludeImagesChange = { },
+                    onAutoBackupIncludeSettingsChange = { },
+                    onAutoBackupIncludePluginsChange = { },
                     onDeleteNovelPrompt = { },
             )
         }

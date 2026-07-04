@@ -404,6 +404,9 @@
     <string name="restoring_settings">Восстановление настроек…</string>
     <string name="plugins_restored">Плагины восстановлены (%1$d)</string>
     <string name="settings_restored">Настройки восстановлены</string>
+    <string name="save_settings">Сохранить настройки</string>
+    <string name="save_plugins">Сохранить плагины</string>
+    <string name="copying_plugins">Копирование плагинов…</string>
     <string name="backup_saving_settings">Сохранение настроек…</string>
 
     <!-- Auto Backup -->
@@ -416,7 +419,11 @@
     <string name="auto_backup_max_count">Максимум файлов</string>
     <string name="auto_backup_max_count_value">%d файлов</string>
     <string name="auto_backup_include_images">Включая изображения</string>
-    <string name="auto_backup_include_images_description">Сохранять изображения в автобекапе</string>
+    <string name="auto_backup_include_images_description">Сохранять изображения в автобекапе</string>
+    <string name="auto_backup_include_settings">Включая настройки</string>
+    <string name="auto_backup_include_settings_description">Сохранять API-ключи и настройки в автобекапе</string>
+    <string name="auto_backup_include_plugins">Включая плагины</string>
+    <string name="auto_backup_include_plugins_description">Сохранять Lua скраперы в автобекапе</string>
     <string name="auto_backup_enabled">Автобекап включён</string>
     <string name="auto_backup_interval">Интервал бекапа</string>
     <string name="auto_backup_disabled">Автобекап выключен</string>

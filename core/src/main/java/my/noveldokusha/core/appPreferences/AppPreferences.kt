@@ -538,6 +538,16 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_Boolean(name, preferences, false)
     }
 
+    // Включать ли настройки в автобекап
+    val BACKUP_AUTO_INCLUDE_SETTINGS = object : Preference<Boolean>("BACKUP_AUTO_INCLUDE_SETTINGS") {
+        override var value by SharedPreference_Boolean(name, preferences, true)
+    }
+
+    // Включать ли плагины в автобекап
+    val BACKUP_AUTO_INCLUDE_PLUGINS = object : Preference<Boolean>("BACKUP_AUTO_INCLUDE_PLUGINS") {
+        override var value by SharedPreference_Boolean(name, preferences, true)
+    }
+
     // Unix timestamp (мс) последнего успешного автобекапа
     val BACKUP_AUTO_LAST_TIMESTAMP = object : Preference<Long>("BACKUP_AUTO_LAST_TIMESTAMP") {
         override var value by SharedPreference_Serializable(
