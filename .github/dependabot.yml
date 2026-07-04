@@ -14,7 +14,7 @@ updates:
         commit-message:
             prefix: "chore(deps)"
         groups:
-            # Room ships room-runtime/room-ktx/room-compiler/room-testing as separate
+            # Room ships room-runtime/room-compiler/room-testing as separate
             # artifacts that must stay version-aligned — bundle them into one PR.
             room:
                 patterns:
