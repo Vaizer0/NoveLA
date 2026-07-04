@@ -69,22 +69,17 @@ android {
         }
 
         named("debug") {
-            postprocessing {
-                isRemoveUnusedCode = false
-                isObfuscate = false
-                isOptimizeCode = false
-                isRemoveUnusedResources = false
-            }
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
 
         named("release") {
-            postprocessing {
-                proguardFile("proguard-rules.pro")
-                isRemoveUnusedCode = true
-                isObfuscate = false
-                isOptimizeCode = true
-                isRemoveUnusedResources = true
-            }
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            isShrinkResources = true
         }
     }
 
@@ -120,7 +115,6 @@ dependencies {
     implementation(projects.data)
     implementation(projects.core)
     implementation(projects.coreui)
-    implementation(projects.navigation)
     implementation(projects.networking)
     implementation(projects.strings)
     implementation(projects.scraper)
@@ -150,7 +144,6 @@ dependencies {
 
     // UI
     implementation(libs.androidx.appcompat)
-    implementation(libs.test.androidx.core.ktx)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.androidx.activity.ktx)
