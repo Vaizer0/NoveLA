@@ -242,12 +242,10 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onAppThemeChange(appTheme: AppTheme) {
         appPreferences.APP_THEME.value = appTheme.name
-        onRestartApp?.invoke()
     }
 
     fun onDarkModeChange(darkMode: DarkMode) {
         appPreferences.THEME_DARK_MODE.value = darkMode.name
-        onRestartApp?.invoke()
     }
 
     fun onLanguageChange(language: AppLanguage) {

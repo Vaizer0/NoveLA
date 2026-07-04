@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import my.noveldokusha.coreui.theme.LocalAppTheme
+import my.noveldokusha.coreui.theme.LocalIsDark
 import my.noveldokusha.tooling.backup_create.onBackupCreate
 import my.noveldokusha.tooling.backup_restore.onBackupRestore
 import androidx.activity.compose.BackHandler
@@ -44,8 +46,12 @@ fun SettingsScreen(
         }
     )
 
-    Scaffold(
-        topBar = {
+    val appTheme = LocalAppTheme.current
+    val isDark = LocalIsDark.current
+
+    androidx.compose.runtime.key(appTheme, isDark) {
+        Scaffold(
+            topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -118,4 +124,5 @@ fun SettingsScreen(
             }
         }
     )
+    }
 }

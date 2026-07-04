@@ -226,7 +226,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
             setOngoing(true)
             setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             priority = NotificationCompat.PRIORITY_HIGH
-            setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_logo))
+            setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_logo))
             setStyle(mediaStyle)
             setDeleteIntent(cancelButton)
             color = Color.CYAN

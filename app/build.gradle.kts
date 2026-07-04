@@ -146,6 +146,7 @@ dependencies {
     // Android SDK
     implementation(libs.androidx.workmanager)
     implementation(libs.androidx.startup)
+    implementation(libs.androidx.core.splashscreen)
 
     // UI
     implementation(libs.androidx.appcompat)

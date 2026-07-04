@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import my.noveldokusha.core.LocaleManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -88,6 +89,10 @@ private val pages = listOf(
 @AndroidEntryPoint
 open class MainActivity : BaseActivity() {
 
+    companion object {
+        private var isColdStart = true
+    }
+
     @Inject
     lateinit var periodicWorkersInitializer: PeriodicWorkersInitializer
 
@@ -96,6 +101,10 @@ open class MainActivity : BaseActivity() {
     ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isColdStart) {
+            installSplashScreen()
+            isColdStart = false
+        }
         super.onCreate(savedInstanceState)
 
         // Defer WorkManager init to first onResume (cold start optimization)

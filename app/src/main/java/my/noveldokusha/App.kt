@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.work.Configuration as WorkConfiguration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.decode.BitmapFactoryDecoder
 import dagger.hilt.EntryPoints
 import dagger.hilt.android.HiltAndroidApp
 import my.noveldokusha.core.LocaleManager
@@ -62,6 +63,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         return when (val networkClient = networkClient) {
             is ScraperNetworkClient -> ImageLoader
                 .Builder(this)
+                .components { add(BitmapFactoryDecoder.Factory()) }
                 .okHttpClient(networkClient.client)
                 .diskCache(diskCache)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
@@ -70,6 +72,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
 
             else -> ImageLoader
                 .Builder(this)
+                .components { add(BitmapFactoryDecoder.Factory()) }
                 .diskCache(diskCache)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
                 .respectCacheHeaders(false)
