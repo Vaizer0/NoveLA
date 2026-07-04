@@ -109,7 +109,7 @@ internal fun ReaderScreen(
                 .let { px -> with(density) { px.toDp() } }
         } else 0.dp
     }
-    val bottomPadding = if (fullScreen) navBarHeightDp + 8.dp else 8.dp
+    val bottomPadding = 52.dp
 
     // Capture back action when viewing info
     BackHandler(enabled = showReaderInfo) {
