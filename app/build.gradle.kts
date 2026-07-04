@@ -205,6 +205,7 @@ dependencies {
     implementation(libs.okhttp.interceptor.brotli)
     implementation(libs.okhttp.interceptor.logging)
     implementation(libs.okhttp.glideIntegration)
+    ksp(libs.glide.ksp)
 
     // Logging
     implementation(libs.timber)

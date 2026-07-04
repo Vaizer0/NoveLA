@@ -52,9 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import my.noveldokusha.coreui.BaseActivity
+import my.noveldokusha.tooling.application_workers.setup.PeriodicWorkersInitializer
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Theme
@@ -85,12 +88,24 @@ private val pages = listOf(
 @AndroidEntryPoint
 open class MainActivity : BaseActivity() {
 
+    @Inject
+    lateinit var periodicWorkersInitializer: PeriodicWorkersInitializer
+
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Defer WorkManager init to first onResume (cold start optimization)
+        var initCalled = false
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && !initCalled) {
+                initCalled = true
+                periodicWorkersInitializer.init()
+            }
+        })
 
         // Apply saved language preference
         val language = AppLanguageProvider.fromCode(appPreferences.APP_LANGUAGE_CODE.value)

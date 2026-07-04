@@ -16,7 +16,6 @@ import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
-import my.noveldokusha.tooling.application_workers.setup.PeriodicWorkersInitializer
 import timber.log.Timber
 import javax.inject.Inject
 import java.util.Locale
@@ -27,9 +26,6 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
 
     @Inject
     lateinit var networkClient: NetworkClient
-
-    @Inject
-    lateinit var periodicWorkersInitializer: PeriodicWorkersInitializer
 
     // Eager singleton: форсирует создание DownloadManager при старте приложения,
     // чтобы restoreTasksFromDatabase() запустился сразу, а не при первом открытии книги.
@@ -55,7 +51,6 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        periodicWorkersInitializer.init()
     }
 
     override fun newImageLoader(): ImageLoader {

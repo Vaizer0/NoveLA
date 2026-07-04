@@ -32,7 +32,6 @@ androidx-media = "1.7.0"
 androidx-lifecycle = "2.8.7"
 androidx-workmanager = "2.11.2"
 androidx-startup = "1.2.0"
-
 androidx-constraintLayout = "2.2.1"
 androidx-coordinatorLayout = "1.2.0"
 androidx-appcompat = "1.7.1"
@@ -71,6 +70,8 @@ snakeyaml = "2.3"
 okhttp = "5.0.0-alpha.14"
 okhttp-interceptor-logging = "5.0.0-alpha.14"
 okhttp-glideIntegration = "4.16.0"
+
+glide = "4.16.0"
 
 readability4j = "1.0.8"
 retrofit = "2.12.0"
@@ -116,6 +117,7 @@ okhttp-interceptor-logging = { module = "com.squareup.okhttp3:logging-intercepto
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-interceptor-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
 okhttp-glideIntegration = { module = "com.github.bumptech.glide:okhttp3-integration", version.ref = "okhttp-glideIntegration" }
+glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
 
 # Data manipulation (html, serialization, ...)
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }

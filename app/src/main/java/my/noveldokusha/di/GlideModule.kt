@@ -15,7 +15,7 @@ import java.io.InputStream
 
 @Excludes(OkHttpLibraryGlideModule::class)
 @GlideModule
-private class GlideModule : AppGlideModule() {
+class GlideModule : AppGlideModule() {
 
     override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
         // Create a simple OkHttpClient for Glide without Hilt dependencies

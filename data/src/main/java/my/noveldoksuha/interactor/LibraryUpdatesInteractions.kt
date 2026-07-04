@@ -309,7 +309,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         }.onError {
-            Log.d(TAG, "[legacy] \"${book.title}\" — FAILED to fetch chapter list")
+            Log.e(TAG, "[legacy] \"${book.title}\" — FAILED to fetch chapter list: ${it.message}")
             failedUpdates.update { it + book }
         }
     }

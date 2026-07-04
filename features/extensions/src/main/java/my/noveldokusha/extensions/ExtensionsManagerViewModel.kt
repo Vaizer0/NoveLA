@@ -3,6 +3,7 @@ package my.noveldokusha.extensions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,8 +55,10 @@ class ExtensionsManagerViewModel @Inject constructor(
             }
         }
 
-        // Загружаем кеш из SharedPreferences
-        loadCachedExtensions()
+        // Загружаем кеш из SharedPreferences — на фоновом потоке
+        viewModelScope.launch(Dispatchers.IO) {
+            loadCachedExtensions()
+        }
 
         // Загружаем актуальные данные из сети
         loadAllAvailableExtensions()
