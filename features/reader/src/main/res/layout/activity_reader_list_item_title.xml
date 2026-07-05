@@ -27,8 +27,10 @@
 
     <TextView
         android:id="@+id/title_original"
+        style="?attr/myReaderTextStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:alpha="0.85"
         android:paddingLeft="17sp"
         android:paddingRight="17sp"
         android:paddingBottom="8sp"
