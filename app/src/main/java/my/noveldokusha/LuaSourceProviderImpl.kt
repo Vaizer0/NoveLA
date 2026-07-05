@@ -32,15 +32,10 @@ class LuaSourceProviderImpl @Inject constructor(
     init {
         scope.launch {
             val cached = loadCache()
-            if (cached.isEmpty()) {
-                // Первый запуск — грузим, UI подождёт
-                reload()
-            } else {
-                // Используем кэш мгновенно — без немедленного reload()
+            if (cached.isNotEmpty()) {
                 _sourcesFlow.value = cached
             }
-            // Подписываемся на изменения установленных плагинов
-            // debounce(500) — при пакетной установке/удалении перезагрузка одна
+            reload()
             @OptIn(kotlinx.coroutines.FlowPreview::class)
             extensionRepository.getInstalledExtensionsFlow().debounce(500).collect {
                 reload()
