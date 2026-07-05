@@ -278,26 +278,9 @@ internal class ReaderItemAdapter(
         }
         bind.titleTranslated.updateTextSelectability()
         bind.root.background = getItemReadingStateBackground(item)
-
-        val parallelEnabled = currentParallelEnabled() && item.textTranslated != null
-        if (parallelEnabled) {
-            val orderTranslationFirst = currentParallelOrder() == "TRANSLATION_FIRST"
-            if (orderTranslationFirst) {
-                bind.titleTranslated.text = item.textTranslated ?: item.text
-                bind.titleOriginal.text = item.text
-            } else {
-                bind.titleTranslated.text = item.text
-                bind.titleOriginal.text = item.textTranslated ?: item.text
-            }
-            bind.titleTranslated.typeface = currentTypefaceBold()
-            bind.titleOriginal.visibility = View.VISIBLE
-            bind.titleOriginal.typeface = currentTypeface()
-            bind.titleOriginal.textSize = 16f
-        } else {
-            bind.titleTranslated.text = item.textToDisplay
-            bind.titleTranslated.typeface = currentTypefaceBold()
-            bind.titleOriginal.visibility = View.GONE
-        }
+        bind.titleTranslated.text = item.textToDisplay
+        bind.titleTranslated.typeface = currentTypefaceBold()
+        bind.titleOriginal.visibility = View.GONE
         return bind.root
     }
 
