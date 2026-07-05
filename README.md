@@ -42,17 +42,21 @@ git clone https://github.com/HnDK0/NoveLA
 
 ## Features
 
-- 25+ built-in sources
+- 35+ sources (built-in + Lua plugins)
 - Global multi-source search; add any novel by URL
-- In-reader translation — no copy-paste, no app switching
+- In-reader translation with parallel mode and novel-specific prompts — no copy-paste, no app switching
 - Infinite chapter scrolling with offline caching
 - Custom fonts, text size, light/dark themes (Material 3)
-- Text-to-speech with background playback, speed and pitch control
-- Local EPUB library
-- Backup & restore
+- Text-to-speech with floating mini-player, background playback, speed/pitch control, Bluetooth support, and multiple engine support
+- Local EPUB and FB2 library with bulk import
+- Backup & restore with granular selection and auto backup
 - Regex text cleanup (strip ads and injected text)
 - Automatic Cloudflare Turnstile bypass
-- Lua-based community plugin system
+- Novel migration between sources
+- Library filters by genre, source, and category
+- Download all chapters
+- TTS reading timer
+- 20 interface languages
 
 ---
 
@@ -68,6 +72,8 @@ Four backends supported. Multiple API keys are rotated round-robin on rate limit
 | OpenAI-compatible | Varies | Required |
 
 OpenAI-compatible accepts OpenAI, OpenRouter, DeepSeek, Ollama, Mistral, and any compatible endpoint.
+
+Parallel mode displays original and translated text side by side. Novel-specific prompts let you customize translation behavior per book.
 
 ---
 
@@ -93,7 +99,7 @@ Pull requests are welcome. For major changes, open an issue first.
 
 ## Tech stack
 
-Kotlin · Coroutines · Jetpack Compose · Material 3 · Room · Jsoup · OkHttp · Coil · LuaJ · Google MLKit · Android TTS & Media APIs
+Kotlin · Coroutines · Jetpack Compose · Material 3 · Room · Jsoup · OkHttp · Coil 3 · LuaJ · Hilt · WorkManager · Android TTS & Media APIs
 
 ---
 
