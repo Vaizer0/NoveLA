@@ -12,6 +12,7 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.domain.LibraryCategory
 import my.noveldokusha.tooling.application_workers.AutoBackupWorker
+import my.noveldokusha.tooling.application_workers.DatabaseMaintenanceWorker
 import my.noveldokusha.tooling.application_workers.LibraryUpdatesWorker
 import my.noveldokusha.tooling.application_workers.UpdatesCheckerWorker
 import timber.log.Timber
@@ -97,6 +98,13 @@ class PeriodicWorkersInitializer @Inject constructor(
                 startLibraryUpdates(enabled, intervalHours)
             }.collect()
         }
+
+        // Database maintenance — раз в неделю при зарядке и простое
+        workManager.enqueueUniquePeriodicWork(
+            DatabaseMaintenanceWorker.TAG,
+            ExistingPeriodicWorkPolicy.KEEP,
+            DatabaseMaintenanceWorker.createPeriodicRequest(),
+        )
 
         // Реагируем на изменения настроек автобэкапа.
         // При старте flow эмитит текущие значения, что эквивалентно проверке при инициализации.

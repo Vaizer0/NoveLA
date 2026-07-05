@@ -366,6 +366,9 @@ internal class ReaderSession(
             }
             lastChapterIndex = chapterIndex
             preloadTriggeredForChapter = -1
+            scope.launch {
+                readerChaptersLoader.pruneItems(chapterIndex)
+            }
         }
 
         if (

@@ -10,6 +10,7 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.tooling.application_workers.AutoBackupWorker
+import my.noveldokusha.tooling.application_workers.DatabaseMaintenanceWorker
 import my.noveldokusha.tooling.application_workers.LibraryUpdatesWorker
 import my.noveldokusha.tooling.application_workers.UpdatesCheckerWorker
 import my.noveldokusha.tooling.application_workers.notifications.LibraryUpdateNotification
@@ -50,6 +51,13 @@ class AppWorkerFactory @Inject internal constructor(
             AutoBackupWorker::class.java.name -> {
                 Log.d("AppWorkerFactory", "AppWorkerFactory: creating AutoBackupWorker")
                 AutoBackupWorker(
+                    context = appContext,
+                    workerParameters = workerParameters,
+                )
+            }
+            DatabaseMaintenanceWorker::class.java.name -> {
+                Log.d("AppWorkerFactory", "AppWorkerFactory: creating DatabaseMaintenanceWorker")
+                DatabaseMaintenanceWorker(
                     context = appContext,
                     workerParameters = workerParameters,
                 )
