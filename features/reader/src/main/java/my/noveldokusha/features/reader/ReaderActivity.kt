@@ -332,9 +332,9 @@ class ReaderActivity : BaseActivity() {
                     onParagraphSpacingChanged = { appPreferences.READER_PARAGRAPH_SPACING.value = it },
                     onSelectableTextChange = { appPreferences.READER_SELECTABLE_TEXT.value = it },
                     onKeepScreenOn = { appPreferences.READER_KEEP_SCREEN_ON.value = it },
-                    onDarkModeSelected = { appPreferences.THEME_DARK_MODE.value = it.name },
-                    onAppThemeChanged = { appPreferences.APP_THEME.value = it.name },
-                    onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it },
+                    onDarkModeSelected = { appPreferences.THEME_DARK_MODE.value = it.name; recreate() },
+                    onAppThemeChanged = { appPreferences.APP_THEME.value = it.name; recreate() },
+                    onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it; recreate() },
                     onSingleTapToOpenSettingsChange = { appPreferences.READER_SINGLE_TAP_TO_OPEN_SETTINGS.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
