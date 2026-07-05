@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">Definir um prompt de sistema personalizado para esta novela</string>
     <string name="novel_prompt_llm_only">Apenas Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">Adicionar ao prompt global</string>
+    <string name="parallel_mode_title">Modo paralelo</string>
+    <string name="parallel_mode_description">Mostrar original e tradução lado a lado</string>
+    <string name="parallel_order_original_first">Original primeiro</string>
+    <string name="parallel_order_translation_first">Tradução primeiro</string>
     <string name="novel_prompts_title">Prompts específicos de novelas</string>
     <string name="novel_prompts_search">Pesquisar prompts</string>
     <string name="novel_prompts_description">Prompts de tradução personalizados definidos por novela nas configurações do leitor</string>

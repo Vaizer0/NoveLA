@@ -92,9 +92,6 @@ internal fun SettingsScreenBody(
     onLanguageChange: (AppLanguage) -> Unit,
     onNavigateToRegexCleanup: () -> Unit,
     onDeleteNovelPrompt: (String) -> Unit,
-    // Display options
-    onParallelEnabledChange: (Boolean) -> Unit,
-    onParallelOrderChange: (String) -> Unit,
     // Auto Backup
     onAutoBackupEnabledChange: (Boolean) -> Unit,
     onAutoBackupSelectDirectory: () -> Unit,
@@ -211,10 +208,6 @@ internal fun SettingsScreenBody(
                 onLlmMaxOutputTokensChange     = onLlmMaxOutputTokensChange,
                 novelPromptCount               = state.translationNovelPrompts.value.size,
                 onNovelPromptsClick            = { showNovelPromptsDialog.value = true },
-            parallelEnabled                = state.parallelEnabled.value,
-            onParallelEnabledChange        = onParallelEnabledChange,
-            parallelOrder                  = state.parallelOrder.value,
-            onParallelOrderChange          = onParallelOrderChange,
             )
         SettingsRegexCleanup(
             onNavigateToRegexCleanup = onNavigateToRegexCleanup
@@ -355,8 +348,6 @@ private fun Preview() {
                     autoBackupIncludePlugins = remember { derivedStateOf { true } },
                     autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
                     translationNovelPrompts = remember { derivedStateOf { emptyMap<String, NovelPromptData>() } },
-                    parallelEnabled = remember { derivedStateOf { false } },
-                    parallelOrder = remember { derivedStateOf { "ORIGINAL_FIRST" } },
                     cleanConfirmationType = remember { mutableStateOf(null) },
                 ),
                 onRefreshSizes = { },
@@ -394,8 +385,6 @@ private fun Preview() {
                     onAutoBackupIncludeImagesChange = { },
                     onAutoBackupIncludeSettingsChange = { },
                     onAutoBackupIncludePluginsChange = { },
-                    onParallelEnabledChange = { },
-                    onParallelOrderChange = { },
                     onDeleteNovelPrompt = { },
             )
         }

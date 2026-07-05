@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">এই নভেলের জন্য একটি কাস্টম সিস্টেম প্রম্পট সেট করুন</string>
     <string name="novel_prompt_llm_only">শুধুমাত্র Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">গ্লোবাল প্রম্পটে যোগ করুন</string>
+    <string name="parallel_mode_title">সমান্তরাল মোড</string>
+    <string name="parallel_mode_description">মূল এবং অনুবাদ পাশাপাশি দেখান</string>
+    <string name="parallel_order_original_first">মূল প্রথম</string>
+    <string name="parallel_order_translation_first">অনুবাদ প্রথম</string>
     <string name="novel_prompts_title">নভেল-নির্দিষ্ট প্রম্পটসমূহ</string>
     <string name="novel_prompts_search">প্রম্পট অনুসন্ধান</string>
     <string name="novel_prompts_description">রিডার সেটিংসে নভেল প্রতি সেট করা কাস্টম অনুবাদ প্রম্পট</string>

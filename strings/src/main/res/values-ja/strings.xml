@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">この小説用のカスタムシステムプロンプトを設定</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAIのみ</string>
     <string name="novel_prompt_append_mode">グローバルプロンプトに追加</string>
+    <string name="parallel_mode_title">パラレルモード</string>
+    <string name="parallel_mode_description">原文と翻訳を並べて表示</string>
+    <string name="parallel_order_original_first">原文を先に</string>
+    <string name="parallel_order_translation_first">翻訳を先に</string>
     <string name="novel_prompts_title">小説固有のプロンプト</string>
     <string name="novel_prompts_search">プロンプトを検索</string>
     <string name="novel_prompts_description">リーダー設定で小説ごとに設定されたカスタム翻訳プロンプト</string>

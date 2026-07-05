@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">Bu roman için özel bir sistem istemi belirleyin</string>
     <string name="novel_prompt_llm_only">Yalnızca Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">Küresel istemciye ekle</string>
+    <string name="parallel_mode_title">Paralel mod</string>
+    <string name="parallel_mode_description">Orijinal ve çeviriyi yan yana göster</string>
+    <string name="parallel_order_original_first">Önce orijinal</string>
+    <string name="parallel_order_translation_first">Önce çeviri</string>
     <string name="novel_prompts_title">Romana özel istemler</string>
     <string name="novel_prompts_search">İstemleri ara</string>
     <string name="novel_prompts_description">Okuyucu ayarlarında roman başına belirlenen özel çeviri istemleri</string>

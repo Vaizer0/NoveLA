@@ -19,7 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.AlertDialog
@@ -32,7 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
@@ -365,41 +366,60 @@ private fun LanguageSearchDialog(
 private fun DisplayOptionsSection(state: LiveTranslationSettingData) {
     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-    // ── Parallel mode toggle ───────────────────────────────────────────
+    val enabled = state.parallelEnabled.value
+    val order = state.parallelOrder.value
+    val active = enabled
+
+    val modeLabel = when {
+        !enabled -> ""
+        order == "TRANSLATION_FIRST" -> stringResource(R.string.parallel_order_translation_first)
+        else -> stringResource(R.string.parallel_order_original_first)
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { state.onParallelEnabledChange(!state.parallelEnabled.value) }
+            .clickable {
+                when {
+                    !enabled -> {
+                        state.onParallelEnabledChange(true)
+                        state.onParallelOrderChange("TRANSLATION_FIRST")
+                    }
+                    order == "TRANSLATION_FIRST" -> {
+                        state.onParallelOrderChange("ORIGINAL_FIRST")
+                    }
+                    else -> {
+                        state.onParallelEnabledChange(false)
+                    }
+                }
+            }
             .padding(vertical = 4.dp),
     ) {
-        Text(
-            text = stringResource(R.string.parallel_mode_title),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
+        Icon(
+            if (active) Icons.Filled.ViewColumn else Icons.Outlined.ViewColumn,
+            contentDescription = stringResource(R.string.parallel_mode_title),
+            tint = if (active) colorAccent() else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
         )
-        Switch(
-            checked = state.parallelEnabled.value,
-            onCheckedChange = { state.onParallelEnabledChange(it) },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = colorAccent(),
-                checkedTrackColor = colorAccent().copy(alpha = 0.3f),
-            ),
-        )
-    }
-
-    // ── Order chips (visible when parallel mode is enabled) ────────────
-    if (state.parallelEnabled.value) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = state.parallelOrder.value == "ORIGINAL_FIRST",
-                onClick = { state.onParallelOrderChange("ORIGINAL_FIRST") },
-                label = { Text(stringResource(R.string.parallel_order_original_first)) },
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.parallel_mode_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (active) colorAccent() else MaterialTheme.colorScheme.onSurface,
             )
-            FilterChip(
-                selected = state.parallelOrder.value == "TRANSLATION_FIRST",
-                onClick = { state.onParallelOrderChange("TRANSLATION_FIRST") },
-                label = { Text(stringResource(R.string.parallel_order_translation_first)) },
+            Text(
+                text = stringResource(R.string.parallel_mode_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (active) {
+            Text(
+                text = modeLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = colorAccent(),
             )
         }
     }

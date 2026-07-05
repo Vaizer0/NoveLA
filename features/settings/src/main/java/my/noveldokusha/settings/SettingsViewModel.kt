@@ -101,8 +101,6 @@ internal class SettingsViewModel @Inject constructor(
         llmBatchSize           = appPreferences.TRANSLATION_BATCH_SIZE.state(viewModelScope),
         llmMaxOutputTokens     = appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.state(viewModelScope),
         translationNovelPrompts = appPreferences.TRANSLATION_NOVEL_PROMPTS.state(viewModelScope),
-        parallelEnabled = appPreferences.TRANSLATION_PARALLEL_ENABLED.state(viewModelScope),
-        parallelOrder = appPreferences.TRANSLATION_PARALLEL_ORDER.state(viewModelScope),
         autoBackupEnabled = appPreferences.BACKUP_AUTO_ENABLED.state(viewModelScope),
         autoBackupDirectoryUri = appPreferences.BACKUP_AUTO_DIRECTORY_URI.state(viewModelScope),
         autoBackupDirectoryDisplayName = mutableStateOf(
@@ -300,14 +298,6 @@ internal class SettingsViewModel @Inject constructor(
 
     fun onLlmMaxOutputTokensChange(tokens: Int) {
         appPreferences.TRANSLATION_MAX_OUTPUT_TOKENS.value = tokens.coerceAtLeast(0)
-    }
-
-    fun onParallelEnabledChange(enabled: Boolean) {
-        appPreferences.TRANSLATION_PARALLEL_ENABLED.value = enabled
-    }
-
-    fun onParallelOrderChange(order: String) {
-        appPreferences.TRANSLATION_PARALLEL_ORDER.value = order
     }
 
     fun onSavePromptPreset(name: String, prompt: String) {

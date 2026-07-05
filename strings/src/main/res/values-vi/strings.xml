@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">Đặt lời nhắc hệ thống tùy chỉnh cho tiểu thuyết này</string>
     <string name="novel_prompt_llm_only">Chỉ Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">Thêm vào prompt chung</string>
+    <string name="parallel_mode_title">Chế độ song song</string>
+    <string name="parallel_mode_description">Hiển thị bản gốc và bản dịch cạnh nhau</string>
+    <string name="parallel_order_original_first">Bản gốc trước</string>
+    <string name="parallel_order_translation_first">Bản dịch trước</string>
     <string name="novel_prompts_title">Lời nhắc dành riêng cho tiểu thuyết</string>
     <string name="novel_prompts_search">Tìm kiếm lời nhắc</string>
     <string name="novel_prompts_description">Lời nhắc dịch tùy chỉnh được đặt cho mỗi tiểu thuyết trong cài đặt trình đọc</string>

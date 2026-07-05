@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">Tetapkan prompt sistem kustom untuk novel ini</string>
     <string name="novel_prompt_llm_only">Hanya Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">Tambahkan ke prompt global</string>
+    <string name="parallel_mode_title">Mode paralel</string>
+    <string name="parallel_mode_description">Tampilkan teks asli dan terjemahan berdampingan</string>
+    <string name="parallel_order_original_first">Asli dulu</string>
+    <string name="parallel_order_translation_first">Terjemahan dulu</string>
     <string name="novel_prompts_title">Prompt khusus untuk novel</string>
     <string name="novel_prompts_search">Cari prompt</string>
     <string name="novel_prompts_description">Prompt terjemahan kustom yang ditetapkan per novel di pengaturan pembaca</string>

@@ -528,6 +528,10 @@
     <string name="novel_prompt_description_reader">इस उपन्यास के लिए कस्टम सिस्टम प्रॉम्प्ट सेट करें</string>
     <string name="novel_prompt_llm_only">केवल Gemini/OpenAI</string>
     <string name="novel_prompt_append_mode">ग्लोबल प्रॉम्प्ट में जोड़ें</string>
+    <string name="parallel_mode_title">समानांतर मोड</string>
+    <string name="parallel_mode_description">मूल और अनुवाद को एक साथ दिखाएं</string>
+    <string name="parallel_order_original_first">पहले मूल</string>
+    <string name="parallel_order_translation_first">पहले अनुवाद</string>
     <string name="novel_prompts_title">उपन्यास-विशिष्ट प्रॉम्प्ट</string>
     <string name="novel_prompts_search">प्रॉम्प्ट खोजें</string>
     <string name="novel_prompts_description">रीडर सेटिंग्स में प्रति उपन्यास सेट किए गए कस्टम अनुवाद प्रॉम्प्ट</string>
