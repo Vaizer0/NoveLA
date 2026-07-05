@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
@@ -17,6 +18,7 @@ import my.noveldokusha.tooling.application_workers.notifications.LibraryUpdateNo
 import javax.inject.Inject
 
 class AppWorkerFactory @Inject internal constructor(
+    private val appPreferences: AppPreferences,
     private val appRemoteRepository: AppRemoteRepository,
     private val notificationsCenter: NotificationsCenter,
     private val libraryUpdateNotification: LibraryUpdateNotification,
@@ -44,6 +46,7 @@ class AppWorkerFactory @Inject internal constructor(
                 LibraryUpdatesWorker(
                     context = appContext,
                     workerParameters = workerParameters,
+                    appPreferences = appPreferences,
                     libraryUpdateNotification = libraryUpdateNotification,
                     libraryUpdatesInteractions = libraryUpdatesInteractions,
                 )

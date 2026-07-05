@@ -256,6 +256,17 @@ class AppPreferences @Inject constructor(
             override var value by SharedPreference_Int(name, preferences, 24)
         }
 
+    val GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP =
+        object : Preference<Long>("GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP") {
+            override var value by SharedPreference_Serializable(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = 0L,
+                encode = { it.toString() },
+                decode = { it.toLongOrNull() ?: 0L }
+            )
+        }
+
     val TRANSLATION_GEMINI_API_KEY =
         object : Preference<String>("TRANSLATION_GEMINI_API_KEY") {
             override var value by SharedPreference_String(name, preferences, "")

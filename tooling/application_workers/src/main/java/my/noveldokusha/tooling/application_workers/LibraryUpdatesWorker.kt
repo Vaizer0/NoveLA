@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.domain.LibraryCategory
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit
 internal class LibraryUpdatesWorker @AssistedInject constructor(
     @Assisted private val context: Context,
     @Assisted workerParameters: WorkerParameters,
+    private val appPreferences: AppPreferences,
     private val libraryUpdateNotification: LibraryUpdateNotification,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
 ) : CoroutineWorker(context, workerParameters) {
@@ -94,6 +96,10 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
 
         val result = updateLibrary(updateCategory = updateCategory)
             .onError { Timber.e(it.exception) }
+
+        if (result is Response.Success) {
+            appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value = System.currentTimeMillis()
+        }
 
         return when (result) {
             is Response.Error -> Result.failure()
