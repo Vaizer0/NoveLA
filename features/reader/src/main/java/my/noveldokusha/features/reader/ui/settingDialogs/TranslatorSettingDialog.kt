@@ -32,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
@@ -111,6 +112,9 @@ internal fun TranslatorSettingDialog(
 
             // ── Language selection ──────────────────────────────────────
             LanguageSelector(state = state)
+
+            // ── Display options ────────────────────────────────────────
+            DisplayOptionsSection(state = state)
 
             // ── Novel prompt (LLM only) ────────────────────────────────
             NovelPromptSection(state = state)
@@ -355,6 +359,50 @@ private fun LanguageSearchDialog(
             }
         },
     )
+}
+
+@Composable
+private fun DisplayOptionsSection(state: LiveTranslationSettingData) {
+    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+    // ── Parallel mode toggle ───────────────────────────────────────────
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { state.onParallelEnabledChange(!state.parallelEnabled.value) }
+            .padding(vertical = 4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.parallel_mode_title),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = state.parallelEnabled.value,
+            onCheckedChange = { state.onParallelEnabledChange(it) },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = colorAccent(),
+                checkedTrackColor = colorAccent().copy(alpha = 0.3f),
+            ),
+        )
+    }
+
+    // ── Order chips (visible when parallel mode is enabled) ────────────
+    if (state.parallelEnabled.value) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = state.parallelOrder.value == "ORIGINAL_FIRST",
+                onClick = { state.onParallelOrderChange("ORIGINAL_FIRST") },
+                label = { Text(stringResource(R.string.parallel_order_original_first)) },
+            )
+            FilterChip(
+                selected = state.parallelOrder.value == "TRANSLATION_FIRST",
+                onClick = { state.onParallelOrderChange("TRANSLATION_FIRST") },
+                label = { Text(stringResource(R.string.parallel_order_translation_first)) },
+            )
+        }
+    }
 }
 
 @Composable

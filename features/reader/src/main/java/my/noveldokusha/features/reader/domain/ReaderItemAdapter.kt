@@ -43,6 +43,8 @@ internal class ReaderItemAdapter(
     private val currentParagraphSpacing: () -> Float,
     private val currentTypeface: () -> Typeface,
     private val currentTypefaceBold: () -> Typeface,
+    private val currentParallelEnabled: () -> Boolean,
+    private val currentParallelOrder: () -> String,
     private val onChapterStartVisible: (chapterUrl: String) -> Unit,
     private val onChapterEndVisible: (chapterUrl: String) -> Unit,
     private val onReloadReader: () -> Unit,
@@ -121,20 +123,44 @@ internal class ReaderItemAdapter(
             else -> ActivityReaderListItemBodyBinding.bind(convertView)
         }
 
-        bind.body.updateTextSelectability()
+        val parallelEnabled = currentParallelEnabled() && item.textTranslated != null
+
+        if (parallelEnabled) {
+            val orderTranslationFirst = currentParallelOrder() == "TRANSLATION_FIRST"
+
+            val primaryText = if (orderTranslationFirst) item.textTranslated ?: item.text else item.text
+            val secondaryText = if (orderTranslationFirst) item.text else item.textTranslated ?: item.text
+
+            bind.bodyTranslated.text = primaryText
+            bind.bodyTranslated.textSize = currentFontSize()
+            bind.bodyTranslated.typeface = currentTypeface()
+            bind.bodyTranslated.updateTextSelectability()
+            bind.bodyTranslated.setLineSpacing(0f, currentLineHeight())
+
+            bind.bodyOriginal.text = secondaryText
+            bind.bodyOriginal.textSize = currentFontSize() * 0.85f
+            bind.bodyOriginal.typeface = currentTypeface()
+            bind.bodyOriginal.updateTextSelectability()
+            bind.bodyOriginal.setLineSpacing(0f, currentLineHeight())
+            bind.bodyOriginal.visibility = View.VISIBLE
+        } else {
+            bind.bodyTranslated.text = item.textToDisplay
+            bind.bodyTranslated.textSize = currentFontSize()
+            bind.bodyTranslated.typeface = currentTypeface()
+            bind.bodyTranslated.updateTextSelectability()
+            bind.bodyTranslated.setLineSpacing(0f, currentLineHeight())
+
+            bind.bodyOriginal.visibility = View.GONE
+        }
+
         bind.root.background = getItemReadingStateBackground(item)
-        bind.body.text = item.textToDisplay
-        bind.body.textSize = currentFontSize()
-        bind.body.typeface = currentTypeface()
-        
-        // Improve reading comfort with line spacing and paragraph spacing
-        bind.body.setLineSpacing(0f, currentLineHeight())
         val paddingVertical = android.util.TypedValue.applyDimension(
             android.util.TypedValue.COMPLEX_UNIT_DIP,
             currentParagraphSpacing(),
             ctx.resources.displayMetrics
         ).toInt()
-        bind.body.setPadding(bind.body.paddingLeft, paddingVertical, bind.body.paddingRight, paddingVertical)
+        bind.bodyTranslated.setPadding(bind.bodyTranslated.paddingLeft, paddingVertical, bind.bodyTranslated.paddingRight, paddingVertical)
+        bind.bodyOriginal.setPadding(bind.bodyOriginal.paddingLeft, paddingVertical, bind.bodyOriginal.paddingRight, paddingVertical)
 
         when (item.location) {
             ReaderItem.Location.FIRST -> onChapterStartVisible(item.chapterUrl)
@@ -250,10 +276,28 @@ internal class ReaderItemAdapter(
             null -> ActivityReaderListItemTitleBinding.inflate(parent.inflater, parent, false).also { it.root.tag = it }
             else -> ActivityReaderListItemTitleBinding.bind(convertView)
         }
-        bind.title.updateTextSelectability()
+        bind.titleTranslated.updateTextSelectability()
         bind.root.background = getItemReadingStateBackground(item)
-        bind.title.text = item.textToDisplay
-        bind.title.typeface = currentTypefaceBold()
+
+        val parallelEnabled = currentParallelEnabled() && item.textTranslated != null
+        if (parallelEnabled) {
+            val orderTranslationFirst = currentParallelOrder() == "TRANSLATION_FIRST"
+            if (orderTranslationFirst) {
+                bind.titleTranslated.text = item.textTranslated ?: item.text
+                bind.titleOriginal.text = item.text
+            } else {
+                bind.titleTranslated.text = item.text
+                bind.titleOriginal.text = item.textTranslated ?: item.text
+            }
+            bind.titleTranslated.typeface = currentTypefaceBold()
+            bind.titleOriginal.visibility = View.VISIBLE
+            bind.titleOriginal.typeface = currentTypeface()
+            bind.titleOriginal.textSize = 16f
+        } else {
+            bind.titleTranslated.text = item.textToDisplay
+            bind.titleTranslated.typeface = currentTypefaceBold()
+            bind.titleOriginal.visibility = View.GONE
+        }
         return bind.root
     }
 

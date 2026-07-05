@@ -40,6 +40,10 @@ internal data class LiveTranslationSettingData(
     val onNovelPromptAppendModeChange: (Boolean) -> Unit,
     val currentProvider: MutableState<String>,
     val onProviderChange: (String) -> Unit,
+    val parallelEnabled: MutableState<Boolean>,
+    val onParallelEnabledChange: (Boolean) -> Unit,
+    val parallelOrder: MutableState<String>,
+    val onParallelOrderChange: (String) -> Unit,
 )
 
 internal class ReaderLiveTranslation(
@@ -81,6 +85,10 @@ internal class ReaderLiveTranslation(
         onNovelPromptAppendModeChange = ::onNovelPromptAppendModeChange,
         currentProvider = mutableStateOf(appPreferences.TRANSLATION_PROVIDER.value),
         onProviderChange = ::onProviderChange,
+        parallelEnabled = mutableStateOf(appPreferences.TRANSLATION_PARALLEL_ENABLED.value),
+        onParallelEnabledChange = ::onParallelEnabledChange,
+        parallelOrder = mutableStateOf(appPreferences.TRANSLATION_PARALLEL_ORDER.value),
+        onParallelOrderChange = ::onParallelOrderChange,
     )
 
     var translatorState: TranslatorState? = null
@@ -88,6 +96,9 @@ internal class ReaderLiveTranslation(
 
     private val _onTranslatorChanged = MutableSharedFlow<Unit>()
     val onTranslatorChanged = _onTranslatorChanged.asSharedFlow()
+
+    private val _onDisplaySettingsChanged = MutableSharedFlow<Unit>()
+    val onDisplaySettingsChanged = _onDisplaySettingsChanged.asSharedFlow()
 
     suspend fun init() {
         Log.d(TAG, "init: starting")
@@ -338,6 +349,18 @@ internal class ReaderLiveTranslation(
         return { texts ->
             translationManager.translateBatch(texts, source, target, systemPromptOverride)
         }
+    }
+
+    private fun onParallelEnabledChange(it: Boolean) {
+        state.parallelEnabled.value = it
+        appPreferences.TRANSLATION_PARALLEL_ENABLED.value = it
+        scope.launch { _onDisplaySettingsChanged.emit(Unit) }
+    }
+
+    private fun onParallelOrderChange(it: String) {
+        state.parallelOrder.value = it
+        appPreferences.TRANSLATION_PARALLEL_ORDER.value = it
+        scope.launch { _onDisplaySettingsChanged.emit(Unit) }
     }
 
     companion object {

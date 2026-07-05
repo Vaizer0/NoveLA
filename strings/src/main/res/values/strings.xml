@@ -132,6 +132,11 @@
     <string name="novel_prompt_description_reader">Set a custom system prompt for this novel</string>
     <string name="novel_prompt_llm_only">Gemini/OpenAI only</string>
     <string name="novel_prompt_append_mode">Add to global prompt</string>
+    <string name="display_options_title">Display</string>
+    <string name="parallel_mode_title">Parallel mode</string>
+    <string name="parallel_mode_description">Show original and translation side by side</string>
+    <string name="parallel_order_original_first">Original first</string>
+    <string name="parallel_order_translation_first">Translation first</string>
     <string name="novel_prompts_title">Novel-specific prompts</string>
     <string name="novel_prompts_search">Search prompts</string>
     <string name="novel_prompts_description">Custom translation prompts set per novel in the reader settings</string>

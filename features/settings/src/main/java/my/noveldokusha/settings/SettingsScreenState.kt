@@ -44,6 +44,9 @@ data class SettingsScreenState(
     val llmMaxOutputTokens: State<Int>,
     // Per-novel prompt overrides
     val translationNovelPrompts: State<Map<String, NovelPromptData>>,
+    // Display options
+    val parallelEnabled: State<Boolean>,
+    val parallelOrder: State<String>,
     // Auto Backup
     val autoBackupEnabled: MutableState<Boolean>,
     val autoBackupDirectoryUri: State<String>,

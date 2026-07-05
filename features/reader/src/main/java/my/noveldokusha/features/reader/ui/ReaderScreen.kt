@@ -355,6 +355,10 @@ private fun ViewsPreview(
         onNovelPromptAppendModeChange = {},
         currentProvider = remember { mutableStateOf("GOOGLE_PA") },
         onProviderChange = {},
+        parallelEnabled = remember { mutableStateOf(false) },
+        onParallelEnabledChange = {},
+        parallelOrder = remember { mutableStateOf("ORIGINAL_FIRST") },
+        onParallelOrderChange = {},
     )
 
     val textToSpeechSettingData = TextToSpeechSettingData(

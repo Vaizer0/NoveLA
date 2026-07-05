@@ -31,6 +31,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -82,6 +84,11 @@ internal fun SettingsGeminiTranslation(
     // Novel-specific prompts
     novelPromptCount: Int,
     onNovelPromptsClick: () -> Unit,
+    // Display options
+    parallelEnabled: Boolean,
+    onParallelEnabledChange: (Boolean) -> Unit,
+    parallelOrder: String,
+    onParallelOrderChange: (String) -> Unit,
 ) {
     val predefinedGeminiModels = listOf(
         "gemini-3.1-flash-lite",
@@ -340,6 +347,53 @@ internal fun SettingsGeminiTranslation(
                     onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
                     onSavePreset                   = onSavePreset,
                     onDeletePreset                 = onDeletePreset,
+                )
+            }
+        }
+
+        // ── Parallel mode ────────────────────────────────────────────────────────────────────
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+
+        // Parallel mode toggle
+        SlimListItem(
+            headlineContent = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.parallel_mode_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = parallelEnabled,
+                        onCheckedChange = onParallelEnabledChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colorAccent(),
+                            checkedTrackColor = colorAccent().copy(alpha = 0.3f),
+                        ),
+                    )
+                }
+            },
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+
+        // Order chips (visible when parallel mode is enabled)
+        if (parallelEnabled) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            ) {
+                FilterChip(
+                    selected = parallelOrder == "ORIGINAL_FIRST",
+                    onClick = { onParallelOrderChange("ORIGINAL_FIRST") },
+                    label = { Text(stringResource(R.string.parallel_order_original_first)) },
+                )
+                FilterChip(
+                    selected = parallelOrder == "TRANSLATION_FIRST",
+                    onClick = { onParallelOrderChange("TRANSLATION_FIRST") },
+                    label = { Text(stringResource(R.string.parallel_order_translation_first)) },
                 )
             }
         }

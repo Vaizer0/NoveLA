@@ -111,6 +111,8 @@ fun SettingsScreen(
                     onAutoBackupIncludeSettingsChange = viewModel::onAutoBackupIncludeSettingsChange,
                     onAutoBackupIncludePluginsChange = viewModel::onAutoBackupIncludePluginsChange,
                     onDeleteNovelPrompt = viewModel::onDeleteNovelPrompt,
+                    onParallelEnabledChange = viewModel::onParallelEnabledChange,
+                    onParallelOrderChange = viewModel::onParallelOrderChange,
                     modifier = Modifier.padding(innerPadding),
                 )
                 "regex-cleanup" -> {

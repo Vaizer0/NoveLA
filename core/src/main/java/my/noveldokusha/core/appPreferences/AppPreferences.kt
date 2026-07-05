@@ -408,6 +408,14 @@ class AppPreferences @Inject constructor(
 
     // Количество параграфов в одном LLM-запросе (только Gemini и OpenAI).
     // Google PA и Free используют символьный лимит и не читают это значение.
+    val TRANSLATION_PARALLEL_ENABLED = object : Preference<Boolean>("TRANSLATION_PARALLEL_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    val TRANSLATION_PARALLEL_ORDER = object : Preference<String>("TRANSLATION_PARALLEL_ORDER") {
+        override var value by SharedPreference_String(name, preferences, "TRANSLATION_FIRST")
+    }
+
     val TRANSLATION_BATCH_SIZE =
         object : Preference<Int>("TRANSLATION_BATCH_SIZE") {
             override var value by SharedPreference_Int(name, preferences, 60)

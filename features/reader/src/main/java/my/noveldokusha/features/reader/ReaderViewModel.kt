@@ -124,6 +124,7 @@ internal class ReaderViewModel @Inject constructor(
         readerSession.currentChapter = new
     }
     val onTranslatorChanged = readerSession.readerLiveTranslation.onTranslatorChanged
+    val onDisplaySettingsChanged = readerSession.readerLiveTranslation.onDisplaySettingsChanged
     val ttsScrolledToTheTop = readerSession.readerTextToSpeech.scrolledToTheTop
     val ttsScrolledToTheBottom = readerSession.readerTextToSpeech.scrolledToTheBottom
 

@@ -116,6 +116,8 @@ class ReaderActivity : BaseActivity() {
                 currentTypeface = { fontsLoader.getTypeFaceNORMAL(appPreferences.READER_FONT_FAMILY.value) },
                 currentTypefaceBold = { fontsLoader.getTypeFaceBOLD(appPreferences.READER_FONT_FAMILY.value) },
                 currentSpeakerActiveItem = { viewModel.readerSpeaker.currentTextPlaying.value },
+                currentParallelEnabled = { appPreferences.TRANSLATION_PARALLEL_ENABLED.value },
+                currentParallelOrder = { appPreferences.TRANSLATION_PARALLEL_ORDER.value },
                 onChapterStartVisible = viewModel::markChapterStartAsSeen,
                 onChapterEndVisible = viewModel::markChapterEndAsSeen,
                 onReloadReader = viewModel::reloadReader,
@@ -180,6 +182,11 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.onTranslatorChanged.collect {
                 viewModel.reloadReader()
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.onDisplaySettingsChanged.collect {
+                viewAdapter.listView.notifyDataSetChanged()
             }
         }
         readerViewHandlersActions.forceUpdateListViewState = {
