@@ -658,8 +658,8 @@ class ReaderActivity : BaseActivity() {
     }
 
     private fun updateInfoView() {
-        val lastVisiblePosition = viewBind.listView.lastVisiblePosition
-        val itemIndex = viewAdapter.listView.fromPositionToIndex(lastVisiblePosition)
+        val firstVisiblePosition = viewBind.listView.firstVisiblePosition
+        val itemIndex = viewAdapter.listView.fromPositionToIndex(firstVisiblePosition)
         viewModel.updateInfoViewTo(itemIndex, userHasScrolled = userHasScrolled)
     }
 

@@ -81,6 +81,26 @@ internal class ReaderItemAdapter(
     private val topPadding = ReaderItem.Padding(chapterIndex = Int.MIN_VALUE)
     private val bottomPadding = ReaderItem.Padding(chapterIndex = Int.MAX_VALUE)
 
+    override fun hasStableIds(): Boolean = true
+
+    override fun getItemId(position: Int): Long {
+        if (position == 0) return Long.MIN_VALUE
+        if (position == count - 1) return Long.MAX_VALUE
+        val item = super.getItem(position - 1)!!
+        return when (item) {
+            is ReaderItem.Position -> (item.chapterIndex.toLong() shl 32) or (item.chapterItemPosition.toLong() and 0xFFFFFFFFL)
+            is ReaderItem.BookStart -> (item.chapterIndex.toLong() shl 32) or 1L
+            is ReaderItem.BookEnd -> (item.chapterIndex.toLong() shl 32) or 2L
+            is ReaderItem.Divider -> (item.chapterIndex.toLong() shl 32) or 3L
+            is ReaderItem.Progressbar -> (item.chapterIndex.toLong() shl 32) or 4L
+            is ReaderItem.Translating -> (item.chapterIndex.toLong() shl 32) or 5L
+            is ReaderItem.Error -> (item.chapterIndex.toLong() shl 32) or 6L
+            is ReaderItem.GoogleTranslateAttribution -> (item.chapterIndex.toLong() shl 32) or 7L
+            is ReaderItem.TranslateAttribution -> (item.chapterIndex.toLong() shl 32) or 8L
+            else -> item.chapterIndex.toLong()
+        }
+    }
+
     override fun getViewTypeCount(): Int = 12
     override fun getItemViewType(position: Int) = when (getItem(position)) {
         is ReaderItem.Body -> 0

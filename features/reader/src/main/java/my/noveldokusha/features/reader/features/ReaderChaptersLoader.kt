@@ -438,7 +438,7 @@ internal class ReaderChaptersLoader(
         insert: suspend (ReaderItem) -> Unit,
         insertAll: suspend (Collection<ReaderItem>) -> Unit,
         remove: suspend (ReaderItem) -> Unit,
-        maintainPosition: suspend (suspend () -> Unit) -> Unit = { it() },
+        maintainPosition: suspend (suspend () -> Unit) -> Unit = { withContext(Dispatchers.Main.immediate) { it() } },
         showLoadingState: Boolean = true,
         skipLoadedCheck: Boolean = false,
         maintainOnSuccess: Boolean = false,
@@ -777,16 +777,17 @@ internal class ReaderChaptersLoader(
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
                 } else {
-                    remove(itemProgressBar)
-                    itemTranslating?.let { remove(it) }
                     withContext(Dispatchers.Main.immediate) {
-                        val idx = this@ReaderChaptersLoader.items.indexOf(itemTitle)
-                        if (idx != -1) this@ReaderChaptersLoader.items[idx] = finalItemTitle
+                        val backingList = this@ReaderChaptersLoader.items
+                        backingList.remove(itemProgressBar)
+                        itemTranslating?.let { backingList.remove(it) }
+                        val idx = backingList.indexOf(itemTitle)
+                        if (idx != -1) backingList[idx] = finalItemTitle
+                        itemTranslationAttribution?.let { backingList.add(it) }
+                        backingList.addAll(items)
+                        backingList.add(ReaderItem.Divider(chapterIndex = chapterIndex))
+                        readerViewHandlersActions.forceUpdateListViewState?.invoke()
                     }
-                    itemTranslationAttribution?.let { insert(it) }
-                    insertAll(items)
-                    insert(ReaderItem.Divider(chapterIndex = chapterIndex))
-                    readerViewHandlersActions.doForceUpdateListViewState()
                 }
                 return@_addChapterInternal true
             }

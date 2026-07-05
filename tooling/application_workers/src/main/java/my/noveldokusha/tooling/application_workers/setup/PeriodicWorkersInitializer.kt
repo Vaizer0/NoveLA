@@ -57,19 +57,11 @@ class PeriodicWorkersInitializer @Inject constructor(
         }
 
         // --- LibraryUpdatesWorker ---
+        // Регистрация периодической работы; manual запускается только по запросу пользователя
         val libEnabled = appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_ENABLED.value
         val libInterval = appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_INTERVAL_HOURS.value
 
         if (libEnabled) {
-            val lastRun = appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value
-            val overdue = lastRun <= 0 || (System.currentTimeMillis() - lastRun) >= libInterval * 3_600_000L
-            if (overdue) {
-                Timber.d("LibraryUpdates: overdue, enqueueing immediate run")
-                workManager.enqueue(
-                    LibraryUpdatesWorker.createManualRequest(LibraryCategory.DEFAULT)
-                )
-            }
-
             workManager.enqueueUniquePeriodicWork(
                 LibraryUpdatesWorker.TAG,
                 ExistingPeriodicWorkPolicy.KEEP,
@@ -85,6 +77,7 @@ class PeriodicWorkersInitializer @Inject constructor(
             ) { enabled, intervalHours ->
                 if (!enabled) {
                     workManager.cancelAllWorkByTag(LibraryUpdatesWorker.TAG)
+                    workManager.cancelAllWorkByTag(LibraryUpdatesWorker.TAG_MANUAL)
                 } else {
                     workManager.enqueueUniquePeriodicWork(
                         LibraryUpdatesWorker.TAG,

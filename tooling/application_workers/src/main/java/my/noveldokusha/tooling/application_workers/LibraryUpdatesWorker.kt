@@ -40,7 +40,6 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
 
     companion object {
 
-        // TODO: solve when both are run at the same time (notifications will get weird)
         const val TAG = "LibraryUpdates"
         const val TAG_MANUAL = "LibraryUpdatesManual"
 
@@ -71,9 +70,7 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
         fun createManualRequest(
             updateCategory: LibraryCategory
         ): OneTimeWorkRequest {
-            val builder = OneTimeWorkRequestBuilder<LibraryUpdatesWorker>()
-            PeriodicWorkRequest.MIN_PERIODIC_FLEX_MILLIS
-            return builder
+            return OneTimeWorkRequestBuilder<LibraryUpdatesWorker>()
                 .addTag(TAG_MANUAL)
                 .setInitialDelay(0, TimeUnit.SECONDS)
                 .setInputData(createInputData(updateCategory))
