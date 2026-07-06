@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.core.Response
@@ -36,6 +37,7 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
     private val appPreferences: AppPreferences,
     private val libraryUpdateNotification: LibraryUpdateNotification,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
+    private val luaSourceProvider: my.noveldokusha.scraper.LuaSourceProvider,
 ) : CoroutineWorker(context, workerParameters) {
 
     companion object {
@@ -90,6 +92,16 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
                 ?: LibraryCategory.DEFAULT
 
         Timber.d("LibraryUpdatesWorker: starting $updateCategory")
+
+        // Ждём загрузки реальных Lua-скриптов (CachedSource заглушки не подходят для данных)
+        try {
+            withTimeout(30_000L) {
+                luaSourceProvider.awaitLoaded()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "LibraryUpdatesWorker: timed out waiting for Lua sources to load")
+            return Result.retry()
+        }
 
         val result = updateLibrary(updateCategory = updateCategory)
             .onError { Timber.e(it.exception) }
