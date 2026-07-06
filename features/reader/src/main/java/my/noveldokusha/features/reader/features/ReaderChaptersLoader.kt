@@ -70,6 +70,7 @@ internal class ReaderChaptersLoader(
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
     private var errorRetryCount = 0
+    private @Volatile var pendingPruneChapterIndex: Int? = null
 
     var hasLoadingError: Boolean
         get() = _hasLoadingError
@@ -219,6 +220,7 @@ internal class ReaderChaptersLoader(
         }
             val success = addChapter(chapterIndex = chapterIndex, insert = insert, insertAll = insertAll, remove = remove)
             readerState = ReaderState.IDLE
+            flushPendingPrune()
 
             if (success == true && !hasLoadingError) {
                 android.util.Log.d(TAG, "retryChapter: auto-resuming preload for next chapter")
@@ -267,6 +269,13 @@ internal class ReaderChaptersLoader(
 
     @Synchronized private fun removeQueueItem(type: LoadChapter.Type) {
         loaderQueue.remove(type)
+    }
+
+    private suspend fun flushPendingPrune() {
+        pendingPruneChapterIndex?.let { chapterIndex ->
+            pendingPruneChapterIndex = null
+            pruneItems(chapterIndex)
+        }
     }
 
     private suspend fun loadRestartedInitialChapter(
@@ -385,6 +394,7 @@ internal class ReaderChaptersLoader(
                 readerViewHandlersActions.doForceUpdateListViewState()
             }
             readerState = ReaderState.IDLE
+            flushPendingPrune()
             return@withContext
         }
 
@@ -395,6 +405,7 @@ internal class ReaderChaptersLoader(
 
         chapterLoadedFlow.emit(ChapterLoaded(chapterIndex = previousIndex, type = ChapterLoaded.Type.Previous))
         readerState = ReaderState.IDLE
+        flushPendingPrune()
     }
 
     private suspend fun loadNextChapter() = withContext(Dispatchers.Main.immediate) {
@@ -423,6 +434,7 @@ internal class ReaderChaptersLoader(
                 readerViewHandlersActions.doForceUpdateListViewState()
             }
             readerState = ReaderState.IDLE
+            flushPendingPrune()
             return@withContext
         }
 
@@ -431,6 +443,7 @@ internal class ReaderChaptersLoader(
         addChapter(chapterIndex = nextIndex, insert = insert, insertAll = insertAll, remove = remove)
         chapterLoadedFlow.emit(ChapterLoaded(chapterIndex = nextIndex, type = ChapterLoaded.Type.Next))
         readerState = ReaderState.IDLE
+        flushPendingPrune()
     }
 
     private suspend fun addChapter(
@@ -823,6 +836,11 @@ internal class ReaderChaptersLoader(
     }
 
     suspend fun pruneItems(currentChapterIndex: Int) = withContext(Dispatchers.Main.immediate) {
+        if (readerState == ReaderState.LOADING) {
+            pendingPruneChapterIndex = currentChapterIndex
+            return@withContext
+        }
+
         val minKeep = (currentChapterIndex - WINDOW_BEHIND).coerceAtLeast(0)
         val maxKeep = currentChapterIndex + WINDOW_AHEAD
 
@@ -838,8 +856,18 @@ internal class ReaderChaptersLoader(
 
         if (toRemoveItems.isEmpty()) return@withContext
 
+        val listView = readerViewHandlersActions.listView
+        val savedFirstVisible = listView?.firstVisiblePosition ?: 0
+        val savedTop = listView?.getChildAt(0)?.top ?: 0
+        val removedCountFront = toRemoveItems.count { it.chapterIndex < currentChapterIndex }
+
         items.removeAll(toRemoveItems)
         readerViewHandlersActions.doForceUpdateListViewState()
+
+        if (listView != null && removedCountFront > 0) {
+            val newFirstVisible = (savedFirstVisible - removedCountFront).coerceAtLeast(0)
+            listView.setSelectionFromTop(newFirstVisible, savedTop)
+        }
 
         for (chapterIndex in toRemoveChapterIndices) {
             val url = orderedChapters.getOrNull(chapterIndex)?.url ?: continue
