@@ -191,7 +191,7 @@ private fun LanguageSelector(state: LiveTranslationSettingData) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             LanguageButton(
-                label = state.source.value?.locale?.displayLanguage
+                label = state.source.value?.displayName
                     ?: stringResource(R.string.language_source_empty_text),
                 active = state.source.value != null,
                 onClick = { showSourceDialog = true },
@@ -206,7 +206,7 @@ private fun LanguageSelector(state: LiveTranslationSettingData) {
             )
             Spacer(Modifier.width(8.dp))
             LanguageButton(
-                label = state.target.value?.locale?.displayLanguage
+                label = state.target.value?.displayName
                     ?: stringResource(R.string.language_target_empty_text),
                 active = state.target.value != null,
                 onClick = { showTargetDialog = true },
@@ -274,7 +274,7 @@ private fun LanguageSearchDialog(
     val filtered = remember(query, languages) {
         if (query.isBlank()) languages
         else languages.filter {
-            it.locale.displayLanguage.contains(query, ignoreCase = true) ||
+            it.displayName.contains(query, ignoreCase = true) ||
             it.language.contains(query, ignoreCase = true)
         }
     }
@@ -323,7 +323,7 @@ private fun LanguageSearchDialog(
                                 .padding(vertical = 6.dp, horizontal = 4.dp),
                         ) {
                             Text(
-                                text = "${item.locale.displayLanguage} (${item.language})",
+                                text = "${item.displayName} (${item.language})",
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                                 color = when {
