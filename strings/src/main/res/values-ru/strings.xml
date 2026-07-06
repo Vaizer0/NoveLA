@@ -235,7 +235,8 @@
     <string name="importing_books_progress">Импорт %1$d / %2$d…</string>
     <string name="imported_books_count">Импортировано книг: %1$d</string>
     <string name="updating_library">Обновление библиотеки (%1$d/%2$d)</string>
-    <string name="delete_novel">Удалить новеллу</string>
+    <string name="delete_novel">Удалить новеллу</string>
+    <string name="delete_book_translations">Удалить все переводы этой книги</string>
     <string name="mark_all_chapters_read">Отметить все главы как прочитанные</string>
     <string name="mark_all_chapters_unread">Отметить все главы как непрочитанные</string>
     <string name="notification_channel_name_reader_narrator">Читатель-рассказчик</string>

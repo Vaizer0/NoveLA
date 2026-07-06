@@ -317,6 +317,7 @@
     <string name="source_name_local">ในเครื่อง</string>
 
     <string name="delete_novel">ลบนิยาย</string>
+    <string name="delete_book_translations">ลบทั้งหมดการแปลของนิยายเรื่องนี้</string>
     <string name="mark_all_chapters_read">ทำเครื่องหมายทุกบทว่าอ่านแล้ว</string>
     <string name="mark_all_chapters_unread">ทำเครื่องหมายทุกบทว่ายังไม่ได้อ่าน</string>
     <string name="move_to">ย้ายไปยัง</string>

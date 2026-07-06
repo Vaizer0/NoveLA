@@ -73,6 +73,7 @@ internal class ReaderSession(
         )
     ) { _, old, new ->
         chapterUrl = new.chapterUrl
+        readerLiveTranslation.currentChapterUrl = new.chapterUrl
         if (
             old.chapterUrl != new.chapterUrl &&
             savePositionMode.value == SavePositionMode.Reading
@@ -105,7 +106,7 @@ internal class ReaderSession(
         appPreferences = appPreferences,
         chapterTranslationDao = chapterTranslationDao,
         bookUrl = bookUrl,
-    )
+    ).also { it.currentChapterUrl = chapterUrl }
 
     val readerChaptersLoader = ReaderChaptersLoader(
         readerRepository = readerRepository,

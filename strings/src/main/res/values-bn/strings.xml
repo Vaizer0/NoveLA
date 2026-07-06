@@ -317,6 +317,7 @@
     <string name="source_name_local">স্থানীয়</string>
 
     <string name="delete_novel">নভেল মুছুন</string>
+    <string name="delete_book_translations">এই উপন্যাসের সমস্ত অনুবাদ মুছুন</string>
     <string name="mark_all_chapters_read">সব অধ্যায় পঠিত হিসেবে চিহ্নিত করুন</string>
     <string name="mark_all_chapters_unread">সব অধ্যায় অপঠিত হিসেবে চিহ্নিত করুন</string>
     <string name="move_to">এতে সরান</string>

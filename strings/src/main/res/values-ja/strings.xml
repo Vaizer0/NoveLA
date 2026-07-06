@@ -317,6 +317,7 @@
     <string name="source_name_local">ローカル</string>
 
     <string name="delete_novel">小説を削除</string>
+    <string name="delete_book_translations">この小説のすべての翻訳を削除</string>
     <string name="mark_all_chapters_read">すべてのチャプターを既読にする</string>
     <string name="mark_all_chapters_unread">すべてのチャプターを未読にする</string>
     <string name="move_to">移動</string>

@@ -317,6 +317,7 @@
     <string name="source_name_local">Yerel</string>
 
     <string name="delete_novel">Romanı sil</string>
+    <string name="delete_book_translations">Bu romanın tüm çevirilerini sil</string>
     <string name="mark_all_chapters_read">Tüm bölümleri okundu işaretle</string>
     <string name="mark_all_chapters_unread">Tüm bölümleri okunmadı işaretle</string>
     <string name="move_to">Taşı</string>

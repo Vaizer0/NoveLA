@@ -317,6 +317,7 @@
     <string name="source_name_local">Lokal</string>
 
     <string name="delete_novel">Hapus novel</string>
+    <string name="delete_book_translations">Hapus semua terjemahan novel ini</string>
     <string name="mark_all_chapters_read">Tandai semua bab sudah dibaca</string>
     <string name="mark_all_chapters_unread">Tandai semua bab belum dibaca</string>
     <string name="move_to">Pindahkan ke</string>

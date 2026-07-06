@@ -317,6 +317,7 @@
     <string name="source_name_local">محلي</string>
 
     <string name="delete_novel">حذف الرواية</string>
+    <string name="delete_book_translations">حذف جميع ترجمات هذه الرواية</string>
     <string name="mark_all_chapters_read">وضع علامة مقروءة على كل الفصول</string>
     <string name="mark_all_chapters_unread">وضع علامة غير مقروءة على كل الفصول</string>
     <string name="move_to">نقل إلى</string>

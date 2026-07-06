@@ -317,6 +317,7 @@
     <string name="source_name_local">Cục bộ</string>
 
     <string name="delete_novel">Xóa tiểu thuyết</string>
+    <string name="delete_book_translations">Xóa tất cả bản dịch của tiểu thuyết này</string>
     <string name="mark_all_chapters_read">Đánh dấu tất cả chương đã đọc</string>
     <string name="mark_all_chapters_unread">Đánh dấu tất cả chương chưa đọc</string>
     <string name="move_to">Di chuyển đến</string>

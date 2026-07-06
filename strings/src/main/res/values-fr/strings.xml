@@ -317,6 +317,7 @@
     <string name="source_name_local">Local</string>
 
     <string name="delete_novel">Supprimer le roman</string>
+    <string name="delete_book_translations">Supprimer toutes les traductions de ce roman</string>
     <string name="mark_all_chapters_read">Marquer tous les chapitres comme lus</string>
     <string name="mark_all_chapters_unread">Marquer tous les chapitres comme non lus</string>
     <string name="move_to">Déplacer vers</string>

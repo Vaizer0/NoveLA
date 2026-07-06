@@ -317,6 +317,7 @@
     <string name="source_name_local">로컬</string>
 
     <string name="delete_novel">소설 삭제</string>
+    <string name="delete_book_translations">이 소설의 모든 번역 삭제</string>
     <string name="mark_all_chapters_read">모든 화 읽음으로 표시</string>
     <string name="mark_all_chapters_unread">모든 화 읽지 않음으로 표시</string>
     <string name="move_to">이동</string>

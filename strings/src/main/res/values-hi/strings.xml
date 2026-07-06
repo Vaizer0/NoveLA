@@ -317,6 +317,7 @@
     <string name="source_name_local">स्थानीय</string>
 
     <string name="delete_novel">उपन्यास हटाएं</string>
+    <string name="delete_book_translations">इस उपन्यास के सभी अनुवाद हटाएं</string>
     <string name="mark_all_chapters_read">सभी अध्यायों को पढ़ा हुआ चिह्नित करें</string>
     <string name="mark_all_chapters_unread">सभी अध्यायों को अपठित चिह्नित करें</string>
     <string name="move_to">ले जाएं</string>

@@ -336,6 +336,7 @@
     <string name="source_name_local">Local</string>
 
     <string name="delete_novel">Delete novel</string>
+    <string name="delete_book_translations">Delete all translations for this book</string>
     <string name="mark_all_chapters_read">Mark all chapters as read</string>
     <string name="mark_all_chapters_unread">Mark all chapters as unread</string>
     <string name="move_to">Move to</string>

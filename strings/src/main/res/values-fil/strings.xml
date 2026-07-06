@@ -317,6 +317,7 @@
     <string name="source_name_local">Lokal</string>
 
     <string name="delete_novel">Tanggalin ang nobela</string>
+    <string name="delete_book_translations">Tanggalin ang lahat ng pagsasalin ng nobelang ito</string>
     <string name="mark_all_chapters_read">Markahan lahat ng kabanata bilang nabasa</string>
     <string name="mark_all_chapters_unread">Markahan lahat ng kabanata bilang hindi nabasa</string>
     <string name="move_to">Ilipat sa</string>
