@@ -28,6 +28,7 @@ import my.noveldokusha.features.reader.domain.ChapterIndex
 import my.noveldokusha.features.reader.domain.ChapterLoaded
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
+import my.noveldokusha.text_to_speech.AppTtsEngine
 import my.noveldokusha.text_to_speech.TextToSpeechManager
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
@@ -109,6 +110,7 @@ internal class ReaderTextToSpeech(
     private var updateJob: Job? = null
     private val manager = TextToSpeechManager(
         context = context,
+        appTtsEngine = AppTtsEngine.getInstance(context),
         initialItemState = TextSynthesis(
             itemPos = ReaderItem.Title(
                 chapterUrl = "",
@@ -118,7 +120,7 @@ internal class ReaderTextToSpeech(
             ),
             playState = Utterance.PlayState.FINISHED
         )
-    )
+    ).also { it.init() }
 
     val scrolledToTheTop = MutableSharedFlow<Unit>()
     val scrolledToTheBottom = MutableSharedFlow<Unit>()
@@ -437,11 +439,6 @@ internal class ReaderTextToSpeech(
         state.isPlaying.value = false
         updateJob?.cancel()
         manager.stop()
-    }
-
-    fun onClose() {
-        stop()
-        manager.service.shutdown()
     }
 
     suspend fun readChapterStartingFromStart(

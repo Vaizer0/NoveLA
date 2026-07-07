@@ -134,7 +134,11 @@ internal class ReaderViewModel @Inject constructor(
     val ttsScrolledToTheBottom = readerSession.readerTextToSpeech.scrolledToTheBottom
 
     fun onCloseManually() {
-        readerManager.close()
+        if (readerSession.readerTextToSpeech.isActive.value) {
+            readerManager.detachSession()
+        } else {
+            readerManager.close()
+        }
     }
 
     fun startSpeaker(itemIndex: Int) =

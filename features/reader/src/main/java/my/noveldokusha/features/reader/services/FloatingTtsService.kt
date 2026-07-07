@@ -45,7 +45,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID = "floating_tts_channel"
 
-        var ttsState: TextToSpeechSettingData? = null
+        var ttsState = mutableStateOf<TextToSpeechSettingData?>(null)
         var showText = mutableStateOf(false)
         var showOutsideApp = mutableStateOf(true)
         var opacity = mutableFloatStateOf(0.6f)
@@ -215,8 +215,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         }
         currentLayoutParams = layoutParams
 
-        val state = ttsState ?: return
-
         paragraphMode = appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value
 
         composeView = ComposeView(this).apply {
@@ -226,6 +224,8 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                 val scope = rememberCoroutineScope()
                 val darkModeState = remember { appPreferences.THEME_DARK_MODE.state(scope) }
                 val appThemeState = remember { appPreferences.APP_THEME.state(scope) }
+
+                val state = ttsState.value ?: return@setContent
 
                 val darkModeStr by darkModeState
                 val appThemeStr by appThemeState

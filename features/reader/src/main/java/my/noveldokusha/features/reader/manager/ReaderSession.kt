@@ -347,7 +347,7 @@ internal class ReaderSession(
                 )
             }
         }
-        readerTextToSpeech.onClose()
+        readerTextToSpeech.stop()
         scope.coroutineContext.cancelChildren()
         NarratorMediaControlsService.stop(context)
     }

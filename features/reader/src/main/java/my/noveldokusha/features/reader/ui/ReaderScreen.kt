@@ -270,7 +270,7 @@ internal fun ReaderScreen(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(context)) {
                 my.noveldokusha.features.reader.services.FloatingTtsService.activityWindowToken =
                     windowToken
-                my.noveldokusha.features.reader.services.FloatingTtsService.ttsState =
+                my.noveldokusha.features.reader.services.FloatingTtsService.ttsState.value =
                     state.settings.textToSpeech
                 my.noveldokusha.features.reader.services.FloatingTtsService.showOutsideApp.value =
                     state.settings.floatingTts.showOutsideApp.value
@@ -319,7 +319,7 @@ internal fun ReaderScreen(
                 if (hasPermission) {
                     my.noveldokusha.features.reader.services.FloatingTtsService.activityWindowToken =
                         windowToken
-                    my.noveldokusha.features.reader.services.FloatingTtsService.ttsState =
+                    my.noveldokusha.features.reader.services.FloatingTtsService.ttsState.value =
                         state.settings.textToSpeech
                     my.noveldokusha.features.reader.services.FloatingTtsService.showOutsideApp.value =
                         state.settings.floatingTts.showOutsideApp.value
