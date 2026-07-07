@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">Permissão de sobreposição</string>
     <string name="tts_floating_overlay_permission_message">O player flutuante precisa de permissão para exibir sobre outros aplicativos.</string>
     <string name="tts_floating_open_settings">Abrir configurações</string>

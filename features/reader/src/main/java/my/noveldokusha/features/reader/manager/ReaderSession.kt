@@ -166,8 +166,8 @@ internal class ReaderSession(
             setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
             getPreferredVoiceIdForOriginal = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL.value },
             setPreferredVoiceIdForOriginal = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL.value = it },
-            getParallelEnabled = { appPreferences.TRANSLATION_PARALLEL_ENABLED.value },
-            getParallelOrder = { appPreferences.TRANSLATION_PARALLEL_ORDER.value },
+            getParallelEnabled = appPreferences.TRANSLATION_PARALLEL_ENABLED.state(scope)::value,
+            getParallelOrder = appPreferences.TRANSLATION_PARALLEL_ORDER.state(scope)::value,
             onBufferLow = {
                 val currentChapterIndex = ttsCurrentChapterIndex
                 val sessionAge = System.currentTimeMillis() - sessionCreatedTime

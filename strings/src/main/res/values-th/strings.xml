@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">สิทธิ์การซ้อนทับ</string>
     <string name="tts_floating_overlay_permission_message">โปรแกรมเล่นลอยต้องได้รับสิทธิ์ในการแสดงเหนือแอปอื่น</string>
     <string name="tts_floating_open_settings">เปิดการตั้งค่า</string>

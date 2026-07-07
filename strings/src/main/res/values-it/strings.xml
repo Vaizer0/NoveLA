@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">Permesso sovrapposizione</string>
     <string name="tts_floating_overlay_permission_message">Il lettore fluttuante necessita del permesso per mostrarsi sopra altre applicazioni.</string>
     <string name="tts_floating_open_settings">Apri impostazioni</string>

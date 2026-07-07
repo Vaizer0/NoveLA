@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">Quyền lớp phủ</string>
     <string name="tts_floating_overlay_permission_message">Trình phát nổi cần quyền để hiển thị trên các ứng dụng khác.</string>
     <string name="tts_floating_open_settings">Mở cài đặt</string>

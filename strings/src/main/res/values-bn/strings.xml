@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">ওভারলে অনুমতি</string>
     <string name="tts_floating_overlay_permission_message">ভাসমান প্লেয়ারটিকে অন্যান্য অ্যাপের উপরে দেখানোর জন্য অনুমতি প্রয়োজন।</string>
     <string name="tts_floating_open_settings">সেটিংস খুলুন</string>

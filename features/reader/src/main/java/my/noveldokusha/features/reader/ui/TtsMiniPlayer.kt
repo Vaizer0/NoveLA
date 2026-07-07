@@ -303,7 +303,8 @@ private fun FloatingTtsMiniPlayer(
         paragraphMode == "inverse" && hasInverse -> inverseParagraph
         else -> ttsParagraph
     }
-    val hasParagraphText = showParagraphText && displayText.isNotBlank()
+    val isBothMode = paragraphMode == "both" && hasInverse
+    val hasParagraphText = showParagraphText && (displayText.isNotBlank() || isBothMode)
 
     val density = LocalDensity.current
     var showOpacitySlider by remember { mutableStateOf(false) }
@@ -476,6 +477,19 @@ private fun FloatingTtsMiniPlayer(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
+                                text = stringResource(R.string.tts_both),
+                                color = if (paragraphMode == "both") MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (paragraphMode == "both") FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .clickable { onParagraphModeChange("both") }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                            Text(
+                                text = "/",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
                                 text = stringResource(R.string.inverse),
                                 color = if (paragraphMode == "inverse") MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -496,12 +510,28 @@ private fun FloatingTtsMiniPlayer(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = displayText,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                    if (isBothMode) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(
+                                text = ttsParagraph,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = inverseParagraph,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize * 0.85f),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = displayText,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
         }

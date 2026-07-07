@@ -179,6 +179,7 @@
     <string name="tts_floating_paragraph">Параграф</string>
     <string name="tts_voice">Голос TTS</string>
     <string name="inverse">Обратный</string>
+    <string name="tts_both">Оба</string>
     <string name="tts_floating_overlay_permission_title">Разрешение оверлея</string>
     <string name="tts_floating_overlay_permission_message">Плавающему плееру нужно разрешение на отображение поверх других приложений.</string>
     <string name="tts_floating_open_settings">Открыть настройки</string>

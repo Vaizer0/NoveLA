@@ -186,6 +186,7 @@
     <string name="tts_floating_paragraph">Paragraph</string>
     <string name="tts_voice">TTS voice</string>
     <string name="inverse">Inverse</string>
+    <string name="tts_both">Both</string>
     <string name="tts_floating_overlay_permission_title">Pahintulot sa overlay</string>
     <string name="tts_floating_overlay_permission_message">Ang lumulutang na player ay nangangailangan ng pahintulot upang magpakita sa ibabaw ng iba pang mga application.</string>
     <string name="tts_floating_open_settings">Buksan ang mga setting</string>
