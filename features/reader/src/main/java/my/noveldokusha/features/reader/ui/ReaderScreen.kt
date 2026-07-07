@@ -356,26 +356,34 @@ internal fun ReaderScreen(
         }
 
         val lifecycle = LocalLifecycleOwner.current.lifecycle
-        var isInBackground by remember { mutableStateOf(false) }
 
-        DisposableEffect(lifecycle) {
-            val observer = LifecycleEventObserver { _, event ->
-                isInBackground = event == Lifecycle.Event.ON_PAUSE
-            }
-            lifecycle.addObserver(observer)
-            onDispose { lifecycle.removeObserver(observer) }
-        }
-
-        LaunchedEffect(
+        DisposableEffect(
+            lifecycle,
             state.settings.selectedSetting.value,
             state.settings.floatingTts.showOutsideApp.value,
-            isInBackground,
         ) {
-            if (FloatingTtsService.isRunning(context)) {
-                val isAnySettingsOpen = state.settings.selectedSetting.value != Type.None
-                val shouldHide = isAnySettingsOpen || (!state.settings.floatingTts.showOutsideApp.value && isInBackground)
-                FloatingTtsService.setOverlayHidden(shouldHide)
+            val selectedSetting = state.settings.selectedSetting.value
+            val showOutsideApp = state.settings.floatingTts.showOutsideApp.value
+
+            val observer = LifecycleEventObserver { _, event ->
+                if (!FloatingTtsService.isRunning(context)) return@LifecycleEventObserver
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> {
+                        FloatingTtsService.setOverlayHidden(selectedSetting != Type.None)
+                    }
+                    Lifecycle.Event.ON_PAUSE -> {
+                        FloatingTtsService.setOverlayHidden(!showOutsideApp)
+                    }
+                    else -> {}
+                }
             }
+            lifecycle.addObserver(observer)
+
+            if (FloatingTtsService.isRunning(context)) {
+                FloatingTtsService.setOverlayHidden(selectedSetting != Type.None)
+            }
+
+            onDispose { lifecycle.removeObserver(observer) }
         }
     }
 }

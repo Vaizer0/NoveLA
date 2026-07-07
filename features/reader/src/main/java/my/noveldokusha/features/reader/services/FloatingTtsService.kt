@@ -142,7 +142,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
     }
 
     override fun onDestroy() {
-        appPreferences.FLOATING_TTS_ENABLED.value = false
         instance = null
         removeOverlay()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
