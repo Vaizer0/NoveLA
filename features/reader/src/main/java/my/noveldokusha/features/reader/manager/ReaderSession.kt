@@ -63,7 +63,7 @@ internal class ReaderSession(
     private val sessionCreatedTime = System.currentTimeMillis()
 
     var bookTitle: String? = null
-    private var bookCoverUrl: String? = null
+    var bookCoverUrl: String? = null
 
     var currentChapter: ChapterState by Delegates.observable(
         ChapterState(
