@@ -55,6 +55,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -104,7 +105,8 @@ import my.noveldokusha.text_to_speech.VoiceData
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VoiceReaderSettingDialog(
-    state: TextToSpeechSettingData
+    state: TextToSpeechSettingData,
+    floatingTtsState: my.noveldokusha.features.reader.ui.ReaderScreenState.Settings.FloatingTtsSettingsData? = null,
 ) {
     var openVoicesDialog by rememberSaveable { mutableStateOf(false) }
     val dropdownCustomSavedVoicesExpanded = rememberSaveable { mutableStateOf(false) }
@@ -365,6 +367,53 @@ internal fun VoiceReaderSettingDialog(
                 }
             }
         }
+
+        if (floatingTtsState != null) {
+            Spacer(Modifier.height(8.dp))
+            ElevatedCard(
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.tts_floating),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Switch(
+                            checked = floatingTtsState.isEnabled.value,
+                            onCheckedChange = { floatingTtsState.isEnabled.value = it },
+                        )
+                    }
+                    if (floatingTtsState.isEnabled.value) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.tts_floating_show_outside_app),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Switch(
+                                checked = floatingTtsState.showOutsideApp.value,
+                                onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -550,7 +599,6 @@ private fun VoiceSelectorDialog(
         }
     }
 }
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

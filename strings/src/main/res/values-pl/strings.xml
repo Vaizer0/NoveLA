@@ -175,6 +175,15 @@
     <string name="media_control_pause">pauza</string>
     <string name="media_control_fast_forward">przewiń do przodu</string>
     <string name="media_control_next">następny</string>
+    <string name="tts_floating">Pływający TTS</string>
+    <string name="tts_floating_channel_description">Kontrolki nakładki pływającego TTS</string>
+    <string name="tts_floating_overlay_active">Nakładka TTS jest aktywna</string>
+    <string name="tts_floating_show_outside_app">Pokaż nad innymi aplikacjami</string>
+    <string name="tts_floating_opacity">Przezroczystość</string>
+    <string name="tts_floating_width">Szerokość</string>
+    <string name="tts_floating_overlay_permission_title">Zezwolenie na nakładkę</string>
+    <string name="tts_floating_overlay_permission_message">Pływający odtwarzacz potrzebuje zezwolenia, aby wyświetlać się nad innymi aplikacjami.</string>
+    <string name="tts_floating_open_settings">Otwórz ustawienia</string>
     <string name="delete">Usuń</string>
     <string name="english">Angielski</string>
     <string name="filter_title">Tytuł</string>

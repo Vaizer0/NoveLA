@@ -175,6 +175,15 @@
     <string name="media_control_pause">pausieren</string>
     <string name="media_control_fast_forward">vorspulen</string>
     <string name="media_control_next">nächste</string>
+    <string name="tts_floating">Floating TTS</string>
+    <string name="tts_floating_channel_description">Floating TTS Overlay-Steuerung</string>
+    <string name="tts_floating_overlay_active">TTS-Overlay ist aktiv</string>
+    <string name="tts_floating_show_outside_app">Über anderen Apps anzeigen</string>
+    <string name="tts_floating_opacity">Deckkraft</string>
+    <string name="tts_floating_width">Breite</string>
+    <string name="tts_floating_overlay_permission_title">Overlay-Berechtigung</string>
+    <string name="tts_floating_overlay_permission_message">Der Floating-Player benötigt die Berechtigung, über anderen Apps angezeigt zu werden.</string>
+    <string name="tts_floating_open_settings">Einstellungen öffnen</string>
     <string name="delete">Löschen</string>
     <string name="english">Englisch</string>
     <string name="filter_title">Titel</string>

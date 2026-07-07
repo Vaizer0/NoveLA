@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+	<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
 	<application>
 		<activity android:name="my.noveldokusha.features.reader.ReaderActivity" />
 
@@ -13,6 +15,12 @@
 				<action android:name="android.intent.action.MEDIA_BUTTON" />
 			</intent-filter>
 		</service>
+
+		<service
+			android:name="my.noveldokusha.features.reader.services.FloatingTtsService"
+			android:exported="false"
+			android:foregroundServiceType="specialUse"
+			/>
 
 		<receiver
 			android:name="androidx.media.session.MediaButtonReceiver"

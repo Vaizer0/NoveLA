@@ -130,6 +130,38 @@ class AppPreferences @Inject constructor(
             )
         }
 
+    val FLOATING_TTS_ENABLED = object : Preference<Boolean>("FLOATING_TTS_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    val FLOATING_TTS_SHOW_OUTSIDE_APP = object : Preference<Boolean>("FLOATING_TTS_SHOW_OUTSIDE_APP") {
+        override var value by SharedPreference_Boolean(name, preferences, true)
+    }
+
+    val FLOATING_TTS_OPACITY = object : Preference<Float>("FLOATING_TTS_OPACITY") {
+        override var value by SharedPreference_Float(name, preferences, 0.95f)
+    }
+
+    val FLOATING_TTS_POS_X = object : Preference<Float>("FLOATING_TTS_POS_X") {
+        override var value by SharedPreference_Float(name, preferences, -1f)
+    }
+
+    val FLOATING_TTS_POS_Y = object : Preference<Float>("FLOATING_TTS_POS_Y") {
+        override var value by SharedPreference_Float(name, preferences, -1f)
+    }
+
+    val FLOATING_TTS_PANEL_WIDTH = object : Preference<Float>("FLOATING_TTS_PANEL_WIDTH") {
+        override var value by SharedPreference_Float(name, preferences, 300f)
+    }
+
+    val FLOATING_TTS_PANEL_POS_X = object : Preference<Float>("FLOATING_TTS_PANEL_POS_X") {
+        override var value by SharedPreference_Float(name, preferences, -1f)
+    }
+
+    val FLOATING_TTS_PANEL_POS_Y = object : Preference<Float>("FLOATING_TTS_PANEL_POS_Y") {
+        override var value by SharedPreference_Float(name, preferences, -1f)
+    }
+
     val READER_SELECTABLE_TEXT = object : Preference<Boolean>("READER_SELECTABLE_TEXT") {
         override var value by SharedPreference_Boolean(name, preferences, false)
     }

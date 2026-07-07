@@ -175,6 +175,15 @@
     <string name="media_control_pause">jeda</string>
     <string name="media_control_fast_forward">maju_cepat</string>
     <string name="media_control_next">berikutnya</string>
+    <string name="tts_floating">TTS Mengambang</string>
+    <string name="tts_floating_channel_description">Kontrol overlay TTS mengambang</string>
+    <string name="tts_floating_overlay_active">Overlay TTS aktif</string>
+    <string name="tts_floating_show_outside_app">Tampilkan di atas aplikasi lain</string>
+    <string name="tts_floating_opacity">Opacity</string>
+    <string name="tts_floating_width">Lebar</string>
+    <string name="tts_floating_overlay_permission_title">Izin overlay</string>
+    <string name="tts_floating_overlay_permission_message">Pemutar mengambang perlu izin untuk ditampilkan di atas aplikasi lain.</string>
+    <string name="tts_floating_open_settings">Buka pengaturan</string>
     <string name="delete">Hapus</string>
     <string name="english">Inggris</string>
     <string name="filter_title">Judul</string>

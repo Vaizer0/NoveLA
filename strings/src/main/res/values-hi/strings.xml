@@ -175,6 +175,15 @@
     <string name="media_control_pause">रोकें</string>
     <string name="media_control_fast_forward">तेज़ आगे</string>
     <string name="media_control_next">अगला</string>
+    <string name="tts_floating">फ्लोटिंग TTS</string>
+    <string name="tts_floating_channel_description">फ्लोटिंग TTS ओवरले नियंत्रण</string>
+    <string name="tts_floating_overlay_active">TTS ओवरले सक्रिय है</string>
+    <string name="tts_floating_show_outside_app">अन्य ऐप्स के ऊपर दिखाएं</string>
+    <string name="tts_floating_opacity">अपारदर्शिता</string>
+    <string name="tts_floating_width">चौड़ाई</string>
+    <string name="tts_floating_overlay_permission_title">ओवरले अनुमति</string>
+    <string name="tts_floating_overlay_permission_message">फ्लोटिंग प्लेयर को अन्य ऐप्स के ऊपर प्रदर्शित होने के लिए अनुमति चाहिए।</string>
+    <string name="tts_floating_open_settings">सेटिंग खोलें</string>
     <string name="delete">हटाएं</string>
     <string name="english">अंग्रेज़ी</string>
     <string name="filter_title">शीर्षक</string>

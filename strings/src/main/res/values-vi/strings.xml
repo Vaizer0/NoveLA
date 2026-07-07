@@ -175,6 +175,15 @@
     <string name="media_control_pause">tạm dừng</string>
     <string name="media_control_fast_forward">tua nhanh</string>
     <string name="media_control_next">tiếp</string>
+    <string name="tts_floating">TTS nổi</string>
+    <string name="tts_floating_channel_description">Điều khiển lớp phủ TTS nổi</string>
+    <string name="tts_floating_overlay_active">Lớp phủ TTS đang hoạt động</string>
+    <string name="tts_floating_show_outside_app">Hiển thị trên ứng dụng khác</string>
+    <string name="tts_floating_opacity">Độ mờ</string>
+    <string name="tts_floating_width">Chiều rộng</string>
+    <string name="tts_floating_overlay_permission_title">Quyền lớp phủ</string>
+    <string name="tts_floating_overlay_permission_message">Trình phát nổi cần quyền để hiển thị trên các ứng dụng khác.</string>
+    <string name="tts_floating_open_settings">Mở cài đặt</string>
     <string name="delete">Xóa</string>
     <string name="english">Tiếng Anh</string>
     <string name="filter_title">Tựa đề</string>

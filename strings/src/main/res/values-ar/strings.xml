@@ -175,6 +175,15 @@
     <string name="media_control_pause">إيقاف مؤقت</string>
     <string name="media_control_fast_forward">تقديم سريع</string>
     <string name="media_control_next">تالي</string>
+    <string name="tts_floating">TTS عائم</string>
+    <string name="tts_floating_channel_description">عناصر تحكم التراكب TTS العائم</string>
+    <string name="tts_floating_overlay_active">تراكب TTS نشط</string>
+    <string name="tts_floating_show_outside_app">عرض فوق التطبيقات الأخرى</string>
+    <string name="tts_floating_opacity">الشفافية</string>
+    <string name="tts_floating_width">العرض</string>
+    <string name="tts_floating_overlay_permission_title">إذن التراكب</string>
+    <string name="tts_floating_overlay_permission_message">المشغل العائم يحتاج إلى إذن للعرض فوق التطبيقات الأخرى.</string>
+    <string name="tts_floating_open_settings">فتح الإعدادات</string>
     <string name="delete">حذف</string>
     <string name="english">الإنجليزية</string>
     <string name="filter_title">العنوان</string>

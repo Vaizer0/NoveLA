@@ -175,6 +175,15 @@
     <string name="media_control_pause">pausa</string>
     <string name="media_control_fast_forward">avanti_veloce</string>
     <string name="media_control_next">successivo</string>
+    <string name="tts_floating">TTS fluttuante</string>
+    <string name="tts_floating_channel_description">Controlli sovrapposizione TTS</string>
+    <string name="tts_floating_overlay_active">La sovrapposizione TTS è attiva</string>
+    <string name="tts_floating_show_outside_app">Mostra sopra altre app</string>
+    <string name="tts_floating_opacity">Opacità</string>
+    <string name="tts_floating_width">Larghezza</string>
+    <string name="tts_floating_overlay_permission_title">Permesso sovrapposizione</string>
+    <string name="tts_floating_overlay_permission_message">Il lettore fluttuante necessita del permesso per mostrarsi sopra altre applicazioni.</string>
+    <string name="tts_floating_open_settings">Apri impostazioni</string>
     <string name="delete">Elimina</string>
     <string name="english">English</string>
     <string name="filter_title">Titolo</string>

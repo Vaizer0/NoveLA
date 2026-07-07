@@ -59,6 +59,7 @@ internal data class TextToSpeechSettingData(
     val estimatedWpm: State<Int>,
     val estimatedTotalSeconds: State<Int>,
     val estimatedRemainingSeconds: State<Int>,
+    val currentParagraphText: State<String>,
 )
 
 internal data class TextSynthesis(
@@ -176,6 +177,20 @@ internal class ReaderTextToSpeech(
         if (cps > 0f) (remainingCharacterCount.value / cps).toInt() else 0
     }
 
+    val currentParagraphText = derivedStateOf {
+        val itemPos = manager.currentActiveItemState.value.itemPos
+        val itemIndex = indexOfReaderItem(
+            list = items,
+            chapterIndex = itemPos.chapterIndex,
+            chapterItemPosition = itemPos.chapterItemPosition,
+        )
+        val item = items.getOrNull(itemIndex)
+        when (item) {
+            is ReaderItem.Text -> item.textToDisplay
+            else -> ""
+        }
+    }
+
     val state = TextToSpeechSettingData(
         isPlaying = mutableStateOf(false),
         isLoadingChapter = mutableStateOf(false),
@@ -204,6 +219,7 @@ internal class ReaderTextToSpeech(
         estimatedWpm = estimatedWpm,
         estimatedTotalSeconds = estimatedTotalSeconds,
         estimatedRemainingSeconds = estimatedRemainingSeconds,
+        currentParagraphText = currentParagraphText,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }

@@ -175,6 +175,15 @@
     <string name="media_control_pause">หยุดชั่วคราว</string>
     <string name="media_control_fast_forward">กรอไปข้างหน้า</string>
     <string name="media_control_next">ถัดไป</string>
+    <string name="tts_floating">TTS ลอย</string>
+    <string name="tts_floating_channel_description">การควบคุมซ้อนทับ TTS ลอย</string>
+    <string name="tts_floating_overlay_active">การซ้อนทับ TTS ทำงานอยู่</string>
+    <string name="tts_floating_show_outside_app">แสดงเหนือแอปอื่น</string>
+    <string name="tts_floating_opacity">ความทึบ</string>
+    <string name="tts_floating_width">ความกว้าง</string>
+    <string name="tts_floating_overlay_permission_title">สิทธิ์การซ้อนทับ</string>
+    <string name="tts_floating_overlay_permission_message">โปรแกรมเล่นลอยต้องได้รับสิทธิ์ในการแสดงเหนือแอปอื่น</string>
+    <string name="tts_floating_open_settings">เปิดการตั้งค่า</string>
     <string name="delete">ลบ</string>
     <string name="english">อังกฤษ</string>
     <string name="filter_title">ชื่อเรื่อง</string>

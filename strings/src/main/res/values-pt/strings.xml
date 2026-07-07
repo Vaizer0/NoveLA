@@ -175,6 +175,15 @@
     <string name="media_control_pause">pausa</string>
     <string name="media_control_fast_forward">avançar</string>
     <string name="media_control_next">seguinte</string>
+    <string name="tts_floating">TTS flutuante</string>
+    <string name="tts_floating_channel_description">Controles de sobreposição TTS</string>
+    <string name="tts_floating_overlay_active">A sobreposição TTS está ativa</string>
+    <string name="tts_floating_show_outside_app">Mostrar sobre outros apps</string>
+    <string name="tts_floating_opacity">Opacidade</string>
+    <string name="tts_floating_width">Largura</string>
+    <string name="tts_floating_overlay_permission_title">Permissão de sobreposição</string>
+    <string name="tts_floating_overlay_permission_message">O player flutuante precisa de permissão para exibir sobre outros aplicativos.</string>
+    <string name="tts_floating_open_settings">Abrir configurações</string>
     <string name="delete">Eliminar</string>
     <string name="english">Inglês</string>
     <string name="filter_title">Título</string>

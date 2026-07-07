@@ -175,6 +175,15 @@
     <string name="media_control_pause">jeda</string>
     <string name="media_control_fast_forward">maju_cepat</string>
     <string name="media_control_next">seterusnya</string>
+    <string name="tts_floating">TTS Terapung</string>
+    <string name="tts_floating_channel_description">Kawalan tindanan TTS terapung</string>
+    <string name="tts_floating_overlay_active">Tindanan TTS aktif</string>
+    <string name="tts_floating_show_outside_app">Tunjukkan di atas apl lain</string>
+    <string name="tts_floating_opacity">Kelegapan</string>
+    <string name="tts_floating_width">Lebar</string>
+    <string name="tts_floating_overlay_permission_title">Kebenaran tindanan</string>
+    <string name="tts_floating_overlay_permission_message">Pemain terapung memerlukan kebenaran untuk dipaparkan di atas aplikasi lain.</string>
+    <string name="tts_floating_open_settings">Buka tetapan</string>
     <string name="delete">Padam</string>
     <string name="english">Inggeris</string>
     <string name="filter_title">Tajuk</string>

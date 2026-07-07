@@ -175,6 +175,15 @@
     <string name="media_control_pause">pause</string>
     <string name="media_control_fast_forward">fast_forward</string>
     <string name="media_control_next">susunod</string>
+    <string name="tts_floating">Lumulutang na TTS</string>
+    <string name="tts_floating_channel_description">Mga kontrol ng overlay ng lumulutang na TTS</string>
+    <string name="tts_floating_overlay_active">Aktibo ang overlay ng TTS</string>
+    <string name="tts_floating_show_outside_app">Ipakita sa itaas ng iba pang app</string>
+    <string name="tts_floating_opacity">Opacity</string>
+    <string name="tts_floating_width">Lapad</string>
+    <string name="tts_floating_overlay_permission_title">Pahintulot sa overlay</string>
+    <string name="tts_floating_overlay_permission_message">Ang lumulutang na player ay nangangailangan ng pahintulot upang magpakita sa ibabaw ng iba pang mga application.</string>
+    <string name="tts_floating_open_settings">Buksan ang mga setting</string>
     <string name="delete">Tanggalin</string>
     <string name="english">Ingles</string>
     <string name="filter_title">Pamagat</string>

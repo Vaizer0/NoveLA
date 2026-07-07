@@ -175,6 +175,15 @@
     <string name="media_control_pause">duraklat</string>
     <string name="media_control_fast_forward">hızlı ileri sar</string>
     <string name="media_control_next">sonraki</string>
+    <string name="tts_floating">Yüzen TTS</string>
+    <string name="tts_floating_channel_description">Yüzen TTS kaplama kontrolleri</string>
+    <string name="tts_floating_overlay_active">TTS kaplaması aktif</string>
+    <string name="tts_floating_show_outside_app">Diğer uygulamaların üstünde göster</string>
+    <string name="tts_floating_opacity">Opaklık</string>
+    <string name="tts_floating_width">Genişlik</string>
+    <string name="tts_floating_overlay_permission_title">Kaplama izni</string>
+    <string name="tts_floating_overlay_permission_message">Yüzen oynatıcının diğer uygulamaların üzerinde görüntülenmek için izne ihtiyacı var.</string>
+    <string name="tts_floating_open_settings">Ayarları aç</string>
     <string name="delete">Sil</string>
     <string name="english">İngilizce</string>
     <string name="filter_title">Başlık</string>

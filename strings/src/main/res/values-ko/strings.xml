@@ -175,6 +175,15 @@
     <string name="media_control_pause">일시정지</string>
     <string name="media_control_fast_forward">빨리감기</string>
     <string name="media_control_next">다음</string>
+    <string name="tts_floating">플로팅 TTS</string>
+    <string name="tts_floating_channel_description">플로팅 TTS 오버레이 컨트롤</string>
+    <string name="tts_floating_overlay_active">TTS 오버레이가 활성화됨</string>
+    <string name="tts_floating_show_outside_app">다른 앱 위에 표시</string>
+    <string name="tts_floating_opacity">투명도</string>
+    <string name="tts_floating_width">너비</string>
+    <string name="tts_floating_overlay_permission_title">오버레이 권한</string>
+    <string name="tts_floating_overlay_permission_message">플로팅 플레이어가 다른 앱 위에 표시되려면 권한이 필요합니다.</string>
+    <string name="tts_floating_open_settings">설정 열기</string>
     <string name="delete">삭제</string>
     <string name="english">영어</string>
     <string name="filter_title">제목</string>

@@ -175,6 +175,15 @@
     <string name="media_control_pause">暂停</string>
     <string name="media_control_fast_forward">快进</string>
     <string name="media_control_next">下一个</string>
+    <string name="tts_floating">浮动TTS</string>
+    <string name="tts_floating_channel_description">浮动TTS覆盖层控制</string>
+    <string name="tts_floating_overlay_active">TTS覆盖层已激活</string>
+    <string name="tts_floating_show_outside_app">在其他应用上方显示</string>
+    <string name="tts_floating_opacity">透明度</string>
+    <string name="tts_floating_width">宽度</string>
+    <string name="tts_floating_overlay_permission_title">覆盖层权限</string>
+    <string name="tts_floating_overlay_permission_message">浮动播放器需要权限才能在其他应用上方显示。</string>
+    <string name="tts_floating_open_settings">打开设置</string>
     <string name="delete">删除</string>
     <string name="english">英语</string>
     <string name="filter_title">标题</string>

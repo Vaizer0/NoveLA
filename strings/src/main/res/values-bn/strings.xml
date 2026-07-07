@@ -175,6 +175,15 @@
     <string name="media_control_pause">পজ</string>
     <string name="media_control_fast_forward">ফাস্ট_ফরোয়ার্ড</string>
     <string name="media_control_next">পরবর্তী</string>
+    <string name="tts_floating">ভাসমান TTS</string>
+    <string name="tts_floating_channel_description">ভাসমান TTS ওভারলে নিয়ন্ত্রণ</string>
+    <string name="tts_floating_overlay_active">TTS ওভারলে সক্রিয়</string>
+    <string name="tts_floating_show_outside_app">অন্যান্য অ্যাপের উপরে দেখান</string>
+    <string name="tts_floating_opacity">অস্বচ্ছতা</string>
+    <string name="tts_floating_width">প্রস্থ</string>
+    <string name="tts_floating_overlay_permission_title">ওভারলে অনুমতি</string>
+    <string name="tts_floating_overlay_permission_message">ভাসমান প্লেয়ারটিকে অন্যান্য অ্যাপের উপরে দেখানোর জন্য অনুমতি প্রয়োজন।</string>
+    <string name="tts_floating_open_settings">সেটিংস খুলুন</string>
     <string name="delete">মুছুন</string>
     <string name="english">ইংরেজি</string>
     <string name="filter_title">শিরোনাম</string>
