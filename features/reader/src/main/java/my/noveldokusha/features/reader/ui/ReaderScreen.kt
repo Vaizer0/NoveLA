@@ -465,6 +465,10 @@ private fun ViewsPreview(
         estimatedTotalSeconds = remember { mutableStateOf(0) },
         estimatedRemainingSeconds = remember { mutableStateOf(0) },
         currentParagraphText = remember { mutableStateOf("") },
+        alternateParagraphText = remember { mutableStateOf("") },
+        parallelEnabled = remember { mutableStateOf(false) },
+        originalVoiceId = remember { mutableStateOf("") },
+        setOriginalVoiceId = {},
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(

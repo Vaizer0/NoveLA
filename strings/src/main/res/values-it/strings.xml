@@ -150,6 +150,8 @@
     <string name="focus">Concentrazione</string>
     <string name="voice_pitch">Tono voce</string>
     <string name="voice_speed">Velocità voce</string>
+    <string name="original_voice">Voce originale</string>
+    <string name="not_set">Non impostato</string>
     <string name="chapter_x_over_n">Capitolo: %1$d/%2$d</string>
     <string name="progress_x_percentage">Progresso: %1$.0f%%</string>
     <string name="text_size">Dimensione testo</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">Mostra sopra altre app</string>
     <string name="tts_floating_opacity">Opacità</string>
     <string name="tts_floating_width">Larghezza</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">Permesso sovrapposizione</string>
     <string name="tts_floating_overlay_permission_message">Il lettore fluttuante necessita del permesso per mostrarsi sopra altre applicazioni.</string>
     <string name="tts_floating_open_settings">Apri impostazioni</string>

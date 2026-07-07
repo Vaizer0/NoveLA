@@ -150,6 +150,8 @@
     <string name="focus">ফোকাস</string>
     <string name="voice_pitch">কণ্ঠস্বরের পিচ</string>
     <string name="voice_speed">কণ্ঠস্বরের গতি</string>
+    <string name="original_voice">মূল ভয়েস</string>
+    <string name="not_set">সেট করা নেই</string>
     <string name="chapter_x_over_n">অধ্যায়: %1$d/%2$d</string>
     <string name="progress_x_percentage">অগ্রগতি: %1$.0f%%</string>
     <string name="text_size">টেক্সটের আকার</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">অন্যান্য অ্যাপের উপরে দেখান</string>
     <string name="tts_floating_opacity">অস্বচ্ছতা</string>
     <string name="tts_floating_width">প্রস্থ</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">ওভারলে অনুমতি</string>
     <string name="tts_floating_overlay_permission_message">ভাসমান প্লেয়ারটিকে অন্যান্য অ্যাপের উপরে দেখানোর জন্য অনুমতি প্রয়োজন।</string>
     <string name="tts_floating_open_settings">সেটিংস খুলুন</string>

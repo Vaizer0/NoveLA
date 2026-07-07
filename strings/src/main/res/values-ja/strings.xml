@@ -150,6 +150,8 @@
     <string name="focus">フォーカス</string>
     <string name="voice_pitch">音声のピッチ</string>
     <string name="voice_speed">音声の速度</string>
+    <string name="original_voice">原文の音声</string>
+    <string name="not_set">未設定</string>
     <string name="chapter_x_over_n">チャプター：%1$d/%2$d</string>
     <string name="progress_x_percentage">進捗：%1$.0f%%</string>
     <string name="text_size">文字サイズ</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">他のアプリの上に表示</string>
     <string name="tts_floating_opacity">透明度</string>
     <string name="tts_floating_width">幅</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">オーバーレイ許可</string>
     <string name="tts_floating_overlay_permission_message">フローティングプレーヤーが他のアプリの上に表示するには許可が必要です。</string>
     <string name="tts_floating_open_settings">設定を開く</string>

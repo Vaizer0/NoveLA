@@ -150,6 +150,8 @@
     <string name="focus">焦点</string>
     <string name="voice_pitch">音调</string>
     <string name="voice_speed">语速</string>
+    <string name="original_voice">原文语音</string>
+    <string name="not_set">未设置</string>
     <string name="chapter_x_over_n">章节：%1$d/%2$d</string>
     <string name="progress_x_percentage">进度：%1$.0f%%</string>
     <string name="text_size">文字大小</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">在其他应用上方显示</string>
     <string name="tts_floating_opacity">透明度</string>
     <string name="tts_floating_width">宽度</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">覆盖层权限</string>
     <string name="tts_floating_overlay_permission_message">浮动播放器需要权限才能在其他应用上方显示。</string>
     <string name="tts_floating_open_settings">打开设置</string>

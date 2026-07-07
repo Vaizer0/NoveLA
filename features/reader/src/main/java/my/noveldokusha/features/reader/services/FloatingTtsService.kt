@@ -46,6 +46,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         var showOutsideApp = mutableStateOf(true)
         var opacity = mutableFloatStateOf(0.95f)
         var panelWidth by mutableFloatStateOf(300f)
+        var paragraphMode by mutableStateOf("tts")
         var activityWindowToken: IBinder? = null
 
         private var isExpanded = mutableStateOf(false)
@@ -220,6 +221,8 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
 
         val state = ttsState ?: return
 
+        paragraphMode = appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value
+
         val isDark = when (DarkMode.valueOf(appPreferences.THEME_DARK_MODE.value)) {
             DarkMode.LIGHT -> false
             DarkMode.DARK, DarkMode.BLACK -> true
@@ -339,6 +342,11 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         showTextToggle = showText.value,
                         onShowTextToggle = {
                             showText.value = !showText.value
+                        },
+                        paragraphMode = paragraphMode,
+                        onParagraphModeChange = { newMode ->
+                            paragraphMode = newMode
+                            appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value = newMode
                         },
                     )
                 }

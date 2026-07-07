@@ -103,6 +103,10 @@ class AppPreferences @Inject constructor(
         object : Preference<String>("READER_TEXT_TO_SPEECH_VOICE_ID") {
             override var value by SharedPreference_String(name, preferences, "")
         }
+    val READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL =
+        object : Preference<String>("READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
     // Пакет TTS-движка, которому принадлежит сохранённый голос (например "com.rhvoice.android")
     val READER_TEXT_TO_SPEECH_VOICE_ENGINE =
         object : Preference<String>("READER_TEXT_TO_SPEECH_VOICE_ENGINE") {
@@ -160,6 +164,10 @@ class AppPreferences @Inject constructor(
 
     val FLOATING_TTS_PANEL_POS_Y = object : Preference<Float>("FLOATING_TTS_PANEL_POS_Y") {
         override var value by SharedPreference_Float(name, preferences, -1f)
+    }
+
+    val FLOATING_TTS_PARAGRAPH_MODE = object : Preference<String>("FLOATING_TTS_PARAGRAPH_MODE") {
+        override var value by SharedPreference_String(name, preferences, "tts")
     }
 
     val READER_SELECTABLE_TEXT = object : Preference<Boolean>("READER_SELECTABLE_TEXT") {

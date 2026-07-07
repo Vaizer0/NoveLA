@@ -164,6 +164,10 @@ internal class ReaderSession(
             setPreferredVoiceSpeed = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value = it },
             getPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value },
             setPreferredVoicePitch = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value = it },
+            getPreferredVoiceIdForOriginal = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL.value },
+            setPreferredVoiceIdForOriginal = { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID_ORIGINAL.value = it },
+            getParallelEnabled = { appPreferences.TRANSLATION_PARALLEL_ENABLED.value },
+            getParallelOrder = { appPreferences.TRANSLATION_PARALLEL_ORDER.value },
             onBufferLow = {
                 val currentChapterIndex = ttsCurrentChapterIndex
                 val sessionAge = System.currentTimeMillis() - sessionCreatedTime
@@ -181,6 +185,12 @@ internal class ReaderSession(
                 }
             },
         )
+
+        scope.launch {
+            readerLiveTranslation.onDisplaySettingsChanged.collect {
+                readerTextToSpeech.onParallelModeOrderChanged()
+            }
+        }
     }
 
     fun init() {

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,8 @@ internal fun TtsMiniPlayer(
     onOpacityChange: ((Float) -> Unit)? = null,
     showTextToggle: Boolean = true,
     onShowTextToggle: (() -> Unit)? = null,
+    paragraphMode: String = "tts",
+    onParagraphModeChange: ((String) -> Unit)? = null,
 ) {
     FloatingTtsMiniPlayer(
         state = state,
@@ -90,6 +93,8 @@ internal fun TtsMiniPlayer(
         onOpacityChange = onOpacityChange,
         showTextToggle = showTextToggle,
         onShowTextToggle = onShowTextToggle,
+        paragraphMode = paragraphMode,
+        onParagraphModeChange = onParagraphModeChange,
     )
 }
 
@@ -279,6 +284,8 @@ private fun FloatingTtsMiniPlayer(
     onOpacityChange: ((Float) -> Unit)?,
     showTextToggle: Boolean,
     onShowTextToggle: (() -> Unit)?,
+    paragraphMode: String = "tts",
+    onParagraphModeChange: ((String) -> Unit)? = null,
 ) {
     val total = state.estimatedTotalSeconds.value
     val remaining = state.estimatedRemainingSeconds.value
@@ -289,8 +296,14 @@ private fun FloatingTtsMiniPlayer(
         label = ""
     )
 
-    val currentParagraph = state.currentParagraphText.value
-    val hasParagraphText = showParagraphText && currentParagraph.isNotBlank()
+    val ttsParagraph = state.currentParagraphText.value
+    val inverseParagraph = state.alternateParagraphText.value
+    val hasInverse = inverseParagraph.isNotBlank()
+    val displayText = when {
+        paragraphMode == "inverse" && hasInverse -> inverseParagraph
+        else -> ttsParagraph
+    }
+    val hasParagraphText = showParagraphText && displayText.isNotBlank()
 
     val density = LocalDensity.current
     var showOpacitySlider by remember { mutableStateOf(false) }
@@ -438,6 +451,41 @@ private fun FloatingTtsMiniPlayer(
                             )
                         }
                     }
+                    if (onParagraphModeChange != null && state.parallelEnabled.value) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.tts_floating_paragraph),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.tts_voice),
+                                color = if (paragraphMode == "tts") MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (paragraphMode == "tts") FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .clickable { onParagraphModeChange("tts") }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                            Text(
+                                text = "/",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = stringResource(R.string.inverse),
+                                color = if (paragraphMode == "inverse") MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (paragraphMode == "inverse") FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .clickable { onParagraphModeChange("inverse") }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -449,7 +497,7 @@ private fun FloatingTtsMiniPlayer(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = currentParagraph,
+                        text = displayText,
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)

@@ -37,6 +37,8 @@ internal fun FloatingTtsOverlayContent(
     onOpacityChange: ((Float) -> Unit)? = null,
     showTextToggle: Boolean = true,
     onShowTextToggle: (() -> Unit)? = null,
+    paragraphMode: String = "tts",
+    onParagraphModeChange: ((String) -> Unit)? = null,
 ) {
     if (isExpanded) {
         TtsMiniPlayer(
@@ -53,6 +55,8 @@ internal fun FloatingTtsOverlayContent(
             onOpacityChange = onOpacityChange,
             showTextToggle = showTextToggle,
             onShowTextToggle = onShowTextToggle,
+            paragraphMode = paragraphMode,
+            onParagraphModeChange = onParagraphModeChange,
         )
     } else {
         FloatingBubble(

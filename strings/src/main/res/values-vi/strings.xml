@@ -150,6 +150,8 @@
     <string name="focus">Tập trung</string>
     <string name="voice_pitch">Cao độ giọng</string>
     <string name="voice_speed">Tốc độ giọng</string>
+    <string name="original_voice">Giọng gốc</string>
+    <string name="not_set">Chưa đặt</string>
     <string name="chapter_x_over_n">Chương: %1$d/%2$d</string>
     <string name="progress_x_percentage">Tiến trình: %1$.0f%%</string>
     <string name="text_size">Cỡ chữ</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">Hiển thị trên ứng dụng khác</string>
     <string name="tts_floating_opacity">Độ mờ</string>
     <string name="tts_floating_width">Chiều rộng</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">Quyền lớp phủ</string>
     <string name="tts_floating_overlay_permission_message">Trình phát nổi cần quyền để hiển thị trên các ứng dụng khác.</string>
     <string name="tts_floating_open_settings">Mở cài đặt</string>

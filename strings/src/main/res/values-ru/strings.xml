@@ -144,7 +144,9 @@
     <string name="start_here">Начать здесь</string>
     <string name="focus">Фокус</string>
     <string name="voice_pitch">Высота голоса</string>
-    <string name="voice_speed">Скорость голоса</string>
+    <string name="voice_speed">Скорость голоса</string>
+    <string name="original_voice">Голос оригинала</string>
+    <string name="not_set">Не задано</string>
     <string name="chapter_x_over_n">Глава: %1$d/%2$d</string>
     <string name="progress_x_percentage">Прогресс: %1$.0f%%</string>
     <string name="text_size">Размер текста</string>
@@ -174,6 +176,9 @@
     <string name="tts_floating_show_outside_app">Поверх других приложений</string>
     <string name="tts_floating_opacity">Прозрачность</string>
     <string name="tts_floating_width">Ширина</string>
+    <string name="tts_floating_paragraph">Параграф</string>
+    <string name="tts_voice">Голос TTS</string>
+    <string name="inverse">Обратный</string>
     <string name="tts_floating_overlay_permission_title">Разрешение оверлея</string>
     <string name="tts_floating_overlay_permission_message">Плавающему плееру нужно разрешение на отображение поверх других приложений.</string>
     <string name="tts_floating_open_settings">Открыть настройки</string>

@@ -107,8 +107,10 @@ import my.noveldokusha.text_to_speech.VoiceData
 internal fun VoiceReaderSettingDialog(
     state: TextToSpeechSettingData,
     floatingTtsState: my.noveldokusha.features.reader.ui.ReaderScreenState.Settings.FloatingTtsSettingsData? = null,
+    parallelEnabled: MutableState<Boolean>? = null,
 ) {
     var openVoicesDialog by rememberSaveable { mutableStateOf(false) }
+    var openOriginalVoiceDialog by rememberSaveable { mutableStateOf(false) }
     val dropdownCustomSavedVoicesExpanded = rememberSaveable { mutableStateOf(false) }
 
     Column {
@@ -190,6 +192,18 @@ internal fun VoiceReaderSettingDialog(
                             disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
+                    if (parallelEnabled?.value == true) {
+                        AssistChip(
+                            label = { Text(text = stringResource(R.string.original_voice)) },
+                            onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
+                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
+                            modifier = Modifier.heightIn(min = 30.dp),
+                            colors = AssistChipDefaults.assistChipColors(
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
                     AssistChip(
                         label = { Text(text = stringResource(R.string.saved_voices)) },
                         onClick = {
@@ -225,6 +239,14 @@ internal fun VoiceReaderSettingDialog(
                             setVoice = state.setVoiceId,
                             isDialogOpen = openVoicesDialog,
                             setDialogOpen = { openVoicesDialog = it }
+                        )
+                        VoiceSelectorDialog(
+                            availableVoices = state.availableVoices,
+                            currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
+                            inputTextFilter = rememberSaveable { mutableStateOf("") },
+                            setVoice = { state.setOriginalVoiceId(it) },
+                            isDialogOpen = openOriginalVoiceDialog,
+                            setDialogOpen = { openOriginalVoiceDialog = it }
                         )
                     }
                 }

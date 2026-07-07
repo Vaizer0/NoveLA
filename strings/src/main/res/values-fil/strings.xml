@@ -150,6 +150,8 @@
     <string name="focus">Tumuon</string>
     <string name="voice_pitch">Pitch ng boses</string>
     <string name="voice_speed">Bilis ng boses</string>
+    <string name="original_voice">Orihinal na boses</string>
+    <string name="not_set">Hindi nakatakda</string>
     <string name="chapter_x_over_n">Kabanata: %1$d/%2$d</string>
     <string name="progress_x_percentage">Progreso: %1$.0f%%</string>
     <string name="text_size">Laki ng teksto</string>
@@ -181,6 +183,9 @@
     <string name="tts_floating_show_outside_app">Ipakita sa itaas ng iba pang app</string>
     <string name="tts_floating_opacity">Opacity</string>
     <string name="tts_floating_width">Lapad</string>
+    <string name="tts_floating_paragraph">Paragraph</string>
+    <string name="tts_voice">TTS voice</string>
+    <string name="inverse">Inverse</string>
     <string name="tts_floating_overlay_permission_title">Pahintulot sa overlay</string>
     <string name="tts_floating_overlay_permission_message">Ang lumulutang na player ay nangangailangan ng pahintulot upang magpakita sa ibabaw ng iba pang mga application.</string>
     <string name="tts_floating_open_settings">Buksan ang mga setting</string>

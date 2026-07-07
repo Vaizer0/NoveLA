@@ -96,7 +96,7 @@ internal class ReaderLiveTranslation(
     private val _onTranslatorChanged = MutableSharedFlow<Unit>()
     val onTranslatorChanged = _onTranslatorChanged.asSharedFlow()
 
-    private val _onDisplaySettingsChanged = MutableSharedFlow<Unit>()
+    private val _onDisplaySettingsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val onDisplaySettingsChanged = _onDisplaySettingsChanged.asSharedFlow()
 
     suspend fun init() {
