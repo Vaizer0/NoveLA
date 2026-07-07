@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,7 +98,6 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
-import my.noveldokusha.features.reader.ui.formatDurationCompact
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -251,50 +251,42 @@ internal fun VoiceReaderSettingDialog(
                     }
                 }
 
-                val totalSeconds = state.estimatedTotalSeconds.value
-                val remainingSeconds = state.estimatedRemainingSeconds.value
-                val wpm = state.estimatedWpm.value
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (floatingTtsState != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = stringResource(R.string.tts_estimated_time_left),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = formatDurationCompact(remainingSeconds),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "$wpm ${stringResource(R.string.tts_wpm)}",
+                                text = stringResource(R.string.tts_floating),
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Text(
-                                text = formatDurationCompact(totalSeconds),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Switch(
+                                    checked = floatingTtsState.isEnabled.value,
+                                    onCheckedChange = { floatingTtsState.isEnabled.value = it }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.tts_floating_show_outside_app),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Switch(
+                                    checked = floatingTtsState.showOutsideApp.value,
+                                    onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
+                                    enabled = floatingTtsState.isEnabled.value
+                                )
+                            }
                         }
                     }
                 }
@@ -390,52 +382,7 @@ internal fun VoiceReaderSettingDialog(
             }
         }
 
-        if (floatingTtsState != null) {
-            Spacer(Modifier.height(8.dp))
-            ElevatedCard(
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(R.string.tts_floating),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Switch(
-                            checked = floatingTtsState.isEnabled.value,
-                            onCheckedChange = { floatingTtsState.isEnabled.value = it },
-                        )
-                    }
-                    if (floatingTtsState.isEnabled.value) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = stringResource(R.string.tts_floating_show_outside_app),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Switch(
-                                checked = floatingTtsState.showOutsideApp.value,
-                                onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
-                            )
-                        }
-                    }
-                }
-            }
-        }
+
     }
 }
 

@@ -48,6 +48,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -61,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -82,7 +84,10 @@ import my.noveldokusha.features.reader.ui.ReaderScreenState.Settings.Type
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
+import my.noveldokusha.features.reader.services.FloatingTtsService
 import my.noveldokusha.text_translator.domain.TranslationModelState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -296,7 +301,7 @@ internal fun ReaderScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showOverlayPermissionDialog = false }) {
-                        Text(text = context.getString(android.R.string.cancel))
+                        Text(text = stringResource(android.R.string.cancel))
                     }
                 },
             )
@@ -343,10 +348,33 @@ internal fun ReaderScreen(
         LaunchedEffect(
             state.settings.floatingTts.showOutsideApp.value,
         ) {
-            if (my.noveldokusha.features.reader.services.FloatingTtsService.isRunning(context)) {
-                my.noveldokusha.features.reader.services.FloatingTtsService.activityWindowToken =
+            if (FloatingTtsService.isRunning(context)) {
+                FloatingTtsService.activityWindowToken =
                     windowToken
-                my.noveldokusha.features.reader.services.FloatingTtsService.recreateOverlay()
+                FloatingTtsService.recreateOverlay()
+            }
+        }
+
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        var isInBackground by remember { mutableStateOf(false) }
+
+        DisposableEffect(lifecycle) {
+            val observer = LifecycleEventObserver { _, event ->
+                isInBackground = event == Lifecycle.Event.ON_PAUSE
+            }
+            lifecycle.addObserver(observer)
+            onDispose { lifecycle.removeObserver(observer) }
+        }
+
+        LaunchedEffect(
+            state.settings.selectedSetting.value,
+            state.settings.floatingTts.showOutsideApp.value,
+            isInBackground,
+        ) {
+            if (FloatingTtsService.isRunning(context)) {
+                val isAnySettingsOpen = state.settings.selectedSetting.value != Type.None
+                val shouldHide = isAnySettingsOpen || (!state.settings.floatingTts.showOutsideApp.value && isInBackground)
+                FloatingTtsService.setOverlayHidden(shouldHide)
             }
         }
     }
@@ -504,7 +532,7 @@ private fun ViewsPreview(
                         floatingTts = ReaderScreenState.Settings.FloatingTtsSettingsData(
                             isEnabled = remember { mutableStateOf(false) },
                             showOutsideApp = remember { mutableStateOf(true) },
-                            opacity = remember { mutableFloatStateOf(0.95f) },
+                            opacity = remember { mutableFloatStateOf(0.6f) },
                         ),
                     ),
                     showInvalidChapterDialog = remember { mutableStateOf(false) }

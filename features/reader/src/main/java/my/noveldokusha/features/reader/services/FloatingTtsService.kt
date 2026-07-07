@@ -8,6 +8,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -47,7 +48,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         var ttsState: TextToSpeechSettingData? = null
         var showText = mutableStateOf(false)
         var showOutsideApp = mutableStateOf(true)
-        var opacity = mutableFloatStateOf(0.95f)
+        var opacity = mutableFloatStateOf(0.6f)
         var panelWidth by mutableFloatStateOf(300f)
         var paragraphMode by mutableStateOf("tts")
         var activityWindowToken: IBinder? = null
@@ -77,6 +78,10 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
 
         fun recreateOverlay() {
             instance?.recreateOverlayInternal()
+        }
+
+        fun setOverlayHidden(hidden: Boolean) {
+            instance?.composeView?.visibility = if (hidden) View.GONE else View.VISIBLE
         }
     }
 
@@ -151,7 +156,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         val savedPanelY = appPreferences.FLOATING_TTS_PANEL_POS_Y.value
         panelWidth = appPreferences.FLOATING_TTS_PANEL_WIDTH.value
 
-        val bubbleSizePx = (56 * displayDensity).toInt()
+        val bubbleSizePx = (32 * displayDensity).toInt()
         val marginPx = (16 * displayDensity).toInt()
         val panelSizePx = (panelWidth * displayDensity).toInt()
 
@@ -194,21 +199,12 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         val startPosY = if (isExpanded.value) panelPosY.floatValue else bubblePosY.floatValue
 
         val initialWidth = if (isExpanded.value) (panelWidth * displayDensity).toInt()
-        else (56 * displayDensity).toInt()
+        else (32 * displayDensity).toInt()
 
         val layoutParams = WindowManager.LayoutParams(
             initialWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            if (showOutsideApp.value) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                } else {
-                    @Suppress("DEPRECATION")
-                    WindowManager.LayoutParams.TYPE_PHONE
-                }
-            } else {
-                WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
-            },
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
@@ -216,9 +212,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
             gravity = Gravity.TOP or Gravity.LEFT
             x = startPosX.toInt()
             y = startPosY.toInt()
-            if (!showOutsideApp.value && activityWindowToken != null) {
-                token = activityWindowToken
-            }
         }
         currentLayoutParams = layoutParams
 
@@ -257,7 +250,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         onClose = {
                             isExpanded.value = false
                             val lp = currentLayoutParams ?: return@FloatingTtsOverlayContent
-                            lp.width = (56 * displayDensity).toInt()
+                            lp.width = (32 * displayDensity).toInt()
                             val bubbleW = lp.width
                             lp.x = bubblePosX.floatValue
                                 .coerceIn(0f, (displayWidth - bubbleW).coerceAtLeast(0).toFloat())
@@ -283,7 +276,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                                     .coerceIn(0f, (displayHeight - 150).coerceAtLeast(0).toFloat())
                                     .toInt()
                             } else {
-                                lp.width = (56 * displayDensity).toInt()
+                                lp.width = (32 * displayDensity).toInt()
                                 val bubbleW = lp.width
                                 lp.x = bubblePosX.floatValue
                                     .coerceIn(0f, (displayWidth - bubbleW).coerceAtLeast(0).toFloat())
@@ -308,7 +301,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                                 lp.x = panelPosX.floatValue.toInt()
                                 lp.y = panelPosY.floatValue.toInt()
                             } else {
-                                lp.width = (56 * displayDensity).toInt()
+                                lp.width = (32 * displayDensity).toInt()
                                 val bubbleW = lp.width
                                 bubblePosX.floatValue = (bubblePosX.floatValue + dx)
                                     .coerceIn(0f, (displayWidth - bubbleW).coerceAtLeast(0).toFloat())
@@ -345,6 +338,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         opacityValue = opacity.floatValue,
                         onOpacityChange = { newOpacity ->
                             opacity.floatValue = newOpacity
+                            appPreferences.FLOATING_TTS_OPACITY.value = newOpacity
                         },
                         showTextToggle = showText.value,
                         onShowTextToggle = {
@@ -372,21 +366,12 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         try { wm.removeView(view) } catch (_: Exception) {}
 
         val currentWidth = if (isExpanded.value) (panelWidth * displayDensity).toInt()
-        else (56 * displayDensity).toInt()
+        else (32 * displayDensity).toInt()
 
         val lp = WindowManager.LayoutParams(
             currentWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            if (showOutsideApp.value) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                } else {
-                    @Suppress("DEPRECATION")
-                    WindowManager.LayoutParams.TYPE_PHONE
-                }
-            } else {
-                WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
-            },
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
@@ -394,9 +379,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
             gravity = Gravity.TOP or Gravity.LEFT
             x = if (isExpanded.value) panelPosX.floatValue.toInt() else bubblePosX.floatValue.toInt()
             y = if (isExpanded.value) panelPosY.floatValue.toInt() else bubblePosY.floatValue.toInt()
-            if (!showOutsideApp.value && activityWindowToken != null) {
-                token = activityWindowToken
-            }
         }
         currentLayoutParams = lp
 
