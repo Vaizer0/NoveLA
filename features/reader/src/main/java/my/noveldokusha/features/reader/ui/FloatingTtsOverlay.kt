@@ -81,7 +81,7 @@ private fun FloatingBubble(
         onClick = onClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.primary.copy(alpha = opacity),
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier
             .size(56.dp)
             .pointerInput(Unit) {

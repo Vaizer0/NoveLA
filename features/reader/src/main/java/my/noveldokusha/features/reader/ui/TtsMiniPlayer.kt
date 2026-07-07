@@ -158,7 +158,7 @@ private fun MiniPlayerControls(
                 .padding(horizontal = 4.dp)
                 .height(progressHeight)
                 .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
                 modifier = Modifier
@@ -340,7 +340,7 @@ private fun FloatingTtsMiniPlayer(
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = opacity),
-        shadowElevation = 12.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier
             .then(dragModifier)
     ) {

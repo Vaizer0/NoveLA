@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -13,7 +12,10 @@ import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -27,6 +29,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dagger.hilt.android.AndroidEntryPoint
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.reader.R
+import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
@@ -124,6 +127,8 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
 
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         showOverlay()
+
+        appPreferences.FLOATING_TTS_ENABLED.value = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -132,6 +137,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
     }
 
     override fun onDestroy() {
+        appPreferences.FLOATING_TTS_ENABLED.value = false
         instance = null
         removeOverlay()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
@@ -220,25 +226,29 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
 
         paragraphMode = appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value
 
-        val isDark = when (DarkMode.valueOf(appPreferences.THEME_DARK_MODE.value)) {
-            DarkMode.LIGHT -> false
-            DarkMode.DARK, DarkMode.BLACK -> true
-            DarkMode.SYSTEM -> (resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        }
-
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingTtsService)
             setViewTreeSavedStateRegistryOwner(this@FloatingTtsService)
             setContent {
+                val scope = rememberCoroutineScope()
+                val darkModeState = remember { appPreferences.THEME_DARK_MODE.state(scope) }
+                val appThemeState = remember { appPreferences.APP_THEME.state(scope) }
+
+                val darkModeStr by darkModeState
+                val appThemeStr by appThemeState
+
+                val darkMode = remember(darkModeStr) {
+                    try { DarkMode.valueOf(darkModeStr) } catch (_: Exception) { DarkMode.SYSTEM }
+                }
+
                 InternalTheme(
-                    appTheme = try {
-                        my.noveldokusha.coreui.theme.AppTheme.valueOf(appPreferences.APP_THEME.value)
-                    } catch (_: Exception) {
-                        my.noveldokusha.coreui.theme.AppTheme.DEFAULT
+                    appTheme = try { AppTheme.valueOf(appThemeStr) } catch (_: Exception) { AppTheme.DEFAULT },
+                    isDark = when (darkMode) {
+                        DarkMode.LIGHT -> false
+                        DarkMode.DARK, DarkMode.BLACK -> true
+                        DarkMode.SYSTEM -> isSystemInDarkTheme()
                     },
-                    isDark = isDark,
-                    isAmoled = appPreferences.THEME_DARK_MODE.value == "BLACK"
+                    isAmoled = darkMode == DarkMode.BLACK
                 ) {
                     FloatingTtsOverlayContent(
                         state = state,
