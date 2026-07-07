@@ -101,8 +101,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
         createNotificationChannel()
-        val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         displayDensity = resources.displayMetrics.density
@@ -129,6 +127,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(NOTIFICATION_ID, createNotification())
         return START_STICKY
     }
 
@@ -205,9 +204,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                 WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
             },
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
@@ -381,9 +378,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                 WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
             },
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
