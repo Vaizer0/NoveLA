@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.compose.material3.android)
     implementation(libs.jsoup)
+    implementation(libs.timber)
 
     // Kotlin reflection for dynamic batch translator lookup
     implementation(kotlin("reflect"))

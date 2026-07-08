@@ -66,7 +66,7 @@ interface AppDatabase {
             .databaseBuilder(ctx, AppRoomDatabase::class.java, name)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .createFromInputStream { inputStream }
-            .fallbackToDestructiveMigration() // Don't apply migrations, database is already at correct version
+            .fallbackToDestructiveMigration(false) // Don't apply migrations, database is already at correct version
             .build()
             .also { it.name = name }
     }

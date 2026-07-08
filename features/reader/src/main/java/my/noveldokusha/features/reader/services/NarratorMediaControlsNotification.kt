@@ -130,10 +130,6 @@ internal class NarratorMediaControlsNotification @Inject constructor(
             refreshMediaSessionMetadata()
 
             setCallback(NarratorMediaControlsCallback(readerSession.readerTextToSpeech))
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-            )
             isActive = true
             setPlaybackToLocal(AudioManager.STREAM_MUSIC)
 
