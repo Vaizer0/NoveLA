@@ -32,7 +32,7 @@ object JsRedirectResolver {
             if (urlMatch != null) {
                 val url = urlMatch.groupValues[1]
                 Timber.d("Found meta refresh redirect: $url")
-                return url
+                return normalizeUrl(url)
             }
         }
 
@@ -49,6 +49,8 @@ object JsRedirectResolver {
             val match = pattern.find(html)
             if (match != null) {
                 var url = match.groupValues[1]
+                // Сначала убираем экранированные слеши \/ -> / (в JS так экранируют https?://)
+                url = url.replace("\\/", "/")
                 // Если URL относительный — превращаем в абсолютный
                 if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("//")) {
                     try {
@@ -100,6 +102,11 @@ object JsRedirectResolver {
      * удаляет лишние пробелы.
      */
     private fun normalizeUrl(url: String): String {
-        return url.replace("\\/", "/").trim()
+        var result = url.replace("\\/", "/").trim()
+        // Редирект-обёртки могут вкладывать абсолютный URL внутрь пути,
+        // напр. "https://a.com/x/https://b.com/y" — берём последний абсолютный URL.
+        val idx = maxOf(result.lastIndexOf("https://"), result.lastIndexOf("http://"))
+        if (idx > 0) result = result.substring(idx)
+        return result
     }
 }

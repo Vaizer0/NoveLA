@@ -56,13 +56,11 @@ class ExtensionsManagerViewModel @Inject constructor(
             }
         }
 
-        // Загружаем кеш из SharedPreferences — на фоновом потоке
+        // Загружаем кеш и (при необходимости) актуальные данные из сети — на фоновом потоке
         viewModelScope.launch(Dispatchers.IO) {
-            loadCachedExtensions()
+            loadCachedExtensions()        // выставляет cachedAvailableExtensions + lastFetchTime
+            loadAllAvailableExtensions()
         }
-
-        // Загружаем актуальные данные из сети
-        loadAllAvailableExtensions()
     }
 
     fun onEvent(event: ExtensionsScreenEvent) = when (event) {
@@ -89,7 +87,7 @@ class ExtensionsManagerViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 val repoUrl  = _state.value.repositoryUrl
@@ -228,6 +226,8 @@ class ExtensionsManagerViewModel @Inject constructor(
                 )
             }
             Timber.d("Loaded ${extensions.size} extensions from cache")
+            cachedAvailableExtensions = extensions
+            lastFetchTime = System.currentTimeMillis()
         }
     }
 

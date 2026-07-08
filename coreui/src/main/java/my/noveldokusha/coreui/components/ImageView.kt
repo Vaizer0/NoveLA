@@ -17,6 +17,7 @@ import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import coil.size.Precision
 import my.noveldokusha.coreui.R
 
 @Composable
@@ -59,6 +60,7 @@ fun ImageView(
                     .Builder(context)
                     .data(model)
                     .crossfade(fadeInDurationMillis)
+                    .precision(Precision.INEXACT)
                     .apply {
                         if (forceCache) {
                             diskCachePolicy(CachePolicy.ENABLED)

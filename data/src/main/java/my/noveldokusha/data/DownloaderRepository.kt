@@ -19,6 +19,7 @@ import net.dankito.readability4j.extended.Readability4JExtended
 import org.jsoup.nodes.Document
 import java.net.SocketTimeoutException
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -220,9 +221,24 @@ class DownloaderRepository @Inject constructor(
         lastError ?: Response.Error("Unknown error", Exception("Unexpected retry loop exit"))
     }
 
+    private val chaptersListCache = ConcurrentHashMap<String, ChaptersListCacheEntry>()
+    private val chaptersListCacheTtlMs = 120_000L
+
+    private data class ChaptersListCacheEntry(
+        val timestamp: Long,
+        val chapters: List<Chapter>
+    )
+
     suspend fun bookChaptersList(
         bookUrl: String,
     ): Response<List<Chapter>> = withContext(Dispatchers.Default) {
+        val now = System.currentTimeMillis()
+        chaptersListCache[bookUrl]?.let { cached ->
+            if (now - cached.timestamp < chaptersListCacheTtlMs) {
+                println("DownloaderRepository: Returning cached chapters (${cached.chapters.size}) for $bookUrl")
+                return@withContext Response.Success(cached.chapters)
+            }
+        }
         println("DownloaderRepository: Loading chapters for book: $bookUrl")
 
         val error by lazy {
@@ -275,6 +291,7 @@ class DownloaderRepository @Inject constructor(
             }
 
             println("DownloaderRepository: Got ${allChapters.size} chapters via parsePage for $bookUrl")
+            chaptersListCache[bookUrl] = ChaptersListCacheEntry(now, allChapters)
             return@withContext Response.Success(allChapters)
         }
 
@@ -293,6 +310,9 @@ class DownloaderRepository @Inject constructor(
                         position = index
                     )
                 }
+            }
+            .onSuccess { chapters ->
+                chaptersListCache[bookUrl] = ChaptersListCacheEntry(System.currentTimeMillis(), chapters)
             }
     }
 

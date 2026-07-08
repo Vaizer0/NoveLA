@@ -27,6 +27,7 @@ import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.File
+import my.noveldokusha.debug.MemoryDiagnostics
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -364,6 +365,11 @@ internal class SettingsViewModel @Inject constructor(
         } finally {
             isCleaningChapterCache.value = false
         }
+    }
+
+    fun dumpDebugInfo() = appScope.launch(Dispatchers.IO) {
+        MemoryDiagnostics.logMemoryStats("SettingsViewModel")
+        toasty.show("Memory stats logged to logcat")
     }
 
     fun confirmCleanAction() {

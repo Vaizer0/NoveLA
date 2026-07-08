@@ -9,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import my.noveldokusha.core.ExtensionRepositoryInterface
@@ -786,22 +787,26 @@ class LuaSourceLoader @Inject constructor(
             Timber.e(e, "getEnabledExtensions failed")
             return emptyList()
         }
-        return enabled.mapNotNull { ext ->
-            try {
-                val iconUrl = extractIconUrl(ext)
-                loadFromDisk(ext.id, iconUrl) ?: run {
-                    val codeUrl = extractCodeUrl(ext)
-                    if (codeUrl != null && downloadAndCacheScript(ext.id, codeUrl))
-                        loadFromDisk(ext.id, iconUrl)
-                    else {
-                        Timber.w("Cannot load ${ext.id}: no .lua and no codeUrl")
+        return coroutineScope {
+            enabled.map { ext ->
+                async(Dispatchers.IO.limitedParallelism(4)) {
+                    try {
+                        val iconUrl = extractIconUrl(ext)
+                        loadFromDisk(ext.id, iconUrl) ?: run {
+                            val codeUrl = extractCodeUrl(ext)
+                            if (codeUrl != null && downloadAndCacheScript(ext.id, codeUrl))
+                                loadFromDisk(ext.id, iconUrl)
+                            else {
+                                Timber.w("Cannot load ${ext.id}: no .lua and no codeUrl")
+                                null
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to load ${ext.id}")
                         null
                     }
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to load ${ext.id}")
-                null
-            }
+            }.awaitAll().filterNotNull()
         }
     }
 
