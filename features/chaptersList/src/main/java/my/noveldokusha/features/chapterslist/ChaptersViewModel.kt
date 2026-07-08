@@ -39,6 +39,7 @@ import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.scraper.utils.normalizeBookUrl
 import my.noveldokusha.text_translator.domain.TranslationManager
+import timber.log.Timber
 import javax.inject.Inject
 
 interface ChapterStateBundle {
@@ -64,10 +65,6 @@ internal class ChaptersViewModel @Inject constructor(
     private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel(), ChapterStateBundle {
-
-    companion object {
-        private const val TAG = "ChaptersViewModel"
-    }
 
     override val rawBookUrl by StateExtra_String(stateHandle)
     override val bookTitle by StateExtra_String(stateHandle)
@@ -331,7 +328,7 @@ internal class ChaptersViewModel @Inject constructor(
         val lastPageResult = downloaderRepository.bookChaptersPage(bookUrl, lastKnownPage)
         val lastPageData = (lastPageResult as? Response.Success)?.data
         if (lastPageData == null) {
-            android.util.Log.w(TAG, "updateChaptersIncremental: failed to load lastPage=$lastKnownPage, falling back to full update")
+            Timber.w("updateChaptersIncremental: failed to load lastPage=$lastKnownPage, falling back to full update")
             updateChaptersFull(bookUrl)
             return
         }

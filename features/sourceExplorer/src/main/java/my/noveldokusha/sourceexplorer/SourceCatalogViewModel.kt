@@ -1,6 +1,5 @@
 package my.noveldokusha.sourceexplorer
 
-import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.SavedStateHandle
@@ -82,12 +81,9 @@ internal class SourceCatalogViewModel @Inject constructor(
             }.getOrNull()
 
             CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
-                Log.d(
-                    "CF_DEBUG",
-                    "bypassCompleted received: $bypassedHost, sourceHost: $sourceHost"
-                )
+                Timber.d("bypassCompleted received: $bypassedHost, sourceHost: $sourceHost")
                 if (sourceHost != null && sourceHost == bypassedHost) {
-                    Log.d("CF_DEBUG", "Reloading catalog for $sourceHost")
+                    Timber.d("Reloading catalog for $sourceHost")
                     state.fetchIterator.reset()
                     state.fetchIterator.fetchNext()
                 }

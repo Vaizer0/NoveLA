@@ -3,7 +3,6 @@ package my.noveldokusha.network.interceptors
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -25,6 +24,7 @@ import okio.Buffer
 import okio.BufferedSink
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
+import timber.log.Timber
 import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.withLock
 import kotlin.time.Duration.Companion.seconds
@@ -62,7 +62,7 @@ object LuaCfOptionsRegistry {
         val key = domain.removePrefix("https://").removePrefix("http://")
             .removePrefix("www.").trimEnd('/')
         options[key] = cfOptions
-        Log.d(TAG, "CF options registered for $key: $cfOptions")
+        Timber.d( "CF options registered for $key: $cfOptions")
     }
 
     fun getForHost(host: String): CfDomainOptions? {
@@ -133,7 +133,7 @@ internal class CloudFareVerificationInterceptor(
             return response
         }
 
-        Log.d(TAG, "CF: Challenge detected. URL: ${bufferedRequest.url}")
+        Timber.d( "CF: Challenge detected. URL: ${bufferedRequest.url}")
 
         return lock.withLock {
             response.close()
@@ -146,7 +146,7 @@ internal class CloudFareVerificationInterceptor(
 
             val existingCookie = cookieManager.getCookie(siteUrl) ?: ""
             if (resolvedDomains.contains(host) || existingCookie.contains("cf_clearance")) {
-                Log.d(TAG, "CF: cf_clearance cached for $host, trying direct retry")
+                Timber.d( "CF: cf_clearance cached for $host, trying direct retry")
                 val retryRequest = bufferedRequest.newBuilder()
                     .header("Cookie", formatCookies(existingCookie))
                     .header("User-Agent", userAgent)
@@ -203,12 +203,12 @@ internal class CloudFareVerificationInterceptor(
 
         val attempts = manualAttempts.getOrDefault(host, 0)
         if (attempts >= MAX_MANUAL_ATTEMPTS) {
-            Log.e(TAG, "CF: Max manual attempts ($MAX_MANUAL_ATTEMPTS) reached for $host, giving up")
+            Timber.e( "CF: Max manual attempts ($MAX_MANUAL_ATTEMPTS) reached for $host, giving up")
             manualAttempts.remove(host)
             throw CloudfareVerificationBypassFailedException()
         }
         manualAttempts[host] = attempts + 1
-        Log.d(TAG, "CF: Step 2 - manual attempt ${attempts + 1}/$MAX_MANUAL_ATTEMPTS for $host, webViewUrl=$webViewUrl")
+        Timber.d( "CF: Step 2 - manual attempt ${attempts + 1}/$MAX_MANUAL_ATTEMPTS for $host, webViewUrl=$webViewUrl")
 
         clearCookiesForDomain(siteUrl, cookieManager)
 
@@ -268,7 +268,7 @@ internal class CloudFareVerificationInterceptor(
         val result = !(isError && (isCfServer || hasMarkers))
         if (!result) {
             val foundMarkers = activeMarkers.filter { body.contains(it, ignoreCase = true) }
-            Log.e(TAG, "CF triggered: code=${response.code} isCfServer=$isCfServer foundMarkers=$foundMarkers")
+            Timber.e( "CF triggered: code=${response.code} isCfServer=$isCfServer foundMarkers=$foundMarkers")
         }
         return result
     }
@@ -310,7 +310,7 @@ internal class CloudFareVerificationInterceptor(
             for (i in 1..30) {
                 delay(500)
                 if (cm.getCookie(webViewUrl)?.contains("cf_clearance") == true) {
-                    Log.d(TAG, "CF: Auto WebView success on iteration $i")
+                    Timber.d( "CF: Auto WebView success on iteration $i")
                     break
                 }
             }

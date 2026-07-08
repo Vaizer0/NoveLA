@@ -395,17 +395,15 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.tts_floating),
-                android.app.NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.tts_floating_channel_description)
-            }
-            val manager = getSystemService(android.app.NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+        val channel = android.app.NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.tts_floating),
+            android.app.NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = getString(R.string.tts_floating_channel_description)
         }
+        val manager = getSystemService(android.app.NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)

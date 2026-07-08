@@ -2,7 +2,6 @@ package my.noveldokusha.settings
 
 import android.content.Context
 import android.text.format.Formatter
-import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -28,6 +27,7 @@ import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.File
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -469,10 +469,10 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     fun onAutoBackupEnabledChange(enabled: Boolean) {
-        Log.d("AutoBackup", "onAutoBackupEnabledChange: enabled=$enabled")
+        Timber.d( "onAutoBackupEnabledChange: enabled=$enabled")
         if (enabled) {
             val uri = appPreferences.BACKUP_AUTO_DIRECTORY_URI.value
-            Log.d("AutoBackup", "onAutoBackupEnabledChange: directoryUri='$uri'")
+            Timber.d( "onAutoBackupEnabledChange: directoryUri='$uri'")
             if (uri.isEmpty()) {
                 toasty.show(R.string.auto_backup_select_directory_first)
                 return
@@ -494,9 +494,9 @@ internal class SettingsViewModel @Inject constructor(
                     )
                     if (createdUri != null) {
                         DocumentsContract.deleteDocument(context.contentResolver, createdUri)
-                        Log.d("AutoBackup", "onAutoBackupEnabledChange: permission OK, enabling")
+                        Timber.d( "onAutoBackupEnabledChange: permission OK, enabling")
                         appPreferences.BACKUP_AUTO_ENABLED.value = true
-                        Log.d("AutoBackup", "onAutoBackupEnabledChange: calling runAutoBackupNow")
+                        Timber.d( "onAutoBackupEnabledChange: calling runAutoBackupNow")
                         appWorkersInteractions.runAutoBackupNow()
                         withContext(Dispatchers.Main) {
                             toasty.show(R.string.auto_backup_enabled)
@@ -507,7 +507,7 @@ internal class SettingsViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("AutoBackup", "Permission check failed", e)
+                    Timber.e(e, "Permission check failed")
                     withContext(Dispatchers.Main) {
                         toasty.show(R.string.auto_backup_no_permission)
                     }
@@ -530,10 +530,10 @@ internal class SettingsViewModel @Inject constructor(
     }
 
     fun onAutoBackupIntervalMinutesChange(minutes: Long) {
-        Log.d("AutoBackup", "onAutoBackupIntervalMinutesChange: minutes=$minutes")
+        Timber.d( "onAutoBackupIntervalMinutesChange: minutes=$minutes")
         appPreferences.BACKUP_AUTO_INTERVAL_MINUTES.value = minutes.coerceAtLeast(60L)
         if (appPreferences.BACKUP_AUTO_ENABLED.value) {
-            Log.d("AutoBackup", "onAutoBackupIntervalMinutesChange: auto backup enabled, scheduling")
+            Timber.d( "onAutoBackupIntervalMinutesChange: auto backup enabled, scheduling")
             appWorkersInteractions.scheduleAutoBackup(minutes)
             viewModelScope.launch {
                 withContext(Dispatchers.Main) {

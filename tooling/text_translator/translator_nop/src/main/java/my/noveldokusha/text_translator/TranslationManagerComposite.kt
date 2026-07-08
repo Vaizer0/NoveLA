@@ -1,6 +1,6 @@
 package my.noveldokusha.text_translator
 
-import android.util.Log
+import timber.log.Timber
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -68,7 +68,7 @@ class TranslationManagerComposite(
 
     override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
         val provider = activeProvider()
-        Log.d(TAG, "getTranslator: source=$source, target=$target, provider=$provider, override=${systemPromptOverride != null}")
+        Timber.d( "getTranslator: source=$source, target=$target, provider=$provider, override=${systemPromptOverride != null}")
         return when {
             provider == "OPENAI"      -> openAiManager.getTranslator(source, target, systemPromptOverride)
             provider == "GEMINI"      -> buildGeminiTranslator(source, target, systemPromptOverride)
@@ -97,13 +97,13 @@ class TranslationManagerComposite(
         targetLanguage: String,
         systemPromptOverride: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
-        Log.d(TAG, "translateBatch: $sourceLanguage → $targetLanguage, override='${systemPromptOverride?.take(200)}', texts=${texts.size}")
+        Timber.d( "translateBatch: $sourceLanguage → $targetLanguage, override='${systemPromptOverride?.take(200)}', texts=${texts.size}")
         if (texts.isEmpty()) return@withContext emptyMap()
 
         val resolvedSource = if (sourceLanguage == "auto") {
             val sample = texts.firstOrNull { it.isNotBlank() }?.take(200) ?: ""
             val detected = googleFreeManager.detectLanguage(sample)
-            Log.d(TAG, "translateBatch: detected language=$detected")
+            Timber.d( "translateBatch: detected language=$detected")
             detected ?: sourceLanguage
         } else {
             sourceLanguage
@@ -111,20 +111,20 @@ class TranslationManagerComposite(
 
         when (activeProvider()) {
             "OPENAI" -> {
-                Log.d(TAG, "translateBatch: using OpenAI-compatible API")
+                Timber.d( "translateBatch: using OpenAI-compatible API")
                 openAiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }
             "GEMINI" -> {
-                Log.d(TAG, "translateBatch: using Gemini, passing override='${systemPromptOverride?.take(200)}'")
+                Timber.d( "translateBatch: using Gemini, passing override='${systemPromptOverride?.take(200)}'")
                 // No fallback — let exception propagate with descriptive message
                 geminiManager.translateBatch(texts, resolvedSource, targetLanguage, systemPromptOverride)
             }
             "GOOGLE_FREE" -> {
-                Log.d(TAG, "translateBatch: using Google Free")
+                Timber.d( "translateBatch: using Google Free")
                 googleFreeManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
             else -> {
-                Log.d(TAG, "translateBatch: using Google PA")
+                Timber.d( "translateBatch: using Google PA")
                 googlePAManager.translateBatch(texts, resolvedSource, targetLanguage)
             }
         }
@@ -151,24 +151,24 @@ class TranslationManagerComposite(
 
         when (activeProvider()) {
             "GOOGLE_FREE" -> {
-                Log.d(TAG, "translateTitle: using Google Free")
+                Timber.d( "translateTitle: using Google Free")
                 try {
                     return@withContext googleFreeManager.translateBatch(
                         listOf(title), resolvedSource, targetLanguage
                     )[title]?.takeIf { !it.isNullOrBlank() && it != title }
                 } catch (e: Exception) {
-                    Log.w(TAG, "translateTitle: Free failed (${e.message})")
+                    Timber.w( "translateTitle: Free failed (${e.message})")
                     null
                 }
             }
             "GOOGLE_PA" -> {
-                Log.d(TAG, "translateTitle: using Google PA")
+                Timber.d( "translateTitle: using Google PA")
                 try {
                     return@withContext googlePAManager.translateBatch(
                         listOf(title), resolvedSource, targetLanguage
                     )[title]?.takeIf { !it.isNullOrBlank() && it != title }
                 } catch (e: Exception) {
-                    Log.w(TAG, "translateTitle: PA failed (${e.message})")
+                    Timber.w( "translateTitle: PA failed (${e.message})")
                     null
                 }
             }
@@ -179,11 +179,11 @@ class TranslationManagerComposite(
                         listOf(title), resolvedSource, targetLanguage
                     )[title]
                     if (!result.isNullOrBlank() && result != title) {
-                        Log.d(TAG, "translateTitle: PA succeeded")
+                        Timber.d( "translateTitle: PA succeeded")
                         return@withContext result
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "translateTitle: PA failed (${e.message}), trying Free")
+                    Timber.w( "translateTitle: PA failed (${e.message}), trying Free")
                 }
 
                 try {
@@ -191,11 +191,11 @@ class TranslationManagerComposite(
                         listOf(title), resolvedSource, targetLanguage
                     )[title]
                     if (!result.isNullOrBlank() && result != title) {
-                        Log.d(TAG, "translateTitle: Free succeeded")
+                        Timber.d( "translateTitle: Free succeeded")
                         return@withContext result
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "translateTitle: Free also failed (${e.message})")
+                    Timber.w( "translateTitle: Free also failed (${e.message})")
                 }
 
                 null

@@ -1,5 +1,6 @@
 package my.noveldokusha.data
 
+import timber.log.Timber
 import android.content.Context
 import androidx.core.os.ConfigurationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -131,7 +132,7 @@ class DownloaderRepository @Inject constructor(
         for (attempt in 0 until maxRetries) {
             if (attempt > 0) {
                 val backoffMs = (1000L * (1L shl (attempt - 1))).coerceAtMost(5000L)
-                android.util.Log.d(TAG, "bookChapter: retry attempt $attempt/$maxRetries for $chapterUrl, waiting ${backoffMs}ms")
+                Timber.d("bookChapter: retry attempt $attempt/$maxRetries for $chapterUrl, waiting ${backoffMs}ms")
                 delay(backoffMs)
             }
 
@@ -181,7 +182,7 @@ class DownloaderRepository @Inject constructor(
                 // Проверяем HTML на JS-редирект (window.location, meta refresh)
                 val redirectUrl = my.noveldokusha.network.JsRedirectResolver.resolveRedirectUrl(doc)
                 if (redirectUrl != null) {
-                    android.util.Log.d(TAG, "JS redirect resolved: $redirectUrl")
+                    Timber.d("JS redirect resolved: $redirectUrl")
                     val redirectedDoc = networkClient.get(redirectUrl).use { it.toDocument() }
                     val chapter = heuristicChapterExtraction(redirectUrl, redirectedDoc)
                     if (chapter != null) {
@@ -376,8 +377,6 @@ class DownloaderRepository @Inject constructor(
     }
 
     companion object {
-        private const val TAG = "DownloaderRepository"
-
         /** MIME-типы при загрузке HTML — аналог браузерного Accept, не зависит от устройства */
         private const val ACCEPT_HTML =
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"

@@ -27,4 +27,6 @@ dependencies {
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.landscapist.glide)
     implementation(libs.compose.coil)
+
+    implementation(libs.timber)
 }

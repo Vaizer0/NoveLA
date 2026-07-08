@@ -34,4 +34,6 @@ dependencies {
     implementation(libs.compose.coil)
     implementation(libs.compose.lazyColumnScrollbar)
 
+    implementation(libs.timber)
+
 }

@@ -5,7 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.util.Log
+import timber.log.Timber
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
@@ -390,15 +390,15 @@ internal class ReaderTextToSpeech(
                 runCatching { audioTrack.stop() }
                 runCatching { audioTrack.release() }
             }
-            Log.d("TTS", "claimMediaSession OK")
+            Timber.d("claimMediaSession OK")
         } catch (e: Exception) {
-            Log.w("TTS", "claimMediaSession failed: $e")
+            Timber.w(e, "claimMediaSession failed")
         }
     }
 
     @Synchronized
     fun start() {
-        Log.d("TTS", "start()")
+        Timber.d("start()")
         claimMediaSession()
         switchVoiceForMode()
         state.isPlaying.value = true
@@ -408,7 +408,7 @@ internal class ReaderTextToSpeech(
                 .currentTextSpeakFlow
                 .filter { it.playState == Utterance.PlayState.FINISHED }
                 .collect {
-                    Log.d("TTS", "collect FINISHED queueSize=${manager.queueList.size}")
+                    Timber.d("collect FINISHED queueSize=${manager.queueList.size}")
                     withContext(Dispatchers.Main) {
                         when (manager.queueList.size) {
                             halfBuffer -> {
@@ -437,7 +437,7 @@ internal class ReaderTextToSpeech(
 
     @Synchronized
     fun stop() {
-        Log.d("TTS", "stop()")
+        Timber.d("stop()")
         state.isPlaying.value = false
         updateJob?.cancel()
         manager.stop()
@@ -769,7 +769,7 @@ internal class ReaderTextToSpeech(
     }
 
     private fun setVoicePitch(value: Float) {
-        Log.d("TTS", "setVoicePitch($value)")
+        Timber.d("setVoicePitch($value)")
         val success = manager.trySetVoicePitch(value)
         if (success) {
             setPreferredVoicePitch(value)
@@ -778,7 +778,7 @@ internal class ReaderTextToSpeech(
     }
 
     private fun setVoiceSpeed(value: Float) {
-        Log.d("TTS", "setVoiceSpeed($value)")
+        Timber.d("setVoiceSpeed($value)")
         val success = manager.trySetVoiceSpeed(value)
         if (success) {
             setPreferredVoiceSpeed(value)
@@ -787,12 +787,12 @@ internal class ReaderTextToSpeech(
     }
 
     private fun resumeFromCurrentState() {
-        Log.d("TTS", "resumeFromCurrentState isPlaying=${state.isPlaying.value}")
+        Timber.d("resumeFromCurrentState isPlaying=${state.isPlaying.value}")
         if (!state.isPlaying.value) return
         stop()
         start()
         val currentState = manager.currentActiveItemState.value
-        Log.d("TTS", "resumeFromCurrentState chapterIndex=${currentState.itemPos.chapterIndex}")
+        Timber.d("resumeFromCurrentState chapterIndex=${currentState.itemPos.chapterIndex}")
         if (currentState.itemPos.chapterIndex >= 0) {
             coroutineScope.launch {
                 readChapterStartingFromChapterItemPosition(

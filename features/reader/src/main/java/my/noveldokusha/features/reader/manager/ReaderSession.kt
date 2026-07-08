@@ -1,5 +1,6 @@
 package my.noveldokusha.features.reader.manager
 
+import timber.log.Timber
 import android.content.Context
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -373,7 +374,7 @@ internal class ReaderSession(
         if (chapterIndex != lastChapterIndex) {
             if (lastChapterIndex != -1 && readerChaptersLoader.hasLoadingError) {
                 readerChaptersLoader.hasLoadingError = false
-                android.util.Log.d("ReaderSession", "Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
+                Timber.d("Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
             }
             lastChapterIndex = chapterIndex
             preloadTriggeredForChapter = -1

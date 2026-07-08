@@ -1,6 +1,6 @@
 package my.noveldokusha.network
 
-import android.util.Log
+import timber.log.Timber
 import org.jsoup.nodes.Document
 
 /**
@@ -12,8 +12,6 @@ import org.jsoup.nodes.Document
  * извлекать URL редиректа вручную.
  */
 object JsRedirectResolver {
-
-    private const val TAG = "JsRedirectResolver"
 
     /**
      * Ищет URL редиректа в HTML-документе.
@@ -33,7 +31,7 @@ object JsRedirectResolver {
                 .find(content)
             if (urlMatch != null) {
                 val url = urlMatch.groupValues[1]
-                Log.d(TAG, "Found meta refresh redirect: $url")
+                Timber.d("Found meta refresh redirect: $url")
                 return url
             }
         }
@@ -80,7 +78,7 @@ object JsRedirectResolver {
                         url = "https:$url"
                     }
                 }
-                Log.d(TAG, "Found JS redirect: $url")
+                Timber.d("Found JS redirect: $url")
                 return normalizeUrl(url)
             }
         }
@@ -90,7 +88,7 @@ object JsRedirectResolver {
         val scriptMatch = scriptPattern.find(html)
         if (scriptMatch != null) {
             val url = scriptMatch.groupValues[1]
-            Log.d(TAG, "Found script redirect: $url")
+            Timber.d("Found script redirect: $url")
             return normalizeUrl(url)
         }
 

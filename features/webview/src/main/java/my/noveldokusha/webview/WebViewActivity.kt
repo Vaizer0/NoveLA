@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.*
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.net.http.SslError
 import android.webkit.*
 import androidx.activity.ComponentActivity
@@ -18,6 +17,7 @@ import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import my.noveldokusha.network.interceptors.resolveUserAgent
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -66,7 +66,7 @@ class WebViewActivity : ComponentActivity() {
                     handler: SslErrorHandler?,
                     error: SslError?
                 ) {
-                    Log.e("WebViewActivity", "SSL error: ${error?.primaryError}, cancelling request")
+                    Timber.e("SSL error: ${error?.primaryError}, cancelling request")
                     handler?.cancel()
                     toasty.show("Secure connection failed")
                 }
@@ -80,7 +80,7 @@ class WebViewActivity : ComponentActivity() {
                     return when (scheme) {
                         "http", "https" -> false
                         else -> {
-                            Log.d("WebViewActivity", "Ignoring unsupported scheme: $url")
+                            Timber.d("Ignoring unsupported scheme: $url")
                             true
                         }
                     }
@@ -91,7 +91,7 @@ class WebViewActivity : ComponentActivity() {
                     CookieManager.getInstance().flush()
                     val cookies = CookieManager.getInstance().getCookie(url) ?: ""
                     if (cookies.contains("cf_clearance")) {
-                        Log.d("WebViewActivity", "CF Cookie detected!")
+                        Timber.d("CF Cookie detected!")
                         pageLoadedOnce = true
                     }
                 }
@@ -103,10 +103,7 @@ class WebViewActivity : ComponentActivity() {
                     errorResponse: WebResourceResponse?
                 ) {
                     super.onReceivedHttpError(view, request, errorResponse)
-                    Log.w(
-                        "WebViewActivity",
-                        "HTTP error ${errorResponse?.statusCode} for ${request?.url}"
-                    )
+                    Timber.w("HTTP error ${errorResponse?.statusCode} for ${request?.url}")
                 }
 
                 // ✅ ИСПРАВЛЕНИЕ: логируем сетевые ошибки для диагностики
@@ -116,10 +113,7 @@ class WebViewActivity : ComponentActivity() {
                     error: WebResourceError?
                 ) {
                     super.onReceivedError(view, request, error)
-                    Log.e(
-                        "WebViewActivity",
-                        "Network error: code=${error?.errorCode}, desc=${error?.description}, url=${request?.url}"
-                    )
+                    Timber.e("Network error: code=${error?.errorCode}, desc=${error?.description}, url=${request?.url}")
                 }
             }
 
@@ -183,7 +177,7 @@ class WebViewActivity : ComponentActivity() {
         val url = intent.data?.toString()
             ?: intent.getStringExtra("url")
             ?: return
-        Log.d("WebViewActivity", "onNewIntent: loading $url")
+        Timber.d("onNewIntent: loading $url")
         currentTargetUrl = url
         webView.loadUrl(url)
     }

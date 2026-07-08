@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import timber.log.Timber
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.AbsListView
@@ -677,7 +677,7 @@ class ReaderActivity : BaseActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (event != null) {
-            Log.d("MediaCallback", "onKeyDown: keyCode=$keyCode action=${event.action}")
+            Timber.d("onKeyDown: keyCode=$keyCode action=${event.action}")
         }
         if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_HEADSETHOOK) {
             if (viewModel.readerSpeaker.isSpeaking.value) {

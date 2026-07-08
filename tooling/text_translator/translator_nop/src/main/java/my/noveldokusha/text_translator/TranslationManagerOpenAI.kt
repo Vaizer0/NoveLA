@@ -1,9 +1,9 @@
 package my.noveldokusha.text_translator
 
+import timber.log.Timber
 import my.noveldokusha.text_translator.buildSystemPrompt
 import my.noveldokusha.text_translator.DEFAULT_TRANSLATION_PROMPT
 
-import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,12 +82,12 @@ class TranslationManagerOpenAI(
 
     private fun resolveTemplatePrompt(systemPromptOverride: String?): String {
         if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) {
-            Log.d(TAG, "resolveTemplatePrompt: using override '${systemPromptOverride.take(200)}'")
+            Timber.d( "resolveTemplatePrompt: using override '${systemPromptOverride.take(200)}'")
             return systemPromptOverride
         }
         val fallback = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
             .ifBlank { DEFAULT_TRANSLATION_PROMPT }
-        Log.d(TAG, "resolveTemplatePrompt: no override, using fallback '${fallback.take(200)}'")
+        Timber.d( "resolveTemplatePrompt: no override, using fallback '${fallback.take(200)}'")
         return fallback
     }
 
@@ -109,7 +109,7 @@ class TranslationManagerOpenAI(
         models.firstOrNull { it.language == language }
 
     override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
-        Log.d(TAG, "getTranslator: source=$source, target=$target, override=${systemPromptOverride != null}")
+        Timber.d( "getTranslator: source=$source, target=$target, override=${systemPromptOverride != null}")
         return TranslatorState(
             source = source,
             target = target,
@@ -151,10 +151,10 @@ class TranslationManagerOpenAI(
             return@withContext merged
         }
 
-        Log.d(TAG, "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage, override='${systemPromptOverride?.take(200)}'")
+        Timber.d( "translateBatch: ${normalizedTexts.size} paragraphs, $sourceLanguage→$targetLanguage, override='${systemPromptOverride?.take(200)}'")
 
         val systemPrompt = buildPrompt(sourceLanguage, targetLanguage, systemPromptOverride)
-        Log.d(TAG, "translateBatch: systemPrompt='${systemPrompt.take(200)}'")
+        Timber.d( "translateBatch: systemPrompt='${systemPrompt.take(200)}'")
 
         // All format instructions are in the system prompt.
         // User message contains only the numbered text — clean and simple.
@@ -184,7 +184,7 @@ class TranslationManagerOpenAI(
         var lastException: Exception? = null
 
         val retryPolicy = RetryPolicy(maxAttempts = keys.size, baseDelayMs = 250L, maxDelayMs = 1500L)
-        Log.d(TAG, "sendWithKeyRotation: systemPrompt='${systemPrompt.take(200)}'")
+        Timber.d( "sendWithKeyRotation: systemPrompt='${systemPrompt.take(200)}'")
 
         for (attempt in 0 until retryPolicy.maxAttempts) {
             val currentKey = keys[(startIndex + attempt) % keys.size]
@@ -196,14 +196,14 @@ class TranslationManagerOpenAI(
 
                 when {
                     code == 401 -> {
-                        Log.w(TAG, "sendWithKeyRotation: 401 on $keyLabel, trying next")
+                        Timber.w( "sendWithKeyRotation: 401 on $keyLabel, trying next")
                         response.close()
                         lastException = IllegalStateException("OpenAI: Invalid API key ($keyLabel). Check your key in Settings.")
                         retryPolicy.backoff(attempt)
                         continue
                     }
                     code == 429 -> {
-                        Log.w(TAG, "sendWithKeyRotation: 429 on $keyLabel, trying next")
+                        Timber.w( "sendWithKeyRotation: 429 on $keyLabel, trying next")
                         response.close()
                         lastException = IllegalStateException("OpenAI: Rate limit exceeded ($keyLabel).")
                         retryPolicy.backoff(attempt)
@@ -224,7 +224,7 @@ class TranslationManagerOpenAI(
                     }
                 }
             } catch (e: IOException) {
-                Log.e(TAG, "sendWithKeyRotation: network error — ${e.message}")
+                Timber.e( "sendWithKeyRotation: network error — ${e.message}")
                 throw e
             }
         }
@@ -281,7 +281,7 @@ class TranslationManagerOpenAI(
                 throw IllegalStateException("OpenAI: No choices in response")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "parseResponse: failed to parse — ${e.message}")
+            Timber.e( "parseResponse: failed to parse — ${e.message}")
             throw IllegalStateException("OpenAI: Failed to parse response — ${e.message}")
         }
     }
@@ -347,12 +347,12 @@ class TranslationManagerOpenAI(
             if (translation != null) {
                 result[originalText] = translation
             } else {
-                Log.w(TAG, "parseNumberedTranslations: missing index $index, using original")
+                Timber.w( "parseNumberedTranslations: missing index $index, using original")
                 result[originalText] = originalText
             }
         }
 
-        Log.d(TAG, "parseNumberedTranslations: ${byIndex.size}/${originalTexts.size} parsed")
+        Timber.d( "parseNumberedTranslations: ${byIndex.size}/${originalTexts.size} parsed")
         return result
     }
 

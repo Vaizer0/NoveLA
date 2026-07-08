@@ -20,4 +20,6 @@ dependencies {
     
     // Free Google Translate library
     implementation("com.github.therealbush:translator:1.1.1")
+
+    implementation(libs.timber)
 }
