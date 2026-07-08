@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
@@ -333,6 +334,7 @@ internal class ReaderSession(
 
     fun close() {
         readerChaptersLoader.coroutineContext.cancelChildren()
+        (readerChaptersLoader.coroutineContext[Job])?.cancel()
         if (readerTextToSpeech.isActive.value) {
             saveLastReadPositionStateSpeaker(
                 item = readerTextToSpeech.currentTextPlaying.value.itemPos
@@ -350,6 +352,7 @@ internal class ReaderSession(
         }
         readerTextToSpeech.stop()
         scope.coroutineContext.cancelChildren()
+        (scope.coroutineContext[Job])?.cancel()
         NarratorMediaControlsService.stop(context)
     }
 

@@ -46,7 +46,9 @@ class AppPreferences @Inject constructor(
 ) {
     private val preferences = PreferenceManager.getDefaultSharedPreferences(context)
     private val preferencesChangeListeners =
-        mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+        java.util.Collections.synchronizedSet(
+            mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+        )
 
     val APP_LANGUAGE_CODE = object : Preference<String>("APP_LANGUAGE_CODE") {
         override var value by SharedPreference_String(name, preferences, "en")
@@ -644,10 +646,9 @@ class AppPreferences @Inject constructor(
 
     private fun <T> toFlow(key: String, mapper: (String) -> T): Flow<T> {
         val flow = MutableStateFlow(mapper(key))
-        val scope = CoroutineScope(Dispatchers.Default)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, vkey ->
             if (key == vkey)
-                scope.launch { flow.value = mapper(vkey) }
+                flow.value = mapper(vkey)
         }
 
         return flow

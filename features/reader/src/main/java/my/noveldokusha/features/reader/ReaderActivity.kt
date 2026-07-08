@@ -157,6 +157,9 @@ class ReaderActivity : BaseActivity() {
 
     override fun onDestroy() {
         readerViewHandlersActions.invalidate()
+        if (isFinishing) {
+            viewModel.onCloseManually()
+        }
         super.onDestroy()
     }
 
