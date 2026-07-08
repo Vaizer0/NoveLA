@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Vượt Cloudflare</string>
     <string name="cloudflare_bypass_description">Bật tự động vượt thử thách Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">Cài đặt vượt Cloudflare sẽ được áp dụng sau khi khởi động lại ứng dụng</string>
-    <string name="user_agent_restart_required">User-Agent đã thay đổi. Khởi động lại ứng dụng để áp dụng.</string>
     <string name="cloudflare_challenge_timeout">Thời gian chờ thử thách</string>
     <string name="timeout_seconds">Thời gian chờ (giây)</string>
     <string name="seconds_format">%d giây</string>

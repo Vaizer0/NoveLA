@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflareバイパス</string>
     <string name="cloudflare_bypass_description">自動Cloudflareチャレンジバイパスを有効化</string>
     <string name="cloudflare_bypass_restart_required">Cloudflareバイパス設定はアプリ再起動後に適用されます</string>
-    <string name="user_agent_restart_required">User-Agentが変更されました。適用するにはアプリを再起動してください。</string>
     <string name="cloudflare_challenge_timeout">チャレンジタイムアウト</string>
     <string name="timeout_seconds">タイムアウト（秒）</string>
     <string name="seconds_format">%d秒</string>

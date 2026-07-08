@@ -354,9 +354,9 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
             }
         }
 
-        try {
+        if (composeView?.isAttachedToWindow != true) {
             windowManager?.addView(composeView, layoutParams)
-        } catch (_: Exception) {}
+        }
     }
 
     private fun recreateOverlayInternal() {

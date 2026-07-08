@@ -8,6 +8,8 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isValidChapterContent
@@ -67,6 +69,7 @@ internal class ReaderChaptersLoader(
     private val items: MutableList<ReaderItem> = ArrayList()
     private val loaderQueue = mutableSetOf<LoadChapter.Type>()
     private val chapterLoaderFlow = MutableSharedFlow<LoadChapter>(extraBufferCapacity = 1)
+    private val loadedChaptersMutex = Mutex()
 
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
@@ -459,7 +462,7 @@ internal class ReaderChaptersLoader(
     ): Boolean? = withContext(Dispatchers.Default) {
         val chapter = orderedChapters.getOrNull(chapterIndex) ?: return@withContext null
 
-        synchronized(loadedChapters) {
+        loadedChaptersMutex.withLock {
             if (!skipLoadedCheck && loadedChapters.contains(chapter.url)) {
                 Timber.d("addChapter: chapter ${chapter.url} already loaded or loading, skipping")
                 return@withContext null
@@ -471,13 +474,13 @@ internal class ReaderChaptersLoader(
             _addChapterInternal(chapter, chapterIndex, insert, insertAll, remove, maintainPosition, showLoadingState, maintainOnSuccess)
         } catch (e: kotlinx.coroutines.CancellationException) {
             Timber.w("addChapter: cancelled for chapter ${chapter.url}, cleaning up")
-            synchronized(loadedChapters) {
+            loadedChaptersMutex.withLock {
                 loadedChapters.remove(chapter.url)
             }
             null
         } catch (e: Throwable) {
             Timber.e(e, "addChapter: unexpected error for chapter ${chapter.url}")
-            synchronized(loadedChapters) {
+            loadedChaptersMutex.withLock {
                 loadedChapters.remove(chapter.url)
             }
             false
@@ -738,6 +741,7 @@ internal class ReaderChaptersLoader(
                         else -> itemsOriginal
                     }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     Timber.e(e, "Translation failed for chapter ${chapter.title}: ${e.message}")
                     withContext(Dispatchers.Main.immediate) {
                         chaptersStats[chapter.url] = ChapterStats(

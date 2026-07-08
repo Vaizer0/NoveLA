@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">تجاوز Cloudflare</string>
     <string name="cloudflare_bypass_description">تمكين تجاوز تحديات Cloudflare تلقائياً</string>
     <string name="cloudflare_bypass_restart_required">سيتم تطبيق إعداد تجاوز Cloudflare بعد إعادة تشغيل التطبيق</string>
-    <string name="user_agent_restart_required">تم تغيير وكيل المستخدم. أعد تشغيل التطبيق للتطبيق.</string>
     <string name="cloudflare_challenge_timeout">مهلة التحدي</string>
     <string name="timeout_seconds">المهلة (ثوانٍ)</string>
     <string name="seconds_format">%d ثانية</string>

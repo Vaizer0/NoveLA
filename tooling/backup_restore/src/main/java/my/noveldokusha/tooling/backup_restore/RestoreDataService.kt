@@ -615,7 +615,13 @@ class RestoreDataService : Service() {
 
         fun mergeToBookFolder(entry: ZipEntry, entryInputStream: InputStream) {
             try {
-                val file = File(appRepository.settings.folderBooks.parentFile, entry.name)
+                val baseDir = appRepository.settings.folderBooks.parentFile ?: return
+                val canonicalBase = baseDir.canonicalFile
+                val file = File(baseDir, entry.name).canonicalFile
+                if (!file.path.startsWith(canonicalBase.path + File.separator)) {
+                    Timber.w("mergeToBookFolder: Zip slip attempt blocked for ${entry.name}")
+                    return
+                }
                 if (file.isDirectory) return
                 file.parentFile?.mkdirs()
                 if (file.parentFile?.exists() != true) {

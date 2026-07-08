@@ -12,6 +12,7 @@ import my.noveldokusha.core.fileImporter
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.epub_tooling.epubParser
 import my.noveldokusha.epub_tooling.EpubBook
+import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.feature.local_database.tables.ChapterBody
@@ -24,6 +25,7 @@ class EpubImporterRepository @Inject constructor(
     private val bookChapters: BookChaptersRepository,
     private val chapterBody: ChapterBodyRepository,
     private val appFileResolver: AppFileResolver,
+    private val appDatabase: AppDatabase,
     @ApplicationContext private val context: Context,
 ) {
     suspend fun importEpubFromContentUri(
@@ -48,44 +50,46 @@ class EpubImporterRepository @Inject constructor(
     ): Unit = withContext(Dispatchers.IO) {
         val localBookUrl = appFileResolver.getLocalBookPath(storageFolderName)
 
-        // First clean any previous entries from the book
-        bookChapters.chapters(localBookUrl)
-            .map { it.url }
-            .let { chapterBody.removeRows(it) }
-        bookChapters.removeAllFromBook(localBookUrl)
-        libraryBooks.remove(localBookUrl)
+        appDatabase.transaction {
+            // First clean any previous entries from the book
+            bookChapters.chapters(localBookUrl)
+                .map { it.url }
+                .let { chapterBody.removeRows(it) }
+            bookChapters.removeAllFromBook(localBookUrl)
+            libraryBooks.remove(localBookUrl)
 
-        val coverImage = epub.coverImage
-        if (coverImage != null) {
-            fileImporter(
-                targetFile = appFileResolver.getStorageBookCoverImageFile(storageFolderName),
-                imageData = coverImage.image
-            )
+            val coverImage = epub.coverImage
+            if (coverImage != null) {
+                fileImporter(
+                    targetFile = appFileResolver.getStorageBookCoverImageFile(storageFolderName),
+                    imageData = coverImage.image
+                )
+            }
+
+            // Insert new book data
+            Book(
+                title = storageFolderName,
+                url = localBookUrl,
+                coverImageUrl = appFileResolver.getLocalBookCoverPath(),
+                inLibrary = addToLibrary
+            ).let { libraryBooks.insert(it) }
+
+            epub.chapters.mapIndexed { i, chapter ->
+                Chapter(
+                    title = chapter.title,
+                    url = appFileResolver.getLocalBookChapterPath(storageFolderName, chapter.absPath),
+                    bookUrl = localBookUrl,
+                    position = i
+                )
+            }.let { bookChapters.insert(it) }
+
+            epub.chapters.map { chapter ->
+                ChapterBody(
+                    url = appFileResolver.getLocalBookChapterPath(storageFolderName, chapter.absPath),
+                    body = chapter.body
+                )
+            }.let { chapterBody.insertReplace(it) }
         }
-
-        // Insert new book data
-        Book(
-            title = storageFolderName,
-            url = localBookUrl,
-            coverImageUrl = appFileResolver.getLocalBookCoverPath(),
-            inLibrary = addToLibrary
-        ).let { libraryBooks.insert(it) }
-
-        epub.chapters.mapIndexed { i, chapter ->
-            Chapter(
-                title = chapter.title,
-                url = appFileResolver.getLocalBookChapterPath(storageFolderName, chapter.absPath),
-                bookUrl = localBookUrl,
-                position = i
-            )
-        }.let { bookChapters.insert(it) }
-
-        epub.chapters.map { chapter ->
-            ChapterBody(
-                url = appFileResolver.getLocalBookChapterPath(storageFolderName, chapter.absPath),
-                body = chapter.body
-            )
-        }.let { chapterBody.insertReplace(it) }
 
         epub.images.map {
             async {

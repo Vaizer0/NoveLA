@@ -51,8 +51,8 @@ class ScraperNetworkClient @Inject constructor(
         OkHttpClient.Builder()
             .apply {
                 if (appInternalState.isDebugMode) addInterceptor(okhttpLoggingInterceptor)
-                addInterceptor(UserAgentInterceptor(appPreferences.SCRAPER_USER_AGENT.value))
-                addInterceptor(BrowserHeadersInterceptor())
+                addInterceptor(UserAgentInterceptor(appPreferences))
+                addInterceptor(BrowserHeadersInterceptor(appPreferences))
                 addInterceptor(DecodeResponseInterceptor())
                 if (appPreferences.CLOUDFLARE_BYPASS_ENABLED.value) {
                     addInterceptor(CloudFareVerificationInterceptor(appContext, appPreferences))

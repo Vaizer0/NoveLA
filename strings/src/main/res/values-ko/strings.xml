@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare 우회</string>
     <string name="cloudflare_bypass_description">자동 Cloudflare 챌린지 우회 활성화</string>
     <string name="cloudflare_bypass_restart_required">Cloudflare 우회 설정은 앱 재시작 후 적용됩니다</string>
-    <string name="user_agent_restart_required">User-Agent가 변경되었습니다. 적용하려면 앱을 다시 시작하세요.</string>
     <string name="cloudflare_challenge_timeout">챌린지 시간 초과</string>
     <string name="timeout_seconds">시간 초과(초)</string>
     <string name="seconds_format">%d초</string>

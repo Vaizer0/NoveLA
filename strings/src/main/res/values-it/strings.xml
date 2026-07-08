@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Bypass Cloudflare</string>
     <string name="cloudflare_bypass_description">Abilita bypass automatico challenge Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">L\'impostazione di bypass Cloudflare verrà applicata dopo il riavvio dell\'app</string>
-    <string name="user_agent_restart_required">User-Agent modificato. Riavvia l\'app per applicare le modifiche.</string>
     <string name="cloudflare_challenge_timeout">Timeout challenge</string>
     <string name="timeout_seconds">Timeout (secondi)</string>
     <string name="seconds_format">%d secondi</string>

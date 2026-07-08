@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare atlatma</string>
     <string name="cloudflare_bypass_description">Otomatik Cloudflare doğrulama atlatmayı etkinleştir</string>
     <string name="cloudflare_bypass_restart_required">Cloudflare atlatma ayarı uygulama yeniden başlatıldıktan sonra uygulanacak</string>
-    <string name="user_agent_restart_required">User-Agent değiştirildi. Uygulamak için uygulamayı yeniden başlatın.</string>
     <string name="cloudflare_challenge_timeout">Doğrulama zaman aşımı</string>
     <string name="timeout_seconds">Zaman aşımı (saniye)</string>
     <string name="seconds_format">%d saniye</string>

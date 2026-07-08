@@ -8,6 +8,7 @@ import org.xml.sax.InputSource
 import java.io.InputStream
 import java.net.URLDecoder
 import java.util.zip.ZipInputStream
+import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 
 
@@ -19,13 +20,22 @@ internal fun Node.selectChildTag(tag: String) = childElements.filter { it.tagNam
 internal fun Node.getAttributeValue(attribute: String): String? =
     attributes?.getNamedItem(attribute)?.textContent
 
+internal fun newSecureDocumentBuilder(): DocumentBuilder =
+    DocumentBuilderFactory.newInstance().apply {
+        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        setFeature("http://xml.org/sax/features/external-general-entities", false)
+        setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        setExpandEntityReferences(false)
+        isXIncludeAware = false
+    }.newDocumentBuilder()
+
 internal fun parseXMLFile(inputSteam: InputStream): Document? =
-    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(inputSteam)
+    newSecureDocumentBuilder().parse(inputSteam)
 
 internal fun parseXMLFile(byteArray: ByteArray): Document? = parseXMLFile(byteArray.inputStream())
 @Suppress("unused")
 internal fun parseXMLText(text: String): Document? = text.reader().runCatching {
-    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(InputSource(this))
+    newSecureDocumentBuilder().parse(InputSource(this))
 }.getOrNull()
 
 internal val String.decodedURL: String get() = URLDecoder.decode(this, "UTF-8")

@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare 绕过</string>
     <string name="cloudflare_bypass_description">启用自动 Cloudflare 挑战绕过</string>
     <string name="cloudflare_bypass_restart_required">Cloudflare 绕过设置将在应用重启后生效</string>
-    <string name="user_agent_restart_required">User-Agent 已更改。请重启应用以生效。</string>
     <string name="cloudflare_challenge_timeout">挑战超时</string>
     <string name="timeout_seconds">超时（秒）</string>
     <string name="seconds_format">%d 秒</string>

@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare বাইপাস</string>
     <string name="cloudflare_bypass_description">স্বয়ংক্রিয় Cloudflare চ্যালেঞ্জ বাইপাস সক্ষম করুন</string>
     <string name="cloudflare_bypass_restart_required">Cloudflare বাইপাস সেটিং অ্যাপ পুনরায় চালু হওয়ার পরে প্রয়োগ করা হবে</string>
-    <string name="user_agent_restart_required">User-Agent পরিবর্তিত হয়েছে। প্রয়োগ করতে অ্যাপ পুনরায় চালু করুন।</string>
     <string name="cloudflare_challenge_timeout">চ্যালেঞ্জ টাইমআউট</string>
     <string name="timeout_seconds">টাইমআউট (সেকেন্ড)</string>
     <string name="seconds_format">%d সেকেন্ড</string>

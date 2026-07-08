@@ -8,13 +8,14 @@ import androidx.lifecycle.Observer
 // The implementation might not be perfect but should work
 // most of the time and is the simplest one that I can think of
 class LiveEvent<T> : MutableLiveData<T>() {
+    private val lock = Any()
     private var setTime = System.currentTimeMillis()
 
     @MainThread
     override fun observe(owner: LifecycleOwner, observer: Observer<in T>) {
         val observerTime = System.currentTimeMillis()
         super.observe(owner) {
-            if (synchronized(this) { observerTime <= setTime })
+            if (synchronized(lock) { observerTime <= setTime })
                 observer.onChanged(it)
         }
     }
@@ -26,7 +27,7 @@ class LiveEvent<T> : MutableLiveData<T>() {
     }
 
     override fun postValue(value: T) {
-        synchronized(this) { setTime = System.currentTimeMillis() }
+        synchronized(lock) { setTime = System.currentTimeMillis() }
         super.postValue(value)
     }
 }

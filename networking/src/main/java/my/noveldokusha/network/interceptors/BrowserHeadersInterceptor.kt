@@ -1,9 +1,12 @@
 package my.noveldokusha.network.interceptors
 
+import my.noveldokusha.core.appPreferences.AppPreferences
 import okhttp3.Interceptor
 import okhttp3.Response
 
-internal class BrowserHeadersInterceptor : Interceptor {
+internal class BrowserHeadersInterceptor(
+    private val appPreferences: AppPreferences
+) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
@@ -46,11 +49,16 @@ internal class BrowserHeadersInterceptor : Interceptor {
         }
 
         if (original.header("Sec-CH-UA").isNullOrBlank()) {
-            builder.header(
-                "Sec-CH-UA",
+            val userAgent = resolveUserAgent(appPreferences)
+            val chromeVersion = "Chrome/(\\d+)".toRegex().find(userAgent)?.groupValues?.get(1)
+            val secChUa = if (chromeVersion != null) {
+                "\"Chromium\";v=\"$chromeVersion\", \"Not(A:Brand\";v=\"24\", " +
+                    "\"Google Chrome\";v=\"$chromeVersion\""
+            } else {
                 "\"Chromium\";v=\"120\", \"Not(A:Brand\";v=\"24\", " +
                     "\"Google Chrome\";v=\"120\""
-            )
+            }
+            builder.header("Sec-CH-UA", secChUa)
         }
         if (original.header("Sec-CH-UA-Mobile").isNullOrBlank()) {
             builder.header("Sec-CH-UA-Mobile", "?1")

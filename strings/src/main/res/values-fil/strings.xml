@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare bypass</string>
     <string name="cloudflare_bypass_description">Paganahin ang awtomatikong pag-bypass sa Cloudflare challenge</string>
     <string name="cloudflare_bypass_restart_required">Ang setting ng Cloudflare bypass ay ilalapat pagkatapos i-restart ang app</string>
-    <string name="user_agent_restart_required">Binago ang User-Agent. I-restart ang app upang ilapat.</string>
     <string name="cloudflare_challenge_timeout">Timeout ng challenge</string>
     <string name="timeout_seconds">Timeout (segundo)</string>
     <string name="seconds_format">%d segundo</string>

@@ -9,12 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.text_translator.domain.GOOGLE_TRANSLATE_LANGUAGES
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import my.noveldokusha.text_translator.domain.TranslatorState
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * No silent fallback — all errors are thrown so the caller and UI can report them.
  */
 class TranslationManagerOpenAI(
+    private val networkClient: ScraperNetworkClient,
     private val coroutineScope: AppCoroutineScope,
     private val appPreferences: AppPreferences
 ) : TranslationManager {
@@ -53,8 +54,8 @@ class TranslationManagerOpenAI(
     private val maxBatchItemsPerRequest: Int
         get() = appPreferences.TRANSLATION_BATCH_SIZE.value.coerceAtLeast(1)
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(120, TimeUnit.SECONDS)
+    private val client get() = networkClient.client.newBuilder()
+        .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
@@ -180,15 +181,15 @@ class TranslationManagerOpenAI(
             throw IllegalStateException("OpenAI: No API keys configured. Please add your API key in Settings → Translation.")
         }
 
-        val startIndex = keyIndex.getAndIncrement() % keys.size
+        val startIndex = Math.floorMod(keyIndex.getAndIncrement(), keys.size)
         var lastException: Exception? = null
 
         val retryPolicy = RetryPolicy(maxAttempts = keys.size, baseDelayMs = 250L, maxDelayMs = 1500L)
         Timber.d( "sendWithKeyRotation: systemPrompt='${systemPrompt.take(200)}'")
 
         for (attempt in 0 until retryPolicy.maxAttempts) {
-            val currentKey = keys[(startIndex + attempt) % keys.size]
-            val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
+            val currentKey = keys[Math.floorMod(startIndex + attempt, keys.size)]
+            val keyLabel = "key #${Math.floorMod(startIndex + attempt, keys.size) + 1}"
 
             try {
                 val response = sendRequest(systemPrompt, userMessage, currentKey)
@@ -218,7 +219,7 @@ class TranslationManagerOpenAI(
                         throw IllegalStateException("OpenAI: Unexpected error ($code): $errorBody")
                     }
                     else -> {
-                        keyIndex.set((startIndex + attempt + 1) % keys.size)
+                        keyIndex.set(Math.floorMod(startIndex + attempt + 1, keys.size))
                         val body = readBodyOrThrow(response, "OpenAI")
                         return@withContext parseResponse(body)
                     }

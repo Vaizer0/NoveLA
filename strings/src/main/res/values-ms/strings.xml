@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Pintasan Cloudflare</string>
     <string name="cloudflare_bypass_description">Dayakan pintasan cabaran Cloudflare automatik</string>
     <string name="cloudflare_bypass_restart_required">Tetapan pintasan Cloudflare akan digunakan selepas apl dimulakan semula</string>
-    <string name="user_agent_restart_required">User-Agent ditukar. Mulakan semula apl untuk menggunakan.</string>
     <string name="cloudflare_challenge_timeout">Masa tamat cabaran</string>
     <string name="timeout_seconds">Masa tamat (saat)</string>
     <string name="seconds_format">%d saat</string>

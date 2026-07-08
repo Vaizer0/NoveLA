@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Cloudflare umgehen</string>
     <string name="cloudflare_bypass_description">Automatische Cloudflare-Challenge-Umgehung aktivieren</string>
     <string name="cloudflare_bypass_restart_required">Die Cloudflare-Umgehungseinstellung wird nach einem App-Neustart übernommen</string>
-    <string name="user_agent_restart_required">User-Agent geändert. Starte die App neu, um die Änderung zu übernehmen.</string>
     <string name="cloudflare_challenge_timeout">Challenge-Timeout</string>
     <string name="timeout_seconds">Timeout (Sekunden)</string>
     <string name="seconds_format">%d Sekunden</string>

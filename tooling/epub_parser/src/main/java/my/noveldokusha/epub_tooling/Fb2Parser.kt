@@ -11,7 +11,6 @@ import org.w3c.dom.Node
 import org.w3c.dom.NodeList
 import java.io.InputStream
 import java.util.zip.ZipInputStream
-import javax.xml.parsers.DocumentBuilderFactory
 
 // ── XML helpers ────────────────────────────────────────────────────────────
 
@@ -32,7 +31,7 @@ private fun Element.getAttr(name: String): String? =
         ?: getAttributeNS(null, name)?.takeIf { it.isNotEmpty() }
 
 private fun parseFb2(data: ByteArray): Document =
-    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(data.inputStream())
+    newSecureDocumentBuilder().parse(data.inputStream())
 
 private fun Node.childElements(): List<Element> {
     val c = childNodes

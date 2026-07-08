@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">การบายพาส Cloudflare</string>
     <string name="cloudflare_bypass_description">เปิดใช้งานการบายพาสความท้าทาย Cloudflare อัตโนมัติ</string>
     <string name="cloudflare_bypass_restart_required">การตั้งค่าการบายพาส Cloudflare จะมีผลหลังจากรีสตาร์ทแอป</string>
-    <string name="user_agent_restart_required">เปลี่ยน User-Agent แล้ว รีสตาร์ทแอปเพื่อใช้</string>
     <string name="cloudflare_challenge_timeout">หมดเวลาความท้าทาย</string>
     <string name="timeout_seconds">หมดเวลา (วินาที)</string>
     <string name="seconds_format">%d วินาที</string>

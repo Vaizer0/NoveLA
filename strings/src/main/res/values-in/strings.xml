@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Bypass Cloudflare</string>
     <string name="cloudflare_bypass_description">Aktifkan bypass tantangan Cloudflare otomatis</string>
     <string name="cloudflare_bypass_restart_required">Pengaturan bypass Cloudflare akan diterapkan setelah aplikasi dimulai ulang</string>
-    <string name="user_agent_restart_required">User-Agen diubah. Mulai ulang aplikasi untuk menerapkan.</string>
     <string name="cloudflare_challenge_timeout">Waktu tunggu tantangan</string>
     <string name="timeout_seconds">Waktu tunggu (detik)</string>
     <string name="seconds_format">%d detik</string>

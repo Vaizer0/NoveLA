@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Omisión de Cloudflare</string>
     <string name="cloudflare_bypass_description">Activar omisión automática del desafío de Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">La configuración de omisión de Cloudflare se aplicará tras reiniciar la app</string>
-    <string name="user_agent_restart_required">User-Agent cambiado. Reinicia la app para aplicar.</string>
     <string name="cloudflare_challenge_timeout">Tiempo de espera del desafío</string>
     <string name="timeout_seconds">Tiempo de espera (segundos)</string>
     <string name="seconds_format">%d segundos</string>

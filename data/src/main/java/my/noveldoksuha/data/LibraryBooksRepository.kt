@@ -156,15 +156,18 @@ class LibraryBooksRepository @Inject constructor(
 
     fun saveImageAsCover(imageUri: Uri, bookUrl: String) {
         appCoroutineScope.launch {
-            val imageData = context.contentResolver.openInputStream(imageUri)
-                ?.use { it.readBytes() } ?: return@launch
+            val imageData = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+            } ?: return@launch
             val bookFolderName = appFileResolver.getLocalBookFolderName(
                 bookUrl = bookUrl
             )
             val bookCoverFile = appFileResolver.getStorageBookCoverImageFile(
                 bookFolderName = bookFolderName
             )
-            fileImporter(targetFile = bookCoverFile, imageData = imageData)
+            withContext(Dispatchers.IO) {
+                fileImporter(targetFile = bookCoverFile, imageData = imageData)
+            }
             delay(timeMillis = 1_000)
             updateCover(bookUrl = bookUrl, coverUrl = appFileResolver.getLocalBookCoverPath())
         }

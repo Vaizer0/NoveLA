@@ -9,12 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.text_translator.domain.GOOGLE_TRANSLATE_LANGUAGES
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import my.noveldokusha.text_translator.domain.TranslatorState
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -24,6 +24,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class TranslationManagerGemini(
+    private val networkClient: ScraperNetworkClient,
     private val coroutineScope: AppCoroutineScope,
     private val appPreferences: AppPreferences
 ) : TranslationManager {
@@ -44,11 +45,10 @@ class TranslationManagerGemini(
     private val maxBatchItemsPerRequest: Int
         get() = appPreferences.TRANSLATION_BATCH_SIZE.value.coerceAtLeast(1)
 
-    private val client = OkHttpClient.Builder()
+    private val client get() = networkClient.client.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
+        .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
     private val keyIndex = java.util.concurrent.atomic.AtomicInteger(0)
@@ -61,7 +61,7 @@ class TranslationManagerGemini(
 
     private fun getApiEndpoint(key: String): String {
         val model = appPreferences.TRANSLATION_GEMINI_MODEL.value.ifBlank { "gemini-2.5-flash" }
-        return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
+        return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
     }
 
     override val available = true
@@ -118,14 +118,14 @@ class TranslationManagerGemini(
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
         val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
-        val startIndex = keyIndex.getAndIncrement() % keys.size
+        val startIndex = Math.floorMod(keyIndex.getAndIncrement(), keys.size)
         var lastException: Exception? = null
         var usesFallback = false
         val totalAttempts = retryCount * keys.size
 
         for (attempt in 0 until totalAttempts) {
-            val currentKey = keys[(startIndex + attempt) % keys.size]
-            val keyLabel = "key #${(startIndex + attempt) % keys.size + 1}"
+            val currentKey = keys[Math.floorMod(startIndex + attempt, keys.size)]
+            val keyLabel = "key #${Math.floorMod(startIndex + attempt, keys.size) + 1}"
             val activePrompt = if (usesFallback) builtFallbackPrompt else systemPrompt
 
             try {
@@ -227,13 +227,13 @@ class TranslationManagerGemini(
         // Iterate keys sequentially. Switch to next key only on 429 (rate limit) or 401/403 (dead key).
         // Server errors (5xx) retry the same key. Content blocks fail immediately — no retry,
         // no key switch: the content is the problem, not the key.
-        var keyIdx = keyIndex.getAndIncrement() % availableKeys.size
+        var keyIdx = Math.floorMod(keyIndex.getAndIncrement(), availableKeys.size)
         val retryCount = 3
         var lastException: Exception? = null
 
         for (keyAttempt in 0 until availableKeys.size) {
-            val currentApiKey = availableKeys[(keyIdx + keyAttempt) % availableKeys.size]
-            val keyLabel = "key #${(keyIdx + keyAttempt) % availableKeys.size + 1}"
+            val currentApiKey = availableKeys[Math.floorMod(keyIdx + keyAttempt, availableKeys.size)]
+            val keyLabel = "key #${Math.floorMod(keyIdx + keyAttempt, availableKeys.size) + 1}"
 
             for (retry in 0 until retryCount) {
                 try {
@@ -368,6 +368,7 @@ class TranslationManagerGemini(
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(getApiEndpoint(apiKey))
+            .addHeader("X-Goog-API-Key", apiKey)
             .addHeader("Content-Type", "application/json")
             .post(requestBody)
             .build()

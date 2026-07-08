@@ -91,7 +91,7 @@ class DownloadForegroundService : android.app.Service() {
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Novela:download_foreground"
             )?.apply {
-                acquire()
+                acquire(10 * 60 * 1000L)
             }
         } catch (_: Exception) { }
     }

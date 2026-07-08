@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Contournement Cloudflare</string>
     <string name="cloudflare_bypass_description">Activer le contournement automatique du défi Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">Le paramètre de contournement Cloudflare sera appliqué après le redémarrage de l\'application</string>
-    <string name="user_agent_restart_required">User-Agent modifié. Redémarrez l\'application pour appliquer.</string>
     <string name="cloudflare_challenge_timeout">Délai d\'attente du défi</string>
     <string name="timeout_seconds">Délai d\'attente (secondes)</string>
     <string name="seconds_format">%d secondes</string>

@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Omijanie Cloudflare</string>
     <string name="cloudflare_bypass_description">Włącz automatyczne omijanie wyzwania Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">Ustawienie omijania Cloudflare zostanie zastosowane po ponownym uruchomieniu aplikacji</string>
-    <string name="user_agent_restart_required">User-Agent został zmieniony. Uruchom ponownie aplikację, aby zastosować.</string>
     <string name="cloudflare_challenge_timeout">Limit czasu wyzwania</string>
     <string name="timeout_seconds">Limit czasu (sekundy)</string>
     <string name="seconds_format">%d sekund</string>

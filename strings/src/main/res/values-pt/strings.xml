@@ -352,7 +352,6 @@
     <string name="cloudflare_bypass">Contorno Cloudflare</string>
     <string name="cloudflare_bypass_description">Ativar contorno automático do desafio Cloudflare</string>
     <string name="cloudflare_bypass_restart_required">A configuração de contorno Cloudflare será aplicada após reiniciar a aplicação</string>
-    <string name="user_agent_restart_required">User-Agent alterado. Reinicie a aplicação para aplicar.</string>
     <string name="cloudflare_challenge_timeout">Tempo limite do desafio</string>
     <string name="timeout_seconds">Tempo limite (segundos)</string>
     <string name="seconds_format">%d segundos</string>

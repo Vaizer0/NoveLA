@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import my.noveldokusha.core.ExtensionRepositoryInterface
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.postRequest
@@ -32,6 +33,7 @@ import org.yaml.snakeyaml.Yaml
 import androidx.core.os.ConfigurationCompat
 import timber.log.Timber
 import java.io.File
+import java.net.InetAddress
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -50,27 +52,56 @@ class LuaEngine @Inject constructor(
 ) {
     private val gson = Gson()
 
-    suspend fun loadScript(luaCode: String): LuaValue = withContext(Dispatchers.IO) {
+    /**
+     * Создаёт globals с минимально необходимым набором библиотек.
+     * Удаляет глобалы, дающие RCE / доступ к файловой системе / загрузку произвольного кода,
+     * чтобы внешние Lua-плагины не могли выйти из песочницы.
+     */
+    private fun createSandboxGlobals(): Globals {
         val globals = JsePlatform.standardGlobals()
+        // Полностью удаляем опасные библиотеки/функции
+        globals.set("luajava", LuaValue.NIL)
+        globals.set("io", LuaValue.NIL)
+        globals.set("load", LuaValue.NIL)
+        globals.set("loadfile", LuaValue.NIL)
+        globals.set("loadstring", LuaValue.NIL)
+        globals.set("dofile", LuaValue.NIL)
+        globals.set("require", LuaValue.NIL)
+        globals.set("package", LuaValue.NIL)
+        globals.set("debug", LuaValue.NIL)
+        // Из os оставляем только безопасные хелперы (os.time, os.date, ...),
+        // убираем всё, что даёт доступ к ОС/файлам.
+        (globals.get("os") as? LuaTable)?.apply {
+            set("execute", LuaValue.NIL)
+            set("getenv", LuaValue.NIL)
+            set("rename", LuaValue.NIL)
+            set("remove", LuaValue.NIL)
+            set("tmpname", LuaValue.NIL)
+        }
+        return globals
+    }
+
+    suspend fun loadScript(luaCode: String): LuaValue = withContext(Dispatchers.IO) {
+        val globals = createSandboxGlobals()
         registerApi(globals)
-        val result = globals.load(luaCode).call()
+        val result = withTimeout(10_000) { globals.load(luaCode).call() }
         // Если скрипт вернул таблицу (return { ... }) — используем её,
         // иначе — функции объявлены как глобальные (function name() ... end)
         if (result.istable()) result else globals
     }
 
     suspend fun loadFromScript(scriptContent: String, iconUrl: String? = null): SourceInterface.Catalog {
-        val globals = JsePlatform.standardGlobals()
+        val globals = createSandboxGlobals()
         registerApi(globals)
-        val result = globals.load(scriptContent).call()
+        val result = withTimeout(10_000) { globals.load(scriptContent).call() }
         val luaScript = if (result.istable()) result else globals
         return createLuaSourceAdapter(context, luaScript, this, iconUrl, null)
     }
 
     suspend fun loadFromScriptWithFileName(scriptContent: String, fileName: String, iconUrl: String? = null): SourceInterface.Catalog {
-        val globals = JsePlatform.standardGlobals()
+        val globals = createSandboxGlobals()
         registerApi(globals)
-        val result = globals.load(scriptContent).call()
+        val result = withTimeout(10_000) { globals.load(scriptContent).call() }
         val luaScript = if (result.istable()) result else globals
         return createLuaSourceAdapter(context, luaScript, this, iconUrl, fileName)
     }
@@ -133,6 +164,7 @@ class LuaEngine @Inject constructor(
     private inner class HttpGetFunction : TwoArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue): LuaValue = runBlocking {
             val url           = a1.checkjstring()
+            if (!isSsrfSafe(url)) return@runBlocking ssrfErrorTable(url)
             val config        = if (a2.istable()) a2.checktable() else LuaTable()
             val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
             val charset       = config.get("charset").optjstring("UTF-8")
@@ -159,6 +191,7 @@ class LuaEngine @Inject constructor(
     private inner class HttpPostFunction : ThreeArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue, a3: LuaValue): LuaValue = runBlocking {
             val url           = a1.checkjstring()
+            if (!isSsrfSafe(url)) return@runBlocking ssrfErrorTable(url)
             val bodyStr       = a2.checkjstring()
             val config        = if (a3.istable()) a3.checktable() else LuaTable()
             val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
@@ -232,6 +265,32 @@ class LuaEngine @Inject constructor(
     )
 
     /**
+     * Блокирует SSRF: запрещает обращаться к loopback / приватным / link-local / any-local
+     * адресам (localhost, 127.0.0.1, 10.0.2.2, внутренние сети и т.д.).
+     * Резолвит имя хоста и проверяет ВСЕ полученные адреса.
+     */
+    private fun isSsrfSafe(url: String): Boolean {
+        val host = try { URI(url).host } catch (_: Exception) { null } ?: return false
+        if (host.isEmpty()) return false
+        return try {
+            InetAddress.getAllByName(host).all { addr ->
+                !addr.isLoopbackAddress &&
+                    !addr.isSiteLocalAddress &&
+                    !addr.isLinkLocalAddress &&
+                    !addr.isAnyLocalAddress
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun ssrfErrorTable(url: String) = LuaTable().also { t ->
+        t.set("success", LuaValue.FALSE)
+        t.set("body", LuaValue.valueOf("SSRF blocked: private/loopback address not allowed ($url)"))
+        t.set("code", LuaValue.valueOf(-1))
+    }
+
+    /**
      * Определяет Content-Type по телу запроса если плагин его не указал.
      * JSON-тело (начинается с { или [) → application/json
      * Иначе → application/x-www-form-urlencoded
@@ -256,6 +315,7 @@ class LuaEngine @Inject constructor(
                 urls.map { url ->
                     async(Dispatchers.IO) {
                         try {
+                            if (!isSsrfSafe(url)) return@async Triple(false, "", 0)
                             networkClient.getWithHeaders(url, defaultHeaders(url)).use { r ->
                                 val body = r.body.string()
                                 Triple(r.isSuccessful, body, r.code)
