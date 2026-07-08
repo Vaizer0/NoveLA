@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">没有可用的来源</string>
     <string name="migration_no_matches_found">未找到匹配项</string>
-    <string name="migration_failed_to_load_chapters">加载章节失败</string>
+    <string name="migration_failed_to_load_chapters">加载章节失败: %s</string>
     <string name="migration_unknown_error">未知错误</string>
     <string name="migration_no_book_selected">未选择书籍</string>
     <string name="migration_chapter_matching_not_ready">章节匹配尚未就绪</string>

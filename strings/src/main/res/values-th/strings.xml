@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">ไม่มีแหล่งที่มาที่พร้อมใช้งาน</string>
     <string name="migration_no_matches_found">ไม่พบรายการที่ตรงกัน</string>
-    <string name="migration_failed_to_load_chapters">ไม่สามารถโหลดบทได้</string>
+    <string name="migration_failed_to_load_chapters">ไม่สามารถโหลดบทได้: %s</string>
     <string name="migration_unknown_error">ข้อผิดพลาดที่ไม่ทราบสาเหตุ</string>
     <string name="migration_no_book_selected">ไม่ได้เลือกหนังสือ</string>
     <string name="migration_chapter_matching_not_ready">การจับคู่บทยังไม่พร้อม</string>

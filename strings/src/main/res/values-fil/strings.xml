@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Walang available na source</string>
     <string name="migration_no_matches_found">Walang nakitang tugma</string>
-    <string name="migration_failed_to_load_chapters">Hindi na-load ang mga kabanata</string>
+    <string name="migration_failed_to_load_chapters">Hindi na-load ang mga kabanata: %s</string>
     <string name="migration_unknown_error">Hindi kilalang error</string>
     <string name="migration_no_book_selected">Walang napiling aklat</string>
     <string name="migration_chapter_matching_not_ready">Hindi pa handa ang pagtutugma ng kabanata</string>

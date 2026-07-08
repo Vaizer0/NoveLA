@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">No hay fuentes disponibles</string>
     <string name="migration_no_matches_found">No se encontraron coincidencias</string>
-    <string name="migration_failed_to_load_chapters">Error al cargar los capítulos</string>
+    <string name="migration_failed_to_load_chapters">Error al cargar los capítulos: %s</string>
     <string name="migration_unknown_error">Error desconocido</string>
     <string name="migration_no_book_selected">Ningún libro seleccionado</string>
     <string name="migration_chapter_matching_not_ready">La coincidencia de capítulos aún no está lista</string>

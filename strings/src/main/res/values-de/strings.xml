@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Keine Quellen verfügbar</string>
     <string name="migration_no_matches_found">Keine Übereinstimmungen gefunden</string>
-    <string name="migration_failed_to_load_chapters">Kapitel konnten nicht geladen werden</string>
+    <string name="migration_failed_to_load_chapters">Kapitel konnten nicht geladen werden: %s</string>
     <string name="migration_unknown_error">Unbekannter Fehler</string>
     <string name="migration_no_book_selected">Kein Buch ausgewählt</string>
     <string name="migration_chapter_matching_not_ready">Kapitelabgleich noch nicht bereit</string>

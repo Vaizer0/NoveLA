@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Kullanılabilir kaynak yok</string>
     <string name="migration_no_matches_found">Eşleşme bulunamadı</string>
-    <string name="migration_failed_to_load_chapters">Bölümler yüklenemedi</string>
+    <string name="migration_failed_to_load_chapters">Bölümler yüklenemedi: %s</string>
     <string name="migration_unknown_error">Bilinmeyen hata</string>
     <string name="migration_no_book_selected">Kitap seçilmedi</string>
     <string name="migration_chapter_matching_not_ready">Bölüm eşleştirme henüz hazır değil</string>

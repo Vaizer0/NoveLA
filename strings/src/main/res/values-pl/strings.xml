@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Brak dostępnych źródeł</string>
     <string name="migration_no_matches_found">Nie znaleziono dopasowań</string>
-    <string name="migration_failed_to_load_chapters">Nie udało się załadować rozdziałów</string>
+    <string name="migration_failed_to_load_chapters">Nie udało się załadować rozdziałów: %s</string>
     <string name="migration_unknown_error">Nieznany błąd</string>
     <string name="migration_no_book_selected">Nie wybrano książki</string>
     <string name="migration_chapter_matching_not_ready">Dopasowywanie rozdziałów jeszcze nie gotowe</string>

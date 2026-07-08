@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">利用可能なソースがありません</string>
     <string name="migration_no_matches_found">一致するものが見つかりません</string>
-    <string name="migration_failed_to_load_chapters">章の読み込みに失敗しました</string>
+    <string name="migration_failed_to_load_chapters">章の読み込みに失敗しました: %s</string>
     <string name="migration_unknown_error">不明なエラー</string>
     <string name="migration_no_book_selected">本が選択されていません</string>
     <string name="migration_chapter_matching_not_ready">章のマッチングがまだ準備できていません</string>

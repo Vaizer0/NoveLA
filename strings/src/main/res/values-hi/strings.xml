@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">कोई स्रोत उपलब्ध नहीं</string>
     <string name="migration_no_matches_found">कोई मिलान नहीं मिला</string>
-    <string name="migration_failed_to_load_chapters">अध्याय लोड करने में विफल</string>
+    <string name="migration_failed_to_load_chapters">अध्याय लोड करने में विफल: %s</string>
     <string name="migration_unknown_error">अज्ञात त्रुटि</string>
     <string name="migration_no_book_selected">कोई पुस्तक चयनित नहीं</string>
     <string name="migration_chapter_matching_not_ready">अध्याय मिलान अभी तैयार नहीं</string>

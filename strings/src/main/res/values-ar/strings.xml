@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">لا توجد مصادر متاحة</string>
     <string name="migration_no_matches_found">لم يتم العثور على تطابقات</string>
-    <string name="migration_failed_to_load_chapters">فشل تحميل الفصول</string>
+    <string name="migration_failed_to_load_chapters">فشل تحميل الفصول: %s</string>
     <string name="migration_unknown_error">خطأ غير معروف</string>
     <string name="migration_no_book_selected">لم يتم تحديد كتاب</string>
     <string name="migration_chapter_matching_not_ready">مطابقة الفصول ليست جاهزة بعد</string>

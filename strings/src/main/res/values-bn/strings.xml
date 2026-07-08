@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">কোনো উৎস উপলব্ধ নেই</string>
     <string name="migration_no_matches_found">কোনো মিল পাওয়া যায়নি</string>
-    <string name="migration_failed_to_load_chapters">অধ্যায় লোড করতে ব্যর্থ</string>
+    <string name="migration_failed_to_load_chapters">অধ্যায় লোড করতে ব্যর্থ: %s</string>
     <string name="migration_unknown_error">অজানা ত্রুটি</string>
     <string name="migration_no_book_selected">কোনো বই নির্বাচিত নয়</string>
     <string name="migration_chapter_matching_not_ready">অধ্যায় মিলানো এখনও প্রস্তুত নয়</string>

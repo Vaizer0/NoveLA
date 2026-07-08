@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Tiada sumber tersedia</string>
     <string name="migration_no_matches_found">Tiada padanan ditemui</string>
-    <string name="migration_failed_to_load_chapters">Gagal memuat bab</string>
+    <string name="migration_failed_to_load_chapters">Gagal memuat bab: %s</string>
     <string name="migration_unknown_error">Ralat tidak diketahui</string>
     <string name="migration_no_book_selected">Tiada buku dipilih</string>
     <string name="migration_chapter_matching_not_ready">Padanan bab belum sedia</string>

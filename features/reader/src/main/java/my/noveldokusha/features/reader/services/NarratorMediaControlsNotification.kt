@@ -274,7 +274,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
             setOngoing(true)
             setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             priority = NotificationCompat.PRIORITY_HIGH
-            setVisibility(Notification.VISIBILITY_PUBLIC)
+            setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             setColorized(false)
             setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_logo))
             setStyle(mediaStyle)

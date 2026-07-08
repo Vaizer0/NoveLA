@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Không có nguồn nào khả dụng</string>
     <string name="migration_no_matches_found">Không tìm thấy kết quả phù hợp</string>
-    <string name="migration_failed_to_load_chapters">Không thể tải chương</string>
+    <string name="migration_failed_to_load_chapters">Không thể tải chương: %s</string>
     <string name="migration_unknown_error">Lỗi không xác định</string>
     <string name="migration_no_book_selected">Chưa chọn sách</string>
     <string name="migration_chapter_matching_not_ready">Việc so khớp chương chưa sẵn sàng</string>

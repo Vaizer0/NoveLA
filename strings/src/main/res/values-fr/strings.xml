@@ -593,7 +593,7 @@
     <!-- Migration from hardcoded strings -->
     <string name="migration_no_sources_available">Aucune source disponible</string>
     <string name="migration_no_matches_found">Aucune correspondance trouvée</string>
-    <string name="migration_failed_to_load_chapters">Échec du chargement des chapitres</string>
+    <string name="migration_failed_to_load_chapters">Échec du chargement des chapitres: %s</string>
     <string name="migration_unknown_error">Erreur inconnue</string>
     <string name="migration_no_book_selected">Aucun livre sélectionné</string>
     <string name="migration_chapter_matching_not_ready">Correspondance des chapitres pas encore prête</string>
