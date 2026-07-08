@@ -11,8 +11,6 @@ class AppTtsEngine private constructor(context: Context) {
     fun getOrCreate(onReady: (() -> Unit)? = null): TextToSpeech {
         if (engine == null) {
             engine = TextToSpeech(appContext) { if (it == TextToSpeech.SUCCESS) onReady?.invoke() }
-        } else {
-            onReady?.invoke()
         }
         return engine!!
     }

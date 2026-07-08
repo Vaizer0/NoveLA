@@ -120,7 +120,7 @@ internal class ReaderTextToSpeech(
             ),
             playState = Utterance.PlayState.FINISHED
         )
-    ).also { it.init() }
+    )
 
     val scrolledToTheTop = MutableSharedFlow<Unit>()
     val scrolledToTheBottom = MutableSharedFlow<Unit>()
@@ -289,6 +289,8 @@ internal class ReaderTextToSpeech(
                 }
             }
         }
+
+        manager.init()
 
         // Калибровка скорости чтения в реальном времени
         coroutineScope.launch {

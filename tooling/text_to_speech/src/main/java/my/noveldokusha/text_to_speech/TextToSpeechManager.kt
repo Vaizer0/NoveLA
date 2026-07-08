@@ -67,6 +67,7 @@ class TextToSpeechManager<T : Utterance<T>>(
 
     fun init() {
         service = appTtsEngine.getOrCreate(onReady = ::onServiceReady)
+        onServiceReady()
     }
 
     private fun onServiceReady() {
@@ -109,7 +110,6 @@ class TextToSpeechManager<T : Utterance<T>>(
         var pending = engines.size
 
         if (engines.isEmpty()) {
-            scope.launch { serviceLoadedFlow.emit(Unit) }
             return
         }
 
