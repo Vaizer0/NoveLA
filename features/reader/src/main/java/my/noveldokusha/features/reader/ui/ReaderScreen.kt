@@ -115,6 +115,7 @@ internal fun ReaderScreen(
     val density = LocalDensity.current
     val windowToken = LocalView.current.windowToken
     val navBarHeightDp = remember {
+        @Suppress("DiscouragedApi")
         val id = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
         if (id > 0) {
             context.resources.getDimensionPixelSize(id)

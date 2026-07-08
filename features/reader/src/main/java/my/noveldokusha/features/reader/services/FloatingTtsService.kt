@@ -160,6 +160,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         val panelSizePx = (panelWidth * displayDensity).toInt()
 
         val navBarHeight = try {
+            @Suppress("DiscouragedApi")
             val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
             if (id > 0) resources.getDimensionPixelSize(id) else 0
         } catch (_: Exception) { 0 }
