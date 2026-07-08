@@ -18,7 +18,6 @@ import my.noveldokusha.core.domain.CloudfareVerificationBypassFailedException
 import my.noveldokusha.core.domain.WebViewCookieManagerInitializationFailedException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
-import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
 import okio.Buffer
@@ -28,93 +27,11 @@ import java.util.concurrent.locks.ReentrantLock
 import timber.log.Timber
 import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.withLock
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-private val ERROR_CODES = listOf(
-    202,
-    HttpsURLConnection.HTTP_FORBIDDEN,
-    429,
-    HttpsURLConnection.HTTP_BAD_GATEWAY,
-    HttpsURLConnection.HTTP_UNAVAILABLE,
-)
-
+private val ERROR_CODES = listOf(HttpsURLConnection.HTTP_FORBIDDEN, HttpsURLConnection.HTTP_UNAVAILABLE, 429)
 private const val TAG = "CloudflareInterceptor"
 private const val MAX_MANUAL_ATTEMPTS = 3
-private const val MAX_BYPASS_ATTEMPTS = 3
-private val MAX_CHALLENGE_WAIT = 20.seconds
-private val CHALLENGE_POLL_INTERVAL = 300.milliseconds
-private val FORCE_NAVIGATION_DELAY = 5.seconds
-
-private val SERVER_HEADER_VALUES = arrayOf(
-    "cloudflare-nginx",
-    "cloudflare",
-    "cloudflare-iad",
-    "ddos-guard",
-    "ddos-guard.net",
-)
-
-private val CHALLENGE_HEADER_NAMES = arrayOf("cf-mitigated")
-
-private val CHALLENGE_BODY_MARKERS = arrayOf(
-    "cf-browser-verification",
-    "cf-challenge-running",
-    "/cdn-cgi/challenge-platform/",
-    "cf-please-wait",
-    "cf_chl_opt",
-    "cf-mitigated",
-    "Attention Required! | Cloudflare",
-    "challenge-platform",
-    "id=\"challenge-running\"",
-    "id=\"cf-challenge-running\"",
-    "id=\"turnstile-wrapper\"",
-    "cf-turnstile",
-    "challenges.cloudflare.com/turnstile",
-    "ddos-guard.net",
-    ".ddos-guard.net",
-)
-
-private val IP_BLOCKED_URL_MARKERS = arrayOf(
-    "/cdn-cgi/error/",
-    "error=1020",
-    "error=1015",
-)
-
-private val TURNSTILE_CLICK_JS = """
-    (function() {
-        try {
-            var frames = document.querySelectorAll('iframe[src*="challenges.cloudflare.com"], iframe[src*="cdn-cgi/challenge-platform"]');
-            for (var i = 0; i < frames.length; i++) {
-                var f = frames[i];
-                var rect = f.getBoundingClientRect();
-                if (rect.width < 20 || rect.height < 20) continue;
-                var cx = rect.left + rect.width / 2;
-                var cy = rect.top + rect.height / 2;
-                var ev = new MouseEvent('click', {
-                    bubbles: true, cancelable: true, view: window,
-                    clientX: cx, clientY: cy
-                });
-                f.dispatchEvent(ev);
-                var pe = new PointerEvent('pointerdown', {
-                    bubbles: true, cancelable: true, view: window,
-                    clientX: cx, clientY: cy, pointerId: 1
-                });
-                f.dispatchEvent(pe);
-                return true;
-            }
-            var widget = document.querySelector('.cf-turnstile, [data-sitekey]');
-            if (widget) {
-                var r = widget.getBoundingClientRect();
-                widget.dispatchEvent(new MouseEvent('click', {
-                    bubbles: true, cancelable: true, view: window,
-                    clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
-                }));
-                return true;
-            }
-        } catch (e) { }
-        return false;
-    })();
-""".trimIndent()
 
 private val CLOUDFLARE_WHITELIST = listOf(
     "github.com",
@@ -168,13 +85,32 @@ internal class CloudFareVerificationInterceptor(
     private val resolvedDomains = mutableSetOf<String>()
     private val manualAttempts = ConcurrentHashMap<String, Int>()
 
-    private val LEGACY_CF_MARKERS = listOf(
+    private val ALL_CF_MARKERS = listOf(
         "cf-challenge",
-        "turnstile",
         "requireTurnstile",
         "__cf_chl_",
         "but-captcha",
-        "recaptcha-accessible-status"
+        "recaptcha-accessible-status",
+        "cf-browser-verification",
+        "cf-challenge-running",
+        "cf-please-wait",
+        "Attention Required! | Cloudflare",
+        "id=\"challenge-running\"",
+        "id=\"cf-challenge-running\"",
+        "ddos-guard.net",
+        ".ddos-guard.net",
+    )
+
+    /**
+     * URL-маркеры жёсткой блокировки IP Cloudflare (ошибки 1020/1015).
+     * Когда авто-WebView уходит на такой URL, дальнейшая выпечка
+     * cf_clearance бессмысленна — прерываем опрос сразу, не дожидаясь
+     * полного таймаута в 15 с.
+     */
+    private val IP_BLOCKED_URL_MARKERS = listOf(
+        "/cdn-cgi/error/",
+        "error=1020",
+        "error=1015",
     )
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -236,7 +172,7 @@ internal class CloudFareVerificationInterceptor(
 
     private fun proceedWithBypass(
         chain: Interceptor.Chain,
-        originalRequest: Request,
+        originalRequest: okhttp3.Request,
         siteUrl: String,
         host: String,
         cookieManager: CookieManager,
@@ -248,45 +184,39 @@ internal class CloudFareVerificationInterceptor(
             else -> siteUrl
         }
 
-        var lastFailure: Exception? = null
-        repeat(MAX_BYPASS_ATTEMPTS) { attempt ->
-            try {
-                runBlocking(Dispatchers.IO) {
-                    resolveWithWebView(webViewUrl, cookieManager, userAgent, originalRequest)
-                }
-
-                val retryRequest = originalRequest.newBuilder()
-                    .header("User-Agent", userAgent)
-                    .build()
-                val retryResponse = chain.proceed(retryRequest)
-                if (isNotCloudflare(retryResponse, peekBodySafe(retryResponse))) {
-                    resolvedDomains.add(host)
-                    manualAttempts.remove(host)
-                    CloudflareBypassSignal.notifyBypassCompleted(host)
-                    return retryResponse
-                }
-                retryResponse.close()
-                lastFailure = CloudfareVerificationBypassFailedException(
-                    "Attempt ${attempt + 1}/$MAX_BYPASS_ATTEMPTS: " +
-                        "still challenged after WebView bypass"
-                )
-            } catch (ce: CancellationException) {
-                throw ce
-            } catch (e: Exception) {
-                lastFailure = e
+        runBlocking(Dispatchers.Main) {
+            withTimeoutOrNull(15_000) {
+                resolveWithWebViewAutomatic(webViewUrl, cookieManager)
             }
         }
 
-        clearCookiesForDomain(siteUrl, cookieManager)
+        val firstCookies = cookieManager.getCookie(siteUrl) ?: ""
+        val firstRetryRequest = originalRequest.newBuilder()
+            .header("Cookie", formatCookies(firstCookies))
+            .header("User-Agent", userAgent)
+            .build()
 
-        val manualAttemptsCount = manualAttempts.getOrDefault(host, 0)
-        if (manualAttemptsCount >= MAX_MANUAL_ATTEMPTS) {
+        val firstRetryResponse = chain.proceed(firstRetryRequest)
+
+        if (isNotCloudflare(firstRetryResponse, peekBodySafe(firstRetryResponse))) {
+            resolvedDomains.add(host)
+            manualAttempts.remove(host)
+            CloudflareBypassSignal.notifyBypassCompleted(host)
+            return firstRetryResponse
+        }
+
+        firstRetryResponse.close()
+
+        val attempts = manualAttempts.getOrDefault(host, 0)
+        if (attempts >= MAX_MANUAL_ATTEMPTS) {
             Timber.e( "CF: Max manual attempts ($MAX_MANUAL_ATTEMPTS) reached for $host, giving up")
             manualAttempts.remove(host)
-            throw lastFailure ?: CloudfareVerificationBypassFailedException()
+            throw CloudfareVerificationBypassFailedException()
         }
-        manualAttempts[host] = manualAttemptsCount + 1
-        Timber.d( "CF: Manual attempt ${manualAttemptsCount + 1}/$MAX_MANUAL_ATTEMPTS for $host, webViewUrl=$webViewUrl")
+        manualAttempts[host] = attempts + 1
+        Timber.d( "CF: Step 2 - manual attempt ${attempts + 1}/$MAX_MANUAL_ATTEMPTS for $host, webViewUrl=$webViewUrl")
+
+        clearCookiesForDomain(siteUrl, cookieManager)
 
         runBlocking(Dispatchers.IO) {
             resolveWithWebViewManual(webViewUrl, siteUrl, cookieManager)
@@ -296,6 +226,7 @@ internal class CloudFareVerificationInterceptor(
         val finalCookies = cookieManager.getCookie(siteUrl) ?: ""
 
         val finalRetryRequest = originalRequest.newBuilder()
+            .header("Cookie", formatCookies(finalCookies))
             .header("User-Agent", userAgent)
             .build()
 
@@ -303,7 +234,7 @@ internal class CloudFareVerificationInterceptor(
 
         if (!isNotCloudflare(finalResponse, peekBodySafe(finalResponse))) {
             finalResponse.close()
-            throw lastFailure ?: CloudfareVerificationBypassFailedException()
+            throw CloudfareVerificationBypassFailedException()
         }
 
         resolvedDomains.add(host)
@@ -327,49 +258,20 @@ internal class CloudFareVerificationInterceptor(
         if (domainOptions?.whitelist == true) return true
 
         val ignoredMarkers = domainOptions?.ignoreMarkers ?: emptySet()
+        val activeMarkers = ALL_CF_MARKERS.filter { it !in ignoredMarkers }
 
-        val challengeInfo = classifyResponse(response, body, ignoredMarkers)
-        return !challengeInfo.isCloudflare
-    }
+        val hasMarkers = activeMarkers.any { body.contains(it, ignoreCase = true) }
+        val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
+        val isCfServer = response.header("Server")?.let {
+            it.contains("cloudflare", true) || it.contains("ddos-guard", true)
+        } == true
 
-    private fun classifyResponse(
-        response: Response,
-        body: String,
-        ignoredMarkers: Set<String>
-    ): ChallengeInfo {
-        val code = response.code
-
-        for (headerName in CHALLENGE_HEADER_NAMES) {
-            if (response.header(headerName) != null) {
-                return ChallengeInfo(isCloudflare = true)
-            }
+        val result = !(isError && (isCfServer || hasMarkers))
+        if (!result) {
+            val foundMarkers = activeMarkers.filter { body.contains(it, ignoreCase = true) }
+            Timber.e( "CF triggered: code=${response.code} isCfServer=$isCfServer foundMarkers=$foundMarkers")
         }
-
-        val serverHeader = response.header("Server")
-        val serverLooksLikeCloudflare = serverHeader != null &&
-            SERVER_HEADER_VALUES.any { serverHeader.equals(it, ignoreCase = true) }
-
-        if (code in ERROR_CODES && serverLooksLikeCloudflare) {
-            return ChallengeInfo(isCloudflare = true)
-        }
-
-        return ChallengeInfo(
-            isCloudflare = bodyLooksLikeChallenge(body, ignoredMarkers)
-        )
-    }
-
-    private fun bodyLooksLikeChallenge(body: String, ignoredMarkers: Set<String>): Boolean {
-        if (body.isBlank()) return false
-
-        for (marker in CHALLENGE_BODY_MARKERS) {
-            if (marker in ignoredMarkers) continue
-            if (body.contains(marker, ignoreCase = true)) return true
-        }
-        for (marker in LEGACY_CF_MARKERS) {
-            if (marker in ignoredMarkers) continue
-            if (body.contains(marker, ignoreCase = true)) return true
-        }
-        return false
+        return result
     }
 
     private fun clearCookiesForDomain(url: String, cm: CookieManager) {
@@ -390,122 +292,39 @@ internal class CloudFareVerificationInterceptor(
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun resolveWithWebView(
-        webViewUrl: String,
-        cookieManager: CookieManager,
-        userAgent: String,
-        originalRequest: Request
-    ) = withContext(Dispatchers.Default) {
-        val headersMap = mutableMapOf<String, String>()
-        originalRequest.header("Accept")?.let { headersMap["Accept"] = it }
-        originalRequest.header("Accept-Language")?.let { headersMap["Accept-Language"] = it }
-        originalRequest.header("Accept-Encoding")?.let { headersMap["Accept-Encoding"] = it }
-        originalRequest.header("Referer")?.let { headersMap["Referer"] = it }
-        originalRequest.header("Sec-CH-UA")?.let { headersMap["Sec-CH-UA"] = it }
-        originalRequest.header("Sec-CH-UA-Mobile")?.let { headersMap["Sec-CH-UA-Mobile"] = it }
-        originalRequest.header("Sec-CH-UA-Platform")?.let { headersMap["Sec-CH-UA-Platform"] = it }
-        originalRequest.header("Sec-Fetch-Dest")?.let { headersMap["Sec-Fetch-Dest"] = it }
-        originalRequest.header("Sec-Fetch-Mode")?.let { headersMap["Sec-Fetch-Mode"] = it }
-        originalRequest.header("Sec-Fetch-Site")?.let { headersMap["Sec-Fetch-Site"] = it }
-
-        cookieManager.setAcceptCookie(true)
-
+    private suspend fun resolveWithWebViewAutomatic(webViewUrl: String, cm: CookieManager) {
         withContext(Dispatchers.Main) {
-            val webView = WebView(appContext).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.databaseEnabled = true
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                settings.cacheMode = WebSettings.LOAD_DEFAULT
-                settings.javaScriptCanOpenWindowsAutomatically = false
-                settings.mediaPlaybackRequiresUserGesture = true
-                settings.blockNetworkImage = true
-                settings.setSupportZoom(false)
-                settings.userAgentString = userAgent
-                cookieManager.setAcceptThirdPartyCookies(this, true)
-                webViewClient = object : WebViewClient() {}
+            val webView = WebView(appContext)
+            cm.setAcceptCookie(true)
+            cm.setAcceptThirdPartyCookies(webView, true)
+            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                userAgentString = resolveUserAgent(appPreferences)
+                cacheMode = WebSettings.LOAD_NO_CACHE
             }
-
-            try {
-                if (cookieManager.getCookie(webViewUrl)?.contains("cf_clearance") == true) {
-                    Timber.d( "CF: cf_clearance already present, skipping WebView load")
-                    return@withContext
-                }
-
-                webView.loadUrl(webViewUrl, headersMap)
-
-                val deadline = System.currentTimeMillis() +
-                    MAX_CHALLENGE_WAIT.inWholeMilliseconds
-                var cfClearanceAt: Long? = null
-                var lastClickAttempt = 0L
-
-                while (System.currentTimeMillis() < deadline) {
-                    delay(CHALLENGE_POLL_INTERVAL)
-
-                    val currentUrl = runCatching { webView.url }.getOrNull()
-                    if (currentUrl != null && IP_BLOCKED_URL_MARKERS.any {
-                            currentUrl.contains(it, ignoreCase = true)
-                        }) {
-                        throw CloudfareVerificationBypassFailedException(
-                            "IP blocked by Cloudflare (error 1020/1015). " +
-                                "Try a different network."
-                        )
-                    }
-
-                    val currentCookies = cookieManager.getCookie(webViewUrl) ?: ""
-                    if (currentCookies.contains("cf_clearance")) {
-                        if (cfClearanceAt == null) {
-                            cfClearanceAt = System.currentTimeMillis()
-                        }
-                        delay(500)
-                        val urlAfterCookie = runCatching { webView.url }.getOrNull()
-                        if (urlAfterCookie == null ||
-                            !urlAfterCookie.contains("challenge", ignoreCase = true) &&
-                            !urlAfterCookie.contains("__cf_chl", ignoreCase = true) &&
-                            !urlAfterCookie.contains("cdn-cgi/challenge-platform", ignoreCase = true)
-                        ) {
-                            break
-                        }
-                    }
-
-                    if (cfClearanceAt != null &&
-                        System.currentTimeMillis() - cfClearanceAt!! >=
-                        FORCE_NAVIGATION_DELAY.inWholeMilliseconds
-                    ) {
-                        runCatching {
-                            webView.loadUrl(webViewUrl, headersMap)
-                        }
-                        delay(1_000)
-                        break
-                    }
-
-                    if (currentUrl != null && currentUrl != webViewUrl &&
-                        !currentUrl.contains("challenge", ignoreCase = true) &&
-                        !currentUrl.contains("__cf_chl", ignoreCase = true) &&
-                        !currentUrl.contains("cdn-cgi/challenge-platform", ignoreCase = true) &&
-                        IP_BLOCKED_URL_MARKERS.none {
-                            currentUrl.contains(it, ignoreCase = true)
-                        }
-                    ) {
-                        delay(300)
-                        break
-                    }
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastClickAttempt >= 3_000) {
-                        lastClickAttempt = now
-                        runCatching {
-                            webView.evaluateJavascript(TURNSTILE_CLICK_JS, null)
-                        }
-                    }
-                }
-            } finally {
-                runCatching { webView.stopLoading() }
-                runCatching { webView.webViewClient = WebViewClient() }
-                runCatching { webView.removeAllViews() }
-                runCatching { webView.destroy() }
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) { cm.flush() }
             }
+            webView.loadUrl(webViewUrl)
+            for (i in 1..30) {
+                delay(500)
+                val currentUrl = webView.url
+                if (currentUrl != null && IP_BLOCKED_URL_MARKERS.any {
+                        currentUrl.contains(it, ignoreCase = true)
+                    }) {
+                    Timber.d("CF: IP blocked ($currentUrl), aborting auto attempt")
+                    break
+                }
+                if (cm.getCookie(webViewUrl)?.contains("cf_clearance") == true) {
+                    Timber.d( "CF: Auto WebView success on iteration $i")
+                    break
+                }
+            }
+            webView.stopLoading()
+            cm.flush()
+            delay(200)
+            webView.destroy()
         }
     }
 
@@ -569,8 +388,4 @@ internal class CloudFareVerificationInterceptor(
     private fun peekBodySafe(response: Response): String {
         return try { response.peekBody(65536).string() } catch (e: Exception) { "" }
     }
-
-    private data class ChallengeInfo(
-        val isCloudflare: Boolean,
-    )
 }

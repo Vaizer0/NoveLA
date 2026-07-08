@@ -5,7 +5,6 @@ import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import my.noveldokusha.core.AppInternalState
 import my.noveldokusha.core.appPreferences.AppPreferences
-import my.noveldokusha.network.interceptors.BrowserHeadersInterceptor
 import my.noveldokusha.network.interceptors.CloudFareVerificationInterceptor
 import my.noveldokusha.network.interceptors.DecodeResponseInterceptor
 import my.noveldokusha.network.interceptors.UserAgentInterceptor
@@ -52,7 +51,6 @@ class ScraperNetworkClient @Inject constructor(
             .apply {
                 if (appInternalState.isDebugMode) addInterceptor(okhttpLoggingInterceptor)
                 addInterceptor(UserAgentInterceptor(appPreferences))
-                addInterceptor(BrowserHeadersInterceptor(appPreferences))
                 addInterceptor(DecodeResponseInterceptor())
                 if (appPreferences.CLOUDFLARE_BYPASS_ENABLED.value) {
                     addInterceptor(CloudFareVerificationInterceptor(appContext, appPreferences))
