@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.interactor.WorkersInteractions
 import my.noveldokusha.scraper.Scraper
+import my.noveldokusha.scraper.SourceInterface
 import javax.inject.Inject
 
 @HiltViewModel
@@ -90,13 +92,14 @@ internal class LibraryPageViewModel @Inject constructor(
         .getBooksInLibraryWithContextFlow
         .map { list ->
             list.mapNotNull { book ->
-                if (book.book.url.isLocalUri) "Local"
-                else scraper.getCompatibleSource(book.book.url)?.resolveName(context)
+                resolveSourceName(book.book.url)
             }.distinct().sorted()
         }
         .toState(viewModelScope, emptyList<String>())
 
     val availableSources = availableSourcesState
+
+    val luaSources: StateFlow<Set<SourceInterface>> get() = scraper.luaSources
 
     // Shared pre-category-filter flow — all filters EXCEPT category selection
     private val preCategoryFilterFlow = appRepository.libraryBooks
@@ -113,8 +116,7 @@ internal class LibraryPageViewModel @Inject constructor(
                 val q = query.trim()
                 val cache = genreToBookUrls.value
                 list.filter { book ->
-                    val sourceName = if (book.book.url.isLocalUri) "Local"
-                    else scraper.getCompatibleSource(book.book.url)?.resolveName(context) ?: ""
+                    val sourceName = resolveSourceName(book.book.url) ?: ""
                     book.book.title.contains(q, ignoreCase = true) ||
                             sourceName.contains(q, ignoreCase = true) ||
                             cache.any { (genre, urls) ->
@@ -136,8 +138,7 @@ internal class LibraryPageViewModel @Inject constructor(
             if (selectedSources.isEmpty()) list
             else {
                 list.filter { book ->
-                    val sourceName = if (book.book.url.isLocalUri) "Local"
-                    else scraper.getCompatibleSource(book.book.url)?.resolveName(context) ?: ""
+                    val sourceName = resolveSourceName(book.book.url) ?: ""
                     sourceName in selectedSources
                 }
             }
@@ -282,8 +283,11 @@ internal class LibraryPageViewModel @Inject constructor(
         toasty.show(R.string.update_cancelled)
     }
 
-    fun getSourceName(url: String): String {
+    private fun resolveSourceName(url: String): String? {
         if (url.isLocalUri) return "Local"
-        return scraper.getCompatibleSource(url)?.resolveName(context) ?: "Unknown Source"
+        val id = scraper.getSourceId(url) ?: return null
+        return scraper.sourcesList.find { it.id == id }?.resolveName(context)
     }
+
+    fun getSourceName(url: String): String = resolveSourceName(url) ?: "Unknown Source"
 }

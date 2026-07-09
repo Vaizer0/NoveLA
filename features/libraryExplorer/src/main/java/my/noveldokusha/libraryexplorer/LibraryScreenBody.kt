@@ -196,11 +196,12 @@ internal fun LibraryScreenBody(
 
             // Single list filtered by selected categories
             val list by viewModel.filteredList
+            val sources by viewModel.luaSources.collectAsState()
             LibraryPageBody(
                 list = list,
                 onClick = onBookClick,
                 onLongClick = onBookLongClick,
-                getSourceName = { viewModel.getSourceName(it) },
+                getSourceName = remember(sources) { { viewModel.getSourceName(it) } },
                 gridColumns = gridColumns,
                 selectedBooks = selectedBooks,
                 isSelectionMode = isSelectionMode,
