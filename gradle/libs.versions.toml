@@ -85,7 +85,6 @@ compose-androidx-runtime-livedata = { module = "androidx.compose.runtime:runtime
 compose-androidx-ui = { module = "androidx.compose.ui:ui", version.ref = "compose-testing-ui" }
 compose-androidx-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "compose-testing-ui" }
 compose-androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "compose-testing-ui" }
-compose-androidx-material3 = { module = "androidx.compose.material3:material3", version.ref = "compose-material3" }
 compose-lazyColumnScrollbar = { module = "com.github.nanihadesuka:LazyColumnScrollbar", version.ref = "compose-lazyColumnScrollbar" }
 compose-coil = { module = "io.coil-kt:coil-compose", version.ref = "compose-coil" }
 compose-landscapist-glide = { module = "com.github.skydoves:landscapist-glide", version.ref = "compose-landscapist-glide" }

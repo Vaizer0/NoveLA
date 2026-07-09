@@ -59,13 +59,6 @@ class TranslationManagerComposite(
 
     private fun activeProvider(): String = appPreferences.TRANSLATION_PROVIDER.value
 
-    fun getActiveTranslatorName(): String = when (activeProvider()) {
-        "GEMINI"      -> "Google Gemini API"
-        "GOOGLE_FREE" -> "Google Translate (Free)"
-        "OPENAI"      -> "OpenAI-compatible API"
-        else          -> "Google Translate (Enhanced)"
-    }
-
     override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
         val provider = activeProvider()
         Timber.d( "getTranslator: source=$source, target=$target, provider=$provider, override=${systemPromptOverride != null}")
@@ -209,8 +202,4 @@ class TranslationManagerComposite(
 
     override fun downloadModel(language: String) {}
     override fun removeModel(language: String) {}
-
-    companion object {
-        private const val TAG = "TranslationComposite"
-    }
 }

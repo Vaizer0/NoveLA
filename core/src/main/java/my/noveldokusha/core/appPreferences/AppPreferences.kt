@@ -504,16 +504,6 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "")
     }
 
-    val SCRAPER_CUSTOM_HEADERS = object : Preference<Map<String, String>>("SCRAPER_CUSTOM_HEADERS") {
-        override var value by SharedPreference_Serializable<Map<String, String>>(
-            name = name,
-            sharedPreferences = preferences,
-            defaultValue = emptyMap<String, String>(),
-            encode = { Json.encodeToString(it) },
-            decode = { Json.decodeFromString(it) }
-        )
-    }
-
     val CLOUDFLARE_BYPASS_ENABLED = object : Preference<Boolean>("CLOUDFLARE_BYPASS_ENABLED") {
         override var value by SharedPreference_Boolean(name, preferences, true)
     }

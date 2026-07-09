@@ -39,7 +39,6 @@ import my.noveldokusha.coreui.BaseActivity
 import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
 import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.coreui.theme.readerTheme
-import my.noveldokusha.coreui.theme.colorAttrRes
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.core.utils.dpToPx

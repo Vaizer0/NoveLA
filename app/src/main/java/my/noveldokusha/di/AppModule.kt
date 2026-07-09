@@ -27,10 +27,6 @@ abstract class AppModule {
     @Singleton
     abstract fun bindAppNavigationRoutes(nav: AppNavigationRoutes): NavigationRoutes
 
-//    @Binds
-//    @Singleton
-//    abstract fun bindAppNavigationRoutesViewModel(nav: AppNavigationRoutesViewModel): NavigationRouteViewModel
-
     @Binds
     @Singleton
     abstract fun bindToasty(toast: ToastyToast): Toasty

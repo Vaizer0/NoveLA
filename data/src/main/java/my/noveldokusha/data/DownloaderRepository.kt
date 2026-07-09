@@ -126,7 +126,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookChapter(
         chapterUrl: String,
-    ): Response<my.noveldokusha.scraper.ChapterDownload> = withContext(Dispatchers.Default) {
+    ): Response<my.noveldokusha.scraper.ChapterDownload> = withContext(Dispatchers.IO) {
         val maxRetries = 3
         var lastError: Response<my.noveldokusha.scraper.ChapterDownload>? = null
 
