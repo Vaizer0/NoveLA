@@ -161,13 +161,32 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueListItemSize[textSynthesis.utteranceId] = subItems.size
 
         Timber.d( "speak id=${textSynthesis.utteranceId} subItems=${subItems.size} queueSize=${_queueList.size}")
+        var enqueueFailed = false
         subItems.forEachIndexed { index, textSlice ->
             val uniqueID = "$index|${textSynthesis.utteranceId}"
             val bundle = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uniqueID)
             }
-            service.speak(textSlice, TextToSpeech.QUEUE_ADD, bundle, uniqueID)
+            val result = service.speak(textSlice, TextToSpeech.QUEUE_ADD, bundle, uniqueID)
+            if (result != TextToSpeech.SUCCESS) {
+                Timber.w( "speak failed id=$uniqueID result=$result")
+                enqueueFailed = true
+            }
         }
+
+        // ponytail: speak() returning ERROR means none of the slices will play and no
+        // callback fires -> the item would stay in the queue forever and freeze reading.
+        // Skip it so the session keeps advancing.
+        if (enqueueFailed) {
+            completeItem(textSynthesis.copyWithState(playState = Utterance.PlayState.FINISHED))
+        }
+    }
+
+    private fun completeItem(item: T) {
+        _queueList.remove(item.utteranceId)
+        _queueListItemSize.remove(item.utteranceId)
+        currentActiveItemState.value = item
+        scope.launch { _currentTextSpeakFlow.emit(item) }
     }
 
     fun setCurrentSpeakState(textSynthesis: T) {
@@ -247,8 +266,30 @@ class TextToSpeechManager<T : Utterance<T>>(
 
             override fun onDone(utteranceId: String?) = onFinished(utteranceId)
 
+            // API 21+ calls this overload; the deprecated onError(String?) below is dead
+            // on modern devices. Without it a failed utterance never completes and the
+            // whole reading session freezes (highlighted but silent, no progress).
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                Timber.w( "onError($errorCode) $utteranceId")
+                onErrorFinished(utteranceId)
+            }
+
             @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) = onFinished(utteranceId)
+            override fun onError(utteranceId: String?) {
+                Timber.w( "onError(deprecated) $utteranceId")
+                onErrorFinished(utteranceId)
+            }
+
+            private fun onErrorFinished(utteranceId: String?) {
+                if (utteranceId == null) return
+                // Skip the broken item regardless of which sub-slice errored so reading
+                // continues instead of stalling on a permanently stuck queue entry.
+                val itemUtteranceId = utteranceId.substringAfter('|')
+                val res: T = _queueList[itemUtteranceId]
+                    ?.copyWithState(playState = Utterance.PlayState.FINISHED)
+                    ?: return
+                completeItem(res)
+            }
 
             private fun onFinished(utteranceId: String?) {
                 if (utteranceId == null) {
@@ -276,12 +317,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                         return
                     }
 
-                _queueList.remove(itemUtteranceId)
-                _queueListItemSize.remove(itemUtteranceId)
-
-                Timber.d( "onFinished -> FINISHED $itemUtteranceId queueSize=${_queueList.size}")
-                currentActiveItemState.value = res
-                scope.launch { _currentTextSpeakFlow.emit(res) }
+                completeItem(res)
             }
         })
     }
