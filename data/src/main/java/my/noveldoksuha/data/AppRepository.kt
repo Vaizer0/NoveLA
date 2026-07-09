@@ -15,6 +15,7 @@ import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.utils.normalizeBookUrl
+import java.io.File
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -107,6 +108,15 @@ class AppRepository @Inject constructor(
                     db.chapterDao().removeAllFromBooks(chunk)
                 }
                 db.libraryDao().removeBooksByUrls(nonLibraryBookUrls)
+
+                // Delete orphan book folders from disk
+                nonLibraryBookUrls.forEach { bookUrl ->
+                    val folderName = appFileResolver.getLocalBookFolderName(bookUrl)
+                    val bookFolder = File(appFileResolver.folderBooks, folderName)
+                    if (bookFolder.exists()) {
+                        bookFolder.deleteRecursively()
+                    }
+                }
             }
 
             // Also clean orphan rows (chapters without books, bodies without chapters)

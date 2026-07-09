@@ -19,7 +19,10 @@ import my.noveldokusha.coreui.states.removeProgressBar
 import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.CoverRepository
+import my.noveldokusha.data.backfillCovers
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_Int
@@ -53,6 +56,12 @@ class BackupDataService : Service() {
 
     @Inject
     lateinit var appPreferences: AppPreferences
+
+    @Inject
+    lateinit var appFileResolver: AppFileResolver
+
+    @Inject
+    lateinit var coverRepository: CoverRepository
 
     private val channelName by lazy { getString(R.string.notification_channel_name_backup) }
     private val channelId = "Backup"
@@ -400,6 +409,14 @@ class BackupDataService : Service() {
 
             // Save books extra data (like images) — only for library books
             if (backupImages) {
+                // Best-effort: make sure local covers exist before we back them up
+                try {
+                    val books = appRepository.libraryBooks.getAllInLibrary()
+                    backfillCovers(books, appFileResolver, coverRepository)
+                } catch (e: Exception) {
+                    Timber.e(e, "BackupDataService: cover backfill failed, continuing backup")
+                }
+
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
                     notificationId = notificationId
@@ -407,16 +424,17 @@ class BackupDataService : Service() {
                     text = getString(R.string.copying_images)
                 }
 
+                Timber.d("BackupDataService: backing up images...")
+
                 // Get library book folder names to filter images
                 val libraryBooks = appRepository.libraryBooks.getAllInLibrary()
                 val libraryFolderNames = libraryBooks
-                    .map { book ->
-                        // Extract folder name from URL (same logic as AppFileResolver)
-                        book.url.substringAfterLast("/").substringBefore("?")
-                    }
+                    .map { book -> appFileResolver.getLocalBookFolderName(book.url) }
                     .toSet()
+                Timber.d("BackupDataService: ${libraryBooks.size} library books, ${libraryFolderNames.size} unique folders")
 
                 val basePath = appRepository.settings.folderBooks.toPath().parent
+                var imageCount = 0
                 appRepository.settings.folderBooks.walkBottomUp()
                     .filterNot { it.isDirectory }
                     .filter { file ->
@@ -424,7 +442,7 @@ class BackupDataService : Service() {
                         val relativePath = basePath.relativize(file.toPath()).toString()
                         // "books" is the root folder, second segment is the book folder
                         val bookFolder = relativePath.split("/", "\\").getOrNull(1) ?: ""
-                        bookFolder in libraryFolderNames || libraryFolderNames.isEmpty()
+                        bookFolder in libraryFolderNames
                     }
                     .forEach { file ->
                         val name = basePath.relativize(file.toPath()).toString()
@@ -434,7 +452,11 @@ class BackupDataService : Service() {
                             zip.putNextEntry(entry)
                             it.copyTo(zip)
                         }
+                        imageCount++
                     }
+                Timber.d("BackupDataService: $imageCount images backed up")
+            } else {
+                Timber.d("BackupDataService: images not included in backup")
             }
 
             zip.closeQuietly()

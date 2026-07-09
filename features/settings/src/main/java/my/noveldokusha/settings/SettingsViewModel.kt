@@ -21,6 +21,7 @@ import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
+import my.noveldokusha.core.isCoverValid
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
@@ -120,14 +121,12 @@ internal class SettingsViewModel @Inject constructor(
 
     init {
         updateDatabaseSize()
-        // TODO: properly implement images saving
-        // updateImagesFolderSize()
+        updateImagesFolderSize()
         updateChapterCacheSize()
         viewModelScope.launch {
             appRepository.eventDataRestored.collect {
                 updateDatabaseSize()
-                // TODO: properly implement images saving
-                // updateImagesFolderSize()
+                updateImagesFolderSize()
             }
         }
 
@@ -194,6 +193,19 @@ internal class SettingsViewModel @Inject constructor(
                 .toSet()
 
             val booksFolder = appRepository.settings.folderBooks
+
+            // Self-heal: delete corrupt/non-image cover files so they are re-downloaded
+            // on the next library update / cover backfill instead of staying broken forever.
+            booksFolder.listFiles()
+                ?.asSequence()
+                ?.filter { it.isDirectory && it.name in libraryFolderNames }
+                ?.forEach { folder ->
+                    val cover = File(folder, AppFileResolver.COVER_PATH_RELATIVE_TO_BOOK)
+                    if (cover.exists() && !isCoverValid(cover)) {
+                        Timber.d("cleanImagesFolder: deleting corrupt cover in ${folder.name}")
+                        cover.delete()
+                    }
+                }
 
             val foldersToDelete = booksFolder.listFiles()
                 ?.asSequence()

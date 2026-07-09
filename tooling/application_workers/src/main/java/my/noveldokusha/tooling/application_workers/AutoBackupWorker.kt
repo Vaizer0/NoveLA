@@ -21,8 +21,11 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.data.AppRepository
+import my.noveldokusha.data.CoverRepository
+import my.noveldokusha.data.backfillCovers
 import my.noveldokusha.feature.local_database.AppDatabase
 import org.json.JSONObject
 import java.io.File
@@ -44,6 +47,8 @@ class AutoBackupWorker(
         fun appDatabase(): AppDatabase
         fun appRepository(): AppRepository
         fun appPreferences(): AppPreferences
+        fun appFileResolver(): AppFileResolver
+        fun coverRepository(): CoverRepository
     }
 
     companion object {
@@ -216,6 +221,8 @@ class AutoBackupWorker(
         val appDatabase = entryPoint.appDatabase()
         val appRepository = entryPoint.appRepository()
         val appPreferences = entryPoint.appPreferences()
+        val appFileResolver = entryPoint.appFileResolver()
+        val coverRepository = entryPoint.coverRepository()
         Timber.d( "performAutoBackup: got dependencies via EntryPoint")
 
         val pattern = "yyyyMMdd_HHmmss"
@@ -330,10 +337,20 @@ class AutoBackupWorker(
 
             // Images
             if (backupImages) {
+                // Best-effort: make sure local covers exist before we back them up,
+                // so the archive contains up-to-date artwork (idempotent, skips valid covers).
+                // Isolated so a single book's cover-sync failure cannot abort the whole backup.
+                try {
+                    val books = appRepository.libraryBooks.getAllInLibrary()
+                    backfillCovers(books, appFileResolver, coverRepository)
+                } catch (e: Exception) {
+                    Timber.e(e, "performAutoBackup: cover backfill failed, continuing backup")
+                }
+
                 Timber.d( "performAutoBackup: backing up images...")
                 val libraryBooks = appRepository.libraryBooks.getAllInLibrary()
                 val libraryFolderNames = libraryBooks
-                    .map { it.url.substringAfterLast("/").substringBefore("?") }
+                    .map { appFileResolver.getLocalBookFolderName(it.url) }
                     .toSet()
                 Timber.d( "performAutoBackup: ${libraryBooks.size} library books, ${libraryFolderNames.size} unique folders")
 
@@ -344,7 +361,7 @@ class AutoBackupWorker(
                     .filter { file ->
                         val relativePath = basePath.relativize(file.toPath()).toString()
                         val bookFolder = relativePath.split("/", "\\").getOrNull(1) ?: ""
-                        bookFolder in libraryFolderNames || libraryFolderNames.isEmpty()
+                        bookFolder in libraryFolderNames
                     }
                     .forEach { file ->
                         val name = basePath.relativize(file.toPath()).toString()

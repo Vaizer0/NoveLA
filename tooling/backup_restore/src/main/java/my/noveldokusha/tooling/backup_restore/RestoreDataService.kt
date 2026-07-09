@@ -21,6 +21,7 @@ import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.NovelPromptData
+import my.noveldokusha.core.isCoverValid
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.BookChaptersRepository
 import my.noveldokusha.data.ChapterBodyRepository
@@ -660,6 +661,8 @@ class RestoreDataService : Service() {
             text = getString(R.string.adding_images)
         }
 
+        var databaseTempFile: File? = null
+
         try {
             ZipInputStream(bufferedStream).use { zipStream ->
                 generateSequence {
@@ -670,7 +673,11 @@ class RestoreDataService : Service() {
                     .forEach { entry ->
                         try {
                             when {
-                                entry.name == "database.sqlite3" -> mergeToDatabase(zipStream)
+                                entry.name == "database.sqlite3" -> {
+                                    val f = File(context.cacheDir, "restore_db_temp")
+                                    f.outputStream().use { zipStream.copyTo(it) }
+                                    databaseTempFile = f
+                                }
                                 entry.name == "settings.json" -> mergeToSettings(zipStream)
                                 entry.name.startsWith("lua_extensions/") && overwritePlugins -> mergeToLuaExtensions(entry, zipStream)
                                 entry.name.startsWith("lua_extensions/") -> Timber.d("restoreData: Skipping plugin (overwritePlugins=false): ${entry.name}")
@@ -697,6 +704,39 @@ class RestoreDataService : Service() {
         }
 
         inputStream.closeQuietly()
+
+        // ponytail: merge database AFTER all files (covers, plugins) are on disk
+        // so Room observers see valid local covers and don't fetch from network.
+        databaseTempFile?.let { f ->
+            try {
+                f.inputStream().buffered().use { stream ->
+                    mergeToDatabase(stream)
+                }
+            } finally {
+                if (!f.delete()) Timber.w("restoreData: failed to delete temp db file")
+            }
+        }
+
+        // Validate restored covers: any corrupt/non-image cover file is deleted so the DB
+        // never points at a broken image. Valid covers keep their new last-modified timestamp,
+        // which (together with addLastModifiedToFileCacheKey in the ImageLoader) invalidates Coil.
+        try {
+            val booksDir = appRepository.settings.folderBooks
+            if (booksDir.exists()) {
+                booksDir.walkTopDown()
+                    .filter { it.isFile && it.name == AppFileResolver.COVER_PATH_RELATIVE_TO_BOOK }
+                    .forEach { cover ->
+                        if (!isCoverValid(cover)) {
+                            Timber.w("restoreData: deleting corrupt restored cover ${cover.absolutePath}")
+                            cover.delete()
+                        }
+                    }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "restoreData: cover validation failed")
+        }
+
+        File(context.cacheDir, "image_cache").deleteRecursively()
 
         // Clear source cache to force LuaSourceProvider to reload from restored lua_extensions/
         try {

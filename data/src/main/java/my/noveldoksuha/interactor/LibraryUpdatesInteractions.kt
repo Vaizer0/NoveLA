@@ -14,7 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.withContext
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloaderRepository
+import my.noveldokusha.core.AppFileResolver
+import my.noveldokusha.core.isHttpsUrl
 import my.noveldokusha.core.isLocalUri
+import my.noveldokusha.data.CoverRepository
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -27,6 +30,8 @@ class LibraryUpdatesInteractions @Inject constructor(
     private val appRepository: AppRepository,
     private val downloaderRepository: DownloaderRepository,
     private val libraryDao: LibraryDao,
+    private val coverRepository: CoverRepository,
+    private val appFileResolver: AppFileResolver,
 ) {
     companion object {
         private val hostGroupSemaphore = Semaphore(4)
@@ -101,28 +106,13 @@ class LibraryUpdatesInteractions @Inject constructor(
         Timber.d("[book] \"${book.title}\" — start update | chaptersLastPage=${book.chaptersLastPage} | chaptersListHash=${book.chaptersListHash?.take(8)?.let { "$it…" } ?: "null"}")
         currentUpdating.update { it + book }
 
-        // Быстрая проверка хэша — только для книг без chaptersLastPage (старый путь).
-        // parsePage-плагины не используют хэш.
-        if (book.chaptersLastPage == null && book.chaptersListHash != null) {
-            val hashUnchanged = downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
-                if (result is my.noveldokusha.core.Response.Success) {
-                    result.data == book.chaptersListHash
-                } else false
-            }
-            if (hashUnchanged) {
-                Timber.d("[SKIP] \"${book.title}\" — hash unchanged, no new chapters")
-                currentUpdating.update { it - book }
-                countingUpdating.update { it?.copy(updated = it.updated + 1) }
-                return@withContext
-            }
-        }
-
         // Загружаем текущий список URL глав один раз — используется во всех стратегиях.
         val oldChaptersList = async(Dispatchers.IO) {
             appRepository.bookChapters.chapters(book.url).map { it.url }.toSet()
         }
 
-        // Обновляем метаданные книги если нужно
+        // Обновляем метаданные книги на каждом апдейте (до проверки хэша глав).
+        // ensureCover сам решает, качать ковер или нет (Skipped если локально уже есть валидный).
         if (book.title == "Unknown Novel" || book.title.isBlank()) {
             downloaderRepository.bookTitle(bookUrl = book.url).onSuccess { newTitle ->
                 if (!newTitle.isNullOrBlank() && newTitle != "Unknown Novel") {
@@ -130,10 +120,10 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         }
-        if (book.coverImageUrl.isBlank()) {
+        if (book.coverImageUrl.isBlank() || book.coverImageUrl.isHttpsUrl) {
             downloaderRepository.bookCoverImageUrl(bookUrl = book.url).onSuccess { newCoverUrl ->
                 if (!newCoverUrl.isNullOrBlank()) {
-                    appRepository.libraryBooks.updateCover(book.url, newCoverUrl)
+                    syncCover(book.url, newCoverUrl)
                 }
             }
         }
@@ -151,6 +141,22 @@ class LibraryUpdatesInteractions @Inject constructor(
                 if (genres.isNotEmpty()) {
                     libraryDao.updateGenres(book.url, my.noveldokusha.core.utils.GenreUtils.normalize(genres))
                 }
+            }
+        }
+
+        // Быстрая проверка хэша — только для книг без chaptersLastPage (старый путь).
+        // parsePage-плагины не используют хэш.
+        if (book.chaptersLastPage == null && book.chaptersListHash != null) {
+            val hashUnchanged = downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
+                if (result is my.noveldokusha.core.Response.Success) {
+                    result.data == book.chaptersListHash
+                } else false
+            }
+            if (hashUnchanged) {
+                Timber.d("[SKIP] \"${book.title}\" — hash unchanged, no new chapters")
+                currentUpdating.update { it - book }
+                countingUpdating.update { it?.copy(updated = it.updated + 1) }
+                return@withContext
             }
         }
 
@@ -362,10 +368,10 @@ class LibraryUpdatesInteractions @Inject constructor(
                             }
                         }
                     }
-                    if (book.coverImageUrl.isBlank()) {
+                    if (book.coverImageUrl.isBlank() || book.coverImageUrl.isHttpsUrl) {
                         downloaderRepository.bookCoverImageUrl(bookUrl = url).toSuccessOrNull()?.data?.let { coverUrl ->
                             if (!coverUrl.isNullOrBlank()) {
-                                appRepository.libraryBooks.updateCover(url, coverUrl)
+                                syncCover(url, coverUrl)
                             }
                         }
                     }
@@ -398,4 +404,11 @@ class LibraryUpdatesInteractions @Inject constructor(
     }
 
     private val updatesInProgress = mutableSetOf<String>()
+
+    private suspend fun syncCover(bookUrl: String, remoteCoverUrl: String) {
+        val coverFile = appFileResolver.getStorageBookCoverImageFile(appFileResolver.getLocalBookFolderName(bookUrl))
+        if (!coverRepository.ensureCover(coverFile, remoteCoverUrl)) {
+            Timber.w("Failed to download cover for $bookUrl")
+        }
+    }
 }

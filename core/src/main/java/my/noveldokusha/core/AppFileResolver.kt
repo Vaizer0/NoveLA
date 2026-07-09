@@ -11,6 +11,7 @@ import java.nio.file.Paths
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
+import my.noveldokusha.core.isCoverValid
 
 
 @Singleton
@@ -65,10 +66,18 @@ class AppFileResolver @Inject constructor(
 
     /**
      * Returns the path to the image if local, no changes if non local.
+     *
+     * For a remote (https) cover we prefer the locally cached cover file when it exists
+     * and is a valid image; otherwise we return the remote URL so a missing local cover
+     * (e.g. after a backup restore) is transparently re-fetched from the site instead of
+     * showing a broken/empty image.
      */
     fun resolvedBookImagePath(bookUrl: String, imagePath: String): Any = when {
-        imagePath.isHttpsUrl -> imagePath
-        bookUrl.isContentUri -> imagePath
+        imagePath.isContentUri -> imagePath
+        imagePath.isHttpsUrl -> {
+            val coverFile = getStorageBookCoverImageFile(getLocalBookFolderName(bookUrl))
+            if (isCoverValid(coverFile)) coverFile else imagePath
+        }
         else -> getStorageBookImageFile(bookUrl, imagePath)
     }
 }

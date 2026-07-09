@@ -82,11 +82,11 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
     override fun newImageLoader(): ImageLoader {
         val diskCache = coil.disk.DiskCache.Builder()
             .directory(cacheDir.resolve("image_cache"))
-            .maxSizeBytes(300L * 1024 * 1024) // 300 MB
+            .maxSizeBytes(900L * 1024 * 1024) // 900 MB
             .build()
 
         val memoryCache = coil.memory.MemoryCache.Builder(this)
-            .maxSizeBytes(64 * 1024 * 1024) // 64 MB
+            .maxSizeBytes(128 * 1024 * 1024) // 128 MB
             .build()
 
         return when (val networkClient = networkClient) {
@@ -99,6 +99,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
                 .diskCache(diskCache)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
                 .respectCacheHeaders(false)
+                .addLastModifiedToFileCacheKey(true)
                 .build()
 
             else -> ImageLoader
@@ -109,6 +110,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
                 .diskCache(diskCache)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
                 .respectCacheHeaders(false)
+                .addLastModifiedToFileCacheKey(true)
                 .build()
         }
     }
