@@ -25,7 +25,6 @@ dependencies {
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.landscapist.glide)
     implementation(libs.compose.coil)
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
 
     // Hilt
     implementation(libs.hilt.android)

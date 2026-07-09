@@ -69,8 +69,6 @@ android {
         }
 
         named("debug") {
-            isMinifyEnabled = false
-            isShrinkResources = false
         }
 
         named("release") {
@@ -131,9 +129,6 @@ dependencies {
     // Lifecycle components
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.livedata.ktx)
-    implementation(libs.androidx.lifecycle.common.java8)
-    implementation(libs.androidx.coordinatorlayout)
-
     // Local storage directory access
     implementation(libs.androidx.documentfile)
 
@@ -169,7 +164,6 @@ dependencies {
     implementation(libs.moshi)
     implementation(libs.moshi.kotlin)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.retrofit)
 
     // Dependency injection
     implementation(libs.hilt.android)
@@ -178,7 +172,6 @@ dependencies {
     implementation(libs.hilt.workmanager)
 
     // HTML text extractor
-    implementation(libs.crux)
     implementation(libs.readability4j)
     implementation(libs.jsoup)
 
@@ -187,7 +180,6 @@ dependencies {
     implementation(libs.compose.androidx.animation)
     implementation(libs.compose.androidx.runtime.livedata)
     implementation(libs.compose.androidx.lifecycle.viewmodel)
-    implementation(libs.compose.androidx.constraintlayout)
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.material3.android)
     implementation(libs.compose.landscapist.glide)

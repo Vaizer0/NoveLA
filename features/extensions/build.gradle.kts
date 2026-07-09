@@ -27,7 +27,6 @@ dependencies {
     implementation(libs.compose.material3.android)
     implementation(libs.compose.landscapist.glide)
     implementation(libs.okhttp)
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
 
     // AndroidX
     implementation(libs.androidx.activity.ktx)

@@ -175,31 +175,6 @@ fun Element.extractValue(rule: SelectorRule): String? {
 }
 
 /**
- * Apply element-modifying context transforms before text extraction
- */
-private fun applyElementTransforms(element: Element, contextTransforms: List<(Element, String) -> String>): Element {
-    // Apply all transforms to the same element instance without cloning
-    contextTransforms.forEach { transform ->
-        transform(element, "")  // Modify the original element directly
-    }
-    return element  // Return the modified element
-}
-
-/**
- * Apply regular (text-only) transformations
- */
-private fun applyRegularTransforms(text: String, rule: SelectorRule): String {
-    var result = text
-
-    // Apply regular transforms
-    for (transform in rule.transforms) {
-        result = transform(result)
-    }
-
-    return result
-}
-
-/**
  * Apply regular transformations to extracted text
  */
 private fun applyTransforms(@Suppress("UNUSED_PARAMETER") element: Element, text: String, rule: SelectorRule): String {

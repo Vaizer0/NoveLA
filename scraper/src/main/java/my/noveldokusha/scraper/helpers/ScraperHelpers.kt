@@ -569,37 +569,6 @@ suspend fun getChapterListPaginated(
 }
 
 /**
- * Legacy version - will be removed after migration
- */
-/*
-suspend fun getChapterText(
-    config: HtmlScraperConfig,
-    doc: Document
-): String {
-    val content = doc.selectFirst(config.chapterContentSelector)
-        ?.cleanChapterContent(config.removeSelectors) ?: ""
-
-    // Remove duplicate title from start of content
-    val cleanedContent = if (config.chapterTitleSelector != null && content.isNotBlank()) {
-        val title = doc.selectText(config.chapterTitleSelector)
-        if (title != null && content.trimStart().startsWith(title.trim())) {
-            content.trimStart().removePrefix(title.trim()).trimStart()
-        } else {
-            content
-        }
-    } else {
-        content
-    }
-
-    if (cleanedContent.isBlank()) {
-        Timber.w("Chapter text: No content found with selector '${config.chapterContentSelector}'")
-    }
-
-    return cleanedContent
-}
-*/
-
-/**
  * New declarative version using HtmlSelectors
  */
 suspend fun getChapterText(

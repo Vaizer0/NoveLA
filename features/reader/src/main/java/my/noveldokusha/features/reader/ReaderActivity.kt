@@ -577,42 +577,6 @@ class ReaderActivity : BaseActivity() {
         viewAdapter.listView.notifyDataSetChanged()
     }
 
-    /**
-     * FIX: Smooth scroll to TTS position after screen unlock.
-     *
-     * Two bugs fixed here vs the old onResume approach:
-     * 1. Delay/ignored scroll — old code called setSelectionFromTop before the ListView
-     *    finished re-layout after onResume. Now called via post{} so it runs after layout.
-     * 2. Jarring jump — replaced setSelectionFromTop with smoothScrollToPositionFromTop
-     *    for nearby items (<=8 positions away), giving a smooth 350ms animation.
-     *    Items already on screen are skipped entirely (no movement at all).
-     *    Items far away still use instant scroll to avoid a long animation.
-     */
-    private fun scrollToReadingPositionSmooth(chapterIndex: Int, chapterItemPosition: Int) {
-        val itemIndex = indexOfReaderItem(
-            list = viewModel.items,
-            chapterIndex = chapterIndex,
-            chapterItemPosition = chapterItemPosition
-        )
-        if (itemIndex == -1) return
-        val itemPosition = viewAdapter.listView.fromIndexToPosition(itemIndex)
-        val newOffsetPx = 200.dpToPx(this)
-        viewAdapter.listView.notifyDataSetChanged()
-
-        // If item is already visible on screen — no scroll needed, avoids any jarring movement
-        val first = viewBind.listView.firstVisiblePosition
-        val last = viewBind.listView.lastVisiblePosition
-        if (itemPosition in first..last) return
-
-        // Smooth scroll for nearby items, instant jump for distant ones
-        val distance = kotlin.math.abs(itemPosition - first)
-        if (distance <= 8) {
-            viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 350)
-        } else {
-            viewBind.listView.setSelectionFromTop(itemPosition, newOffsetPx)
-        }
-    }
-
     private fun updateReadingState() {
         val firstVisibleItem = viewBind.listView.firstVisiblePosition
         val lastVisibleItem = viewBind.listView.lastVisiblePosition

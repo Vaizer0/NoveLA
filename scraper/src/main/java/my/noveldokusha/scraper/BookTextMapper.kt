@@ -49,9 +49,5 @@ object BookTextMapper {
             return """<img src="$path" yrel="${"%.2f".format(yRel)}">"""
         }
 
-        @Suppress("unused")
-        private fun toXMLStringV0(): String {
-            return """<img yrel="${"%.2f".format(yRel)}">$path</img>"""
-        }
     }
 }
