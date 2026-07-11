@@ -37,9 +37,9 @@ import java.io.File
 import java.net.InetAddress
 import java.net.URI
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.util.LruCache
 
 
 // =============================================================================
@@ -739,17 +739,24 @@ class LuaSourceLoader @Inject constructor(
     private val extensionRepository: ExtensionRepositoryInterface
 ) {
     private val yaml  = Yaml()
-    private val cache = ConcurrentHashMap<String, SourceInterface>()
+    // ponytail: LRU cache with fixed max size. Evicts least recently used VMs to keep native heap bounded.
+    // Cost: ~100ms reload from disk .lua file on cache miss.
+    // LruCache is already thread-safe (synchronized internally).
+    private val cache = object : LruCache<String, SourceInterface>(MAX_CACHED_SOURCES) {
+        override fun entryRemoved(evicted: Boolean, key: String, oldValue: SourceInterface, newValue: SourceInterface?) {
+            if (evicted) Timber.d("Evicted Lua source from LRU cache: $key")
+        }
+    }
 
     private val luaDir: File
         get() = File(context.filesDir, "lua_extensions").also { it.mkdirs() }
 
-    fun clearCache() { cache.clear(); Timber.d("Lua source cache cleared") }
+    fun clearCache() { cache.evictAll(); Timber.d("Lua source cache cleared") }
 
     suspend fun loadAllSources(): Result<List<SourceInterface>> = withContext(Dispatchers.IO) {
         runCatching {
             val sources = loadInstalledSources()
-            sources.forEach { cache[it.id] = it }
+            sources.forEach { cache.put(it.id, it) }
             Timber.d("Loaded ${sources.size} Lua sources")
             sources
         }
@@ -816,7 +823,7 @@ class LuaSourceLoader @Inject constructor(
         return try {
             val script = luaEngine.loadScript(file.readText(Charsets.UTF_8))
             createLuaSourceAdapter(context, script, luaEngine, iconUrl, id)
-                .also { cache[id] = it; Timber.d("Loaded from disk: $id") }
+                .also { cache.put(id, it); Timber.d("Loaded from disk: $id") }
         } catch (e: Exception) {
             Timber.e(e, "Compile error for $id")
             null
@@ -850,6 +857,12 @@ class LuaSourceLoader @Inject constructor(
     }
 
     private fun luaFile(id: String) = File(luaDir, "$id.lua")
+
+    companion object {
+        // ponytail: 15 VMs max. Each LuaJ Globals ~2-5MB. 15 * 5 = 75MB ceiling.
+        // Upgrade path: increase if user reports slow extension loading.
+        private const val MAX_CACHED_SOURCES = 15
+    }
 }
 
 // ── Дополнения для полной поддержки всех источников ──────────────────────────

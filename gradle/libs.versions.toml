@@ -32,7 +32,6 @@ androidx-lifecycle = "2.8.7"
 androidx-workmanager = "2.11.2"
 androidx-startup = "1.2.0"
 androidx-constraintLayout = "2.2.1"
-androidx-coordinatorLayout = "1.2.0"
 androidx-appcompat = "1.7.1"
 
 androidx-testing-core = "1.6.1"
@@ -46,7 +45,6 @@ compose-coil = "2.7.0"
 compose-animation = "1.11.4"
 compose-activity = "1.9.3"
 compose-lazyColumnScrollbar = "2.2.0"
-compose-landscapist-glide = "2.4.4"
 compose-testing-ui = "1.7.5"
 compose-material-icons-extended = "1.7.8"
 compose-material3 = "1.3.1"
@@ -65,9 +63,6 @@ snakeyaml = "2.6"
 
 okhttp = "5.0.0-alpha.14"
 okhttp-interceptor-logging = "5.0.0-alpha.14"
-okhttp-glideIntegration = "4.16.0"
-
-glide = "4.16.0"
 
 readability4j = "1.0.8"
 
@@ -87,7 +82,7 @@ compose-androidx-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4
 compose-androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "compose-testing-ui" }
 compose-lazyColumnScrollbar = { module = "com.github.nanihadesuka:LazyColumnScrollbar", version.ref = "compose-lazyColumnScrollbar" }
 compose-coil = { module = "io.coil-kt:coil-compose", version.ref = "compose-coil" }
-compose-landscapist-glide = { module = "com.github.skydoves:landscapist-glide", version.ref = "compose-landscapist-glide" }
+coil = { module = "io.coil-kt:coil", version.ref = "compose-coil" }
 compose-material3-android = { group = "androidx.compose.material3", name = "material3-android", version.ref = "compose-material3Android" }
 
 # Hilt
@@ -105,8 +100,6 @@ androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "
 okhttp-interceptor-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp-interceptor-logging" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-interceptor-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
-okhttp-glideIntegration = { module = "com.github.bumptech.glide:okhttp3-integration", version.ref = "okhttp-glideIntegration" }
-glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
 
 # Data manipulation (html, serialization, ...)
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
@@ -134,8 +127,6 @@ test-androidx-core-ktx = { module = "androidx.test:core-ktx", version.ref = "and
 
 # Kotlin
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
-kotlin-script-runtime = { module = "org.jetbrains.kotlin:kotlin-script-runtime", version.ref = "kotlin" }
-kotlin-scripting-jvm = { module = "org.jetbrains.kotlin:kotlin-scripting-jvm", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines-core" }
 
 # Android

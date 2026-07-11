@@ -17,10 +17,10 @@ object MemoryDiagnostics {
         val jvmUsed = jvmTotal - jvmFree
 
         Timber.tag(tag).d(
-            "Native: used=%.1fMB / total=%.1fMB / max=%.1fMB | " +
+            "Native: alloc=%.1fMB / free=%.1fMB / reserved=%.1fMB | " +
             "JVM: used=%.1fMB / total=%.1fMB / max=%.1fMB",
             nativeHeapAllocated / 1_000_000.0,
-            nativeHeapSize / 1_000_000.0,
+            nativeHeapFree / 1_000_000.0,
             nativeHeapSize / 1_000_000.0,
             jvmUsed / 1_000_000.0,
             jvmTotal / 1_000_000.0,

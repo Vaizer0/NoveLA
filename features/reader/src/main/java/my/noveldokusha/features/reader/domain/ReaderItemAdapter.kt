@@ -13,8 +13,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.updateLayoutParams
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import coil.load
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.utils.inflater
 import my.noveldokusha.features.reader.features.TextSynthesis
@@ -203,12 +202,11 @@ internal class ReaderItemAdapter(
         val imageModel = appFileResolver.resolvedBookImagePath(bookUrl = bookUrl, imagePath = item.image.path)
 
         bind.imageContainer.doOnNextLayout {
-            Glide.with(ctx)
-                .load(imageModel)
-                .fitCenter()
-                .error(R.drawable.ic_baseline_error_outline_24)
-                .transition(DrawableTransitionOptions.withCrossFade())
-                .into(bind.image)
+            bind.image.load(imageModel) {
+                crossfade(true)
+                scale(coil.size.Scale.FIT)
+                error(R.drawable.ic_baseline_error_outline_24)
+            }
         }
 
         when (item.location) {

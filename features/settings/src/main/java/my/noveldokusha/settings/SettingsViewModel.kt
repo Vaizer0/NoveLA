@@ -7,7 +7,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewModelScope
-import com.bumptech.glide.Glide
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -223,10 +222,8 @@ internal class SettingsViewModel @Inject constructor(
                 }
             }
 
-            Glide.get(context).clearDiskCache()
             context.cacheDir.resolve("image_cache").deleteRecursively()
             withContext(Dispatchers.Main) {
-                Glide.get(context).clearMemory()
                 coil.Coil.imageLoader(context).memoryCache?.clear()
             }
 

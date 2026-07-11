@@ -120,10 +120,7 @@ dependencies {
     // Translation feature (FOSS - Gemini API only)
     implementation(projects.tooling.textTranslator.translatorNop)
 
-    // Kotlin scripting for extension compilation
-    implementation(libs.kotlin.scripting.jvm)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlin.script.runtime)
     implementation(libs.kotlin.stdlib)
 
     // Lifecycle components
@@ -182,7 +179,6 @@ dependencies {
     implementation(libs.compose.androidx.lifecycle.viewmodel)
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.material3.android)
-    implementation(libs.compose.landscapist.glide)
     implementation(libs.compose.coil)
     implementation(libs.compose.lazyColumnScrollbar)
 
@@ -190,8 +186,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.interceptor.brotli)
     implementation(libs.okhttp.interceptor.logging)
-    implementation(libs.okhttp.glideIntegration)
-    ksp(libs.glide.ksp)
 
     // Logging
     implementation(libs.timber)
