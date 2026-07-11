@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.AppFileResolver
+import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isHttpsUrl
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.data.CoverRepository
@@ -161,12 +162,22 @@ class LibraryUpdatesInteractions @Inject constructor(
         }
 
         // ── Выбор стратегии обновления ────────────────────────────────────────
-        if (book.chaptersLastPage != null) {
+        val lastPage = book.chaptersLastPage
+        if (lastPage != null &&
+            ChapterPagination.isPageCounterConsistent(lastPage, oldChaptersList.await().size)
+        ) {
             // parsePage-режим: книга уже была спарсена через parsePage.
             // Перечитываем последнюю известную страницу + догружаем новые.
-            Timber.d("[STRATEGY: parsePage incremental] \"${book.title}\" — lastPage=${book.chaptersLastPage}")
+            Timber.d("[STRATEGY: parsePage incremental] \"${book.title}\" — lastPage=$lastPage")
             updateBookWithParsePage(book, oldChaptersList, newUpdates, failedUpdates)
         } else {
+            // Счётчик страниц рассинхронизирован с числом глав в БД (главы потеряны) —
+            // сбрасываем счётчик и делаем полный репарс. Троттлинг повторов обеспечивает
+            // сам интервал воркера автообновления — отдельный guard не нужен.
+            if (lastPage != null) {
+                Timber.w("[RECOVERY] \"${book.title}\" — lastPage=$lastPage несогласован с ${oldChaptersList.await().size} главами, сброс счётчика и полный репарс")
+                appRepository.libraryBooks.updateChaptersLastPage(book.url, null)
+            }
             // Проверяем, поддерживает ли плагин parsePage (первый раз для этой книги).
             val firstPageResult = downloaderRepository.bookChaptersPage(book.url, page = 1)
             if (firstPageResult != null) {

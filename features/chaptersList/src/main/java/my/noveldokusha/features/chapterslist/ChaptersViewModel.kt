@@ -27,6 +27,7 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.utils.GenreUtils
@@ -308,9 +309,18 @@ internal class ChaptersViewModel @Inject constructor(
             // This only re-checks the last known page + loads new pages,
             // instead of re-parsing all pages from scratch.
             val lastPage = book?.chaptersLastPage
-            if (lastPage != null) {
+            val chapterCount = appRepository.bookChapters.countByBookUrl(url)
+            if (lastPage != null &&
+                ChapterPagination.isPageCounterConsistent(lastPage, chapterCount)
+            ) {
                 updateChaptersIncremental(url, lastPage)
             } else {
+                // Счётчик страниц рассинхронизирован с БД (или первый парс/legacy) —
+                // сбрасываем и делаем полный репарс, позиции пересобираются с нуля.
+                if (lastPage != null) {
+                    Timber.w("updateChaptersList: lastPage=$lastPage несогласован с $chapterCount главами, сброс и полный репарс")
+                    appRepository.libraryBooks.updateChaptersLastPage(url, null)
+                }
                 // First time or legacy: try full parsePage, fallback to getChapterList
                 updateChaptersFull(url)
             }
