@@ -156,7 +156,8 @@
     <string name="layout">Макет</string>
     <string name="new_chapters">Новые главы</string>
     <string name="update_error">Ошибка обновления</string>
-    <string name="update_cancelled">Обновление отменено</string>
+    <string name="update_cancelled">Обновление отменено</string>
+    <string name="book_fix">Починить книгу</string>
     <string name="tts_estimated_time_left">Осталось</string>
     <string name="tts_total_chapter">Всего глава</string>
     <string name="tts_wpm">слов/мин</string>

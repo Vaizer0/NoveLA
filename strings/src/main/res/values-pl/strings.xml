@@ -618,4 +618,6 @@
     <string name="installed">Zainstalowane</string>
     <string name="available">Dostępne</string>
 
+    <string name="book_fix">Napraw ksiazke</string>
+
 </resources>

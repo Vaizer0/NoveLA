@@ -618,4 +618,6 @@
     <string name="installed">Terinstal</string>
     <string name="available">Tersedia</string>
 
+    <string name="book_fix">Perbaiki buku</string>
+
 </resources>

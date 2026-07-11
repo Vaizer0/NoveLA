@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.fileImporter
+import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
@@ -127,7 +128,7 @@ class LibraryBooksRepository @Inject constructor(
         bookTitle: String
     ): Boolean = appDatabase.transaction {
         val currentTime = System.currentTimeMillis()
-        when (val book = get(bookUrl)) {
+        when (val book = getByUrl(bookUrl)) {
             null -> {
                 insert(
                     Book(
@@ -172,4 +173,74 @@ class LibraryBooksRepository @Inject constructor(
             updateCover(bookUrl = bookUrl, coverUrl = appFileResolver.getLocalBookCoverPath())
         }
     }
+
+    /**
+     * Локальный поиск книги по URL с учётом нормализации:
+     * проверяет и «как есть», и [normalizeBookUrl].
+     * Нужно, чтобы старая книга с не-нормализованным URL
+     * (например, с завершающим слешем) находилась по нормализованному
+     * ключу и не создавала дубль.
+     */
+    suspend fun getByUrl(rawUrl: String): Book? {
+        val canonical = normalizeBookUrl(rawUrl)
+        return libraryDao.get(rawUrl) ?: libraryDao.get(canonical)
+    }
+
+    /**
+     * Возвращает реальный (сохранённый) URL книги по переданному [rawUrl],
+     * перебирая варианты нормализации и завершающего слэша. Если книги нет
+     * в БД — возвращает канонический URL (для новых книг).
+     *
+     * Только чтение: никаких записей в БД, никакой нагрузки. Нужен, чтобы
+     * ChaptersViewModel мог работать с тем URL, под которым книга реально
+     * лежит (её главы/прогресс), не создавая дублей и не запуская репарс.
+     */
+    suspend fun resolveStoredUrl(rawUrl: String): String {
+        val candidates = listOf(
+            rawUrl,
+            normalizeBookUrl(rawUrl),
+            rawUrl.removeSuffix("/"),
+            rawUrl + "/"
+        )
+        return candidates.firstNotNullOfOrNull { libraryDao.get(it)?.url }
+            ?: normalizeBookUrl(rawUrl)
+    }
+
+    /**
+     * Вставка/обновление книги с канонизацией URL.
+     * Если книга (по raw или нормализованному URL) уже есть —
+     * переименовываем её URL в канонический и дополняем метаданные,
+     * не создавая дубля.
+     */
+    suspend fun upsertCanonical(book: Book) = withContext(Dispatchers.IO) {
+        val canonical = normalizeBookUrl(book.url)
+        val existing = getByUrl(book.url)
+        if (existing == null) {
+            insert(book.copy(url = canonical))
+        } else {
+            if (existing.url != canonical) reparentBookUrl(existing.url, canonical)
+            update(
+                existing.copy(
+                    url = canonical,
+                    title = book.title.ifBlank { existing.title },
+                    coverImageUrl = book.coverImageUrl.ifBlank { existing.coverImageUrl },
+                    description = book.description.ifBlank { existing.description },
+                )
+            )
+        }
+    }
+
+    suspend fun reparentBookUrl(oldUrl: String, newUrl: String) =
+        withContext(Dispatchers.IO) {
+            if (oldUrl == newUrl) return@withContext
+            appDatabase.transaction {
+                chapterDao.updateBookUrl(oldUrl, newUrl)
+                libraryDao.updateUrl(oldUrl, newUrl)
+                val downloadTaskDao = appDatabase.downloadTaskDao()
+                downloadTaskDao.get(oldUrl)?.let { task ->
+                    downloadTaskDao.delete(oldUrl)
+                    downloadTaskDao.insert(task.copy(bookUrl = newUrl))
+                }
+            }
+        }
 }

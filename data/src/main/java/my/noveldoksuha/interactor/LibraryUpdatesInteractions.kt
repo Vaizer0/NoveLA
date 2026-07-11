@@ -17,6 +17,7 @@ import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isHttpsUrl
+import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.data.CoverRepository
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
@@ -97,6 +98,28 @@ class LibraryUpdatesInteractions @Inject constructor(
         }
     }
 
+    suspend fun updateSpecificBooks(
+        books: List<Book>,
+        countingUpdating: MutableStateFlow<CountingUpdating?>,
+        currentUpdating: MutableStateFlow<Set<Book>>,
+        newUpdates: MutableStateFlow<Set<NewUpdate>>,
+        failedUpdates: MutableStateFlow<Set<Book>>,
+    ) = withContext(Dispatchers.IO) {
+        countingUpdating.update { CountingUpdating(updated = 0, total = books.size) }
+        books.filter { !it.url.isLocalUri }
+            .groupBy { it.url.toHttpUrlOrNull()?.host }
+            .map { (_, group) ->
+                async {
+                    hostGroupSemaphore.withPermit {
+                        for (book in group) {
+                            updateBook(book, countingUpdating, currentUpdating, newUpdates, failedUpdates)
+                        }
+                    }
+                }
+            }
+            .awaitAll()
+    }
+
     private suspend fun updateBook(
         book: Book,
         countingUpdating: MutableStateFlow<CountingUpdating?>,
@@ -104,94 +127,101 @@ class LibraryUpdatesInteractions @Inject constructor(
         newUpdates: MutableStateFlow<Set<NewUpdate>>,
         failedUpdates: MutableStateFlow<Set<Book>>,
     ): Unit = withContext(Dispatchers.IO) {
-        Timber.d("[book] \"${book.title}\" — start update | chaptersLastPage=${book.chaptersLastPage} | chaptersListHash=${book.chaptersListHash?.take(8)?.let { "$it…" } ?: "null"}")
-        currentUpdating.update { it + book }
+        var activeBook = book
+        val canonical = normalizeBookUrl(activeBook.url)
+        if (canonical != activeBook.url) {
+            appRepository.libraryBooks.reparentBookUrl(activeBook.url, canonical)
+            activeBook = activeBook.copy(url = canonical)
+        }
+
+        Timber.d("[book] \"${activeBook.title}\" — start update | chaptersLastPage=${activeBook.chaptersLastPage} | chaptersListHash=${activeBook.chaptersListHash?.take(8)?.let { "$it…" } ?: "null"}")
+        currentUpdating.update { it + activeBook }
 
         // Загружаем текущий список URL глав один раз — используется во всех стратегиях.
         val oldChaptersList = async(Dispatchers.IO) {
-            appRepository.bookChapters.chapters(book.url).map { it.url }.toSet()
+            appRepository.bookChapters.chapters(activeBook.url).map { it.url }.toSet()
         }
 
         // Обновляем метаданные книги на каждом апдейте (до проверки хэша глав).
         // ensureCover сам решает, качать ковер или нет (Skipped если локально уже есть валидный).
-        if (book.title == "Unknown Novel" || book.title.isBlank()) {
-            downloaderRepository.bookTitle(bookUrl = book.url).onSuccess { newTitle ->
+        if (activeBook.title == "Unknown Novel" || activeBook.title.isBlank()) {
+            downloaderRepository.bookTitle(bookUrl = activeBook.url).onSuccess { newTitle ->
                 if (!newTitle.isNullOrBlank() && newTitle != "Unknown Novel") {
-                    appRepository.libraryBooks.updateTitle(book.url, newTitle)
+                    appRepository.libraryBooks.updateTitle(activeBook.url, newTitle)
                 }
             }
         }
-        if (book.coverImageUrl.isBlank() || book.coverImageUrl.isHttpsUrl) {
-            downloaderRepository.bookCoverImageUrl(bookUrl = book.url).onSuccess { newCoverUrl ->
+        if (activeBook.coverImageUrl.isBlank() || activeBook.coverImageUrl.isHttpsUrl) {
+            downloaderRepository.bookCoverImageUrl(bookUrl = activeBook.url).onSuccess { newCoverUrl ->
                 if (!newCoverUrl.isNullOrBlank()) {
-                    syncCover(book.url, newCoverUrl)
+                    syncCover(activeBook.url, newCoverUrl)
                 }
             }
         }
-        if (book.description.isBlank()) {
-            downloaderRepository.bookDescription(bookUrl = book.url).onSuccess { newDescription ->
+        if (activeBook.description.isBlank()) {
+            downloaderRepository.bookDescription(bookUrl = activeBook.url).onSuccess { newDescription ->
                 if (!newDescription.isNullOrBlank()) {
-                    appRepository.libraryBooks.updateDescription(book.url, newDescription)
+                    appRepository.libraryBooks.updateDescription(activeBook.url, newDescription)
                 }
             }
         }
 
         // Загружаем и сохраняем жанры книги только если они ещё не заполнены
-        if (book.genres.isBlank()) {
-            downloaderRepository.bookGenres(bookUrl = book.url).onSuccess { genres ->
+        if (activeBook.genres.isBlank()) {
+            downloaderRepository.bookGenres(bookUrl = activeBook.url).onSuccess { genres ->
                 if (genres.isNotEmpty()) {
-                    libraryDao.updateGenres(book.url, my.noveldokusha.core.utils.GenreUtils.normalize(genres))
+                    libraryDao.updateGenres(activeBook.url, my.noveldokusha.core.utils.GenreUtils.normalize(genres))
                 }
             }
         }
 
         // Быстрая проверка хэша — только для книг без chaptersLastPage (старый путь).
         // parsePage-плагины не используют хэш.
-        if (book.chaptersLastPage == null && book.chaptersListHash != null) {
-            val hashUnchanged = downloaderRepository.bookChaptersListHash(bookUrl = book.url).let { result ->
+        if (activeBook.chaptersLastPage == null && activeBook.chaptersListHash != null) {
+            val hashUnchanged = downloaderRepository.bookChaptersListHash(bookUrl = activeBook.url).let { result ->
                 if (result is my.noveldokusha.core.Response.Success) {
-                    result.data == book.chaptersListHash
+                    result.data == activeBook.chaptersListHash
                 } else false
             }
             if (hashUnchanged) {
-                Timber.d("[SKIP] \"${book.title}\" — hash unchanged, no new chapters")
-                currentUpdating.update { it - book }
+                Timber.d("[SKIP] \"${activeBook.title}\" — hash unchanged, no new chapters")
+                currentUpdating.update { it - activeBook }
                 countingUpdating.update { it?.copy(updated = it.updated + 1) }
                 return@withContext
             }
         }
 
         // ── Выбор стратегии обновления ────────────────────────────────────────
-        val lastPage = book.chaptersLastPage
+        val lastPage = activeBook.chaptersLastPage
         if (lastPage != null &&
             ChapterPagination.isPageCounterConsistent(lastPage, oldChaptersList.await().size)
         ) {
             // parsePage-режим: книга уже была спарсена через parsePage.
             // Перечитываем последнюю известную страницу + догружаем новые.
-            Timber.d("[STRATEGY: parsePage incremental] \"${book.title}\" — lastPage=$lastPage")
-            updateBookWithParsePage(book, oldChaptersList, newUpdates, failedUpdates)
+            Timber.d("[STRATEGY: parsePage incremental] \"${activeBook.title}\" — lastPage=$lastPage")
+            updateBookWithParsePage(activeBook, oldChaptersList, newUpdates, failedUpdates)
         } else {
             // Счётчик страниц рассинхронизирован с числом глав в БД (главы потеряны) —
             // сбрасываем счётчик и делаем полный репарс. Троттлинг повторов обеспечивает
             // сам интервал воркера автообновления — отдельный guard не нужен.
             if (lastPage != null) {
-                Timber.w("[RECOVERY] \"${book.title}\" — lastPage=$lastPage несогласован с ${oldChaptersList.await().size} главами, сброс счётчика и полный репарс")
-                appRepository.libraryBooks.updateChaptersLastPage(book.url, null)
+                Timber.w("[RECOVERY] \"${activeBook.title}\" — lastPage=$lastPage несогласован с ${oldChaptersList.await().size} главами, сброс счётчика и полный репарс")
+                appRepository.libraryBooks.updateChaptersLastPage(activeBook.url, null)
             }
             // Проверяем, поддерживает ли плагин parsePage (первый раз для этой книги).
-            val firstPageResult = downloaderRepository.bookChaptersPage(book.url, page = 1)
+            val firstPageResult = downloaderRepository.bookChaptersPage(activeBook.url, page = 1)
             if (firstPageResult != null) {
                 // Плагин поддерживает parsePage — полный первоначальный парс всех страниц
-                Timber.d("[STRATEGY: parsePage first-time] \"${book.title}\" — will scan all pages")
-                updateBookFirstTimeParsePage(book, firstPageResult, oldChaptersList, newUpdates, failedUpdates)
+                Timber.d("[STRATEGY: parsePage first-time] \"${activeBook.title}\" — will scan all pages")
+                updateBookFirstTimeParsePage(activeBook, firstPageResult, oldChaptersList, newUpdates, failedUpdates)
             } else {
                 // Плагин не поддерживает parsePage — старый путь через getChapterList
-                Timber.d("[STRATEGY: legacy getChapterList] \"${book.title}\"")
-                updateBookLegacy(book, oldChaptersList, newUpdates, failedUpdates)
+                Timber.d("[STRATEGY: legacy getChapterList] \"${activeBook.title}\"")
+                updateBookLegacy(activeBook, oldChaptersList, newUpdates, failedUpdates)
             }
         }
 
-        currentUpdating.update { it - book }
+        currentUpdating.update { it - activeBook }
         countingUpdating.update { it?.copy(updated = it.updated + 1) }
     }
 
@@ -314,8 +344,8 @@ class LibraryUpdatesInteractions @Inject constructor(
         mergeAndNotify(book, chaptersToAdd, oldChaptersList, newUpdates)
 
         if (newTotalPages != lastKnownPage) {
-            Timber.d("[parsePage incremental] \"${book.title}\" — updating lastPage $lastKnownPage → $newTotalPages")
             appRepository.libraryBooks.updateChaptersLastPage(book.url, newTotalPages)
+            Timber.d("[parsePage incremental] \"${book.title}\" — updating lastPage $lastKnownPage → $newTotalPages")
         } else {
             Timber.d("[parsePage incremental] \"${book.title}\" — no new pages, lastPage=$lastKnownPage unchanged")
         }
@@ -364,43 +394,50 @@ class LibraryUpdatesInteractions @Inject constructor(
     }
 
     suspend fun updateSingleBookMetadata(url: String, maxRetries: Int = 3) {
-        if (url in updatesInProgress) return
-        updatesInProgress.add(url)
+        val canonical = normalizeBookUrl(url)
+        if (canonical != url) {
+            val book = appRepository.libraryBooks.get(url)
+            if (book != null) {
+                appRepository.libraryBooks.reparentBookUrl(url, canonical)
+            }
+        }
+        if (canonical in updatesInProgress) return
+        updatesInProgress.add(canonical)
         try {
             var retryCount = 0
             var success = false
             while (retryCount < maxRetries && !success) {
                 try {
-                    val book = appRepository.libraryBooks.get(url) ?: return
+                    val book = appRepository.libraryBooks.get(canonical) ?: return
                     if (book.title == "Unknown Novel" || book.title.isBlank()) {
-                        downloaderRepository.bookTitle(bookUrl = url).toSuccessOrNull()?.data?.let { newTitle ->
+                        downloaderRepository.bookTitle(bookUrl = canonical).toSuccessOrNull()?.data?.let { newTitle ->
                             if (!newTitle.isNullOrBlank() && newTitle != "Unknown Novel") {
-                                appRepository.libraryBooks.updateTitle(url, newTitle)
+                                appRepository.libraryBooks.updateTitle(canonical, newTitle)
                             }
                         }
                     }
                     if (book.coverImageUrl.isBlank() || book.coverImageUrl.isHttpsUrl) {
-                        downloaderRepository.bookCoverImageUrl(bookUrl = url).toSuccessOrNull()?.data?.let { coverUrl ->
+                        downloaderRepository.bookCoverImageUrl(bookUrl = canonical).toSuccessOrNull()?.data?.let { coverUrl ->
                             if (!coverUrl.isNullOrBlank()) {
-                                syncCover(url, coverUrl)
+                                syncCover(canonical, coverUrl)
                             }
                         }
                     }
                     if (book.description.isBlank()) {
-                        downloaderRepository.bookDescription(bookUrl = url).toSuccessOrNull()?.data?.let { description ->
+                        downloaderRepository.bookDescription(bookUrl = canonical).toSuccessOrNull()?.data?.let { description ->
                             if (!description.isNullOrBlank()) {
-                                appRepository.libraryBooks.updateDescription(url, description)
+                                appRepository.libraryBooks.updateDescription(canonical, description)
                             }
                         }
                     }
                     if (book.genres.isBlank()) {
-                        downloaderRepository.bookGenres(bookUrl = url).toSuccessOrNull()?.data?.let { genres ->
+                        downloaderRepository.bookGenres(bookUrl = canonical).toSuccessOrNull()?.data?.let { genres ->
                             if (genres.isNotEmpty()) {
-                                libraryDao.updateGenres(url, my.noveldokusha.core.utils.GenreUtils.normalize(genres))
+                                libraryDao.updateGenres(canonical, my.noveldokusha.core.utils.GenreUtils.normalize(genres))
                             }
                         }
                     }
-                    appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(url)
+                    appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(canonical)
                     success = true
                 } catch (e: Exception) {
                     retryCount++
@@ -410,7 +447,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                 }
             }
         } finally {
-            updatesInProgress.remove(url)
+            updatesInProgress.remove(canonical)
         }
     }
 

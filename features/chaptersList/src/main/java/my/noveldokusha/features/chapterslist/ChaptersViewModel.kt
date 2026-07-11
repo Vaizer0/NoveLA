@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.Response
@@ -38,7 +39,7 @@ import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
-import my.noveldokusha.scraper.utils.normalizeBookUrl
+import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.text_translator.domain.TranslationManager
 import timber.log.Timber
 import javax.inject.Inject
@@ -70,9 +71,16 @@ internal class ChaptersViewModel @Inject constructor(
     override val rawBookUrl by StateExtra_String(stateHandle)
     override val bookTitle by StateExtra_String(stateHandle)
 
-    private val bookUrl = normalizeBookUrl(
-        appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+    private val bookUrlFlow = MutableStateFlow(
+        normalizeBookUrl(
+            appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+        )
     )
+    private var bookUrl: String
+        get() = bookUrlFlow.value
+        set(value) {
+            bookUrlFlow.value = value
+        }
 
     @Volatile
     private var loadChaptersJob: Job? = null
@@ -80,7 +88,9 @@ internal class ChaptersViewModel @Inject constructor(
     @Volatile
     private var lastSelectedChapterUrl: String? = null
     private val source = scraper.getCompatibleSource(bookUrl)
-    private val book = appRepository.libraryBooks.getFlow(bookUrl)
+    private val book = bookUrlFlow.flatMapLatest { url ->
+        appRepository.libraryBooks.getFlow(url)
+    }
         .filterNotNull()
         .map(ChaptersScreenState::BookState)
         .toState(
@@ -151,19 +161,24 @@ internal class ChaptersViewModel @Inject constructor(
     // ─── Инициализация ────────────────────────────────────────────────────────
 
     init {
-        appScope.launch {
+        viewModelScope.launch {
+            bookUrl = appRepository.libraryBooks.resolveStoredUrl(rawBookUrl)
+            val canonical = normalizeBookUrl(bookUrl)
+            if (canonical != bookUrl) {
+                appRepository.libraryBooks.reparentBookUrl(bookUrl, canonical)
+                bookUrl = canonical
+            }
+
             if (rawBookUrl.isContentUri && appRepository.libraryBooks.get(bookUrl) == null) {
                 importUriContent()
             }
-        }
 
-        viewModelScope.launch {
             if (state.isLocalSource.value) return@launch
 
             if (!appRepository.bookChapters.hasChapters(bookUrl))
                 updateChaptersList()
 
-            if (appRepository.libraryBooks.get(bookUrl) != null)
+            if (appRepository.libraryBooks.getByUrl(bookUrl) != null)
                 return@launch
 
             chaptersRepository.downloadBookMetadata(bookUrl = bookUrl, bookTitle = bookTitle)
@@ -181,16 +196,18 @@ internal class ChaptersViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            chaptersRepository.getChaptersSortedFlow(bookUrl = bookUrl).collect {
-                state.chapters.clear()
-                state.chapters.addAll(it)
+            bookUrlFlow.collect { url ->
+                chaptersRepository.getChaptersSortedFlow(bookUrl = url).collect {
+                    state.chapters.clear()
+                    state.chapters.addAll(it)
+                }
             }
         }
 
         // Подписываемся на статус загрузки текущей книги
         viewModelScope.launch {
             downloadManager.tasks.collect { tasks ->
-                state.downloadTask.value = tasks.find { it.bookUrl == bookUrl }
+                state.downloadTask.value = tasks.find { it.bookUrl == bookUrlFlow.value }
             }
         }
 
@@ -224,6 +241,20 @@ internal class ChaptersViewModel @Inject constructor(
         viewModelScope.launch {
             val isCompleted = category == "Completed"
             libraryDao.updateCategoryAndCompleted(bookUrl, category, isCompleted)
+        }
+    }
+
+    /**
+     * «Починить книгу»: принудительно сбрасывает кэш-признаки списка глав
+     * (chaptersListHash + chaptersLastPage) и запускает ПОЛНЫЙ репарс глав.
+     * Прогресс (read/позиция) сохраняется — merge берёт его из старых записей.
+     */
+    fun fixBook() {
+        val url = bookUrl
+        viewModelScope.launch {
+            appRepository.libraryBooks.updateChaptersListHash(url, null)
+            appRepository.libraryBooks.updateChaptersLastPage(url, null)
+            updateChaptersList()
         }
     }
 

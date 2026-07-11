@@ -30,7 +30,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.feature.local_database.DAOs.DownloadTaskDao
 import my.noveldokusha.feature.local_database.tables.DownloadTaskEntity
-import my.noveldokusha.scraper.utils.normalizeBookUrl
+import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.text_translator.domain.TranslationManager
 import org.json.JSONArray
 import java.net.ConnectException

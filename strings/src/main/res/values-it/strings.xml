@@ -618,4 +618,6 @@
     <string name="installed">Installato</string>
     <string name="available">Disponibile</string>
 
+    <string name="book_fix">Ripara libro</string>
+
 </resources>

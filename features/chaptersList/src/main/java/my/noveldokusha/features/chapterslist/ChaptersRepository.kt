@@ -11,7 +11,7 @@ import my.noveldokusha.data.DownloaderRepository
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.feature.local_database.tables.Book
-import my.noveldokusha.scraper.utils.normalizeBookUrl
+import my.noveldokusha.core.utils.normalizeBookUrl
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,7 +27,7 @@ internal class ChaptersRepository @Inject constructor(
         val coverUrl = async { downloaderRepository.bookCoverImageUrl(bookUrl = normalizedUrl) }
         val description = async { downloaderRepository.bookDescription(bookUrl = normalizedUrl) }
 
-        appRepository.libraryBooks.insert(
+        appRepository.libraryBooks.upsertCanonical(
             Book(
                 title = bookTitle,
                 url = normalizedUrl,

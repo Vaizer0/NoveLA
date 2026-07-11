@@ -183,6 +183,7 @@
     <string name="new_chapters">New chapters</string>
     <string name="update_error">Update error</string>
     <string name="update_cancelled">Update cancelled</string>
+    <string name="book_fix">Fix book</string>
     <string name="tts_estimated_time_left">Estimated Time Left</string>
     <string name="tts_total_chapter">Total Chapter</string>
     <string name="tts_wpm">WPM</string>

@@ -1,18 +1,22 @@
 package my.noveldokusha.libraryexplorer
 
+import android.app.NotificationManager
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.channels.Channel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.AppCoroutineScope
@@ -20,14 +24,20 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.appPreferences.SortConfig
+import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.utils.asMutableStateOf
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.coreui.components.ToolbarMode
+import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.coreui.states.text
+import my.noveldokusha.coreui.states.title
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.feature.local_database.BookWithContext
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.interactor.LibraryUpdatesInteractions
+import my.noveldokusha.strings.R
 import javax.inject.Inject
 
 @Immutable
@@ -36,6 +46,9 @@ internal data class LibraryUiState(
     val showAddByUrlDialog: Boolean = false,
     val isSelectionMode: Boolean = false,
     val selectedBooks: Set<String> = emptySet(),
+    val isFixingBooks: Boolean = false,
+    val fixProgress: Int = 0,
+    val fixTotal: Int = 0,
     val gridColumns: Int = 3,
     val showBottomSheet: Boolean = false,
     val readFilter: TernaryState = TernaryState.Inactive,
@@ -45,24 +58,20 @@ internal data class LibraryUiState(
     val showCategories: Boolean = false,
 )
 
-internal sealed interface LibraryUiEffect {
-    data class ShowMessage(val message: String) : LibraryUiEffect
-}
-
 @HiltViewModel
 internal class LibraryViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val appRepository: AppRepository,
     private val appScope: AppCoroutineScope,
     private val scraperRepository: ScraperRepository,
+    @ApplicationContext private val context: Context,
+    private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
+    private val notificationsCenter: NotificationsCenter,
     stateHandle: SavedStateHandle,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
-
-    private val _uiEffect = Channel<LibraryUiEffect>(Channel.BUFFERED)
-    val uiEffect = _uiEffect.receiveAsFlow()
 
     init {
         // Sync with preferences
@@ -137,6 +146,79 @@ internal class LibraryViewModel @Inject constructor(
 
     fun clearSelection() {
         _uiState.update { it.copy(selectedBooks = emptySet()) }
+    }
+
+    fun fixSelectedBooks() {
+        val channelId = "FixBooks"
+        val notificationId = channelId.hashCode()
+        viewModelScope.launch {
+            val selectedUrls = _uiState.value.selectedBooks.toList()
+            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
+
+            val books = selectedUrls.mapNotNull { appRepository.libraryBooks.get(it) }
+                .filter { !it.url.isLocalUri }
+            if (books.isEmpty()) return@launch
+            _uiState.update { it.copy(isFixingBooks = true, fixProgress = 0, fixTotal = books.size) }
+
+            // Обнуляем кэш-признаки
+            books.forEach { book ->
+                appRepository.libraryBooks.updateChaptersListHash(book.url, null)
+                appRepository.libraryBooks.updateChaptersLastPage(book.url, null)
+            }
+
+            // Перечитываем книги — теперь с null-кэшем, чтобы updateBook сделал полный репарс
+            val freshBooks = books.mapNotNull { appRepository.libraryBooks.get(it.url) }
+
+            // Прогресс-потоки
+            val countingUpdating = MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
+            val currentUpdating = MutableStateFlow<Set<Book>>(setOf())
+            val newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(setOf())
+            val failedUpdates = MutableStateFlow<Set<Book>>(setOf())
+
+            // Показываем нотификацию с прогрессом
+            val notificationBuilder = notificationsCenter.showNotification(
+                channelId = channelId,
+                channelName = context.getString(R.string.book_fix),
+                notificationId = notificationId,
+                importance = NotificationManager.IMPORTANCE_LOW
+            ) {
+                title = context.getString(R.string.book_fix)
+                setStyle(NotificationCompat.BigTextStyle())
+            }
+
+            // Подписка на обновление нотификации
+            val notifyJob = launch {
+                combine(
+                    countingUpdating,
+                    currentUpdating,
+                ) { counting, current ->
+                    if (counting != null) {
+                        _uiState.update { it.copy(fixProgress = counting.updated, fixTotal = counting.total) }
+                        notificationsCenter.modifyNotification(notificationBuilder, notificationId) {
+                            title = context.getString(R.string.updating_library, counting.updated, counting.total)
+                            text = current.joinToString("\n") { "· " + it.title }
+                            setProgress(counting.total, counting.updated, false)
+                        }
+                    }
+                }.collect()
+            }
+
+            libraryUpdatesInteractions.updateSpecificBooks(
+                books = freshBooks,
+                countingUpdating = countingUpdating,
+                currentUpdating = currentUpdating,
+                newUpdates = newUpdates,
+                failedUpdates = failedUpdates,
+            )
+
+            notifyJob.cancel()
+            notificationsCenter.close(notificationId)
+
+            // Итог
+            val failCount = failedUpdates.value.size
+            val successCount = freshBooks.size - failCount
+            _uiState.update { it.copy(isFixingBooks = false) }
+        }
     }
 
     fun deleteSelectedBooks() {
