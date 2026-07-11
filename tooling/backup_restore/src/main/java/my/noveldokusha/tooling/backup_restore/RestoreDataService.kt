@@ -34,6 +34,7 @@ import my.noveldokusha.core.utils.Extra_Boolean
 import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
+import my.noveldokusha.feature.local_database.tables.Book
 import okhttp3.internal.closeQuietly
 import org.json.JSONObject
 import timber.log.Timber
@@ -310,6 +311,8 @@ class RestoreDataService : Service() {
                 val restoredBookUrls = mutableSetOf<String>()
                 val totalBooks = backupDatabase.libraryBooks.count()
                 Timber.d("mergeToDatabase: Backup contains $totalBooks total books")
+                // ponytail: load existing books to preserve local categories and avoid downgrades
+                val existingBooks = appRepository.libraryBooks.getAll().associateBy { it.url }
                 processInChunks(
                     total = totalBooks, initialChunkSize = 500, label = "books",
                     fetchChunk = { limit, offset -> backupDatabase.libraryBooks.getChunk(limit, offset) },
@@ -317,19 +320,45 @@ class RestoreDataService : Service() {
                         val valid = chunk
                             .filter { it.inLibrary }
                             .filter { it.url.matches("""^(https?|local)://.*""".toRegex()) }
-                        if (valid.isNotEmpty()) {
+
+                        val toInsert = mutableListOf<Book>()
+                        val toUpdate = mutableListOf<Book>()
+
+                        for (book in valid) {
+                            val existing = existingBooks[book.url]
+                            if (existing == null) {
+                                toInsert.add(book)
+                            } else {
+                                val localCount = appRepository.bookChapters.countByBookUrl(book.url)
+                                val backupCount = backupDatabase.newDatabase.chapterDao().countByBookUrl(book.url)
+                                if (backupCount > localCount) {
+                                    toUpdate.add(book.copy(category = existing.category))
+                                }
+                            }
+                        }
+
+                        if (toInsert.isNotEmpty()) {
                             try {
-                                appRepository.libraryBooks.insertReplace(valid)
+                                appRepository.libraryBooks.insertReplace(toInsert)
                             } catch (e: Exception) {
                                 Timber.e(e, "mergeToDatabase: Bulk book insert failed, trying individual")
-                                valid.forEach { book ->
+                                toInsert.forEach { book ->
                                     try { appRepository.libraryBooks.insertReplace(listOf(book)) }
                                     catch (bookError: Exception) {
                                         Timber.w(bookError, "Failed to insert book: ${book.title}")
                                     }
                                 }
                             }
-                            valid.forEach { restoredBookUrls.add(it.url) }
+                            toInsert.forEach { restoredBookUrls.add(it.url) }
+                        }
+
+                        if (toUpdate.isNotEmpty()) {
+                            try {
+                                toUpdate.forEach { appRepository.libraryBooks.update(it) }
+                            } catch (e: Exception) {
+                                Timber.e(e, "mergeToDatabase: Book update failed")
+                            }
+                            toUpdate.forEach { restoredBookUrls.add(it.url) }
                         }
                     }
                 )

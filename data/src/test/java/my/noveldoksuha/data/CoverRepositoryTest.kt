@@ -103,7 +103,7 @@ class CoverRepositoryTest {
 
         val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(CoverResult.Downloaded, result)
+        assertEquals(true, result)
         assertEquals(1, client.calls)
         assertTrue(isCoverValid(cover))
     }
@@ -113,9 +113,9 @@ class CoverRepositoryTest {
         val repo = repo()
         val cover = File(tempDir.root, "cover.png")
 
-        assertEquals(CoverResult.Failed, repo.ensureCover(cover, "http://example.com/c.png"))
-        assertEquals(CoverResult.Failed, repo.ensureCover(cover, ""))
-        assertEquals(CoverResult.Failed, repo.ensureCover(cover, null))
+        assertEquals(false, repo.ensureCover(cover, "http://example.com/c.png"))
+        assertEquals(false, repo.ensureCover(cover, ""))
+        assertEquals(false, repo.ensureCover(cover, null))
     }
 
     @Test
@@ -124,7 +124,7 @@ class CoverRepositoryTest {
         val repo = CoverRepository(client)
         val cover = File(tempDir.root, "cover.png")
 
-        assertEquals(CoverResult.Failed, repo.ensureCover(cover, "https://example.com/c.png"))
+        assertEquals(false, repo.ensureCover(cover, "https://example.com/c.png"))
         assertFalse(cover.exists())
     }
 
@@ -134,23 +134,23 @@ class CoverRepositoryTest {
         val repo = CoverRepository(client)
         val cover = File(tempDir.root, "cover.png")
 
-        assertEquals(CoverResult.Failed, repo.ensureCover(cover, "https://example.com/c.png"))
+        assertEquals(false, repo.ensureCover(cover, "https://example.com/c.png"))
         assertFalse(cover.exists())
     }
 
     // ---- atomicity ----
 
     @Test
-    fun `ensureCover is atomic - a valid existing cover survives a failed re-download`() = runBlocking {
+    fun `ensureCover leaves a valid existing cover untouched on failed download`() = runBlocking {
         val client = FakeNetworkClient().apply { nextBytes = "<html>corrupt</html>".toByteArray() }
         val repo = CoverRepository(client)
         val cover = File(tempDir.root, "cover.png")
         cover.writeBytes(png()) // pre-existing valid cover
 
-        val result = repo.ensureCover(cover, "https://example.com/c.png", force = true)
+        val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(CoverResult.Failed, result)
-        // The previous valid cover must still be in place (AtomicFile restored it).
+        assertEquals(false, result)
+        // The previous valid cover must still be in place.
         assertTrue(isCoverValid(cover))
     }
 
@@ -163,24 +163,24 @@ class CoverRepositoryTest {
         val cover = File(tempDir.root, "cover.png")
         cover.writeBytes(png())
 
-        val result = repo.ensureCover(cover, "https://example.com/c.png", force = false)
+        val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(CoverResult.Skipped, result)
+        assertEquals(true, result)
         assertEquals(0, client.calls)
         assertTrue(isCoverValid(cover))
     }
 
     @Test
-    fun `ensureCover re-downloads when forced even if valid`() = runBlocking {
+    fun `ensureCover does not re-download a valid existing cover`() = runBlocking {
         val client = FakeNetworkClient().apply { nextBytes = jpeg() }
         val repo = CoverRepository(client)
         val cover = File(tempDir.root, "cover.png")
         cover.writeBytes(png())
 
-        val result = repo.ensureCover(cover, "https://example.com/c.png", force = true)
+        val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(CoverResult.Downloaded, result)
-        assertEquals(1, client.calls)
+        assertEquals(true, result)
+        assertEquals(0, client.calls)
         assertTrue(isCoverValid(cover))
     }
 
@@ -193,7 +193,7 @@ class CoverRepositoryTest {
 
         val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(CoverResult.Downloaded, result)
+        assertEquals(true, result)
         assertTrue(isCoverValid(cover))
     }
 
@@ -203,7 +203,7 @@ class CoverRepositoryTest {
         val repo = CoverRepository(client)
         val cover = File(tempDir.root, "cover.png")
 
-        assertEquals(CoverResult.Downloaded, repo.ensureCover(cover, "https://example.com/c.png", force = true))
+        assertEquals(true, repo.ensureCover(cover, "https://example.com/c.png"))
         assertTrue(isCoverValid(cover))
         assertFalse(File(cover.path + ".bak").exists())
         assertFalse(File(cover.path + ".tmp").exists())

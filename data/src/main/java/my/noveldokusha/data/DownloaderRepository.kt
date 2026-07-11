@@ -235,11 +235,11 @@ class DownloaderRepository @Inject constructor(
         val now = System.currentTimeMillis()
         chaptersListCache[bookUrl]?.let { cached ->
             if (now - cached.timestamp < chaptersListCacheTtlMs) {
-                println("DownloaderRepository: Returning cached chapters (${cached.chapters.size}) for $bookUrl")
+                Timber.d("bookChaptersList: CACHE HIT — ${cached.chapters.size} chapters for $bookUrl")
                 return@withContext Response.Success(cached.chapters)
             }
         }
-        println("DownloaderRepository: Loading chapters for book: $bookUrl")
+        Timber.d("bookChaptersList: CACHE MISS — loading chapters for $bookUrl")
 
         val error by lazy {
             """
@@ -252,14 +252,12 @@ class DownloaderRepository @Inject constructor(
 
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
         if (scrap == null) {
-            println("DownloaderRepository: No compatible source found for $bookUrl")
+            Timber.d("bookChaptersList: no compatible source for $bookUrl")
             return@withContext Response.Error(error, Exception())
         }
 
-        println("DownloaderRepository: Found source ${scrap.id} for $bookUrl")
+        Timber.d("bookChaptersList: source=${scrap.id}")
 
-        // Если плагин поддерживает parsePage — собираем все страницы через него.
-        // Это нужно для первичной загрузки глав (ChaptersActivity), а не только для обновлений.
         val firstPageResult = try {
             scrap.parsePage(bookUrl, 1)
         } catch (e: Exception) {
@@ -273,7 +271,7 @@ class DownloaderRepository @Inject constructor(
                     (firstPageResult as Response.Error).exception
                 )
 
-            println("DownloaderRepository: Using parsePage, totalPages=${firstPage.totalPages}")
+            Timber.d("bookChaptersList: parsePage supported, totalPages=${firstPage.totalPages}, page1 chapters=${firstPage.chapters.size}")
 
             val allChapters = mutableListOf<Chapter>()
 
@@ -282,26 +280,30 @@ class DownloaderRepository @Inject constructor(
             }
 
             for (page in 2..firstPage.totalPages) {
+                Timber.d("bookChaptersList: loading page $page/${firstPage.totalPages}")
                 val pageData = (bookChaptersPage(bookUrl, page) as? Response.Success)?.data
-                    ?: break
+                if (pageData == null) {
+                    Timber.d("bookChaptersList: FAILED page $page, stopping early")
+                    break
+                }
                 val offset = allChapters.size
                 pageData.chapters.forEachIndexed { idx, ch ->
                     allChapters.add(Chapter(title = ch.title, url = ch.url, bookUrl = bookUrl, position = offset + idx))
                 }
+                Timber.d("bookChaptersList: page $page loaded, cumulative count=${allChapters.size}")
             }
 
-            println("DownloaderRepository: Got ${allChapters.size} chapters via parsePage for $bookUrl")
+            Timber.d("bookChaptersList: total ${allChapters.size} chapters via parsePage, caching...")
             chaptersListCache[bookUrl] = ChaptersListCacheEntry(now, allChapters)
             return@withContext Response.Success(allChapters)
         }
 
-        // Плагин не объявил parsePage — старый путь через getChapterList.
+        Timber.d("bookChaptersList: parsePage not supported, falling back to getChapterList")
         my.noveldokusha.network.tryFlatConnect {
-            println("DownloaderRepository: Calling getChapterList for $bookUrl")
             scrap.getChapterList(bookUrl)
         }
             .map { chapters ->
-                println("DownloaderRepository: Got ${chapters.size} chapters for $bookUrl")
+                Timber.d("bookChaptersList: getChapterList returned ${chapters.size} chapters")
                 chapters.mapIndexed { index, it ->
                     Chapter(
                         title = it.title,
@@ -312,6 +314,7 @@ class DownloaderRepository @Inject constructor(
                 }
             }
             .onSuccess { chapters ->
+                Timber.d("bookChaptersList: caching ${chapters.size} chapters from getChapterList")
                 chaptersListCache[bookUrl] = ChaptersListCacheEntry(System.currentTimeMillis(), chapters)
             }
     }
@@ -324,14 +327,24 @@ class DownloaderRepository @Inject constructor(
         bookUrl: String,
         page: Int,
     ): Response<SourceInterface.Catalog.PagedChapterResult>? = withContext(Dispatchers.Default) {
-        val scrap = scraper.getCompatibleSourceCatalog(bookUrl) ?: return@withContext null
-        // parsePage() возвращает null если плагин не объявил функцию.
-        // Оборачиваем исключения вручную — tryFlatConnect не подходит, так как
-        // его лямбда типизирована как () -> Response<T> (non-nullable),
-        // а нам нужно пробросить наружу null от самого parsePage.
+        val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
+        if (scrap == null) {
+            Timber.d("bookChaptersPage: no source for $bookUrl, page=$page")
+            return@withContext null
+        }
+        Timber.d("bookChaptersPage: loading page=$page for $bookUrl source=${scrap.id}")
         try {
-            scrap.parsePage(bookUrl, page)
+            val result = scrap.parsePage(bookUrl, page)
+            if (result is Response.Success) {
+                Timber.d("bookChaptersPage: page=$page OK, chapters=${result.data.chapters.size}, totalPages=${result.data.totalPages}")
+            } else if (result is Response.Error) {
+                Timber.d("bookChaptersPage: page=$page ERROR — ${result.message}")
+            } else {
+                Timber.d("bookChaptersPage: page=$page → null (not supported)")
+            }
+            result
         } catch (e: Exception) {
+            Timber.e(e, "bookChaptersPage: page=$page exception")
             Response.Error(e.message ?: "Unknown error", e)
         }
     }

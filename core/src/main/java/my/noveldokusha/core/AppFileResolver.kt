@@ -74,6 +74,7 @@ class AppFileResolver @Inject constructor(
      */
     fun resolvedBookImagePath(bookUrl: String, imagePath: String): Any = when {
         imagePath.isContentUri -> imagePath
+        bookUrl.isContentUri -> imagePath
         imagePath.isHttpsUrl -> {
             val coverFile = getStorageBookCoverImageFile(getLocalBookFolderName(bookUrl))
             if (isCoverValid(coverFile)) coverFile else imagePath
