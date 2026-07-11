@@ -298,17 +298,38 @@ class BackupDataService : Service() {
             text = getString(R.string.cleaning_database)
         }
 
+        // Step 1: clean non-library data
+        Timber.d("BackupDataService: Cleaning non-library data before backup")
+        appRepository.settings.clearNonLibraryData()
+        Timber.d("BackupDataService: Non-library data cleaned")
+
+        // Step 2: verify source database integrity
+        val sourceIntegrity = appDatabase.integrityCheck()
+        if (sourceIntegrity != "ok") {
+            throw Exception("Source database integrity check failed: $sourceIntegrity")
+        }
+        Timber.d("BackupDataService: Source database integrity OK")
+
+        // Step 3: VACUUM INTO temporary file (creates a clean snapshot without touching the original)
+        val tempDbFile = File(this@BackupDataService.cacheDir, "backup_vacuum_into_${System.currentTimeMillis()}.db")
         try {
-            Timber.d("BackupDataService: Cleaning non-library data before backup")
-            appRepository.settings.clearNonLibraryData()
-            Timber.d("BackupDataService: Running VACUUM")
-            appRepository.vacuum()
-            Timber.d("BackupDataService: Database ready for backup")
+            appDatabase.vacuumInto(tempDbFile.absolutePath)
+            Timber.d("BackupDataService: VACUUM INTO completed, temp file size: ${tempDbFile.length()}")
         } catch (e: Exception) {
-            Timber.e(e, "BackupDataService: Failed to clean database before backup, continuing anyway")
+            tempDbFile.delete()
+            throw e
         }
 
-        contentResolver.openOutputStream(uri)?.use { outputStream ->
+        // Step 4: verify the snapshot integrity
+        val snapshotIntegrity = AppDatabase.checkFileIntegrity(this@BackupDataService, tempDbFile.absolutePath)
+        if (snapshotIntegrity != "ok") {
+            tempDbFile.delete()
+            throw Exception("Backup snapshot integrity check failed: $snapshotIntegrity")
+        }
+        Timber.d("BackupDataService: Snapshot integrity OK")
+
+        try {
+            contentResolver.openOutputStream(uri)?.use { outputStream ->
             val zip = ZipOutputStream(outputStream)
 
             notificationsCenter.modifyNotification(
@@ -318,16 +339,15 @@ class BackupDataService : Service() {
                 text = getString(R.string.copying_database)
             }
 
-            // Save database — now contains only library books
+            // Save database snapshot to ZIP
             run {
                 val entry = ZipEntry("database.sqlite3")
-                val file = this@BackupDataService.getDatabasePath(appDatabase.name)
                 entry.method = ZipOutputStream.DEFLATED
-                file.inputStream().use {
+                tempDbFile.inputStream().use {
                     zip.putNextEntry(entry)
                     it.copyTo(zip)
                 }
-                Timber.d("BackupDataService: Database backed up (${file.length()} bytes)")
+                Timber.d("BackupDataService: Database backed up (${tempDbFile.length()} bytes)")
             }
 
             // Save settings (API keys + categories)
@@ -476,6 +496,9 @@ class BackupDataService : Service() {
         ) {
             removeProgressBar()
             text = getString(R.string.failed_to_make_backup)
+        }
+        } finally {
+            tempDbFile.delete()
         }
     }
 }

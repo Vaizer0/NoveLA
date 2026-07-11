@@ -100,6 +100,7 @@ class RestoreDataService : Service() {
         while (offset < total) {
             val actualSize = minOf(chunkSize, total - offset)
             val chunk = fetchChunk(actualSize, offset)
+            if (chunk.isEmpty()) break
             processChunk(chunk)
             offset += chunk.size
 
@@ -254,7 +255,13 @@ class RestoreDataService : Service() {
                     text = getString(R.string.loading_database)
                 }
 
-                val tempDbFile = File(context.cacheDir, "temp_restore_database.db")
+                // ponytail: Room caches DB instances by filename — reuse of
+                // "temp_restore_database.db" returns a stale instance with phantom
+                // row counts from a prior failed restore. Use a unique name each time.
+                context.cacheDir.listFiles()
+                    ?.filter { it.name.startsWith("temp_restore_database") }
+                    ?.forEach { it.delete() }
+                val tempDbFile = File(context.cacheDir, "temp_restore_database_${System.currentTimeMillis()}.db")
                 try {
                     tempDbFile.outputStream().use { output -> dbInputStream.copyTo(output) }
                     Timber.d("mergeToDatabase: Wrote database to temp file, size: ${tempDbFile.length()}")
@@ -300,6 +307,15 @@ class RestoreDataService : Service() {
                         }
                     }
                 }
+
+                // Verify backup database integrity
+                val backupIntegrity = backupDatabase.newDatabase.integrityCheck()
+                if (backupIntegrity != "ok") {
+                    backupDatabase.close()
+                    backupDatabase.delete()
+                    throw Exception("Backup database integrity check failed: $backupIntegrity")
+                }
+                Timber.d("mergeToDatabase: Backup database integrity OK")
 
                 // Restore library books — chunked
                 notificationsCenter.modifyNotification(

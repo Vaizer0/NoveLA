@@ -246,29 +246,51 @@ class AutoBackupWorker(
         }
         Timber.d( "performAutoBackup: file created successfully")
 
+        // Step 1: clean non-library data
+        Timber.d( "performAutoBackup: clearing non-library data")
+        appRepository.settings.clearNonLibraryData()
+        Timber.d( "performAutoBackup: non-library data cleared")
+
+        // Step 2: verify source database integrity
+        val sourceIntegrity = appDatabase.integrityCheck()
+        if (sourceIntegrity != "ok") {
+            Timber.e( "performAutoBackup: Source database integrity check FAILED: $sourceIntegrity")
+            return false
+        }
+        Timber.d( "performAutoBackup: source database integrity OK")
+
+        // Step 3: VACUUM INTO temporary file
+        val tempDbFile = File(ctx.cacheDir, "auto_backup_vacuum_into_${System.currentTimeMillis()}.db")
         try {
-            Timber.d( "performAutoBackup: clearing non-library data + vacuum")
-            appRepository.settings.clearNonLibraryData()
-            appRepository.vacuum()
-            Timber.d( "performAutoBackup: vacuum done")
+            appDatabase.vacuumInto(tempDbFile.absolutePath)
+            Timber.d( "performAutoBackup: VACUUM INTO done, temp file size: ${tempDbFile.length()}")
         } catch (e: Exception) {
-            Timber.e(e, "performAutoBackup: clean/vacuum FAILED, continuing")
+            tempDbFile.delete()
+            throw e
         }
 
+        // Step 4: verify snapshot integrity
+        val snapshotIntegrity = AppDatabase.checkFileIntegrity(ctx, tempDbFile.absolutePath)
+        if (snapshotIntegrity != "ok") {
+            tempDbFile.delete()
+            throw Exception("Auto backup snapshot integrity check failed: $snapshotIntegrity")
+        }
+        Timber.d( "performAutoBackup: snapshot integrity OK")
+
         Timber.d( "performAutoBackup: writing zip...")
+        try {
         ctx.contentResolver.openOutputStream(createUri)?.use { outputStream ->
             val zip = ZipOutputStream(outputStream)
 
             // Database
             run {
                 val entry = ZipEntry("database.sqlite3")
-                val file = ctx.getDatabasePath(appDatabase.name)
                 entry.method = ZipOutputStream.DEFLATED
-                file.inputStream().use {
+                tempDbFile.inputStream().use {
                     zip.putNextEntry(entry)
                     it.copyTo(zip)
                 }
-                Timber.d( "performAutoBackup: Database backed up (${file.length()} bytes)")
+                Timber.d( "performAutoBackup: Database backed up (${tempDbFile.length()} bytes)")
             }
 
             // Settings
@@ -383,6 +405,9 @@ class AutoBackupWorker(
         } ?: run {
             Timber.e( "performAutoBackup: FAILED to open output stream")
             return false
+        }
+        } finally {
+            tempDbFile.delete()
         }
 
         try {

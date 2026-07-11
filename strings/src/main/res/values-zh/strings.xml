@@ -618,6 +618,6 @@
     <string name="installed">已安装</string>
     <string name="available">可用</string>
 
-    <string name="book_fix">????</string>
+    <string name="book_fix">修复书籍</string>
 
 </resources>

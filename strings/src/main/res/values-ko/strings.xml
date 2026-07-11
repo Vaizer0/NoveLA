@@ -618,6 +618,6 @@
     <string name="installed">설치됨</string>
     <string name="available">사용 가능</string>
 
-    <string name="book_fix">? ??</string>
+    <string name="book_fix">책 수정</string>
 
 </resources>
