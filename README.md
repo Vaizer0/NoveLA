@@ -19,6 +19,8 @@ Free and open source web novel reader for Android.
 [![License: GPL-3.0](https://img.shields.io/github/license/HnDK0/NoveLA?style=flat-square&labelColor=27303D&color=0D1117)](LICENSE)
 [![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=flat-square&labelColor=27303D&color=3DDC84&logo=android&logoColor=white)](https://github.com/HnDK0/NoveLA/releases/latest)
 
+> ⚠️ **Status:** New features are temporarily paused. Current focus is on fixing bugs, cleaning up the codebase, and performance/optimization work. Bug reports and PRs targeting existing issues are very welcome — new feature requests will be revisited later.
+
 <br/>
 
 <img src="preview.png" alt="NoveLA preview" width="100%"/>

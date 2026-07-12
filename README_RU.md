@@ -17,6 +17,8 @@
 [![License: GPL-3.0](https://img.shields.io/github/license/HnDK0/NoveLA?style=flat-square&labelColor=27303D&color=0D1117)](LICENSE)
 [![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=flat-square&labelColor=27303D&color=3DDC84&logo=android&logoColor=white)](https://github.com/HnDK0/NoveLA/releases/latest)
 
+> ⚠️ **Статус:** Разработка нового функционала временно приостановлена. Сейчас в приоритете — исправление багов, чистка кода и оптимизация. Баг-репорты и PR по существующим проблемам приветствуются, а новые запросы фич будут рассмотрены позже.
+
 <br/>
 <img src="preview.png" alt="NoveLA preview" width="100%"/>
 </div>
