@@ -10,10 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
-import coil.Coil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +19,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
@@ -235,9 +234,8 @@ internal class LibraryViewModel @Inject constructor(
         toDelete.forEach { _pendingRemoval[it] = true }
         viewModelScope.launch {
             delay(300)
-            toDelete.forEach { _pendingRemoval.remove(it) }
             appRepository.libraryBooks.setNotInLibrary(toDelete)
-            Coil.imageLoader(context).memoryCache?.clear()
+            toDelete.forEach { _pendingRemoval.remove(it) }
         }
     }
 
@@ -279,9 +277,8 @@ internal class LibraryViewModel @Inject constructor(
         }
         viewModelScope.launch {
             delay(300)
-            _pendingRemoval.remove(bookUrl)
             appRepository.libraryBooks.setNotInLibrary(bookUrl)
-            Coil.imageLoader(context).memoryCache?.clear()
+            _pendingRemoval.remove(bookUrl)
         }
     }
 

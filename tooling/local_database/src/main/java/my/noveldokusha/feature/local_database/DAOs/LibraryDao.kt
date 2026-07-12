@@ -120,7 +120,7 @@ interface LibraryDao {
         UPDATE Book SET 
             inLibrary = 1 - inLibrary,
             lastUpdateEpochTimeMilli = :currentTime,
-            addedToLibraryEpochTimeMilli = CASE WHEN inLibrary = 1 THEN :currentTime ELSE addedToLibraryEpochTimeMilli END
+            addedToLibraryEpochTimeMilli = CASE WHEN inLibrary = 0 THEN :currentTime ELSE addedToLibraryEpochTimeMilli END
         WHERE url = :bookUrl
     """)
     suspend fun toggleInLibrary(bookUrl: String, currentTime: Long): Int

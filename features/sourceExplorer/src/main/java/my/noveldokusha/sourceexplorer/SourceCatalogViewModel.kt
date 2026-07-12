@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
 import my.noveldokusha.coreui.components.ToolbarMode
@@ -40,7 +39,6 @@ internal class SourceCatalogViewModel @Inject constructor(
     override var sourceBaseUrl by StateExtra_String(stateHandle)
     private val source = scraper.getCompatibleSourceCatalog(sourceBaseUrl)!!
     private val filterableSource = source as? SourceInterface.FilterableCatalog
-    private var bookmarkJob: Job? = null
     private var lastBookmarkClickMs = 0L
 
     private val _filterList = mutableStateOf(emptyList<my.noveldokusha.scraper.LuaFilter>())
@@ -128,8 +126,7 @@ internal class SourceCatalogViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         if (now - lastBookmarkClickMs < 300L) return
         lastBookmarkClickMs = now
-        bookmarkJob?.cancel()
-        bookmarkJob = viewModelScope.launch {
+        viewModelScope.launch {
             val isInLibrary =
                 appRepository.toggleBookmark(bookUrl = book.url, bookTitle = book.title)
             val res = if (isInLibrary) R.string.added_to_library else R.string.removed_from_library

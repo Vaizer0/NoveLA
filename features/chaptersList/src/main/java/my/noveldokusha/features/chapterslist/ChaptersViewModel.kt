@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -86,7 +87,6 @@ internal class ChaptersViewModel @Inject constructor(
     @Volatile
     private var loadChaptersJob: Job? = null
 
-    private var bookmarkJob: Job? = null
     private var lastBookmarkClickMs = 0L
 
     @Volatile
@@ -239,8 +239,7 @@ internal class ChaptersViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         if (now - lastBookmarkClickMs < 300L) return
         lastBookmarkClickMs = now
-        bookmarkJob?.cancel()
-        bookmarkJob = viewModelScope.launch {
+        viewModelScope.launch {
             val isBookmarked =
                 appRepository.toggleBookmark(bookTitle = bookTitle, bookUrl = bookUrl)
             val msg = if (isBookmarked) R.string.added_to_library else R.string.removed_from_library
