@@ -91,12 +91,14 @@ class AppRepository @Inject constructor(
 
             if (nonLibraryBookUrls.isNotEmpty()) {
                 Timber.d("clearNonLibraryData: Removing ${nonLibraryBookUrls.size} non-library books")
-                nonLibraryBookUrls.chunked(500).forEach { chunk ->
-                    db.chapterTranslationDao().deleteTranslationsByBookUrls(chunk)
-                    db.chapterBodyDao().removeChapterBodiesByBookUrls(chunk)
-                    db.chapterDao().removeAllFromBooks(chunk)
+                db.transaction {
+                    nonLibraryBookUrls.chunked(500).forEach { chunk ->
+                        db.chapterTranslationDao().deleteTranslationsByBookUrls(chunk)
+                        db.chapterBodyDao().removeChapterBodiesByBookUrls(chunk)
+                        db.chapterDao().removeAllFromBooks(chunk)
+                    }
+                    db.libraryDao().removeBooksByUrls(nonLibraryBookUrls)
                 }
-                db.libraryDao().removeBooksByUrls(nonLibraryBookUrls)
 
                 // Delete orphan book folders from disk
                 nonLibraryBookUrls.forEach { bookUrl ->
@@ -109,9 +111,11 @@ class AppRepository @Inject constructor(
             }
 
             // Also clean orphan rows (chapters without books, bodies without chapters)
-            db.chapterDao().removeAllNonLibraryRows()
-            db.chapterBodyDao().removeAllNonChapterRows()
-            db.chapterTranslationDao().removeOrphanedTranslations()
+            db.transaction {
+                db.chapterDao().removeAllNonLibraryRows()
+                db.chapterBodyDao().removeAllNonChapterRows()
+                db.chapterTranslationDao().removeOrphanedTranslations()
+            }
         }
 
         /**

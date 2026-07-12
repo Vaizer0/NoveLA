@@ -64,7 +64,9 @@ class DatabaseSearchViewModel @Inject constructor(
     override val extras: DatabaseSearchExtras by StateExtra_Parcelable(stateHandle)
     private var firstLoad by stateHandle.asMutableStateOf("firstLoad") { true }
 
-    private val database = scraper.getCompatibleDatabase(extras.databaseBaseUrl)!!
+    private val database = requireNotNull(scraper.getCompatibleDatabase(extras.databaseBaseUrl)) {
+        "No compatible database for base URL: ${extras.databaseBaseUrl}"
+    }
     internal val state = DatabaseSearchScreenState(
         databaseNameStrId = derivedStateOf { database.nameStrId },
         searchMode = stateHandle.asMutableStateOf("searchMode") { SearchMode.Catalog },

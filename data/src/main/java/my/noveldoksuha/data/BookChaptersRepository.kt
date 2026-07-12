@@ -2,6 +2,7 @@ package my.noveldokusha.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.tables.Chapter
 
@@ -11,6 +12,7 @@ import javax.inject.Singleton
 @Singleton
 class BookChaptersRepository @Inject constructor(
     private val chapterDao: ChapterDao,
+    private val appDatabase: AppDatabase,
 ) {
     suspend fun update(chapter: Chapter) = chapterDao.update(chapter)
     suspend fun updatePosition(chapterUrl: String, lastReadPosition: Int, lastReadOffset: Int) =
@@ -38,6 +40,12 @@ class BookChaptersRepository @Inject constructor(
     suspend fun setAsUnread(chaptersUrl: List<String>) =
         chaptersUrl.chunked(500).forEach { chapterDao.setAsUnread(it) }
 
+    suspend fun setAllAsReadByBookUrl(bookUrl: String) =
+        chapterDao.setAllAsReadByBookUrl(bookUrl)
+
+    suspend fun setAllAsUnreadByBookUrl(bookUrl: String) =
+        chapterDao.setAllAsUnreadByBookUrl(bookUrl)
+
     suspend fun insert(chapters: List<Chapter>) =
         chapterDao.insert(chapters.filter(::isValid))
 
@@ -58,13 +66,15 @@ class BookChaptersRepository @Inject constructor(
                 chapter.url,
                 chapter
             ) { old, new -> old.copy(position = new.position) }
-        insertReplace(current.values.toList())
+        appDatabase.transaction {
+            insertReplace(current.values.toList())
 
-        if (newChapters.isNotEmpty() && newChapters.size >= current.size * 0.3) {
-            val newUrls = newChapters.map { it.url }.toSet()
-            val removedUrls = current.keys.filter { it !in newUrls }
-            if (removedUrls.isNotEmpty()) {
-                chapterDao.removeByUrls(removedUrls)
+            if (newChapters.isNotEmpty() && newChapters.size >= current.size * 0.3) {
+                val newUrls = newChapters.map { it.url }.toSet()
+                val removedUrls = current.keys.filter { it !in newUrls }
+                if (removedUrls.isNotEmpty()) {
+                    chapterDao.removeByUrls(removedUrls)
+                }
             }
         }
     }

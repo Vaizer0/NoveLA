@@ -36,7 +36,9 @@ class DatabaseBookInfoViewModel @Inject constructor(
     override var bookUrl: String by StateExtra_String(stateHandle)
     override var bookTitle: String by StateExtra_String(stateHandle)
 
-    val database = scraper.getCompatibleDatabase(databaseUrlBase)!!
+    val database = requireNotNull(scraper.getCompatibleDatabase(databaseUrlBase)) {
+        "No compatible database for base URL: $databaseUrlBase"
+    }
 
     internal val state = DatabaseBookInfoState(
         databaseNameStrId = mutableIntStateOf(database.nameStrId),

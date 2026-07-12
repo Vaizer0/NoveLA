@@ -172,7 +172,7 @@ internal class LibraryViewModel @Inject constructor(
             }
 
             // Перечитываем книги — теперь с null-кэшем, чтобы updateBook сделал полный репарс
-            val freshBooks = books.mapNotNull { appRepository.libraryBooks.get(it.url) }
+            val freshBooks = books.map { it.copy(chaptersListHash = null, chaptersLastPage = null) }
 
             // Прогресс-потоки
             val countingUpdating = MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
@@ -265,8 +265,7 @@ internal class LibraryViewModel @Inject constructor(
 
     fun bookCompletedToggle(bookUrl: String) {
         viewModelScope.launch {
-            val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
-            appRepository.libraryBooks.update(book.copy(completed = !book.completed))
+            appRepository.libraryBooks.toggleCompleted(bookUrl)
         }
     }
 
@@ -284,15 +283,13 @@ internal class LibraryViewModel @Inject constructor(
 
     fun markAllChaptersAsRead(bookUrl: String) {
         viewModelScope.launch {
-            val chapters = appRepository.bookChapters.chapters(bookUrl)
-            appRepository.bookChapters.setAsRead(chapters.map { it.url })
+            appRepository.bookChapters.setAllAsReadByBookUrl(bookUrl)
         }
     }
 
     fun markAllChaptersAsUnread(bookUrl: String) {
         viewModelScope.launch {
-            val chapters = appRepository.bookChapters.chapters(bookUrl)
-            appRepository.bookChapters.setAsUnread(chapters.map { it.url })
+            appRepository.bookChapters.setAllAsUnreadByBookUrl(bookUrl)
         }
     }
 

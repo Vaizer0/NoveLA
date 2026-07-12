@@ -278,7 +278,7 @@ class RestoreDataService : Service() {
                         tempDbFile.delete()
                         throw e
                     }
-                    val bookChapters = BookChaptersRepository(chapterDao = newDatabase.chapterDao())
+                    val bookChapters = BookChaptersRepository(chapterDao = newDatabase.chapterDao(), appDatabase = newDatabase)
                     val chapterBody = ChapterBodyRepository(
                         chapterBodyDao = newDatabase.chapterBodyDao(),
                         appDatabase = newDatabase,

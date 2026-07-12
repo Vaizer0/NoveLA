@@ -48,11 +48,14 @@ interface ChapterDao {
     )
     suspend fun getFirstChapter(bookUrl: String): Chapter?
 
-    @Query("UPDATE Chapter SET read = 1 WHERE url in (:chaptersUrl)")
+    @Query("UPDATE Chapter SET read = 1 WHERE url IN (:chaptersUrl)")
     suspend fun setAsRead(chaptersUrl: List<String>)
 
     @Query("UPDATE Chapter SET read = :read WHERE url = :chapterUrl")
     suspend fun setAsRead(chapterUrl: String, read: Boolean)
+
+    @Query("UPDATE Chapter SET read = 1 WHERE bookUrl = :bookUrl")
+    suspend fun setAllAsReadByBookUrl(bookUrl: String)
 
     @Query(
         """
@@ -66,8 +69,11 @@ interface ChapterDao {
     @Query("UPDATE Chapter SET title = :title WHERE url == :url")
     suspend fun updateTitle(url: String, title: String)
 
-    @Query("UPDATE Chapter SET read = 0 WHERE url in (:chaptersUrl)")
+    @Query("UPDATE Chapter SET read = 0 WHERE url IN (:chaptersUrl)")
     suspend fun setAsUnread(chaptersUrl: List<String>)
+
+    @Query("UPDATE Chapter SET read = 0 WHERE bookUrl = :bookUrl")
+    suspend fun setAllAsUnreadByBookUrl(bookUrl: String)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(chapters: List<Chapter>)

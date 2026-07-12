@@ -29,11 +29,10 @@ interface ChapterBodyDao {
 
     @Query("""
         DELETE FROM ChapterBody 
-        WHERE ChapterBody.url IN (
-            SELECT ChapterBody.url 
-            FROM ChapterBody 
-            INNER JOIN Chapter ON ChapterBody.url = Chapter.url 
-            WHERE Chapter.bookUrl IN (:bookUrls)
+        WHERE EXISTS (
+            SELECT 1 FROM Chapter 
+            WHERE Chapter.url = ChapterBody.url 
+            AND Chapter.bookUrl IN (:bookUrls)
         )
     """)
     suspend fun removeChapterBodiesByBookUrls(bookUrls: List<String>)
