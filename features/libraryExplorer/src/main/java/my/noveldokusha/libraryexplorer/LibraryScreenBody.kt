@@ -58,6 +58,7 @@ internal fun LibraryScreenBody(
     gridColumns: Int = 3,
     selectedBooks: Map<String, Boolean> = emptyMap(),
     isSelectionMode: Boolean = false,
+    pendingRemoval: Set<String> = emptySet(),
     showCategories: Boolean = false,
     customCategories: List<String> = emptyList(),
     onCreateCategory: () -> Unit = {},
@@ -205,6 +206,7 @@ internal fun LibraryScreenBody(
                 gridColumns = gridColumns,
                 selectedBooks = selectedBooks,
                 isSelectionMode = isSelectionMode,
+                pendingRemoval = pendingRemoval,
                 gridState = gridState,
             )
         }

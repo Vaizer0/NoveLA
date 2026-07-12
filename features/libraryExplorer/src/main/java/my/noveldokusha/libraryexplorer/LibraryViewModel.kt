@@ -10,8 +10,10 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import coil.Coil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +77,9 @@ internal class LibraryViewModel @Inject constructor(
 
     private val _selectedBooks = mutableStateMapOf<String, Boolean>()
     val selectedBooks: Map<String, Boolean> = _selectedBooks
+
+    private val _pendingRemoval = mutableStateMapOf<String, Boolean>()
+    val pendingRemoval: Map<String, Boolean> = _pendingRemoval
 
     init {
         // Sync with preferences
@@ -145,6 +150,7 @@ internal class LibraryViewModel @Inject constructor(
 
     fun clearSelection() {
         _selectedBooks.clear()
+        _pendingRemoval.clear()
     }
 
     fun fixSelectedBooks() {
@@ -222,11 +228,16 @@ internal class LibraryViewModel @Inject constructor(
     }
 
     fun deleteSelectedBooks() {
+        val toDelete = _selectedBooks.keys.toList()
+        if (toDelete.isEmpty()) return
+        _selectedBooks.clear()
+        _uiState.update { it.copy(isSelectionMode = false) }
+        toDelete.forEach { _pendingRemoval[it] = true }
         viewModelScope.launch {
-            val toDelete = _selectedBooks.keys.toList()
-            _selectedBooks.clear()
-            _uiState.update { it.copy(isSelectionMode = false) }
+            delay(300)
+            toDelete.forEach { _pendingRemoval.remove(it) }
             appRepository.libraryBooks.setNotInLibrary(toDelete)
+            Coil.imageLoader(context).memoryCache?.clear()
         }
     }
 
@@ -262,11 +273,15 @@ internal class LibraryViewModel @Inject constructor(
     }
 
     fun deleteBook(bookUrl: String) {
+        _pendingRemoval[bookUrl] = true
+        if (_uiState.value.bookActionsSheetBook?.url == bookUrl) {
+            _uiState.update { it.copy(bookActionsSheetBook = null) }
+        }
         viewModelScope.launch {
+            delay(300)
+            _pendingRemoval.remove(bookUrl)
             appRepository.libraryBooks.setNotInLibrary(bookUrl)
-            if (_uiState.value.bookActionsSheetBook?.url == bookUrl) {
-                _uiState.update { it.copy(bookActionsSheetBook = null) }
-            }
+            Coil.imageLoader(context).memoryCache?.clear()
         }
     }
 

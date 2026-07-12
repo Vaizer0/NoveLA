@@ -146,7 +146,7 @@ class LibraryBooksRepository @Inject constructor(
         bookTitle: String
     ): Boolean = appDatabase.transaction {
         val currentTime = System.currentTimeMillis()
-        when (val book = getByUrl(bookUrl)) {
+        when (val existing = getByUrl(bookUrl)) {
             null -> {
                 insert(
                     Book(
@@ -160,15 +160,8 @@ class LibraryBooksRepository @Inject constructor(
                 true
             }
             else -> {
-                val newInLibrary = !book.inLibrary
-                update(
-                    book.copy(
-                        inLibrary = newInLibrary,
-                        addedToLibraryEpochTimeMilli = if (newInLibrary) currentTime else book.addedToLibraryEpochTimeMilli,
-                        lastUpdateEpochTimeMilli = currentTime
-                    )
-                )
-                newInLibrary
+                libraryDao.toggleInLibrary(existing.url, currentTime)
+                !existing.inLibrary
             }
         }
     }

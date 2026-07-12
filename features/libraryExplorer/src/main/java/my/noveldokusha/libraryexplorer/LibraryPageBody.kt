@@ -1,5 +1,9 @@
 package my.noveldokusha.libraryexplorer
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -45,6 +50,7 @@ internal fun LibraryPageBody(
     gridColumns: Int = 3,
     selectedBooks: Map<String, Boolean> = emptyMap(),
     isSelectionMode: Boolean = false,
+    pendingRemoval: Set<String> = emptySet(),
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     LazyVerticalGrid(
@@ -58,6 +64,11 @@ internal fun LibraryPageBody(
             contentType = { "book" }
         ) {
             val isSelected = selectedBooks[it.book.url] ?: false
+            val isRemoving = it.book.url in pendingRemoval
+            AnimatedVisibility(
+                visible = !isRemoving,
+                exit = fadeOut(animationSpec = tween(300)) + scaleOut(animationSpec = tween(300))
+            ) {
             Box {
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 BookImageButtonView(
@@ -126,6 +137,9 @@ internal fun LibraryPageBody(
                     }
                 }
             }
+            }
         }
     }
 }
+
+

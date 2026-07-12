@@ -293,6 +293,7 @@ fun LibraryScreen(
                 gridColumns = gridColumns,
                 selectedBooks = libraryModel.selectedBooks,
                 isSelectionMode = uiState.isSelectionMode,
+                pendingRemoval = libraryModel.pendingRemoval.keys.toSet(),
                 showCategories = uiState.showCategories,
                 customCategories = uiState.customCategories,
                 onCreateCategory = { showCreateCategoryDialog = true },
