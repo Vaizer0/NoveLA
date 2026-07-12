@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.BaseViewModel
@@ -130,7 +129,7 @@ internal class SourceCatalogViewModel @Inject constructor(
         if (now - lastBookmarkClickMs < 300L) return
         lastBookmarkClickMs = now
         bookmarkJob?.cancel()
-        bookmarkJob = viewModelScope.launch(Dispatchers.IO) {
+        bookmarkJob = viewModelScope.launch {
             val isInLibrary =
                 appRepository.toggleBookmark(bookUrl = book.url, bookTitle = book.title)
             val res = if (isInLibrary) R.string.added_to_library else R.string.removed_from_library

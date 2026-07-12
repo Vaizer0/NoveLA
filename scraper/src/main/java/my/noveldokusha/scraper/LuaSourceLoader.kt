@@ -7,7 +7,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.coroutineScope
@@ -693,7 +692,7 @@ class LuaEngine @Inject constructor(
     private inner class SleepFunction : OneArgFunction() {
         override fun call(arg: LuaValue): LuaValue {
             val ms = arg.optlong(500)
-            runBlocking { delay(ms) }
+            Thread.sleep(ms)
             return LuaValue.NIL
         }
     }

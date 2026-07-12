@@ -45,7 +45,7 @@ private fun newByteArray(src: ByteArray): ByteArray = src
 // ── Main parser ─────────────────────────────────────────────────────────────
 
 @Throws(Exception::class)
-suspend fun fb2Parser(inputStream: InputStream): EpubBook = withContext(Dispatchers.Default) {
+suspend fun fb2Parser(inputStream: InputStream): EpubBook = withContext(Dispatchers.IO) {
     val rawData = readFb2Data(inputStream)
     val doc = parseFb2(rawData)
     val root = doc.documentElement ?: throw Exception("FB2: root element missing")
@@ -146,7 +146,7 @@ suspend fun fb2Parser(inputStream: InputStream): EpubBook = withContext(Dispatch
 
 // ── Cover-only parser ───────────────────────────────────────────────────────
 
-suspend fun fb2CoverParser(inputStream: InputStream): EpubBook.Image? = withContext(Dispatchers.Default) {
+suspend fun fb2CoverParser(inputStream: InputStream): EpubBook.Image? = withContext(Dispatchers.IO) {
     val rawData = readFb2Data(inputStream)
     val doc = parseFb2(rawData)
     val root = doc.documentElement ?: return@withContext null

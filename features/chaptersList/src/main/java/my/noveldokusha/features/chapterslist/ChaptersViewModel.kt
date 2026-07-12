@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -462,14 +461,14 @@ internal class ChaptersViewModel @Inject constructor(
 
     fun setAsUnreadSelected() {
         val list = state.selectedChaptersUrl.toList()
-        appScope.launch(Dispatchers.Default) {
+        appScope.launch {
             appRepository.bookChapters.setAsUnread(list.map { it.first })
         }
     }
 
     fun setAsReadSelected() {
         val list = state.selectedChaptersUrl.toList()
-        appScope.launch(Dispatchers.Default) {
+        appScope.launch {
             appRepository.bookChapters.setAsRead(list.map { it.first })
         }
     }
@@ -482,7 +481,7 @@ internal class ChaptersViewModel @Inject constructor(
 
         if (selectedIndex != -1) {
             val chaptersToMarkAsRead = state.chapters.take(selectedIndex + 1).map { it.chapter.url }
-            appScope.launch(Dispatchers.Default) {
+            appScope.launch {
                 appRepository.bookChapters.setAsRead(chaptersToMarkAsRead)
             }
         }
@@ -496,7 +495,7 @@ internal class ChaptersViewModel @Inject constructor(
 
         if (selectedIndex != -1) {
             val chaptersToMarkAsUnread = state.chapters.take(selectedIndex + 1).map { it.chapter.url }
-            appScope.launch(Dispatchers.Default) {
+            appScope.launch {
                 appRepository.bookChapters.setAsUnread(chaptersToMarkAsUnread)
             }
         }
@@ -548,13 +547,13 @@ internal class ChaptersViewModel @Inject constructor(
     fun deleteDownloadsSelected() {
         if (state.isLocalSource.value) return
         val list = state.selectedChaptersUrl.toList()
-        appScope.launch(Dispatchers.Default) {
+        appScope.launch {
             appRepository.chapterBody.removeRows(list.map { it.first })
         }
     }
 
     fun deleteTranslationsForBook() {
-        appScope.launch(Dispatchers.Default) {
+        appScope.launch {
             chapterTranslationDao.deleteTranslationsByBookUrls(listOf(bookUrl))
         }
     }

@@ -32,7 +32,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookCoverImageUrl(
         bookUrl: String,
-    ): Response<String?> = withContext(Dispatchers.Default) {
+    ): Response<String?> = withContext(Dispatchers.IO) {
         val error by lazy {
             """
 			Incompatible source.
@@ -52,7 +52,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookTitle(
         bookUrl: String,
-    ): Response<String?> = withContext(Dispatchers.Default) {
+    ): Response<String?> = withContext(Dispatchers.IO) {
         val error by lazy {
             """
 			Incompatible source.
@@ -95,7 +95,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookGenres(
         bookUrl: String,
-    ): Response<List<String>> = withContext(Dispatchers.Default) {
+    ): Response<List<String>> = withContext(Dispatchers.IO) {
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
             ?: return@withContext Response.Success(emptyList())
 
@@ -106,7 +106,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookDescription(
         bookUrl: String,
-    ): Response<String?> = withContext(Dispatchers.Default) {
+    ): Response<String?> = withContext(Dispatchers.IO) {
         val error by lazy {
             """
 			Incompatible source.
@@ -231,7 +231,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookChaptersList(
         bookUrl: String,
-    ): Response<List<Chapter>> = withContext(Dispatchers.Default) {
+    ): Response<List<Chapter>> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         chaptersListCache[bookUrl]?.let { cached ->
             if (now - cached.timestamp < chaptersListCacheTtlMs) {
@@ -326,7 +326,7 @@ class DownloaderRepository @Inject constructor(
     suspend fun bookChaptersPage(
         bookUrl: String,
         page: Int,
-    ): Response<SourceInterface.Catalog.PagedChapterResult>? = withContext(Dispatchers.Default) {
+    ): Response<SourceInterface.Catalog.PagedChapterResult>? = withContext(Dispatchers.IO) {
         val scrap = scraper.getCompatibleSourceCatalog(bookUrl)
         if (scrap == null) {
             Timber.d("bookChaptersPage: no source for $bookUrl, page=$page")
@@ -351,7 +351,7 @@ class DownloaderRepository @Inject constructor(
 
     suspend fun bookChaptersListHash(
         bookUrl: String,
-    ): Response<String?> = withContext(Dispatchers.Default) {
+    ): Response<String?> = withContext(Dispatchers.IO) {
         val error by lazy {
             """
 			Incompatible source.

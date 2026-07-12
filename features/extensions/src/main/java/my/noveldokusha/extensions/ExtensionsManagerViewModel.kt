@@ -3,7 +3,6 @@ package my.noveldokusha.extensions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,7 +56,7 @@ class ExtensionsManagerViewModel @Inject constructor(
         }
 
         // Загружаем кеш и (при необходимости) актуальные данные из сети — на фоновом потоке
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             loadCachedExtensions()        // выставляет cachedAvailableExtensions + lastFetchTime
             loadAllAvailableExtensions()
         }
@@ -87,7 +86,7 @@ class ExtensionsManagerViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 val repoUrl  = _state.value.repositoryUrl

@@ -210,7 +210,7 @@ internal class ReaderSession(
         scope.launch {
             val book = async(Dispatchers.IO) { appRepository.libraryBooks.get(bookUrl) }
             val chapter = async(Dispatchers.IO) { appRepository.bookChapters.get(chapterUrl) }
-            val chaptersList = async(Dispatchers.Default) {
+            val chaptersList = async(Dispatchers.IO) {
                 orderedChapters.also { it.addAll(appRepository.bookChapters.chapters(bookUrl)) }
             }
             val chapterIndex = async(Dispatchers.Default) {
