@@ -81,11 +81,11 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
     override fun newImageLoader(): ImageLoader {
         val diskCache = coil.disk.DiskCache.Builder()
             .directory(cacheDir.resolve("image_cache"))
-            .maxSizeBytes(900L * 1024 * 1024) // 900 MB
+            .maxSizeBytes(100 * 1024 * 1024) // 100 MB
             .build()
 
         val memoryCache = coil.memory.MemoryCache.Builder(this)
-            .maxSizeBytes(128 * 1024 * 1024) // 128 MB
+            .maxSizeBytes(64 * 1024 * 1024) // 64 MB
             .build()
 
         return when (val networkClient = networkClient) {

@@ -29,6 +29,7 @@ object BookTextMapper {
             }
 
             private fun fromXMLStringV1(text: String): ImgEntry? {
+                if (!text.contains("<img", ignoreCase = true)) return null
                 return Jsoup.parse(text).selectFirst("img")?.let {
                     ImgEntry(
                         path = it.attr("src").takeIf { it.isNotBlank() } ?: return null,

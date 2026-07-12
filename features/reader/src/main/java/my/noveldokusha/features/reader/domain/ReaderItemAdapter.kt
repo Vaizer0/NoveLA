@@ -205,7 +205,7 @@ internal class ReaderItemAdapter(
             bind.image.load(imageModel) {
                 crossfade(true)
                 scale(coil.size.Scale.FIT)
-                size(384)
+                size(1024)
                 error(R.drawable.ic_baseline_error_outline_24)
             }
         }
