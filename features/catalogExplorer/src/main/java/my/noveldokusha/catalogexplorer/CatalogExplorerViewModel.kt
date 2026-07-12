@@ -23,6 +23,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.data.CatalogItem
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
+import timber.log.Timber
 import javax.inject.Inject
 
 @Immutable
@@ -168,7 +169,7 @@ internal class CatalogExplorerViewModel @Inject constructor(
                                 }
                             } catch (e: Exception) {
                                 // Silently fail for additional data loading
-                                e.printStackTrace()
+                                Timber.e(e)
                             }
                         }
 

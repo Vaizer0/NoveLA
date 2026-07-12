@@ -62,16 +62,11 @@ android {
 
     buildTypes {
 
-        signingConfigs.asMap["default"]?.let {
-            all {
-                signingConfig = it
-            }
-        }
-
         named("debug") {
         }
 
         named("release") {
+            signingConfigs.asMap["default"]?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -185,8 +180,6 @@ dependencies {
     // Networking
     implementation(libs.okhttp)
     implementation(libs.okhttp.interceptor.brotli)
-    implementation(libs.okhttp.interceptor.logging)
-
     // Logging
     implementation(libs.timber)
 

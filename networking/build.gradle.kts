@@ -14,7 +14,7 @@ dependencies {
     // Networking
     implementation(libs.okhttp)
     implementation(libs.okhttp.interceptor.brotli)
-    implementation(libs.okhttp.interceptor.logging)
+    debugImplementation(libs.okhttp.interceptor.logging)
 
     // Logging
     implementation(libs.timber)

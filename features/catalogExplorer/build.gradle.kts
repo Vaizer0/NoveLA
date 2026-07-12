@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.timber)
     implementation(projects.core)
     implementation(projects.coreui)
     implementation(projects.strings)

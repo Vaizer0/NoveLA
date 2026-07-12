@@ -27,6 +27,7 @@ import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.File
+import my.noveldokusha.settings.BuildConfig
 import my.noveldokusha.debug.MemoryDiagnostics
 import timber.log.Timber
 import javax.inject.Inject
@@ -162,7 +163,7 @@ internal class SettingsViewModel @Inject constructor(
 
         } catch (e: Exception) {
             toasty.show(R.string.database_clean_failed)
-            e.printStackTrace()
+            Timber.e(e)
         } finally {
             isCleaningDatabase.value = false
         }
@@ -218,7 +219,7 @@ internal class SettingsViewModel @Inject constructor(
                     folder.deleteRecursively()
                     deletedCount++
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Timber.e(e)
                 }
             }
 
@@ -238,7 +239,7 @@ internal class SettingsViewModel @Inject constructor(
 
         } catch (e: Exception) {
             toasty.show(R.string.images_folder_clean_failed)
-            e.printStackTrace()
+            Timber.e(e)
         } finally {
             isCleaningImages.value = false
         }
@@ -370,15 +371,17 @@ internal class SettingsViewModel @Inject constructor(
             toasty.show(R.string.chapter_cache_cleaned)
         } catch (e: Exception) {
             toasty.show(R.string.chapter_cache_clean_failed)
-            e.printStackTrace()
+            Timber.e(e)
         } finally {
             isCleaningChapterCache.value = false
         }
     }
 
     fun dumpDebugInfo() = appScope.launch(Dispatchers.IO) {
-        MemoryDiagnostics.logMemoryStats("SettingsViewModel")
-        toasty.show("Memory stats logged to logcat")
+        if (BuildConfig.DEBUG) {
+            MemoryDiagnostics.logMemoryStats("SettingsViewModel")
+            toasty.show("Memory stats logged to logcat")
+        }
     }
 
     fun confirmCleanAction() {
