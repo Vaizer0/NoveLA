@@ -40,6 +40,8 @@ import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.core.utils.normalizeBookUrl
+import my.noveldokusha.chapterslist.BuildConfig
+import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
 import timber.log.Timber
 import javax.inject.Inject
@@ -364,6 +366,7 @@ internal class ChaptersViewModel @Inject constructor(
             }
 
             appRepository.libraryBooks.updateLastUpdateEpochTimeMilli(bookUrl = url)
+            if (BuildConfig.DEBUG) MemoryDiagnostics.logMemoryStats("ChaptersList:updateChaptersList")
             state.isRefreshing.value = false
         }
     }
@@ -381,7 +384,7 @@ internal class ChaptersViewModel @Inject constructor(
             return
         }
 
-        val existingUrls = appRepository.bookChapters.chapters(bookUrl).map { it.url }.toSet()
+        val existingUrls = appRepository.bookChapters.getChapterUrls(bookUrl).toSet()
         var positionOffset = existingUrls.size
         val chaptersToAdd = mutableListOf<Chapter>()
 
@@ -419,6 +422,8 @@ internal class ChaptersViewModel @Inject constructor(
         if (newTotalPages != lastKnownPage) {
             appRepository.libraryBooks.updateChaptersLastPage(bookUrl, newTotalPages)
         }
+
+        if (BuildConfig.DEBUG) MemoryDiagnostics.logMemoryStats("ChaptersList:updateChaptersIncremental")
     }
 
     /**
@@ -435,6 +440,7 @@ internal class ChaptersViewModel @Inject constructor(
                 if (totalPages != null) {
                     appRepository.libraryBooks.updateChaptersLastPage(bookUrl, totalPages)
                 }
+                if (BuildConfig.DEBUG) MemoryDiagnostics.logMemoryStats("ChaptersList:updateChaptersFull")
             }.onError {
                 state.error.value = it.message
             }

@@ -95,13 +95,15 @@ interface ChapterDao {
 
     @Query(
         """
-        SELECT Chapter.*, ChapterBody.url IS NOT NULL AS downloaded , Book.lastReadChapter IS NOT NULL AS lastReadChapter
+        SELECT Chapter.*, 0 AS downloaded, Book.lastReadChapter IS NOT NULL AS lastReadChapter
         FROM Chapter
-        LEFT JOIN ChapterBody ON ChapterBody.url = Chapter.url
         LEFT JOIN Book ON Book.url = :bookUrl AND Book.lastReadChapter == Chapter.url
         WHERE Chapter.bookUrl == :bookUrl
         ORDER BY position ASC
     """
     )
     fun getChaptersWithContextFlow(bookUrl: String): Flow<List<ChapterWithContext>>
+
+    @Query("SELECT url FROM Chapter WHERE bookUrl == :bookUrl ORDER BY position ASC")
+    suspend fun getChapterUrls(bookUrl: String): List<String>
 }

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.tables.ChapterBody
 
 @Dao
@@ -48,4 +49,11 @@ interface ChapterBodyDao {
 
     @Query("DELETE FROM ChapterBody")
     suspend fun deleteAll(): Int
+
+    @Query("""
+        SELECT ChapterBody.url FROM ChapterBody
+        INNER JOIN Chapter ON Chapter.url = ChapterBody.url
+        WHERE Chapter.bookUrl = :bookUrl
+    """)
+    fun getDownloadedUrlsFlow(bookUrl: String): Flow<List<String>>
 }

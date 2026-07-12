@@ -46,6 +46,7 @@ class BookChaptersRepository @Inject constructor(
 
     suspend fun removeAllFromBook(bookUrl: String) = chapterDao.removeAllFromBook(bookUrl)
     suspend fun chapters(bookUrl: String) = chapterDao.chapters(bookUrl)
+    suspend fun getChapterUrls(bookUrl: String) = chapterDao.getChapterUrls(bookUrl)
     suspend fun getFirstChapter(bookUrl: String) = chapterDao.getFirstChapter(bookUrl)
     fun getChaptersWithContextFlow(bookUrl: String) =
         chapterDao.getChaptersWithContextFlow(bookUrl)
