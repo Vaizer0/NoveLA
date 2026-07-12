@@ -18,7 +18,7 @@ internal suspend fun textToItemsConverter(
 ): List<ReaderItem> = withContext(Dispatchers.Default) {
 
     val cleanText = text
-        .replace(Regex("<(?!(imgEntry|/imgEntry))[^>]*>"), "")
+        .replace(Regex("<(?!(img|/img))[^>]*>"), "")
         .replace("\r\n", "\n")
         .replace("\u00A0", " ")
         .replace(Regex("[ ]+"), " ")
@@ -75,7 +75,7 @@ private fun processTextIntoLogicalBlocks(text: String): List<String> {
 }
 
 private fun splitParagraphRespectingLogicalBlocks(paragraph: String): List<String> {
-    if (paragraph.length <= 800 || paragraph.contains("imgEntry")) {
+    if (paragraph.length <= 800 || paragraph.contains("<img")) {
         return listOf(paragraph)
     }
 

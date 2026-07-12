@@ -898,7 +898,7 @@ class DownloadManager @Inject constructor(
 
         return try {
             val paragraphs = body
-                .replace(Regex("<(?!(imgEntry|/imgEntry))[^>]*>"), "")
+                .replace(Regex("<(?!(img|/img))[^>]*>"), "")
                 .replace("\r\n", "\n")
                 .replace("\u00A0", " ")
                 .replace(Regex("[ ]+"), " ")

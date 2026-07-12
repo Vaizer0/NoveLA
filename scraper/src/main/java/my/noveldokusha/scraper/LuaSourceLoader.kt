@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
@@ -169,14 +170,18 @@ class LuaEngine @Inject constructor(
             val config        = if (a2.istable()) a2.checktable() else LuaTable()
             val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
             val charset       = config.get("charset").optjstring("UTF-8")
-            // Дефолтные заголовки: плагин переопределяет только то что ему нужно
             val headers       = defaultHeaders(url) + pluginHeaders
             try {
-                networkClient.getWithHeaders(url, headers).use { r ->
-                    val bytes = r.body.bytes()
-                    val body  = String(bytes, java.nio.charset.Charset.forName(charset))
-                    responseTable(r.isSuccessful, body, r.code)
+                withContext(Dispatchers.IO) {
+                    networkClient.getWithHeaders(url, headers).use { r ->
+                        val bytes = r.body.bytes()
+                        val body  = String(bytes, java.nio.charset.Charset.forName(charset))
+                        responseTable(r.isSuccessful, body, r.code)
+                    }
                 }
+            } catch (e: CancellationException) {
+                Timber.e(e, "http_get cancelled: $url")
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "http_get failed: $url")
                 errorTable(e)
@@ -197,16 +202,20 @@ class LuaEngine @Inject constructor(
             val config        = if (a3.istable()) a3.checktable() else LuaTable()
             val pluginHeaders = convertHeaders(config.get("headers").opttable(LuaTable()))
             val charset       = config.get("charset").optjstring("UTF-8")
-            // Дефолтные заголовки: плагин переопределяет только то что ему нужно
             val headers       = defaultHeaders(url) + pluginHeaders
             try {
-                val mediaType = (headers["Content-Type"] ?: detectContentType(bodyStr)).toMediaType()
-                val body = bodyStr.toRequestBody(mediaType)
-                networkClient.call(postRequest(url, body = body, headers = headers.toHeaders())).use { r ->
-                    val bytes = r.body.bytes()
-                    val s     = String(bytes, java.nio.charset.Charset.forName(charset))
-                    responseTable(r.isSuccessful, s, r.code)
+                withContext(Dispatchers.IO) {
+                    val mediaType = (headers["Content-Type"] ?: detectContentType(bodyStr)).toMediaType()
+                    val body = bodyStr.toRequestBody(mediaType)
+                    networkClient.call(postRequest(url, body = body, headers = headers.toHeaders())).use { r ->
+                        val bytes = r.body.bytes()
+                        val s     = String(bytes, java.nio.charset.Charset.forName(charset))
+                        responseTable(r.isSuccessful, s, r.code)
+                    }
                 }
+            } catch (e: CancellationException) {
+                Timber.e(e, "http_post cancelled: $url")
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "http_post failed: $url")
                 errorTable(e)
@@ -321,6 +330,8 @@ class LuaEngine @Inject constructor(
                                 val body = r.body.string()
                                 Triple(r.isSuccessful, body, r.code)
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             Timber.e(e, "http_get_batch failed: $url")
                             Triple(false, "", 0)

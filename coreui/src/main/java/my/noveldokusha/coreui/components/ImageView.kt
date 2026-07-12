@@ -61,6 +61,7 @@ fun ImageView(
                     .Builder(context)
                     .data(model)
                     .crossfade(fadeInDurationMillis)
+                    .size(384)
                     .precision(Precision.INEXACT)
                     .apply {
                         if (forceCache) {
@@ -80,6 +81,8 @@ fun ImageView(
                     .Builder(context)
                     .data(error)
                     .crossfade(fadeInDurationMillis)
+                    .size(384)
+                    .precision(Precision.INEXACT)
                     .build()
             }
         }

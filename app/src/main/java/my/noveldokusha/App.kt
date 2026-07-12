@@ -7,7 +7,6 @@ import android.util.Log
 import androidx.work.Configuration as WorkConfiguration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import coil.decode.BitmapFactoryDecoder
 import dagger.hilt.EntryPoints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,8 +91,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         return when (val networkClient = networkClient) {
             is ScraperNetworkClient -> ImageLoader
                 .Builder(this)
-                .components { add(BitmapFactoryDecoder.Factory()) }
-                .dispatcher(Dispatchers.IO.limitedParallelism(8))
+                .dispatcher(Dispatchers.IO.limitedParallelism(4))
                 .memoryCache(memoryCache)
                 .okHttpClient(networkClient.client)
                 .diskCache(diskCache)
@@ -104,8 +102,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
 
             else -> ImageLoader
                 .Builder(this)
-                .components { add(BitmapFactoryDecoder.Factory()) }
-                .dispatcher(Dispatchers.IO.limitedParallelism(8))
+                .dispatcher(Dispatchers.IO.limitedParallelism(4))
                 .memoryCache(memoryCache)
                 .diskCache(diskCache)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)

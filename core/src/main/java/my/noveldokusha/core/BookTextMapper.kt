@@ -31,8 +31,8 @@ object BookTextMapper {
             private fun fromXMLStringV1(text: String): ImgEntry? {
                 return Jsoup.parse(text).selectFirst("img")?.let {
                     ImgEntry(
-                        path = it.attr("src") ?: return null,
-                        yrel = it.attr("yrel").toFloatOrNull() ?: return null
+                        path = it.attr("src").takeIf { it.isNotBlank() } ?: return null,
+                        yrel = it.attr("yrel").toFloatOrNull()?.takeIf { it > 0f } ?: return null
                     )
                 }
             }
@@ -46,8 +46,8 @@ object BookTextMapper {
                     return null
                 return parseXMLText(text)?.selectFirstTag("img")?.let {
                     ImgEntry(
-                        path = it.textContent ?: return null,
-                        yrel = it.getAttributeValue("yrel")?.toFloatOrNull() ?: return null
+                        path = it.textContent?.takeIf { v -> v.isNotBlank() } ?: return null,
+                        yrel = it.getAttributeValue("yrel")?.toFloatOrNull()?.takeIf { it > 0f } ?: return null
                     )
                 }
             }
