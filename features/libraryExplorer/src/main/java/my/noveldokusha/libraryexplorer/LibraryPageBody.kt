@@ -43,7 +43,7 @@ internal fun LibraryPageBody(
     getSourceName: (String) -> String,
     // Количество колонок: от 2 до 6, дефолт 3
     gridColumns: Int = 3,
-    selectedBooks: Set<String> = emptySet(),
+    selectedBooks: Map<String, Boolean> = emptyMap(),
     isSelectionMode: Boolean = false,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
@@ -57,7 +57,7 @@ internal fun LibraryPageBody(
             key = { it.book.url },
             contentType = { "book" }
         ) {
-            val isSelected = selectedBooks.contains(it.book.url)
+            val isSelected = selectedBooks[it.book.url] ?: false
             Box {
                 val notReadCount = it.chaptersCount - it.chaptersReadCount
                 BookImageButtonView(

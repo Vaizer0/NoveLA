@@ -123,6 +123,24 @@ class LibraryBooksRepository @Inject constructor(
         }
     }
 
+    suspend fun setNotInLibrary(bookUrl: String) = withContext(Dispatchers.IO) {
+        libraryDao.setNotInLibrary(bookUrl)
+    }
+
+    suspend fun setNotInLibrary(bookUrls: List<String>) = withContext(Dispatchers.IO) {
+        bookUrls.chunked(500).forEach { chunk -> libraryDao.setNotInLibrary(chunk) }
+    }
+
+    suspend fun batchUpdateCategoryAndCompleted(
+        bookUrls: List<String>,
+        category: String,
+        isCompleted: Boolean
+    ) = withContext(Dispatchers.IO) {
+        bookUrls.chunked(500).forEach { chunk ->
+            libraryDao.updateCategoryAndCompleted(chunk, category, isCompleted)
+        }
+    }
+
     suspend fun toggleBookmark(
         bookUrl: String,
         bookTitle: String

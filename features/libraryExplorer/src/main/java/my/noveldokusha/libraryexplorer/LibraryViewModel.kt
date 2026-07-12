@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
@@ -45,7 +46,6 @@ internal data class LibraryUiState(
     val bookActionsSheetBook: Book? = null,
     val showAddByUrlDialog: Boolean = false,
     val isSelectionMode: Boolean = false,
-    val selectedBooks: Set<String> = emptySet(),
     val isFixingBooks: Boolean = false,
     val fixProgress: Int = 0,
     val fixTotal: Int = 0,
@@ -72,6 +72,9 @@ internal class LibraryViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
+
+    private val _selectedBooks = mutableStateMapOf<String, Boolean>()
+    val selectedBooks: Map<String, Boolean> = _selectedBooks
 
     init {
         // Sync with preferences
@@ -122,38 +125,35 @@ internal class LibraryViewModel @Inject constructor(
     fun toggleSelectionMode() {
         _uiState.update {
             val nextMode = !it.isSelectionMode
-            it.copy(
-                isSelectionMode = nextMode,
-                selectedBooks = if (!nextMode) emptySet() else it.selectedBooks
-            )
+            if (!nextMode) _selectedBooks.clear()
+            it.copy(isSelectionMode = nextMode)
         }
     }
 
     fun toggleBookSelection(bookUrl: String) {
-        _uiState.update {
-            val nextSelected = if (it.selectedBooks.contains(bookUrl)) {
-                it.selectedBooks - bookUrl
-            } else {
-                it.selectedBooks + bookUrl
-            }
-            it.copy(selectedBooks = nextSelected)
+        if (_selectedBooks.containsKey(bookUrl)) {
+            _selectedBooks.remove(bookUrl)
+        } else {
+            _selectedBooks[bookUrl] = true
         }
     }
 
     fun selectAllBooks(books: List<BookWithContext>) {
-        _uiState.update { it.copy(selectedBooks = books.map { b -> b.book.url }.toSet()) }
+        _selectedBooks.clear()
+        books.forEach { _selectedBooks[it.book.url] = true }
     }
 
     fun clearSelection() {
-        _uiState.update { it.copy(selectedBooks = emptySet()) }
+        _selectedBooks.clear()
     }
 
     fun fixSelectedBooks() {
         val channelId = "FixBooks"
         val notificationId = channelId.hashCode()
         viewModelScope.launch {
-            val selectedUrls = _uiState.value.selectedBooks.toList()
-            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
+            val selectedUrls = _selectedBooks.keys.toList()
+            _selectedBooks.clear()
+            _uiState.update { it.copy(isSelectionMode = false) }
 
             val books = selectedUrls.mapNotNull { appRepository.libraryBooks.get(it) }
                 .filter { !it.url.isLocalUri }
@@ -223,12 +223,10 @@ internal class LibraryViewModel @Inject constructor(
 
     fun deleteSelectedBooks() {
         viewModelScope.launch {
-            val toDelete = _uiState.value.selectedBooks.toList()
-            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
-            toDelete.forEach { bookUrl ->
-                val book = appRepository.libraryBooks.get(bookUrl) ?: return@forEach
-                appRepository.libraryBooks.update(book.copy(inLibrary = false))
-            }
+            val toDelete = _selectedBooks.keys.toList()
+            _selectedBooks.clear()
+            _uiState.update { it.copy(isSelectionMode = false) }
+            appRepository.libraryBooks.setNotInLibrary(toDelete)
         }
     }
 
@@ -265,8 +263,7 @@ internal class LibraryViewModel @Inject constructor(
 
     fun deleteBook(bookUrl: String) {
         viewModelScope.launch {
-            val book = appRepository.libraryBooks.get(bookUrl) ?: return@launch
-            appRepository.libraryBooks.update(book.copy(inLibrary = false))
+            appRepository.libraryBooks.setNotInLibrary(bookUrl)
             if (_uiState.value.bookActionsSheetBook?.url == bookUrl) {
                 _uiState.update { it.copy(bookActionsSheetBook = null) }
             }
@@ -309,15 +306,15 @@ internal class LibraryViewModel @Inject constructor(
         appPreferences.LIBRARY_CUSTOM_CATEGORIES.value = current - name
     }
 
-    fun moveBooksToCategory(bookUrls: Set<String>, category: String) {
+    fun moveBooksToCategory(category: String) {
         viewModelScope.launch {
-            bookUrls.forEach { bookUrl ->
-                val book = appRepository.libraryBooks.get(bookUrl) ?: return@forEach
-                appRepository.libraryBooks.updateCategoryAndCompleted(
-                    bookUrl, category, category == "Completed"
-                )
-            }
-            _uiState.update { it.copy(selectedBooks = emptySet(), isSelectionMode = false) }
+            val toMove = _selectedBooks.keys.toList()
+            if (toMove.isEmpty()) return@launch
+            appRepository.libraryBooks.batchUpdateCategoryAndCompleted(
+                toMove, category, category == "Completed"
+            )
+            _selectedBooks.clear()
+            _uiState.update { it.copy(isSelectionMode = false) }
         }
     }
 

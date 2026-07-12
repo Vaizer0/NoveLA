@@ -107,6 +107,15 @@ interface LibraryDao {
     @Query("DELETE FROM Book WHERE url IN (:urls)")
     suspend fun removeBooksByUrls(urls: List<String>)
 
+    @Query("UPDATE Book SET inLibrary = 0 WHERE url = :bookUrl")
+    suspend fun setNotInLibrary(bookUrl: String)
+
+    @Query("UPDATE Book SET inLibrary = 0 WHERE url IN (:bookUrls)")
+    suspend fun setNotInLibrary(bookUrls: List<String>)
+
+    @Query("UPDATE Book SET category = :category, completed = :isCompleted WHERE url IN (:bookUrls)")
+    suspend fun updateCategoryAndCompleted(bookUrls: List<String>, category: String, isCompleted: Boolean)
+
     // ─── Жанры (хранятся в поле genres через запятую) ────────────────────────
 
     /** Все уникальные жанры во всей библиотеке — для экрана фильтрации */

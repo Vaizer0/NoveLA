@@ -56,7 +56,7 @@ internal fun LibraryScreenBody(
     onBookClick: (BookWithContext) -> Unit,
     onBookLongClick: (BookWithContext) -> Unit,
     gridColumns: Int = 3,
-    selectedBooks: Set<String> = emptySet(),
+    selectedBooks: Map<String, Boolean> = emptyMap(),
     isSelectionMode: Boolean = false,
     showCategories: Boolean = false,
     customCategories: List<String> = emptyList(),

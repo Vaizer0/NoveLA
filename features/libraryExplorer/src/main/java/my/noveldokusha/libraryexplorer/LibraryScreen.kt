@@ -109,7 +109,7 @@ fun LibraryScreen(
                         ),
                         title = {
                             Text(
-                                text = stringResource(R.string.selected_count, uiState.selectedBooks.size),
+                                text = stringResource(R.string.selected_count, libraryModel.selectedBooks.size),
                                 style = MaterialTheme.typography.headlineSmall
                             )
                         },
@@ -124,43 +124,43 @@ fun LibraryScreen(
                             }
                             IconButton(
                                 onClick = { showMoveToCategoryDialog = true },
-                                enabled = uiState.selectedBooks.isNotEmpty()
+                                enabled = libraryModel.selectedBooks.isNotEmpty()
                             ) {
                                 Icon(
                                     Icons.Filled.DriveFileRenameOutline,
                                     stringResource(R.string.move_to),
-                                    tint = if (uiState.selectedBooks.isNotEmpty())
+                                    tint = if (libraryModel.selectedBooks.isNotEmpty())
                                         MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
                             }
                             IconButton(
                                 onClick = { libraryModel.deleteSelectedBooks() },
-                                enabled = uiState.selectedBooks.isNotEmpty()
+                                enabled = libraryModel.selectedBooks.isNotEmpty()
                             ) {
                                 Icon(
                                     Icons.Filled.Delete,
                                     stringResource(R.string.delete),
-                                    tint = if (uiState.selectedBooks.isNotEmpty())
+                                    tint = if (libraryModel.selectedBooks.isNotEmpty())
                                         MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
                             }
                             IconButton(
                                 onClick = { libraryModel.fixSelectedBooks() },
-                                enabled = uiState.selectedBooks.isNotEmpty()
+                                enabled = libraryModel.selectedBooks.isNotEmpty()
                             ) {
                                 Icon(
                                     Icons.Filled.Build,
                                     stringResource(R.string.book_fix),
-                                    tint = if (uiState.selectedBooks.isNotEmpty())
+                                    tint = if (libraryModel.selectedBooks.isNotEmpty())
                                         MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
                             }
                             IconButton(
                                 onClick = {
-                                    val selectedUrls = uiState.selectedBooks.toList()
+                                    val selectedUrls = libraryModel.selectedBooks.keys.toList()
                                     if (selectedUrls.isNotEmpty()) {
                                         // Launch mass migration with the first selected book's source
                                         val sourceUrl = selectedUrls.firstOrNull()?.let { url ->
@@ -172,12 +172,12 @@ fun LibraryScreen(
                                         ).let(context::startActivity)
                                     }
                                 },
-                                enabled = uiState.selectedBooks.isNotEmpty()
+                                enabled = libraryModel.selectedBooks.isNotEmpty()
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowForward,
                                     stringResource(StringsR.string.migration_tab),
-                                    tint = if (uiState.selectedBooks.isNotEmpty())
+                                    tint = if (libraryModel.selectedBooks.isNotEmpty())
                                         MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
@@ -291,7 +291,7 @@ fun LibraryScreen(
                 onBookClick = handleBookClick,
                 onBookLongClick = handleBookLongClick,
                 gridColumns = gridColumns,
-                selectedBooks = uiState.selectedBooks,
+                selectedBooks = libraryModel.selectedBooks,
                 isSelectionMode = uiState.isSelectionMode,
                 showCategories = uiState.showCategories,
                 customCategories = uiState.customCategories,
@@ -342,7 +342,7 @@ fun LibraryScreen(
             categories = libraryModel.getCategories(),
             onDismiss = { showMoveToCategoryDialog = false },
             onCategorySelected = { category ->
-                libraryModel.moveBooksToCategory(uiState.selectedBooks, category)
+                libraryModel.moveBooksToCategory(category)
                 showMoveToCategoryDialog = false
             }
         )
