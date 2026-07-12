@@ -37,11 +37,9 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MoreVert
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.ToolbarMode
-import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.coreui.components.TopAppBarSearch
 import my.noveldokusha.navigation.NavigationRouteViewModel
 import my.noveldokusha.feature.local_database.BookMetadata
@@ -155,30 +153,6 @@ fun LibraryScreen(
                                     stringResource(R.string.book_fix),
                                     tint = if (libraryModel.selectedBooks.isNotEmpty())
                                         MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    val selectedUrls = libraryModel.selectedBooks.keys.toList()
-                                    if (selectedUrls.isNotEmpty()) {
-                                        // Launch mass migration with the first selected book's source
-                                        val sourceUrl = selectedUrls.firstOrNull()?.let { url ->
-                                            url.substringBeforeLast("/")
-                                        } ?: ""
-                                        navigationRouteViewModel.massMigration(
-                                            context = context,
-                                            sourceBaseUrl = sourceUrl
-                                        ).let(context::startActivity)
-                                    }
-                                },
-                                enabled = libraryModel.selectedBooks.isNotEmpty()
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowForward,
-                                    stringResource(StringsR.string.migration_tab),
-                                    tint = if (libraryModel.selectedBooks.isNotEmpty())
-                                        MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
                             }
