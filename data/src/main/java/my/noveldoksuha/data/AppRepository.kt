@@ -48,17 +48,6 @@ class AppRepository @Inject constructor(
         } else {
             libraryBooks.toggleBookmark(bookUrl = normalizedUrl, bookTitle = bookTitle)
         }
-        // Если книга добавлена в библиотеку — загружаем жанры в фоне
-        if (result && !normalizedUrl.isContentUri) {
-            appCoroutineScope.launch {
-                downloaderRepository.bookGenres(bookUrl = normalizedUrl).onSuccess { genres ->
-                    if (genres.isNotEmpty()) {
-                        val normalized = my.noveldokusha.core.utils.GenreUtils.normalize(genres)
-                        libraryDao.updateGenres(normalizedUrl, normalized)
-                    }
-                }
-            }
-        }
         return result
     }
 

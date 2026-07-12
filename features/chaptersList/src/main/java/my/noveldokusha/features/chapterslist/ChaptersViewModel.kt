@@ -85,6 +85,9 @@ internal class ChaptersViewModel @Inject constructor(
     @Volatile
     private var loadChaptersJob: Job? = null
 
+    private var bookmarkJob: Job? = null
+    private var lastBookmarkClickMs = 0L
+
     @Volatile
     private var lastSelectedChapterUrl: String? = null
     private val source = scraper.getCompatibleSource(bookUrl)
@@ -226,7 +229,11 @@ internal class ChaptersViewModel @Inject constructor(
     }
 
     fun toggleBookmark() {
-        viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        if (now - lastBookmarkClickMs < 300L) return
+        lastBookmarkClickMs = now
+        bookmarkJob?.cancel()
+        bookmarkJob = viewModelScope.launch {
             val isBookmarked =
                 appRepository.toggleBookmark(bookTitle = bookTitle, bookUrl = bookUrl)
             val msg = if (isBookmarked) R.string.added_to_library else R.string.removed_from_library
