@@ -61,8 +61,6 @@ import my.noveldokusha.tooling.application_workers.setup.PeriodicWorkersInitiali
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.coreui.theme.Theme
-import my.noveldokusha.coreui.theme.ThemeProvider
-import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.R
 import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
 import my.noveldokusha.libraryexplorer.LibraryScreen

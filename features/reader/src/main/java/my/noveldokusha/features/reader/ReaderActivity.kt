@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.coreui.BaseActivity
 import my.noveldokusha.coreui.composableActions.SetSystemBarTransparent
 import my.noveldokusha.coreui.theme.Theme
@@ -82,6 +83,9 @@ class ReaderActivity : BaseActivity() {
 
     @Inject
     lateinit var navigationRoutes: NavigationRoutes
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     @Inject
     internal lateinit var readerViewHandlersActions: ReaderViewHandlersActions

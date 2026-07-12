@@ -12,7 +12,7 @@ import androidx.compose.runtime.*
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import my.noveldokusha.coreui.theme.Theme
-import my.noveldokusha.coreui.theme.ThemeProvider
+import my.noveldokusha.coreui.AppThemeProvider
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.interceptors.CloudflareBypassSignal
@@ -24,7 +24,7 @@ import javax.inject.Inject
 class WebViewActivity : ComponentActivity() {
 
     @Inject lateinit var toasty: Toasty
-    @Inject lateinit var themeProvider: ThemeProvider
+    @Inject lateinit var themeProvider: AppThemeProvider
     @Inject lateinit var appPreferences: AppPreferences
 
     private var currentTargetUrl: String = ""

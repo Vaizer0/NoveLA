@@ -12,7 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
@@ -42,7 +42,7 @@ internal class SettingsViewModel @Inject constructor(
     private val appRemoteRepository: AppRemoteRepository,
     private val toasty: Toasty,
     private val appWorkersInteractions: AppWorkersInteractions,
-) : BaseViewModel() {
+) : ViewModel() {
 
     var onRestartApp: (() -> Unit)? = null
 

@@ -15,7 +15,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.states.PagedListIteratorState
 import my.noveldokusha.data.storage.PersistentCacheDatabaseSearchGenresProvider
 import my.noveldokusha.core.PagedList
@@ -59,7 +59,7 @@ class DatabaseSearchViewModel @Inject constructor(
     scraper: Scraper,
     appPreferences: AppPreferences,
     searchGenresProvider: PersistentCacheDatabaseSearchGenresProvider
-) : BaseViewModel(), DatabaseSearchStateBundle {
+) : ViewModel(), DatabaseSearchStateBundle {
 
     override val extras: DatabaseSearchExtras by StateExtra_Parcelable(stateHandle)
     private var firstLoad by stateHandle.asMutableStateOf("firstLoad") { true }

@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.isLocalUri
@@ -45,7 +45,7 @@ internal class LibraryPageViewModel @Inject constructor(
     private val libraryDao: LibraryDao,
     private val scraper: Scraper,
     @ApplicationContext private val context: Context,
-) : BaseViewModel() {
+) : ViewModel() {
     var isLibraryLoaded by mutableStateOf(false)
         private set
 

@@ -12,7 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import my.noveldokusha.core.ExtensionRepositoryInterface
+import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.postRequest
 import my.noveldokusha.scraper.configs.SourceMetadata
@@ -746,7 +746,7 @@ class LuaSourceLoader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val networkClient: NetworkClient,
     private val luaEngine: LuaEngine,
-    private val extensionRepository: ExtensionRepositoryInterface
+    private val extensionRepository: ExtensionManager
 ) {
     private val yaml  = Yaml()
     // ponytail: LRU cache with fixed max size. Evicts least recently used VMs to keep native heap bounded.

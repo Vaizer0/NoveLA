@@ -15,10 +15,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.LanguageCode
 import my.noveldokusha.core.getLanguageDisplayName
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.utils.toState
 import my.noveldokusha.data.CatalogItem
@@ -40,10 +39,9 @@ internal data class CatalogExplorerUiState(
 internal class CatalogExplorerViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val appRepository: AppRepository,
-    private val appScope: AppCoroutineScope,
     val scraperRepository: ScraperRepository,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
-) : BaseViewModel() {
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogExplorerUiState(
         databaseList = scraperRepository.databaseList(),

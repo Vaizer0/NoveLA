@@ -13,7 +13,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.network.interceptors.resolveUserAgent
@@ -33,7 +32,6 @@ import java.util.concurrent.TimeUnit
  * significantly better quality than the plain-text translate.googleapis.com endpoint.
  */
 class TranslationManagerGooglePA(
-    private val coroutineScope: AppCoroutineScope,
     private val appPreferences: AppPreferences,
     private val networkClient: ScraperNetworkClient
 ) : TranslationManager {

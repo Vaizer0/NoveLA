@@ -35,10 +35,6 @@ abstract class AppModule {
     @Singleton
     abstract fun bindExtensionManager(extensionRepository: ExtensionRepository): ExtensionManager
 
-    @Binds
-    @Singleton
-    abstract fun bindExtensionRepositoryInterface(extensionRepository: ExtensionRepository): my.noveldokusha.core.ExtensionRepositoryInterface
-
     companion object {
 
         @Provides

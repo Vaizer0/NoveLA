@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.Response
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.data.EnqueueResult
@@ -68,7 +68,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val chapterTranslationDao: ChapterTranslationDao,
     private val translationManager: TranslationManager,
     stateHandle: SavedStateHandle,
-) : BaseViewModel(), ChapterStateBundle {
+) : ViewModel(), ChapterStateBundle {
 
     override val rawBookUrl by StateExtra_String(stateHandle)
     override val bookTitle by StateExtra_String(stateHandle)

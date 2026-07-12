@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isContentUri
@@ -31,7 +30,6 @@ class AppRepository @Inject constructor(
     private val localBookImporterRepository: LocalBookImporterRepository,
     val downloaderRepository: DownloaderRepository,
     private val libraryDao: LibraryDao,
-    private val appCoroutineScope: AppCoroutineScope,
 ) {
     val settings = Settings()
     val eventDataRestored = MutableSharedFlow<Unit>()

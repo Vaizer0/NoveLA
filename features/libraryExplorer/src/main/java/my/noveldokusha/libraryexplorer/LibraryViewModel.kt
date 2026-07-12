@@ -21,14 +21,13 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.LibrarySortOption
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.appPreferences.SortConfig
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.core.utils.asMutableStateOf
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.coreui.states.text
@@ -63,13 +62,12 @@ internal data class LibraryUiState(
 internal class LibraryViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val appRepository: AppRepository,
-    private val appScope: AppCoroutineScope,
     private val scraperRepository: ScraperRepository,
     @ApplicationContext private val context: Context,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
     private val notificationsCenter: NotificationsCenter,
     stateHandle: SavedStateHandle,
-) : BaseViewModel() {
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()

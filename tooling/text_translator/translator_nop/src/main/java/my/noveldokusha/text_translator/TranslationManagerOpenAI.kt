@@ -7,7 +7,6 @@ import my.noveldokusha.text_translator.DEFAULT_TRANSLATION_PROMPT
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.text_translator.domain.GOOGLE_TRANSLATE_LANGUAGES
@@ -39,7 +38,6 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class TranslationManagerOpenAI(
     private val networkClient: ScraperNetworkClient,
-    private val coroutineScope: AppCoroutineScope,
     private val appPreferences: AppPreferences
 ) : TranslationManager {
 

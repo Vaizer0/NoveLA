@@ -6,7 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import my.noveldokusha.coreui.BaseViewModel
+import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.components.ToolbarMode
 import my.noveldokusha.coreui.states.PagedListIteratorState
 import my.noveldokusha.data.AppRepository
@@ -34,7 +34,7 @@ internal class SourceCatalogViewModel @Inject constructor(
     stateHandle: SavedStateHandle,
     appPreferences: AppPreferences,
     scraper: Scraper,
-) : BaseViewModel(), SourceCatalogStateBundle {
+) : ViewModel(), SourceCatalogStateBundle {
 
     override var sourceBaseUrl by StateExtra_String(stateHandle)
     private val source = scraper.getCompatibleSourceCatalog(sourceBaseUrl)!!

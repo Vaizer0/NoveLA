@@ -245,14 +245,6 @@ class AppPreferences @Inject constructor(
         )
     }
 
-    @Deprecated("Use LIBRARY_SORT_OPTION instead", ReplaceWith("LIBRARY_SORT_OPTION"))
-    val LIBRARY_SORT_LAST_READ = object : Preference<TernaryState>("LIBRARY_SORT_LAST_READ") {
-        override var value by SharedPreference_Enum(
-            name,
-            preferences,
-            TernaryState.Inverse
-        ) { enumValueOf(it) }
-    }
     val BOOKS_LIST_LAYOUT_MODE = object : Preference<ListLayoutMode>("BOOKS_LIST_LAYOUT_MODE") {
         override var value by SharedPreference_Enum(
             name,
@@ -610,21 +602,6 @@ class AppPreferences @Inject constructor(
         )
     }
 
-
-    @Deprecated("Removed", level = DeprecationLevel.HIDDEN)
-    val LOCAL_SOURCES_URI_DIRECTORIES =
-        object : Preference<Set<String>>("LOCAL_SOURCES_URI_DIRECTORIES") {
-            override var value by SharedPreference_StringSet(name, preferences, setOf())
-        }
-
-    @Deprecated("Removed", level = DeprecationLevel.HIDDEN)
-    val LIBRARY_SORT_READ = object : Preference<TernaryState>("LIBRARY_SORT_READ") {
-        override var value by SharedPreference_Enum(
-            name,
-            preferences,
-            TernaryState.Active
-        ) { enumValueOf(it) }
-    }
 
     abstract inner class Preference<T>(val name: String) {
         abstract var value: T

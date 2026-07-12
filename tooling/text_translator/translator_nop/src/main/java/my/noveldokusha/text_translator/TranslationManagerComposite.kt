@@ -4,7 +4,6 @@ import timber.log.Timber
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_translator.domain.TranslationModelState
@@ -25,7 +24,6 @@ import my.noveldokusha.text_translator.domain.TranslatorState
  * regardless of the active provider, to avoid spending Gemini/OpenAI tokens on titles.
  */
 class TranslationManagerComposite(
-    private val coroutineScope: AppCoroutineScope,
     private val geminiManager: TranslationManagerGemini,
     private val googleFreeManager: TranslationManagerGoogleFree,
     private val googlePAManager: TranslationManagerGooglePA,

@@ -172,6 +172,7 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
 noveldokusha-android-application = { id = "noveldokusha.android.application", version = "unspecified" }
 noveldokusha-android-library = { id = "noveldokusha.android.library", version = "unspecified" }
+noveldokusha-android-library-nohilt = { id = "noveldokusha.android.library.nohilt", version = "unspecified" }
 noveldokusha-android-compose = { id = "noveldokusha.android.compose", version = "unspecified" }
 
 [bundles]
