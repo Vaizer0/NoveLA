@@ -40,12 +40,12 @@
     <string name="open_in_browser">เปิดในเบราว์เซอร์</string>
     <string name="sources">แหล่งที่มา</string>
     <string name="search_for_sources">ค้นหาแหล่งที่มา</string>
-    <string name="import_epub">นำเข้า EPUB</string>
+    <string name="import_epub">นำเข้าหนังสือ</string>
     <string name="failed_get_file">ไม่สามารถรับไฟล์ได้</string>
     <string name="local_book_nothing_to_update">หนังสือในเครื่อง ไม่มีอะไรให้อัปเดต</string>
-    <string name="failed_to_import_epub">นำเข้า epub ล้มเหลว</string>
+    <string name="failed_to_import_epub">นำเข้าหนังสือล้มเหลว</string>
     <string name="image">รูปภาพ</string>
-    <string name="importing_epub">กำลังนำเข้า epub</string>
+    <string name="importing_epub">กำลังนำเข้าหนังสือ</string>
     <string name="no_results_found">ไม่พบผลลัพธ์</string>
     <string name="updating_library_notice">กำลังอัปเดตห้องสมุด</string>
     <string name="chapter_downloaded">ดาวน์โหลดบทแล้ว</string>
@@ -304,7 +304,7 @@
     <string name="notification_channel_name_new_chapters">บทใหม่</string>
     <string name="notification_channel_name_failed_updates">อัปเดตล้มเหลว</string>
     <string name="notification_channel_name_backup">สำรองข้อมูล</string>
-    <string name="notification_channel_name_import_epub">นำเข้า EPUB</string>
+    <string name="notification_channel_name_import_epub">นำเข้าหนังสือ</string>
     <string name="notification_channel_name_restore_backup">กู้คืนข้อมูลสำรอง</string>
     <string name="notification_channel_name_app_updates_checker">ตรวจสอบอัปเดต</string>
     <string name="new_app_version_available">มีเวอร์ชันแอปใหม่</string>

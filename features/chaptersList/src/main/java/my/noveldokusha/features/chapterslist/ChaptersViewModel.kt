@@ -22,7 +22,7 @@ import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.data.EnqueueResult
 import my.noveldokusha.data.DownloaderRepository
-import my.noveldokusha.data.EpubImporterRepository
+import my.noveldokusha.data.LocalBookImporterRepository
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
@@ -59,11 +59,11 @@ internal class ChaptersViewModel @Inject constructor(
     scraper: Scraper,
     private val toasty: Toasty,
     private val appPreferences: AppPreferences,
-    appFileResolver: AppFileResolver,
+    private val appFileResolver: AppFileResolver,
     private val downloaderRepository: DownloaderRepository,
     val downloadManager: DownloadManager,
     private val chaptersRepository: ChaptersRepository,
-    private val epubImporterRepository: EpubImporterRepository,
+    private val localBookImporterRepository: LocalBookImporterRepository,
     private val libraryDao: LibraryDao,
     private val chapterTranslationDao: ChapterTranslationDao,
     private val translationManager: TranslationManager,
@@ -174,8 +174,14 @@ internal class ChaptersViewModel @Inject constructor(
                 bookUrl = canonical
             }
 
-            if (rawBookUrl.isContentUri && appRepository.libraryBooks.get(bookUrl) == null) {
-                importUriContent()
+            if (rawBookUrl.isContentUri) {
+                val localUrl = normalizeBookUrl(
+                    appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+                )
+                if (appRepository.libraryBooks.get(localUrl) == null) {
+                    importUriContent()
+                }
+                bookUrl = localUrl
             }
 
             if (state.isLocalSource.value) return@launch
@@ -325,12 +331,17 @@ internal class ChaptersViewModel @Inject constructor(
         loadChaptersJob = appScope.launch {
             state.error.value = ""
             state.isRefreshing.value = true
-            val isInLibrary = appRepository.libraryBooks.existInLibrary(bookUrl)
-            epubImporterRepository.importEpubFromContentUri(
+            val localUrl = normalizeBookUrl(
+                appFileResolver.getLocalIfContentType(rawBookUrl, bookFolderName = bookTitle)
+            )
+            val isInLibrary = appRepository.libraryBooks.existInLibrary(localUrl)
+            localBookImporterRepository.importFromContentUri(
                 contentUri = rawBookUrl,
                 bookTitle = bookTitle,
                 addToLibrary = isInLibrary
-            ).onError {
+            ).onSuccess {
+                bookUrl = localUrl
+            }.onError {
                 state.error.value = it.message
             }
             state.isRefreshing.value = false

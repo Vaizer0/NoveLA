@@ -237,7 +237,7 @@ fun LibraryScreen(
                                                 Icon(Icons.Filled.FileOpen, stringResource(id = R.string.import_epub))
                                             },
                                             text = { Text(stringResource(id = R.string.import_epub)) },
-                                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportEPUB()
+                                            onClick = my.noveldokusha.tooling.epub_importer.onDoImportFile()
                                         )
                                     }
                                 }

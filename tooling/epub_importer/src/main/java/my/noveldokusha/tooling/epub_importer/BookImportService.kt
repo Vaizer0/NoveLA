@@ -17,29 +17,31 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.coreui.states.removeProgressBar
 import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
-import my.noveldokusha.data.EpubImporterRepository
+import my.noveldokusha.data.LocalBookImporterRepository
 import my.noveldokusha.core.asSequence
+import my.noveldokusha.core.isFb2File
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.epub_tooling.epubParser
+import my.noveldokusha.epub_tooling.fb2Parser
 import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class EpubImportService : Service() {
+class BookImportService : Service() {
 
     @Inject
     lateinit var notificationsCenter: NotificationsCenter
 
     @Inject
-    lateinit var epubImporterRepository: EpubImporterRepository
+    lateinit var localBookImporterRepository: LocalBookImporterRepository
 
     private class IntentData : Intent {
         var uri by Extra_Uri()
 
         constructor(intent: Intent) : super(intent)
-        constructor(ctx: Context, uri: Uri) : super(ctx, EpubImportService::class.java) {
+        constructor(ctx: Context, uri: Uri) : super(ctx, BookImportService::class.java) {
             this.uri = uri
         }
     }
@@ -51,12 +53,13 @@ class EpubImportService : Service() {
         }
 
         private fun isRunning(context: Context): Boolean =
-            context.isServiceRunning(EpubImportService::class.java)
+            context.isServiceRunning(BookImportService::class.java)
     }
 
     private val channelName by lazy { getString(R.string.notification_channel_name_import_epub) }
-    private val channelId = "Import EPUB"
-    private val notificationId = channelId.hashCode()
+    private val channelId = "book_import"
+    private val notificationId get() = channelId.hashCode()
+    private val failureNotificationId get() = (channelId + "_failure").hashCode()
 
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private var job: Job? = null
@@ -96,7 +99,7 @@ class EpubImportService : Service() {
                     notificationsCenter.showNotification(
                         channelName = channelName,
                         channelId = channelId,
-                        notificationId = "Import EPUB failure".hashCode()
+                        notificationId = failureNotificationId
                     ) {
                         text = getString(R.string.failed_get_file)
                         removeProgressBar()
@@ -113,7 +116,9 @@ class EpubImportService : Service() {
                     null
                 ).asSequence().map { it.getString(0) }.last()
 
-                val epub = inputStream.use { epubParser(inputStream = it) }
+                val bookData = inputStream.use { stream ->
+                    if (fileName.isFb2File()) fb2Parser(stream) else epubParser(stream)
+                }
 
                 notificationsCenter.modifyNotification(
                     notificationBuilder,
@@ -121,9 +126,9 @@ class EpubImportService : Service() {
                 ) {
                     text = getString(R.string.importing_epub)
                 }
-                epubImporterRepository.epubImporter(
+                localBookImporterRepository.epubImporter(
                     storageFolderName = fileName,
-                    epub = epub,
+                    epub = bookData,
                     addToLibrary = true
                 )
             }.onError {
@@ -131,7 +136,7 @@ class EpubImportService : Service() {
                 notificationsCenter.showNotification(
                     channelName = channelName,
                     channelId = channelId,
-                    notificationId = "Import EPUB failure".hashCode()
+                    notificationId = failureNotificationId
                 ) {
                     text = getString(R.string.failed_to_import_epub)
                     setSubText(it.message)

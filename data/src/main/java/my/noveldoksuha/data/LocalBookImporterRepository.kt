@@ -1,6 +1,7 @@
 package my.noveldokusha.data
 
 import android.content.Context
+import android.provider.OpenableColumns
 import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -9,9 +10,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.fileImporter
+import my.noveldokusha.core.isFb2File
 import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.epub_tooling.epubParser
 import my.noveldokusha.epub_tooling.EpubBook
+import my.noveldokusha.epub_tooling.fb2Parser
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -20,7 +23,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class EpubImporterRepository @Inject constructor(
+class LocalBookImporterRepository @Inject constructor(
     private val libraryBooks: LibraryBooksRepository,
     private val bookChapters: BookChaptersRepository,
     private val chapterBody: ChapterBodyRepository,
@@ -28,17 +31,24 @@ class EpubImporterRepository @Inject constructor(
     private val appDatabase: AppDatabase,
     @ApplicationContext private val context: Context,
 ) {
-    suspend fun importEpubFromContentUri(
+    suspend fun importFromContentUri(
         contentUri: String,
         bookTitle: String,
         addToLibrary: Boolean = false
     ) = tryAsResponse {
         val inputStream = context.contentResolver.openInputStream(contentUri.toUri())
-            ?: return@tryAsResponse
-        val epub = inputStream.use { epubParser(inputStream = inputStream) }
+            ?: throw Exception("Failed to open input stream")
+        val fileName = context.contentResolver.query(
+            contentUri.toUri(),
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null, null, null
+        )?.use { if (it.moveToFirst()) it.getString(0) else null } ?: bookTitle
+        val bookData = inputStream.use { stream ->
+            if (fileName.isFb2File()) fb2Parser(stream) else epubParser(stream)
+        }
         epubImporter(
             storageFolderName = bookTitle,
-            epub = epub,
+            epub = bookData,
             addToLibrary = addToLibrary
         )
     }

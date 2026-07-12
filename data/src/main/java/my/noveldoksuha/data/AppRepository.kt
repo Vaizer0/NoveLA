@@ -28,7 +28,7 @@ class AppRepository @Inject constructor(
     val bookChapters: BookChaptersRepository,
     val chapterBody: ChapterBodyRepository,
     private val appFileResolver: AppFileResolver,
-    private val epubImporterRepository: EpubImporterRepository,
+    private val localBookImporterRepository: LocalBookImporterRepository,
     val downloaderRepository: DownloaderRepository,
     private val libraryDao: LibraryDao,
     private val appCoroutineScope: AppCoroutineScope,
@@ -40,7 +40,7 @@ class AppRepository @Inject constructor(
         val realUrl = appFileResolver.getLocalIfContentType(bookUrl, bookFolderName = bookTitle)
         val normalizedUrl = normalizeBookUrl(realUrl)
         val result = if (bookUrl.isContentUri && libraryBooks.get(normalizedUrl) == null) {
-            epubImporterRepository.importEpubFromContentUri(
+            localBookImporterRepository.importFromContentUri(
                 contentUri = bookUrl,
                 bookTitle = bookTitle,
                 addToLibrary = true
