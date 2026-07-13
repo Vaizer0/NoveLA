@@ -262,21 +262,26 @@ internal class CloudFareVerificationInterceptor(
         val domainOptions = LuaCfOptionsRegistry.getForHost(host)
         if (domainOptions?.whitelist == true) return true
 
+        if (response.header("cf-mitigated") == "challenge") return false
+
         val ignoredMarkers = domainOptions?.ignoreMarkers ?: emptySet()
         val activeMarkers = ALL_CF_MARKERS.filter { it !in ignoredMarkers }
 
         val hasMarkers = activeMarkers.any { body.contains(it, ignoreCase = true) }
-        val isError = response.code in ERROR_CODES || (response.code == 200 && hasMarkers)
         val isCfServer = response.header("Server")?.let {
             it.contains("cloudflare", true) || it.contains("ddos-guard", true)
         } == true
 
-        val result = !(isError && (isCfServer || hasMarkers))
-        if (!result) {
+        val isCf = when {
+            response.code == 200 -> hasMarkers && isCfServer
+            response.code in ERROR_CODES -> hasMarkers && isCfServer
+            else -> false
+        }
+        if (isCf) {
             val foundMarkers = activeMarkers.filter { body.contains(it, ignoreCase = true) }
             Timber.e( "CF triggered: code=${response.code} isCfServer=$isCfServer foundMarkers=$foundMarkers")
         }
-        return result
+        return !isCf
     }
 
     private fun clearCookiesForDomain(url: String, cm: CookieManager) {
