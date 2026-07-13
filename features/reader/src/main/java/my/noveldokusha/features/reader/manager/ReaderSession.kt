@@ -254,7 +254,7 @@ internal class ReaderSession(
                     if (readerChaptersLoader.hasLoadingError) return@withContext
                     val nextChapterIndex = chapterIndex + 1
                     val chapterItem = readerChaptersLoader.orderedChapters[nextChapterIndex]
-                    if (readerChaptersLoader.loadedChapters.contains(chapterItem.url)) {
+                    if (readerChaptersLoader.isChapterContentReady(nextChapterIndex)) {
                         readerTextToSpeech.readChapterStartingFromStart(
                             chapterIndex = nextChapterIndex
                         )
@@ -389,7 +389,7 @@ internal class ReaderSession(
         if (
             userHasScrolled &&
             preloadTriggeredForChapter != chapterIndex &&
-            progress >= 80f &&
+            progress >= 30f &&
             !readerChaptersLoader.isLastChapter(chapterIndex) &&
             !readerChaptersLoader.hasLoadingError
         ) {

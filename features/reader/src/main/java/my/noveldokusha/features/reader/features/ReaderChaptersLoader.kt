@@ -144,6 +144,8 @@ internal class ReaderChaptersLoader(
             ?: false
     }
     fun isChapterIndexValid(chapterIndex: Int) = chapterIndex in 0 until orderedChapters.size
+    fun isChapterContentReady(chapterIndex: Int): Boolean =
+        items.any { it is ReaderItem.Body && it.chapterIndex == chapterIndex }
 
     @Synchronized fun tryLoadInitial(chapterIndex: Int) {
         Timber.d("tryLoadInitial called, chapterIndex=$chapterIndex, stack=${Thread.currentThread().stackTrace[2]}")
