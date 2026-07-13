@@ -11,8 +11,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -223,9 +225,16 @@ internal class ChaptersViewModel @Inject constructor(
 
         // Подписываемся на переведённые названия глав из БД
         viewModelScope.launch {
-            appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.flow()
-                .flatMapLatest { targetLang ->
-                    chapterTranslationDao.getTranslatedTitlesFlow(bookUrl, targetLang)
+            combine(
+                appPreferences.GLOBAL_TRANSLATION_ENABLED.flow(),
+                appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.flow()
+            ) { enabled, targetLang -> enabled to targetLang }
+                .flatMapLatest { (enabled, targetLang) ->
+                    if (enabled) {
+                        chapterTranslationDao.getTranslatedTitlesFlow(bookUrl, targetLang)
+                    } else {
+                        flowOf(emptyList())
+                    }
                 }
                 .collectLatest { list ->
                     state.translatedChapterTitles.value = list.associate {
