@@ -3,7 +3,11 @@ package my.noveldokusha.network.interceptors
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.http.SslError
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -88,13 +92,14 @@ internal class CloudFareVerificationInterceptor(
     private val ALL_CF_MARKERS = listOf(
         "cf-challenge",
         "requireTurnstile",
+        "action=\"/cdn-cgi/challenge-platform/",
+        "onloadTurnstileCallback",
         "__cf_chl_",
         "but-captcha",
         "recaptcha-accessible-status",
         "cf-browser-verification",
         "cf-challenge-running",
         "cf-please-wait",
-        "Attention Required! | Cloudflare",
         "id=\"challenge-running\"",
         "id=\"cf-challenge-running\"",
         "ddos-guard.net",
@@ -301,9 +306,20 @@ internal class CloudFareVerificationInterceptor(
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 userAgentString = resolveUserAgent(appPreferences)
-                cacheMode = WebSettings.LOAD_NO_CACHE
+                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             }
             webView.webViewClient = object : WebViewClient() {
+                override fun onReceivedSslError(
+                    view: WebView?, handler: SslErrorHandler?, error: SslError?
+                ) {
+                    Timber.e("CF WebView SSL error: ${error?.primaryError}")
+                    handler?.cancel()
+                }
+                override fun onReceivedError(
+                    view: WebView?, request: WebResourceRequest?, error: WebResourceError?
+                ) {
+                    Timber.e("CF WebView error: code=${error?.errorCode}, url=${request?.url}")
+                }
                 override fun onPageFinished(view: WebView?, url: String?) { cm.flush() }
             }
             webView.loadUrl(webViewUrl)
@@ -317,8 +333,17 @@ internal class CloudFareVerificationInterceptor(
                     break
                 }
                 if (cm.getCookie(webViewUrl)?.contains("cf_clearance") == true) {
-                    Timber.d( "CF: Auto WebView success on iteration $i")
-                    break
+                    delay(500)
+                    val urlAfterCookie = webView.url
+                    val stillOnChallenge = urlAfterCookie != null && (
+                        urlAfterCookie.contains("__cf_chl", ignoreCase = true) ||
+                        urlAfterCookie.contains("/cdn-cgi/challenge-platform", ignoreCase = true)
+                    )
+                    if (!stillOnChallenge) {
+                        Timber.d( "CF: Auto WebView success on iteration $i")
+                        break
+                    }
+                    Timber.d("CF: cf_clearance detected but still on challenge page, continuing")
                 }
             }
             webView.stopLoading()
