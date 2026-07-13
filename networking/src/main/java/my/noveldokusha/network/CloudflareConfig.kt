@@ -9,7 +9,11 @@ import com.google.gson.Gson
 data class CloudflareConfig(
     val detectionRules: List<DetectionRule> = emptyList()
 ) {
-    fun toJson(): String = Gson().toJson(this)
+    fun toJson(): String = gson.toJson(this)
+
+    companion object {
+        private val gson = Gson()
+    }
 }
 
 /**

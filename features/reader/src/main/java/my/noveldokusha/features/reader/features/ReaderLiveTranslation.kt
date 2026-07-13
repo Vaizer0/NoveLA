@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -358,6 +359,10 @@ internal class ReaderLiveTranslation(
         state.parallelOrder.value = it
         appPreferences.TRANSLATION_PARALLEL_ORDER.value = it
         scope.launch { _onDisplaySettingsChanged.emit(Unit) }
+    }
+
+    fun close() {
+        scope.cancel()
     }
 
     companion object {

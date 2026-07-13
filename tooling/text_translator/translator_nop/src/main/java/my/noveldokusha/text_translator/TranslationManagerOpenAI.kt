@@ -301,6 +301,8 @@ class TranslationManagerOpenAI(
      *  - Alternate numbering formats: "1)", "**1.**", "№1.", "1 ."
      *  - Missing items (falls back to original text)
      */
+    private val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
+
     private fun parseNumberedTranslations(
         translatedText: String,
         originalTexts: List<String>
@@ -309,8 +311,6 @@ class TranslationManagerOpenAI(
         val byIndex = mutableMapOf<Int, String>()
 
         // Matches: "1.", "1)", "**1.**", "№1.", "#1.", "1 ." at start of line
-        val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
-
         val lines = translatedText.split("\n")
         var currentIndex = -1  // -1 = before first numbered item (preamble)
         var currentText = StringBuilder()

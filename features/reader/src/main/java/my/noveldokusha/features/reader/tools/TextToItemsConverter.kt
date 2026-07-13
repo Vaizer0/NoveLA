@@ -9,6 +9,9 @@ import org.jsoup.Jsoup
 import timber.log.Timber
 
 private val IMG_TAG_REGEX = Regex("<img\\b", RegexOption.IGNORE_CASE)
+private val STRIP_HTML_TAGS = Regex("<[^>]*>")
+private val COLLAPSE_SPACES = Regex("[ ]+")
+private val PARAGRAPH_BREAK = Regex("\\n\\s*\\n")
 
 internal suspend fun textToItemsConverter(
     chapterUrl: String,
@@ -110,10 +113,10 @@ private fun buildBodyItems(
     userRegexRules: List<RegexRule>
 ): List<ReaderItem.Body> {
     val cleanText = text
-        .replace(Regex("<[^>]*>"), "")
+        .replace(STRIP_HTML_TAGS, "")
         .replace("\r\n", "\n")
         .replace("\u00A0", " ")
-        .replace(Regex("[ ]+"), " ")
+        .replace(COLLAPSE_SPACES, " ")
 
     val processedText = applyUserRegexRules(cleanText, userRegexRules)
     val paragraphs = processTextIntoLogicalBlocks(processedText)
@@ -134,7 +137,7 @@ private fun buildBodyItems(
 private fun processTextIntoLogicalBlocks(text: String): List<String> {
     val result = mutableListOf<String>()
 
-    var splitResult = text.split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
+    var splitResult = text.split(PARAGRAPH_BREAK).filter { it.isNotBlank() }
 
     if (splitResult.size <= 1 && text.contains("\n")) {
         splitResult = text.split("\n").filter { it.isNotBlank() }

@@ -52,7 +52,6 @@ internal class ReaderChaptersLoader(
     private val chapterTranslationDao: ChapterTranslationDao,
     private val regexRulesProvider: () -> List<my.noveldokusha.core.models.RegexRule> = { emptyList() },
 ) : CoroutineScope {
-
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Main.immediate
 
     private sealed interface LoadChapter {
@@ -826,7 +825,7 @@ internal class ReaderChaptersLoader(
                     remove(itemTitle)
                     items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
                     val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
-                    val detail = Regex(""":\d+\s+(\[?\w.*?)$""", RegexOption.DOT_MATCHES_ALL)
+                    val detail = ERROR_DETAIL_PATTERN
                         .find(rawDetail)?.groupValues?.get(1)?.trim()
                         ?: rawDetail.lines().lastOrNull { it.isNotBlank() }?.trim()
                         ?: rawDetail
@@ -947,5 +946,6 @@ internal class ReaderChaptersLoader(
     companion object {
         private const val WINDOW_AHEAD = 10
         private const val WINDOW_BEHIND = 10
+        private val ERROR_DETAIL_PATTERN = Regex(""":\d+\s+(\[?\w.*?)$""", RegexOption.DOT_MATCHES_ALL)
     }
 }

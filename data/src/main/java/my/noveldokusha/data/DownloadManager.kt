@@ -99,6 +99,10 @@ sealed class EnqueueResult {
     object AllCached : EnqueueResult()
 }
 
+private val STRIP_NON_IMGENTRY_TAGS = Regex("<(?!(img|/img))[^>]*>")
+private val COLLAPSE_SPACES = Regex("[ ]+")
+private val PARAGRAPH_BREAK = Regex("\\n\\s*\\n")
+
 @Singleton
 class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -898,12 +902,12 @@ class DownloadManager @Inject constructor(
 
         return try {
             val paragraphs = body
-                .replace(Regex("<(?!(img|/img))[^>]*>"), "")
+                .replace(STRIP_NON_IMGENTRY_TAGS, "")
                 .replace("\r\n", "\n")
                 .replace("\u00A0", " ")
-                .replace(Regex("[ ]+"), " ")
+                .replace(COLLAPSE_SPACES, " ")
                 .let { clean ->
-                    var parts = clean.split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
+                    var parts = clean.split(PARAGRAPH_BREAK).filter { it.isNotBlank() }
                     if (parts.size <= 1 && clean.contains("\n"))
                         parts = clean.split("\n").filter { it.isNotBlank() }
                     parts.map { it.trim() }.filter { it.isNotBlank() }

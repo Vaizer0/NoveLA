@@ -53,8 +53,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -119,8 +121,14 @@ internal fun ChaptersScreen(
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val lazyListState = rememberLazyListState()
-    val areSelectedChaptersRead = state.selectedChaptersUrl.keys.all { url ->
-        state.chapters.find { it.chapter.url == url }?.chapter?.read == true
+    val areSelectedChaptersRead by remember {
+        derivedStateOf {
+            val readUrls = state.chapters.asSequence()
+                .filter { it.chapter.read }
+                .map { it.chapter.url }
+                .toHashSet()
+            state.selectedChaptersUrl.keys.all { it in readUrls }
+        }
     }
 
     if (state.isInSelectionMode.value) BackHandler {

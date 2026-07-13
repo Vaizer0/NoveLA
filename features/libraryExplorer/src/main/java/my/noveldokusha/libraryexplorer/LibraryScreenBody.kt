@@ -34,8 +34,8 @@ import androidx.compose.material3.TopAppBarState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -85,7 +85,7 @@ internal fun LibraryScreenBody(
         Column {
             // Category filter chips (like LanguageFilterChips in Finder)
             if (showCategories) {
-                val selectedCategories by viewModel.selectedCategories.collectAsState()
+                val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
                 val catCounts by viewModel.categoryCounts
                 val allCategories = buildList {
                     add("" to stringResource(R.string.reading))
@@ -201,7 +201,7 @@ internal fun LibraryScreenBody(
 
             // Single list filtered by selected categories
             val list by viewModel.filteredList
-            val sources by viewModel.luaSources.collectAsState()
+            val sources by viewModel.luaSources.collectAsStateWithLifecycle()
             if (viewModel.isLibraryLoaded) {
                 LibraryPageBody(
                     list = list,

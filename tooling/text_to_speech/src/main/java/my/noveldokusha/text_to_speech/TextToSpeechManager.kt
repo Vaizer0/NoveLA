@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.shareIn
@@ -38,7 +40,7 @@ class TextToSpeechManager<T : Utterance<T>>(
     private val appTtsEngine: AppTtsEngine,
     initialItemState: T,
 ) {
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _queueList = mutableMapOf<String, T>()
     private val _queueListItemSize = mutableMapOf<String, Int>()
     private val _currentTextSpeakFlow = MutableSharedFlow<T>()
@@ -145,8 +147,18 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueListItemSize.clear()
     }
 
+    fun shutdown() {
+        runCatching { service.stop() }
+        runCatching { service.shutdown() }
+        auxiliaryServices.forEach { runCatching { it.shutdown() } }
+        auxiliaryServices.clear()
+        _queueList.clear()
+        _queueListItemSize.clear()
+        scope.cancel()
+    }
+
     fun clearQueue() {
-        Timber.d( "clearQueue() queueSize=${_queueList.size}")
+        Timber.d("clearQueue() queueSize=${_queueList.size}")
         _queueList.clear()
         _queueListItemSize.clear()
     }

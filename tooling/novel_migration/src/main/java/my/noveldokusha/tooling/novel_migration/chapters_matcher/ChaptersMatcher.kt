@@ -12,6 +12,21 @@ data class MatchResult(
 private data class ChapterId(val number: Float, val volume: Int?)
 
 class ChaptersMatcher {
+    private companion object {
+        val BRACKET_REGEX = Regex("""\[.*?]""")
+        val SS_KEYWORD_REGEX = Regex("""(?i)\bss\b""")
+        val AUTHOR_NOTE_REGEX = Regex("""(?i)\bauthor'?s?\s+note\b""")
+        val CHAPTER_NUM_REGEX = Regex(
+            """(?i)(?:chapter|ch\.?\s*|episode|ep\.?\s*|chapitre|capítulo|kapitel|bab)\s*""" +
+            """(\d+(?:\.\d+)?)"""
+        )
+        val ASIAN_CHAPTER_REGEX = Regex("""[第제]?\s*(\d+(?:\.\d+)?)\s*[話화章节]""")
+        val LEADING_NUM_REGEX = Regex("""^(\d+(?:\.\d+)?)""")
+        val VOLUME_REGEX = Regex(
+            """(?i)(?:volume|vol\.?\s*|book|v)\s*(\d+)\s*""" +
+            """(?:chapter|ch\.?\s*|episode|ep\.?\s*|話)"""
+        )
+    }
 
     fun match(old: List<ChapterResult>, new: List<ChapterResult>): MatchResult {
         val matched = mutableListOf<Pair<ChapterResult, ChapterResult>>()
@@ -63,12 +78,12 @@ class ChaptersMatcher {
 
     private fun isMainChapter(title: String): Boolean {
         val t = title.lowercase().trim()
-        val clean = t.replace(Regex("""\[.*?]"""), "").trim()
+        val clean = t.replace(BRACKET_REGEX, "").trim()
         for (kw in nonMainKeywords) {
             if (clean.startsWith(kw)) return false
         }
-        if (Regex("""(?i)\bss\b""").containsMatchIn(clean)) return false
-        if (Regex("""(?i)\bauthor'?s?\s+note\b""").containsMatchIn(clean)) return false
+        if (SS_KEYWORD_REGEX.containsMatchIn(clean)) return false
+        if (AUTHOR_NOTE_REGEX.containsMatchIn(clean)) return false
         return true
     }
 
@@ -76,21 +91,18 @@ class ChaptersMatcher {
         if (!isMainChapter(title)) return null
 
         val t = title.trim()
-        val clean = t.replace(Regex("""\[.*?]"""), "").trim()
+        val clean = t.replace(BRACKET_REGEX, "").trim()
 
         // Chapter/Episode keyword + number
-        val ch = Regex(
-            """(?i)(?:chapter|ch\.?\s*|episode|ep\.?\s*|chapitre|capítulo|kapitel|bab)\s*""" +
-            """(\d+(?:\.\d+)?)"""
-        ).find(clean)
+        val ch = CHAPTER_NUM_REGEX.find(clean)
         if (ch != null) return ch.groupValues[1].toFloatOrNull()
 
         // East Asian: 第15話, 15話, 第15章, 15화
-        val asian = Regex("""[第제]?\s*(\d+(?:\.\d+)?)\s*[話화章节]""").find(clean)
+        val asian = ASIAN_CHAPTER_REGEX.find(clean)
         if (asian != null) return asian.groupValues[1].toFloatOrNull()
 
         // Starts with number
-        val plain = Regex("""^(\d+(?:\.\d+)?)""").find(clean)
+        val plain = LEADING_NUM_REGEX.find(clean)
         if (plain != null) return plain.groupValues[1].toFloatOrNull()
 
         return null
@@ -98,13 +110,10 @@ class ChaptersMatcher {
 
     private fun extractVolume(title: String): Int? {
         val t = title.trim()
-        val clean = t.replace(Regex("""\[.*?]"""), "").trim()
+        val clean = t.replace(BRACKET_REGEX, "").trim()
 
         // Volume/Book/Vol./V X [Chapter/Episode/Ch.] Y
-        val vol = Regex(
-            """(?i)(?:volume|vol\.?\s*|book|v)\s*(\d+)\s*""" +
-            """(?:chapter|ch\.?\s*|episode|ep\.?\s*|話)"""
-        ).find(clean)
+        val vol = VOLUME_REGEX.find(clean)
         if (vol != null) return vol.groupValues[1].toIntOrNull()
 
         return null

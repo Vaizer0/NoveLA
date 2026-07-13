@@ -405,6 +405,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
     fun close() {
         mediaSession?.release()
         mediaSession = null
+        currentCoverBitmap?.let { runCatching { it.recycle() } }
+        currentCoverBitmap = null
         scope.cancel()
     }
 

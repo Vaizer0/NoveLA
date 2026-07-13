@@ -162,4 +162,6 @@ internal class ReaderViewModel @Inject constructor(
     fun saveCurrentReadingPosition() {
         readerSession.saveCurrentPosition(readingCurrentChapter)
     }
+
+    override fun onCleared() = onCloseManually()
 }

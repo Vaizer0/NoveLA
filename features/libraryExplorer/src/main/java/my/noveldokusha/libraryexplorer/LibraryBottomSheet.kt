@@ -57,9 +57,9 @@ internal fun LibraryBottomSheet(
 
     val uiState by model.uiState.collectAsStateWithLifecycle()
     val availableGenres by pageModel.availableGenres
-    val selectedGenres by pageModel.selectedGenres.collectAsState()
+    val selectedGenres by pageModel.selectedGenres.collectAsStateWithLifecycle()
     val availableSources by pageModel.availableSources
-    val selectedSources by pageModel.selectedSources.collectAsState()
+    val selectedSources by pageModel.selectedSources.collectAsStateWithLifecycle()
     // Читаем текущее значение из общего preference
     val gridColumns = uiState.gridColumns
 

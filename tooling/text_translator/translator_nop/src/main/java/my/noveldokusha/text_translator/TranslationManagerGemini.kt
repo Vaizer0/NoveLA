@@ -465,9 +465,10 @@ class TranslationManagerGemini(
         return trimmed
     }
 
+    private val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
+
     private fun parseNumberedTranslations(translatedText: String, originalTexts: List<String>): Map<String, String> {
         val byIndex = mutableMapOf<Int, String>()
-        val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
         val lines = translatedText.split("\n")
         var currentIndex = -1
         var currentText = StringBuilder()

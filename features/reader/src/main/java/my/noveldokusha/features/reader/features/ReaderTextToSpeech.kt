@@ -478,6 +478,10 @@ internal class ReaderTextToSpeech(
         }
     }
 
+    fun shutdownTts() {
+        runCatching { manager.shutdown() }
+    }
+
     fun forceResetState(itemPos: ReaderItem.Position?) {
         if (itemPos == null) return
         state.isPlaying.value = false
@@ -957,7 +961,9 @@ internal class ReaderTextToSpeech(
     }
 }
 
+private val WHITESPACE = Regex("\\s+")
+
 private fun String.wordCount(): Int {
     if (this.isEmpty()) return 0
-    return this.split(Regex("\\s+")).count { it.isNotEmpty() }
+    return this.split(WHITESPACE).count { it.isNotEmpty() }
 }

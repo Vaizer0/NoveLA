@@ -12,6 +12,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -137,6 +139,7 @@ class RestoreDataService : Service() {
     private val channelId = "Restore backup"
     private val notificationId = channelId.hashCode()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private var job: Job? = null
 
@@ -153,6 +156,7 @@ class RestoreDataService : Service() {
 
     override fun onDestroy() {
         job?.cancel()
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -168,7 +172,7 @@ class RestoreDataService : Service() {
             Timber.w("RestoreDataService: job already active")
             return START_NOT_STICKY
         }
-        job = CoroutineScope(Dispatchers.IO).launch {
+        job = scope.launch {
             tryAsResponse {
                 Timber.d("RestoreDataService: Starting restore from URI: ${intentData.uri}")
                 restoreData(intentData.uri, intentData.overwritePlugins)

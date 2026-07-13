@@ -36,6 +36,7 @@ class TranslationManagerGooglePA(
     private val networkClient: ScraperNetworkClient
 ) : TranslationManager {
 
+    private val gson = Gson()
     private val client get() = networkClient.client
 
     override val available = true
@@ -44,6 +45,8 @@ class TranslationManagerGooglePA(
     private val translateUrl = "https://translate-pa.googleapis.com/v1/translateHtml"
     private val KEY_CACHE_DURATION_MS = 24 * 60 * 60 * 1000L
     private val keyHeaderRegex = Regex(""""X-Goog-API-Key"\s*:\s*"([^"]+)"""")
+    private val htmlNumericEntity = Regex("&#(\\d+);")
+    private val brTag = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
 
     private val keyFetchMutex = Mutex()
     private var keyFetchJob: Deferred<String>? = null
@@ -140,7 +143,7 @@ class TranslationManagerGooglePA(
     private suspend fun checkKey(key: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val payload = listOf(listOf("<p>test</p>", "en", "en"), "wt_lib")
-            val body = Gson().toJson(payload).toRequestBody("application/json+protobuf".toMediaType())
+            val body = gson.toJson(payload).toRequestBody("application/json+protobuf".toMediaType())
             val request = Request.Builder()
                 .url(translateUrl)
                 .addHeader("X-Goog-Api-Key", key)
@@ -281,7 +284,7 @@ class TranslationManagerGooglePA(
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&nbsp;", " ")
-            .replace(Regex("&#(\\d+);")) {
+            .replace(htmlNumericEntity) {
                 it.groupValues[1].toIntOrNull()
                     ?.toChar()
                     ?.toString()
@@ -341,7 +344,7 @@ class TranslationManagerGooglePA(
             }
 
             val translatedParas = translated
-                .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+                .replace(brTag, "\n")
                 .split("\n")
                 .map { unescapeHtmlEntities(it.trim()) }
                 .filter { it.isNotBlank() }
@@ -371,7 +374,7 @@ class TranslationManagerGooglePA(
         apiKey: String
     ): String = withContext(Dispatchers.IO) {
         val payload = listOf(listOf(html, sourceLang, targetLang), "wt_lib")
-        val requestBody = Gson().toJson(payload)
+        val requestBody = gson.toJson(payload)
             .toRequestBody("application/json+protobuf".toMediaType())
 
         val request = Request.Builder()

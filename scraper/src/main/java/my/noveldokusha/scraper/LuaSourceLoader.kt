@@ -52,6 +52,7 @@ class LuaEngine @Inject constructor(
     private val networkClient: NetworkClient
 ) {
     private val gson = Gson()
+    private val luaPrefs by lazy { context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE) }
 
     /**
      * Создаёт globals с минимально необходимым набором библиотек.
@@ -351,15 +352,13 @@ class LuaEngine @Inject constructor(
 
     private inner class GetPreferenceFunction : OneArgFunction() {
         override fun call(arg: LuaValue): LuaValue {
-            val prefs = context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE)
-            return LuaValue.valueOf(prefs.getString(arg.checkjstring(), "") ?: "")
+            return LuaValue.valueOf(luaPrefs.getString(arg.checkjstring(), "") ?: "")
         }
     }
 
     private inner class SetPreferenceFunction : TwoArgFunction() {
         override fun call(a1: LuaValue, a2: LuaValue): LuaValue {
-            context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE)
-                .edit().putString(a1.checkjstring(), a2.tojstring()).apply()
+            luaPrefs.edit().putString(a1.checkjstring(), a2.tojstring()).apply()
             return LuaValue.NIL
         }
     }

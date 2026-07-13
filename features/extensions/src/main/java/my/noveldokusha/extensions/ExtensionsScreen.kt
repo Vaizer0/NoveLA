@@ -149,8 +149,14 @@ private fun UnifiedExtensionsScreen(
                     state.availableExtensions.filter { it.language in state.selectedLanguages }
                 }
 
-                val installedExtensions = filteredExtensions.filter { it.isInstalled }
-                val availableExtensions = filteredExtensions.filter { !it.isInstalled }
+                val (installedExtensions, availableExtensions) = remember(filteredExtensions) {
+                    val inst = ArrayList<ExtensionInfo>(filteredExtensions.size)
+                    val avail = ArrayList<ExtensionInfo>(filteredExtensions.size)
+                    for (ext in filteredExtensions) {
+                        if (ext.isInstalled) inst.add(ext) else avail.add(ext)
+                    }
+                    inst to avail
+                }
 
                 if (filteredExtensions.isEmpty()) {
                     Box(

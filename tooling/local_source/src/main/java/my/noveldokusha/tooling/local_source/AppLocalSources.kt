@@ -20,8 +20,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -368,7 +368,7 @@ class AppLocalSources @Inject constructor(
                     Text(text = stringResource(R.string.add_local_directory))
                 }
             }
-            val list by localSourcesDirectories.listState.collectAsState()
+            val list by localSourcesDirectories.listState.collectAsStateWithLifecycle()
             if (list.isEmpty()) {
                 Text(
                     text = stringResource(R.string.no_directories_added_please_add_them_to_see_them_in_the_source_catalog_list),

@@ -12,6 +12,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.states.NotificationsCenter
@@ -162,6 +164,7 @@ class BackupDataService : Service() {
             context.isServiceRunning(BackupDataService::class.java)
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private var job: Job? = null
 
@@ -178,6 +181,7 @@ class BackupDataService : Service() {
 
     override fun onDestroy() {
         job?.cancel()
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -186,7 +190,7 @@ class BackupDataService : Service() {
         if (intent == null) return START_NOT_STICKY
         val intentData = IntentData(intent)
 
-        job = CoroutineScope(Dispatchers.IO).launch {
+        job = scope.launch {
             tryAsResponse {
                 backupData(intentData.uri, intentData.backupImages, intentData.backupSettings, intentData.backupPlugins)
             }.onError {

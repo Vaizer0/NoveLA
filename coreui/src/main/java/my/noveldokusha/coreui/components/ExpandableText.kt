@@ -47,13 +47,17 @@ fun ExpandableText(
                 derivedStateOf { if (expanded) Int.MAX_VALUE else linesForExpand }
             }
             val textStyle = MaterialTheme.typography.bodyMedium
-            val paragraph = Paragraph(
-                text = target,
-                style = textStyle,
-                constraints = Constraints(maxWidth = constraints.maxWidth),
-                density = LocalDensity.current,
-                fontFamilyResolver = LocalFontFamilyResolver.current
-            )
+            val density = LocalDensity.current
+            val fontFamilyResolver = LocalFontFamilyResolver.current
+            val paragraph = remember(target, constraints.maxWidth, textStyle, density, fontFamilyResolver) {
+                Paragraph(
+                    text = target,
+                    style = textStyle,
+                    constraints = Constraints(maxWidth = constraints.maxWidth),
+                    density = density,
+                    fontFamilyResolver = fontFamilyResolver
+                )
+            }
             val textColor = LocalContentColor.current
             val textColorEnd by animateColorAsState(
                 targetValue = when {
