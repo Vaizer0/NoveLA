@@ -52,14 +52,20 @@ internal class NarratorMediaControlsCallback(
         return super.onMediaButtonEvent(mediaButtonEvent)
     }
 
-    override fun onPlay() {
-        Timber.d("onPlay()")
-        readerTextToSpeech.state.setPlaying(true)
-    }
-
     override fun onPause() {
         Timber.d("onPause()")
+        if (!ReaderTextToSpeech.isSystemPauseTrigger) {
+            ReaderTextToSpeech.pausedBySystem = false
+        }
+        ReaderTextToSpeech.isSystemPauseTrigger = false
         readerTextToSpeech.state.setPlaying(false)
+    }
+
+    override fun onPlay() {
+        Timber.d("onPlay()")
+        ReaderTextToSpeech.pausedBySystem = false
+        NarratorMediaControlsService.reacquireFocus()
+        readerTextToSpeech.state.setPlaying(true)
     }
 
     override fun onSkipToNext() {

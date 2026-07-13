@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import my.noveldokusha.features.reader.services.NarratorMediaControlsService
 import timber.log.Timber
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -78,7 +79,7 @@ internal data class TextSynthesis(
 
 internal class ReaderTextToSpeech(
     private val coroutineScope: CoroutineScope,
-    context: Context,
+    private val context: Context,
     private val items: List<ReaderItem>,
     private val chapterLoadedFlow: Flow<ChapterLoaded>,
     customSavedVoices: State<List<VoicePredefineState>>,
@@ -101,6 +102,14 @@ internal class ReaderTextToSpeech(
     private val getParallelEnabled: () -> Boolean,
     private val getParallelOrder: () -> String,
 ) {
+    companion object {
+        @Volatile
+        var pausedBySystem: Boolean = false
+
+        @Volatile
+        var isSystemPauseTrigger: Boolean = false
+    }
+
     private val DECORATIVE_CHARS = """\-=*_~+#·•°─-┿"""
     private val SEPARATOR_ONLY = Regex("""^\s*[$DECORATIVE_CHARS]{3,}\s*$""")
     private val LEADING_DECORATIVE = Regex("""^[$DECORATIVE_CHARS]{3,}\s*""")
@@ -418,6 +427,7 @@ internal class ReaderTextToSpeech(
         try {
             Timber.d("start()")
             claimMediaSession()
+            NarratorMediaControlsService.reacquireFocus()
             switchVoiceForMode()
             state.isPlaying.value = true
             updateJob?.cancel()
