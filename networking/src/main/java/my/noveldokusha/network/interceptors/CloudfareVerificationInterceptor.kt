@@ -189,7 +189,7 @@ internal class CloudFareVerificationInterceptor(
             else -> siteUrl
         }
 
-        runBlocking(Dispatchers.Main) {
+        runBlocking {
             withTimeoutOrNull(15_000) {
                 resolveWithWebViewAutomatic(webViewUrl, cookieManager)
             }
