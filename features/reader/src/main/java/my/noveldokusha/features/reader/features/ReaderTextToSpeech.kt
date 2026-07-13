@@ -468,6 +468,14 @@ internal class ReaderTextToSpeech(
         }
     }
 
+    fun forceResetState(itemPos: ReaderItem.Position?) {
+        if (itemPos == null) return
+        state.isPlaying.value = false
+        manager.setCurrentSpeakState(
+            TextSynthesis(itemPos, Utterance.PlayState.FINISHED)
+        )
+    }
+
     suspend fun readChapterStartingFromStart(
         chapterIndex: Int
     ) = withContext(Dispatchers.Main.immediate) {

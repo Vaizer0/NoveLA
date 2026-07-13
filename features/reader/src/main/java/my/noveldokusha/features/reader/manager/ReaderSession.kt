@@ -374,6 +374,19 @@ internal class ReaderSession(
         val progress = stats.chapterReadPercentage()
         val chapterIndex = stats.chapterIndex
 
+        if (
+            userHasScrolled &&
+            readerTextToSpeech.isActive.value &&
+            !readerTextToSpeech.isSpeaking.value &&
+            chapterIndex >= ttsCurrentChapterIndex + 1
+        ) {
+            Timber.d("Auto-stop TTS: user on chapter $chapterIndex, TTS was on $ttsCurrentChapterIndex")
+            readerTextToSpeech.stop()
+            readerTextToSpeech.forceResetState(
+                items.getOrNull(itemIndex) as? ReaderItem.Position
+            )
+        }
+
         if (chapterIndex != lastChapterIndex) {
             if (lastChapterIndex != -1 && readerChaptersLoader.hasLoadingError) {
                 readerChaptersLoader.hasLoadingError = false
