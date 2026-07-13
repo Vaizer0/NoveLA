@@ -87,7 +87,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val imageLoader = Coil.imageLoader(context)
-                val localCover = appFileResolver.resolvedBookImagePath(bookUrl, coverUrl)
+                val localCover = appFileResolver.resolvedBookImagePath(bookUrl, coverUrl, isCover = true)
                 val request = ImageRequest.Builder(context)
                     .data(localCover)
                     .size(Size(512, 512))

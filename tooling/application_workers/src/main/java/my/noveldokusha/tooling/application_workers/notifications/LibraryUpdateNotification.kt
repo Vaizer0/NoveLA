@@ -141,7 +141,7 @@ internal class LibraryUpdateNotification @Inject constructor(
         if (book.coverImageUrl.isBlank()) return
 
         val imageLoader = Coil.imageLoader(context)
-        val localCover = appFileResolver.resolvedBookImagePath(book.url, book.coverImageUrl)
+        val localCover = appFileResolver.resolvedBookImagePath(book.url, book.coverImageUrl, isCover = true)
         val request = ImageRequest.Builder(context)
             .data(localCover)
             .size(Size(512, 512))
