@@ -1,7 +1,7 @@
 package my.noveldokusha.data.storage
 
 import android.content.Context
-import com.squareup.moshi.Types
+import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import my.noveldokusha.scraper.DatabaseInterface
 import my.noveldokusha.scraper.SearchGenre
@@ -17,11 +17,7 @@ class PersistentCacheDatabaseSearchGenresProvider @Inject constructor(
     fun provide(database: DatabaseInterface): PersistentCacheDataLoader<List<SearchGenre>> {
         return PersistentCacheDataLoader(
             cacheFile = File(appContext.cacheDir, database.searchGenresCacheFileName),
-            adapterProvider = {
-                val listMyData =
-                    Types.newParameterizedType(List::class.java, SearchGenre::class.java)
-                it.adapter(listMyData)
-            }
+            type = TypeToken.getParameterized(List::class.java, SearchGenre::class.java).type
         )
     }
 }

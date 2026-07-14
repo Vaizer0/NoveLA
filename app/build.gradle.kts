@@ -153,8 +153,6 @@ dependencies {
 
     // Serialization
     implementation(libs.gson)
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
     implementation(libs.kotlinx.serialization.json)
 
     // Dependency injection

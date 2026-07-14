@@ -19,7 +19,6 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.readability4j)
     implementation(libs.gson)
-    implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
     implementation(libs.timber)
 
