@@ -1,13 +1,16 @@
 package my.noveldokusha.extensions
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +60,11 @@ fun LuaEditorDialog(
                 .widthIn(max = 600.dp)
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(28.dp)
+                )
+                .padding(24.dp)
         ) {
             Text(
                 text = title,
@@ -68,42 +76,56 @@ fun LuaEditorDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                FilledTonalButton(onClick = { clipboardManager.setText(AnnotatedString(code)) }) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.copy), fontSize = 12.sp)
-                }
+                val compactBtn = Modifier.height(32.dp)
+                val compactPadding = PaddingValues(horizontal = 10.dp)
                 FilledTonalButton(
-                    modifier = Modifier.padding(start = 6.dp),
-                    onClick = { clipboardManager.getText()?.text?.let(onCodeChange) }
+                    onClick = { clipboardManager.setText(AnnotatedString(code)) },
+                    modifier = compactBtn,
+                    contentPadding = compactPadding,
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.paste), fontSize = 12.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.copy), fontSize = 11.sp)
                 }
+                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
-                    modifier = Modifier.padding(start = 6.dp),
-                    onClick = { onCodeChange("") }
+                    onClick = { clipboardManager.getText()?.text?.let(onCodeChange) },
+                    modifier = compactBtn,
+                    contentPadding = compactPadding,
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.clear), fontSize = 12.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.paste), fontSize = 11.sp)
+                }
+                Spacer(Modifier.width(4.dp))
+                FilledTonalButton(
+                    onClick = { onCodeChange("") },
+                    modifier = compactBtn,
+                    contentPadding = compactPadding,
+                ) {
+                    Text(stringResource(my.noveldokusha.strings.R.string.clear), fontSize = 11.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 FilledTonalButton(
                     onClick = onDismiss,
+                    modifier = compactBtn,
+                    contentPadding = compactPadding,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.cancel), fontSize = 12.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.cancel), fontSize = 11.sp)
                 }
+                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
-                    modifier = Modifier.padding(start = 6.dp),
                     onClick = onSave,
+                    modifier = compactBtn,
+                    contentPadding = compactPadding,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.save), fontSize = 12.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.save), fontSize = 11.sp)
                 }
             }
 
