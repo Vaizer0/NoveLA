@@ -116,7 +116,7 @@ internal class NarratorMediaControlsService : Service() {
 
     private fun onFocusGained() {
         narratorNotification.reassertActive()
-        if (wasPausedByFocusLoss && ReaderTextToSpeech.pausedBySystem) {
+        if (wasPausedByFocusLoss && ReaderTextToSpeech.pausedBySystem && !ReaderTextToSpeech.userPaused) {
             wasPausedByFocusLoss = false
             ReaderTextToSpeech.pausedBySystem = false
             narratorNotification.play()
