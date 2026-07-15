@@ -419,7 +419,7 @@ internal class ReaderTextToSpeech(
                     if (activeClaimTrack === audioTrack) activeClaimTrack = null
                 }
             }
-            Timber.d("claimMediaSession OK")
+            Timber.v("claimMediaSession OK")
         } catch (e: Exception) {
             Timber.w(e, "claimMediaSession failed")
         }

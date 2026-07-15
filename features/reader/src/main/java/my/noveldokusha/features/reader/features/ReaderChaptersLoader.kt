@@ -74,7 +74,7 @@ internal class ReaderChaptersLoader(
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
     private var errorRetryCount = 0
-    private var failedChapterIndex: Int = -1
+    @Volatile var failedChapterIndex: Int = -1
     private @Volatile var retryInProgress = false
     private @Volatile var pendingPruneChapterIndex: Int? = null
 
@@ -183,6 +183,15 @@ internal class ReaderChaptersLoader(
     fun clearErrorAndLoadNext() {
         hasLoadingError = false
         tryLoadNext()
+    }
+
+    fun retryFailed() {
+        if (retryInProgress || !_hasLoadingError) return
+        val idx = failedChapterIndex
+        if (idx < 0) return
+        autoResetJob?.cancel()
+        autoResetJob = null
+        retryChapter(idx)
     }
 
     fun retryChapter(chapterIndex: Int) {

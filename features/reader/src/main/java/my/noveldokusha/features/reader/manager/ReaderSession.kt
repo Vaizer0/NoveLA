@@ -2,6 +2,7 @@ package my.noveldokusha.features.reader.manager
 
 import timber.log.Timber
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -34,6 +35,7 @@ import my.noveldokusha.features.reader.features.ReaderLiveTranslation
 import my.noveldokusha.features.reader.features.ReaderTextToSpeech
 import my.noveldokusha.features.reader.services.FloatingTtsService
 import my.noveldokusha.features.reader.services.NarratorMediaControlsService
+import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import my.noveldokusha.features.reader.tools.ChaptersIsReadRoutine
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
 import my.noveldokusha.text_translator.domain.TranslationManager
@@ -212,6 +214,16 @@ internal class ReaderSession(
             readerRepository.upsertReadingHistory(bookUrl, chapterUrl)
         }
         initReaderTTSObservers()
+
+        scope.launch {
+            CloudflareBypassSignal.bypassCompleted.collect { host ->
+                val bookHost = Uri.parse(bookUrl).host
+                if (host == bookHost && readerChaptersLoader.hasLoadingError) {
+                    Timber.d("CF bypass completed for $host, retrying failed chapter")
+                    readerChaptersLoader.retryFailed()
+                }
+            }
+        }
     }
 
     private fun initLoadData() {
@@ -332,6 +344,7 @@ internal class ReaderSession(
     }
 
     fun startSpeaker(itemIndex: Int) {
+        NarratorMediaControlsService.start(context)
         val startingItem = items.getOrNull(itemIndex) ?: return
         readerTextToSpeech.start()
         scope.launch {
@@ -363,8 +376,8 @@ internal class ReaderSession(
         readerLiveTranslation.close()
         readRoutine.close()
         readerTextToSpeech.shutdownTts()
-        scope.cancel()
         NarratorMediaControlsService.stop(context)
+        scope.cancel()
         runCatching { FloatingTtsService.stop(context) }
     }
 

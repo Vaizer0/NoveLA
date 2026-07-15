@@ -673,6 +673,10 @@ class ReaderActivity : BaseActivity() {
             val newOffsetPx = 200.dpToPx(this)
             viewBind.listView.smoothScrollToPositionFromTop(itemPosition, newOffsetPx, 500)
         }
+
+        if (viewModel.chaptersLoader.hasLoadingError) {
+            viewModel.chaptersLoader.retryFailed()
+        }
     }
 
     private fun updateCurrentReadingPosSavingState(firstVisibleItemIndex: Int) {
