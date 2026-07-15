@@ -620,4 +620,52 @@
 
     <string name="book_fix">पुस्तक ठीक करें</string>
 
+
+    <!-- History -->
+    <string name="title_history">इतिहास</string>
+    <string name="no_history_yet">अभी तक कोई पढ़ने का इतिहास नहीं</string>
+    <string name="clear_all_history">सभी इतिहास साफ़ करें</string>
+    <string name="display_options_title">प्रदर्शन</string>
+    <string name="save_settings">सेटिंग्स सहेजें</string>
+    <string name="save_plugins">प्लगइन सहेजें</string>
+    <string name="copying_plugins">प्लगइन कॉपी हो रहे हैं…</string>
+    <string name="auto_backup_include_settings">सेटिंग्स शामिल करें</string>
+    <string name="auto_backup_include_settings_description">ऑटो बैकअप में API कुंजियाँ और प्राथमिकताएँ सहेजें</string>
+    <string name="auto_backup_include_plugins">प्लगइन शामिल करें</string>
+    <string name="auto_backup_include_plugins_description">ऑटो बैकअप में Lua स्क्रेपर प्लगइन सहेजें</string>
+    <string name="import_lua">Lua आयात करें</string>
+    <string name="edit_lua">Lua संपादित करें</string>
+    <string name="reset">रीसेट</string>
+    <string name="uninstall">अनइंस्टॉल</string>
+    <string name="installing">इंस्टॉल हो रहा है…</string>
+    <string name="install">इंस्टॉल</string>
+    <string name="update">अपडेट</string>
+    <string name="retry">पुनः प्रयास</string>
+    <string name="top">↑ ऊपर</string>
+    <string name="copy">कॉपी</string>
+    <string name="paste">पेस्ट</string>
+    <string name="clear">साफ़</string>
+    <string name="no_extensions_available">कोई एक्सटेंशन उपलब्ध नहीं</string>
+    <string name="local_extension_description">स्थानीय Lua एक्सटेंशन</string>
+    <string name="extension_author_local">स्थानीय</string>
+    <string name="ext_failed_to_load">एक्सटेंशन लोड करने में विफल: %s</string>
+    <string name="ext_failed_to_download">%s के लिए स्क्रिप्ट डाउनलोड करने में विफल</string>
+    <string name="ext_failed_to_install">%1$s इंस्टॉल करने में विफल: %2$s</string>
+    <string name="ext_failed_to_uninstall">एक्सटेंशन अनइंस्टॉल करने में विफल</string>
+    <string name="ext_failed_to_toggle">एक्सटेंशन टॉगल करने में विफल</string>
+    <string name="lua_empty_error">खाली Lua फ़ाइल</string>
+    <string name="lua_compile_error">Lua संकलन त्रुटि</string>
+    <string name="lua_save_error">Lua फ़ाइल सहेजने में विफल</string>
+    <string name="lua_import_error">आयातित Lua फ़ाइल सहेजने में विफल</string>
+    <string name="lua_duplicate_error">एक्सटेंशन \"%s\" पहले से स्थानीय रूप से मौजूद है</string>
+    <string name="lua_not_editable">संपादन के लिए स्रोत कोड उपलब्ध नहीं</string>
+    <string name="lua_restore_error">रिपॉजिटरी से Lua पुनर्स्थापित करने में विफल</string>
+    <string name="time_just_now">अभी अभी</string>
+    <string name="time_minutes_ago">%dm पहले</string>
+    <string name="time_hours_ago">%dh पहले</string>
+    <string name="time_days_ago">%dd पहले</string>
+    <string name="time_weeks_ago">%dw पहले</string>
+    <string name="time_months_ago">%dmo पहले</string>
+    <string name="time_years_ago">%dy पहले</string>
+
 </resources>

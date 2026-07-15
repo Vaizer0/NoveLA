@@ -620,4 +620,52 @@
 
     <string name="book_fix">Sửa sách</string>
 
+
+    <!-- History -->
+    <string name="title_history">Lịch sử</string>
+    <string name="no_history_yet">Chưa có lịch sử đọc</string>
+    <string name="clear_all_history">Xóa tất cả lịch sử</string>
+    <string name="display_options_title">Hiển thị</string>
+    <string name="save_settings">Lưu cài đặt</string>
+    <string name="save_plugins">Lưu plugin</string>
+    <string name="copying_plugins">Đang sao chép plugin…</string>
+    <string name="auto_backup_include_settings">Bao gồm cài đặt</string>
+    <string name="auto_backup_include_settings_description">Lưu khóa API và tùy chọn trong sao lưu tự động</string>
+    <string name="auto_backup_include_plugins">Bao gồm plugin</string>
+    <string name="auto_backup_include_plugins_description">Lưu plugin thu thập Lua trong sao lưu tự động</string>
+    <string name="import_lua">Nhập Lua</string>
+    <string name="edit_lua">Sửa Lua</string>
+    <string name="reset">Đặt lại</string>
+    <string name="uninstall">Gỡ cài đặt</string>
+    <string name="installing">Đang cài đặt…</string>
+    <string name="install">Cài đặt</string>
+    <string name="update">Cập nhật</string>
+    <string name="retry">Thử lại</string>
+    <string name="top">↑ Đầu</string>
+    <string name="copy">Sao chép</string>
+    <string name="paste">Dán</string>
+    <string name="clear">Xóa</string>
+    <string name="no_extensions_available">Không có tiện ích mở rộng</string>
+    <string name="local_extension_description">Tiện ích mở rộng Lua cục bộ</string>
+    <string name="extension_author_local">Cục bộ</string>
+    <string name="ext_failed_to_load">Không thể tải tiện ích mở rộng: %s</string>
+    <string name="ext_failed_to_download">Không thể tải tập lệnh cho %s</string>
+    <string name="ext_failed_to_install">Không thể cài đặt %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Không thể gỡ cài đặt tiện ích mở rộng</string>
+    <string name="ext_failed_to_toggle">Không thể chuyển đổi tiện ích mở rộng</string>
+    <string name="lua_empty_error">Tệp Lua trống</string>
+    <string name="lua_compile_error">Lỗi biên dịch Lua</string>
+    <string name="lua_save_error">Không thể lưu tệp Lua</string>
+    <string name="lua_import_error">Không thể lưu tệp Lua đã nhập</string>
+    <string name="lua_duplicate_error">Tiện ích mở rộng \"%s\" đã tồn tại ở cục bộ</string>
+    <string name="lua_not_editable">Mã nguồn không khả dụng để chỉnh sửa</string>
+    <string name="lua_restore_error">Không thể khôi phục Lua từ kho lưu trữ</string>
+    <string name="time_just_now">vừa xong</string>
+    <string name="time_minutes_ago">%d phút trước</string>
+    <string name="time_hours_ago">%d giờ trước</string>
+    <string name="time_days_ago">%d ngày trước</string>
+    <string name="time_weeks_ago">%d tuần trước</string>
+    <string name="time_months_ago">%d tháng trước</string>
+    <string name="time_years_ago">%d năm trước</string>
+
 </resources>

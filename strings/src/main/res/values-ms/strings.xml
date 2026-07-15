@@ -620,4 +620,52 @@
 
     <string name="book_fix">Baiki buku</string>
 
+
+    <!-- History -->
+    <string name="title_history">Sejarah</string>
+    <string name="no_history_yet">Tiada sejarah bacaan lagi</string>
+    <string name="clear_all_history">Kosongkan semua sejarah</string>
+    <string name="display_options_title">Paparan</string>
+    <string name="save_settings">Simpan tetapan</string>
+    <string name="save_plugins">Simpan plugin</string>
+    <string name="copying_plugins">Menyalin plugin…</string>
+    <string name="auto_backup_include_settings">Sertakan tetapan</string>
+    <string name="auto_backup_include_settings_description">Simpan kunci API dan keutamaan dalam sandaran auto</string>
+    <string name="auto_backup_include_plugins">Sertakan plugin</string>
+    <string name="auto_backup_include_plugins_description">Simpan plugin pengikis Lua dalam sandaran auto</string>
+    <string name="import_lua">Import Lua</string>
+    <string name="edit_lua">Sunting Lua</string>
+    <string name="reset">Set semula</string>
+    <string name="uninstall">Nyahpasang</string>
+    <string name="installing">Memasang…</string>
+    <string name="install">Pasang</string>
+    <string name="update">Kemas kini</string>
+    <string name="retry">Cuba lagi</string>
+    <string name="top">↑ Atas</string>
+    <string name="copy">Salin</string>
+    <string name="paste">Tampal</string>
+    <string name="clear">Kosongkan</string>
+    <string name="no_extensions_available">Tiada sambungan tersedia</string>
+    <string name="local_extension_description">Sambungan Lua tempatan</string>
+    <string name="extension_author_local">Tempatan</string>
+    <string name="ext_failed_to_load">Gagal memuat sambungan: %s</string>
+    <string name="ext_failed_to_download">Gagal muat turun skrip untuk %s</string>
+    <string name="ext_failed_to_install">Gagal memasang %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Gagal nyahpasang sambungan</string>
+    <string name="ext_failed_to_toggle">Gagal togol sambungan</string>
+    <string name="lua_empty_error">Fail Lua kosong</string>
+    <string name="lua_compile_error">Ralat kompilasi Lua</string>
+    <string name="lua_save_error">Gagal menyimpan fail Lua</string>
+    <string name="lua_import_error">Gagal menyimpan fail Lua import</string>
+    <string name="lua_duplicate_error">Sambungan \"%s\" sudah wujud secara tempatan</string>
+    <string name="lua_not_editable">Kod sumber tidak tersedia untuk suntingan</string>
+    <string name="lua_restore_error">Gagal memulihkan Lua dari repositori</string>
+    <string name="time_just_now">baru sahaja</string>
+    <string name="time_minutes_ago">%dm lalu</string>
+    <string name="time_hours_ago">%dj lalu</string>
+    <string name="time_days_ago">%dh lalu</string>
+    <string name="time_weeks_ago">%dmg lalu</string>
+    <string name="time_months_ago">%dbln lalu</string>
+    <string name="time_years_ago">%dth lalu</string>
+
 </resources>

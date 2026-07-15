@@ -1064,5 +1064,70 @@
     <string name="time_months_ago">%d мес. назад</string>
     <string name="time_years_ago">%d г. назад</string>
 
+    <!-- Auto Import -->
+    <string name="auto_import_directory_selected">Выбрана директория: %s</string>
+    <string name="auto_import_local_books">Автоматический импорт книг</string>
+    <string name="auto_import_local_books_description">Автоматически импортировать все книги из выбранной директории в библиотеку</string>
+    <string name="auto_import_select_directory">Выбрать директорию</string>
+
+    <!-- Dark Mode -->
+    <string name="dark_mode_black">Чёрный</string>
+    <string name="dark_mode_dark">Тёмная</string>
+    <string name="dark_mode_light">Светлая</string>
+    <string name="dark_mode_system">Системная</string>
+
+    <!-- Downloads -->
+    <string name="download_progress_title">Загрузки</string>
+
+    <!-- Language Names -->
+    <string name="english">Английский</string>
+    <string name="language_german">Немецкий</string>
+    <string name="language_japanese">Японский</string>
+    <string name="language_korean">Корейский</string>
+    <string name="language_MTL">MTL</string>
+    <string name="language_polish">Польский</string>
+    <string name="language_turkish">Турецкий</string>
+    <string name="language_vietnamese">Вьетнамский</string>
+
+    <!-- LLM -->
+    <string name="llm_prompt_use_system_locale">Использовать язык системы в запросе</string>
+    <string name="llm_prompt_use_system_locale_description">Напр. «переведи на японский» вместо «translate to Japanese»</string>
+
+    <!-- Other UI -->
+    <string name="line_height">Высота строки</string>
+    <string name="loading">Загрузка…</string>
+    <string name="no_category">Без категории</string>
+    <string name="paragraph_spacing">Интервал между абзацами</string>
+    <string name="rename_category">Переименовать</string>
+    <string name="seconds_format">%d с</string>
+    <string name="sort_ascending">По возрастанию</string>
+    <string name="sort_by_name">По названию</string>
+    <string name="sort_descending">По убыванию</string>
+    <string name="cloudflare_challenge_timeout">Тайм-аут проверки Cloudflare</string>
+    <string name="timeout_seconds">Тайм-аут (сек.)</string>
+
+    <!-- Themes -->
+    <string name="theme_name_catppuccin">Catppuccin</string>
+    <string name="theme_name_cloudflare">Cloudflare</string>
+    <string name="theme_name_cottoncandy">Сахарная вата</string>
+    <string name="theme_name_default">По умолчанию</string>
+    <string name="theme_name_doom">Doom</string>
+    <string name="theme_name_green_apple">Зелёное яблоко</string>
+    <string name="theme_name_lavender">Лаванда</string>
+    <string name="theme_name_matrix">Matrix</string>
+    <string name="theme_name_midnight_dusk">Полуночные сумерки</string>
+    <string name="theme_name_mocha">Mocha</string>
+    <string name="theme_name_monet">Material You</string>
+    <string name="theme_name_monochrome">Монохромный</string>
+    <string name="theme_name_nord">Nord</string>
+    <string name="theme_name_sapphire">Sapphire</string>
+    <string name="theme_name_strawberry_daiquiri">Клубничный дайкири</string>
+    <string name="theme_name_tachiyomi">Tachiyomi</string>
+    <string name="theme_name_tako">Tako</string>
+    <string name="theme_name_teal_turquoise">Бирюзовый</string>
+    <string name="theme_name_tidal_wave">Приливная волна</string>
+    <string name="theme_name_yinyang">Инь Янь</string>
+    <string name="theme_name_yotsuba">Yotsuba</string>
+
 </resources>
 

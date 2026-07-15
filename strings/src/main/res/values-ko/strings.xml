@@ -620,4 +620,63 @@
 
     <string name="book_fix">책 수정</string>
 
+    <!-- History -->
+    <string name="title_history">기록</string>
+    <string name="no_history_yet">아직 읽은 기록이 없습니다</string>
+    <string name="clear_all_history">모든 기록 지우기</string>
+
+    <!-- Display -->
+    <string name="display_options_title">표시</string>
+    <string name="save_settings">설정 저장</string>
+    <string name="save_plugins">플러그인 저장</string>
+    <string name="copying_plugins">플러그인 복사 중…</string>
+
+    <!-- Auto Backup -->
+    <string name="auto_backup_include_settings">설정 포함</string>
+    <string name="auto_backup_include_settings_description">API 키 및 환경설정을 자동 백업에 저장</string>
+    <string name="auto_backup_include_plugins">플러그인 포함</string>
+    <string name="auto_backup_include_plugins_description">Lua 스크래퍼 플러그인을 자동 백업에 저장</string>
+
+    <!-- Lua Extensions -->
+    <string name="import_lua">Lua 가져오기</string>
+    <string name="edit_lua">Lua 편집</string>
+    <string name="reset">초기화</string>
+    <string name="uninstall">제거</string>
+    <string name="installing">설치 중…</string>
+    <string name="install">설치</string>
+    <string name="update">업데이트</string>
+    <string name="retry">재시도</string>
+    <string name="top">↑ 맨 위</string>
+    <string name="copy">복사</string>
+    <string name="paste">붙여넣기</string>
+    <string name="clear">지우기</string>
+    <string name="no_extensions_available">사용 가능한 확장 프로그램이 없습니다</string>
+    <string name="local_extension_description">로컬 Lua 확장 프로그램</string>
+    <string name="extension_author_local">로컬</string>
+
+    <!-- Extension errors -->
+    <string name="ext_failed_to_load">확장 프로그램을 불러오지 못했습니다: %s</string>
+    <string name="ext_failed_to_download">%s의 스크립트 다운로드 실패</string>
+    <string name="ext_failed_to_install">%1$s 설치 실패: %2$s</string>
+    <string name="ext_failed_to_uninstall">확장 프로그램 제거 실패</string>
+    <string name="ext_failed_to_toggle">확장 프로그램 전환 실패</string>
+
+    <!-- Lua errors -->
+    <string name="lua_empty_error">빈 Lua 파일</string>
+    <string name="lua_compile_error">Lua 컴파일 오류</string>
+    <string name="lua_save_error">Lua 파일 저장 실패</string>
+    <string name="lua_import_error">가져온 Lua 파일 저장 실패</string>
+    <string name="lua_duplicate_error">확장 프로그램 \"%s\"이(가) 이미 로컬에 존재합니다</string>
+    <string name="lua_not_editable">소스 코드를 편집할 수 없습니다</string>
+    <string name="lua_restore_error">리포지토리에서 Lua 복원 실패</string>
+
+    <!-- Time -->
+    <string name="time_just_now">방금</string>
+    <string name="time_minutes_ago">%dm 전</string>
+    <string name="time_hours_ago">%dh 전</string>
+    <string name="time_days_ago">%dd 전</string>
+    <string name="time_weeks_ago">%dw 전</string>
+    <string name="time_months_ago">%dmo 전</string>
+    <string name="time_years_ago">%dy 전</string>
+
 </resources>

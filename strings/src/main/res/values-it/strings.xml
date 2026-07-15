@@ -620,4 +620,62 @@
 
     <string name="book_fix">Ripara libro</string>
 
+
+    <!-- History -->
+    <string name="title_history">Cronologia</string>
+    <string name="no_history_yet">Nessuna cronologia di lettura</string>
+    <string name="clear_all_history">Cancella tutta la cronologia</string>
+
+    <!-- Display -->
+    <string name="display_options_title">Schermo</string>
+
+    <!-- Saving -->
+    <string name="save_settings">Salva impostazioni</string>
+    <string name="save_plugins">Salva plugin</string>
+    <string name="copying_plugins">Copia plugin in corso…</string>
+
+    <!-- Auto Backup -->
+    <string name="auto_backup_include_settings">Includi impostazioni</string>
+    <string name="auto_backup_include_settings_description">Salva chiavi API e preferenze nel backup automatico</string>
+    <string name="auto_backup_include_plugins">Includi plugin</string>
+    <string name="auto_backup_include_plugins_description">Salva plugin scraper Lua nel backup automatico</string>
+
+    <!-- Lua Editor / Extensions -->
+    <string name="import_lua">Importa Lua</string>
+    <string name="edit_lua">Modifica Lua</string>
+    <string name="reset">Reimposta</string>
+    <string name="uninstall">Disinstalla</string>
+    <string name="installing">Installazione in corso…</string>
+    <string name="install">Installa</string>
+    <string name="update">Aggiorna</string>
+    <string name="retry">Riprova</string>
+    <string name="top">↑ Inizio</string>
+    <string name="copy">Copia</string>
+    <string name="paste">Incolla</string>
+    <string name="clear">Cancella</string>
+    <string name="no_extensions_available">Nessuna estensione disponibile</string>
+    <string name="local_extension_description">Estensione Lua locale</string>
+    <string name="extension_author_local">Locale</string>
+    <string name="ext_failed_to_load">Impossibile caricare le estensioni: %s</string>
+    <string name="ext_failed_to_download">Impossibile scaricare lo script per %s</string>
+    <string name="ext_failed_to_install">Impossibile installare %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Impossibile disinstallare l'estensione</string>
+    <string name="ext_failed_to_toggle">Impossibile attivare/disattivare l'estensione</string>
+    <string name="lua_empty_error">File Lua vuoto</string>
+    <string name="lua_compile_error">Errore di compilazione Lua</string>
+    <string name="lua_save_error">Impossibile salvare il file Lua</string>
+    <string name="lua_import_error">Impossibile salvare il file Lua importato</string>
+    <string name="lua_duplicate_error">L'estensione \"%s\" esiste già localmente</string>
+    <string name="lua_not_editable">Codice sorgente non disponibile per la modifica</string>
+    <string name="lua_restore_error">Impossibile ripristinare Lua dal repository</string>
+
+    <!-- Relative Time -->
+    <string name="time_just_now">proprio ora</string>
+    <string name="time_minutes_ago">%dm fa</string>
+    <string name="time_hours_ago">%dh fa</string>
+    <string name="time_days_ago">%dd fa</string>
+    <string name="time_weeks_ago">%dw fa</string>
+    <string name="time_months_ago">%dmo fa</string>
+    <string name="time_years_ago">%dy fa</string>
+
 </resources>

@@ -620,4 +620,52 @@
 
     <string name="book_fix">Ayusin ang libro</string>
 
+
+    <!-- History -->
+    <string name="title_history">Kasaysayan</string>
+    <string name="no_history_yet">Wala pang kasaysayan ng pagbasa</string>
+    <string name="clear_all_history">Alisin lahat ng kasaysayan</string>
+    <string name="display_options_title">Display</string>
+    <string name="save_settings">I-save ang mga setting</string>
+    <string name="save_plugins">I-save ang mga plugin</string>
+    <string name="copying_plugins">Kinokopya ang mga plugin…</string>
+    <string name="auto_backup_include_settings">Isama ang mga setting</string>
+    <string name="auto_backup_include_settings_description">I-save ang mga API key at kagustuhan sa auto backup</string>
+    <string name="auto_backup_include_plugins">Isama ang mga plugin</string>
+    <string name="auto_backup_include_plugins_description">I-save ang mga Lua scraper plugin sa auto backup</string>
+    <string name="import_lua">Mag-import ng Lua</string>
+    <string name="edit_lua">I-edit ang Lua</string>
+    <string name="reset">I-reset</string>
+    <string name="uninstall">I-uninstall</string>
+    <string name="installing">Ini-install…</string>
+    <string name="install">I-install</string>
+    <string name="update">I-update</string>
+    <string name="retry">Subukan muli</string>
+    <string name="top">↑ Itaas</string>
+    <string name="copy">Kopyahin</string>
+    <string name="paste">I-paste</string>
+    <string name="clear">Alisin</string>
+    <string name="no_extensions_available">Walang available na extension</string>
+    <string name="local_extension_description">Lokal na Lua extension</string>
+    <string name="extension_author_local">Lokal</string>
+    <string name="ext_failed_to_load">Nabigo ang pag-load ng mga extension: %s</string>
+    <string name="ext_failed_to_download">Nabigo ang pag-download ng script para sa %s</string>
+    <string name="ext_failed_to_install">Nabigo ang pag-install ng %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Nabigo ang pag-uninstall ng extension</string>
+    <string name="ext_failed_to_toggle">Nabigo ang pag-toggle ng extension</string>
+    <string name="lua_empty_error">Walang laman na Lua file</string>
+    <string name="lua_compile_error">Error sa pagkumpila ng Lua</string>
+    <string name="lua_save_error">Nabigo ang pag-save ng Lua file</string>
+    <string name="lua_import_error">Nabigo ang pag-save ng na-import na Lua file</string>
+    <string name="lua_duplicate_error">Ang extension na \"%s\" ay mayroon na nang lokal</string>
+    <string name="lua_not_editable">Hindi available ang source code para sa pag-edit</string>
+    <string name="lua_restore_error">Nabigo ang pag-restore ng Lua mula sa repository</string>
+    <string name="time_just_now">ngayon lang</string>
+    <string name="time_minutes_ago">%d min. nakaraan</string>
+    <string name="time_hours_ago">%d or. nakaraan</string>
+    <string name="time_days_ago">%d araw nakaraan</string>
+    <string name="time_weeks_ago">%d ling. nakaraan</string>
+    <string name="time_months_ago">%d buw. nakaraan</string>
+    <string name="time_years_ago">%d taon nakaraan</string>
+
 </resources>

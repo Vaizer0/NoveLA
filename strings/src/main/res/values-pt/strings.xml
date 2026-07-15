@@ -620,4 +620,62 @@
 
     <string name="book_fix">Reparar livro</string>
 
+
+    <!-- History -->
+    <string name="title_history">Histórico</string>
+    <string name="no_history_yet">Nenhum histórico de leitura ainda</string>
+    <string name="clear_all_history">Limpar todo o histórico</string>
+
+    <!-- Display -->
+    <string name="display_options_title">Ecrã</string>
+
+    <!-- Saving -->
+    <string name="save_settings">Guardar definições</string>
+    <string name="save_plugins">Guardar plugins</string>
+    <string name="copying_plugins">Copiando plugins…</string>
+
+    <!-- Auto Backup -->
+    <string name="auto_backup_include_settings">Incluir definições</string>
+    <string name="auto_backup_include_settings_description">Guardar chaves de API e preferências no backup automático</string>
+    <string name="auto_backup_include_plugins">Incluir plugins</string>
+    <string name="auto_backup_include_plugins_description">Guardar plugins Lua scraper no backup automático</string>
+
+    <!-- Lua Editor / Extensions -->
+    <string name="import_lua">Importar Lua</string>
+    <string name="edit_lua">Editar Lua</string>
+    <string name="reset">Repor</string>
+    <string name="uninstall">Desinstalar</string>
+    <string name="installing">A instalar…</string>
+    <string name="install">Instalar</string>
+    <string name="update">Atualizar</string>
+    <string name="retry">Repetir</string>
+    <string name="top">↑ Início</string>
+    <string name="copy">Copiar</string>
+    <string name="paste">Colar</string>
+    <string name="clear">Limpar</string>
+    <string name="no_extensions_available">Nenhuma extensão disponível</string>
+    <string name="local_extension_description">Extensão Lua local</string>
+    <string name="extension_author_local">Local</string>
+    <string name="ext_failed_to_load">Falha ao carregar extensões: %s</string>
+    <string name="ext_failed_to_download">Falha ao transferir script para %s</string>
+    <string name="ext_failed_to_install">Falha ao instalar %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Falha ao desinstalar extensão</string>
+    <string name="ext_failed_to_toggle">Falha ao ativar/desativar extensão</string>
+    <string name="lua_empty_error">Ficheiro Lua vazio</string>
+    <string name="lua_compile_error">Erro de compilação Lua</string>
+    <string name="lua_save_error">Falha ao guardar ficheiro Lua</string>
+    <string name="lua_import_error">Falha ao guardar ficheiro Lua importado</string>
+    <string name="lua_duplicate_error">A extensão \"%s\" já existe localmente</string>
+    <string name="lua_not_editable">Código-fonte indisponível para edição</string>
+    <string name="lua_restore_error">Falha ao restaurar Lua do repositório</string>
+
+    <!-- Relative Time -->
+    <string name="time_just_now">agora mesmo</string>
+    <string name="time_minutes_ago">há %dm</string>
+    <string name="time_hours_ago">há %dh</string>
+    <string name="time_days_ago">há %dd</string>
+    <string name="time_weeks_ago">há %dw</string>
+    <string name="time_months_ago">há %dmo</string>
+    <string name="time_years_ago">há %dy</string>
+
 </resources>

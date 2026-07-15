@@ -620,4 +620,63 @@
 
     <string name="book_fix">本を修正</string>
 
+    <!-- History -->
+    <string name="title_history">履歴</string>
+    <string name="no_history_yet">閲覧履歴はまだありません</string>
+    <string name="clear_all_history">すべての履歴を消去</string>
+
+    <!-- Display -->
+    <string name="display_options_title">表示</string>
+    <string name="save_settings">設定を保存</string>
+    <string name="save_plugins">プラグインを保存</string>
+    <string name="copying_plugins">プラグインをコピー中…</string>
+
+    <!-- Auto Backup -->
+    <string name="auto_backup_include_settings">設定を含める</string>
+    <string name="auto_backup_include_settings_description">APIキーと設定を自動バックアップに保存</string>
+    <string name="auto_backup_include_plugins">プラグインを含める</string>
+    <string name="auto_backup_include_plugins_description">Luaスクレイパープラグインを自動バックアップに保存</string>
+
+    <!-- Lua Extensions -->
+    <string name="import_lua">Luaをインポート</string>
+    <string name="edit_lua">Luaを編集</string>
+    <string name="reset">リセット</string>
+    <string name="uninstall">アンインストール</string>
+    <string name="installing">インストール中…</string>
+    <string name="install">インストール</string>
+    <string name="update">更新</string>
+    <string name="retry">再試行</string>
+    <string name="top">↑ トップ</string>
+    <string name="copy">コピー</string>
+    <string name="paste">ペースト</string>
+    <string name="clear">クリア</string>
+    <string name="no_extensions_available">利用可能な拡張機能はありません</string>
+    <string name="local_extension_description">ローカルLua拡張機能</string>
+    <string name="extension_author_local">ローカル</string>
+
+    <!-- Extension errors -->
+    <string name="ext_failed_to_load">拡張機能の読み込みに失敗しました: %s</string>
+    <string name="ext_failed_to_download">%s のスクリプトのダウンロードに失敗しました</string>
+    <string name="ext_failed_to_install">%1$s のインストールに失敗しました: %2$s</string>
+    <string name="ext_failed_to_uninstall">拡張機能のアンインストールに失敗しました</string>
+    <string name="ext_failed_to_toggle">拡張機能の切り替えに失敗しました</string>
+
+    <!-- Lua errors -->
+    <string name="lua_empty_error">Luaファイルが空です</string>
+    <string name="lua_compile_error">Luaコンパイルエラー</string>
+    <string name="lua_save_error">Luaファイルの保存に失敗しました</string>
+    <string name="lua_import_error">インポートしたLuaファイルの保存に失敗しました</string>
+    <string name="lua_duplicate_error">拡張機能 \"%s\" は既にローカルに存在します</string>
+    <string name="lua_not_editable">ソースコードは編集できません</string>
+    <string name="lua_restore_error">リポジトリからLuaの復元に失敗しました</string>
+
+    <!-- Time -->
+    <string name="time_just_now">たった今</string>
+    <string name="time_minutes_ago">%dm前</string>
+    <string name="time_hours_ago">%dh前</string>
+    <string name="time_days_ago">%dd前</string>
+    <string name="time_weeks_ago">%dw前</string>
+    <string name="time_months_ago">%dmo前</string>
+    <string name="time_years_ago">%dy前</string>
+
 </resources>

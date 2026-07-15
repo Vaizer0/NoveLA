@@ -620,4 +620,52 @@
 
     <string name="book_fix">Perbaiki buku</string>
 
+
+    <!-- History -->
+    <string name="title_history">Riwayat</string>
+    <string name="no_history_yet">Belum ada riwayat baca</string>
+    <string name="clear_all_history">Hapus semua riwayat</string>
+    <string name="display_options_title">Tampilan</string>
+    <string name="save_settings">Simpan pengaturan</string>
+    <string name="save_plugins">Simpan plugin</string>
+    <string name="copying_plugins">Menyalin plugin…</string>
+    <string name="auto_backup_include_settings">Sertakan pengaturan</string>
+    <string name="auto_backup_include_settings_description">Simpan kunci API dan preferensi di cadangan otomatis</string>
+    <string name="auto_backup_include_plugins">Sertakan plugin</string>
+    <string name="auto_backup_include_plugins_description">Simpan plugin scraper Lua di cadangan otomatis</string>
+    <string name="import_lua">Impor Lua</string>
+    <string name="edit_lua">Edit Lua</string>
+    <string name="reset">Atur ulang</string>
+    <string name="uninstall">Copot</string>
+    <string name="installing">Memasang…</string>
+    <string name="install">Pasang</string>
+    <string name="update">Perbarui</string>
+    <string name="retry">Coba lagi</string>
+    <string name="top">↑ Atas</string>
+    <string name="copy">Salin</string>
+    <string name="paste">Tempel</string>
+    <string name="clear">Hapus</string>
+    <string name="no_extensions_available">Tidak ada ekstensi tersedia</string>
+    <string name="local_extension_description">Ekstensi Lua lokal</string>
+    <string name="extension_author_local">Lokal</string>
+    <string name="ext_failed_to_load">Gagal memuat ekstensi: %s</string>
+    <string name="ext_failed_to_download">Gagal mengunduh skrip untuk %s</string>
+    <string name="ext_failed_to_install">Gagal memasang %1$s: %2$s</string>
+    <string name="ext_failed_to_uninstall">Gagal mencopot ekstensi</string>
+    <string name="ext_failed_to_toggle">Gagal mengaktifkan ekstensi</string>
+    <string name="lua_empty_error">Berkas Lua kosong</string>
+    <string name="lua_compile_error">Galat kompilasi Lua</string>
+    <string name="lua_save_error">Gagal menyimpan berkas Lua</string>
+    <string name="lua_import_error">Gagal menyimpan berkas Lua impor</string>
+    <string name="lua_duplicate_error">Ekstensi \"%s\" sudah ada secara lokal</string>
+    <string name="lua_not_editable">Kode sumber tidak tersedia untuk diedit</string>
+    <string name="lua_restore_error">Gagal memulihkan Lua dari repositori</string>
+    <string name="time_just_now">baru saja</string>
+    <string name="time_minutes_ago">%dm lalu</string>
+    <string name="time_hours_ago">%dj lalu</string>
+    <string name="time_days_ago">%dh lalu</string>
+    <string name="time_weeks_ago">%dmg lalu</string>
+    <string name="time_months_ago">%dbln lalu</string>
+    <string name="time_years_ago">%dth lalu</string>
+
 </resources>

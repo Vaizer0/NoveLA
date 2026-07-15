@@ -620,4 +620,52 @@
 
     <string name="book_fix">বuku মেরামত</string>
 
+
+    <!-- History -->
+    <string name="title_history">ইতিহাস</string>
+    <string name="no_history_yet">এখনো কোনো পড়ার ইতিহাস নেই</string>
+    <string name="clear_all_history">সমস্ত ইতিহাস সাফ করুন</string>
+    <string name="display_options_title">প্রদর্শন</string>
+    <string name="save_settings">সেটিংস সংরক্ষণ করুন</string>
+    <string name="save_plugins">প্লাগইন সংরক্ষণ করুন</string>
+    <string name="copying_plugins">প্লাগইন কপি করা হচ্ছে…</string>
+    <string name="auto_backup_include_settings">সেটিংস অন্তর্ভুক্ত করুন</string>
+    <string name="auto_backup_include_settings_description">অটো ব্যাকআপে API কী এবং পছন্দসমূহ সংরক্ষণ করুন</string>
+    <string name="auto_backup_include_plugins">প্লাগইন অন্তর্ভুক্ত করুন</string>
+    <string name="auto_backup_include_plugins_description">অটো ব্যাকআপে Lua স্ক্র্যাপার প্লাগইন সংরক্ষণ করুন</string>
+    <string name="import_lua">Lua ইম্পোর্ট</string>
+    <string name="edit_lua">Lua সম্পাদনা</string>
+    <string name="reset">রিসেট</string>
+    <string name="uninstall">আনইনস্টল</string>
+    <string name="installing">ইনস্টল করা হচ্ছে…</string>
+    <string name="install">ইনস্টল</string>
+    <string name="update">আপডেট</string>
+    <string name="retry">পুনরায় চেষ্টা</string>
+    <string name="top">↑ উপরে</string>
+    <string name="copy">কপি</string>
+    <string name="paste">পেস্ট</string>
+    <string name="clear">সাফ</string>
+    <string name="no_extensions_available">কোনো এক্সটেনশন উপলব্ধ নেই</string>
+    <string name="local_extension_description">স্থানীয় Lua এক্সটেনশন</string>
+    <string name="extension_author_local">স্থানীয়</string>
+    <string name="ext_failed_to_load">এক্সটেনশন লোড করতে ব্যর্থ: %s</string>
+    <string name="ext_failed_to_download">%s-এর জন্য স্ক্রিপ্ট ডাউনলোড করতে ব্যর্থ</string>
+    <string name="ext_failed_to_install">%1$s ইনস্টল করতে ব্যর্থ: %2$s</string>
+    <string name="ext_failed_to_uninstall">এক্সটেনশন আনইনস্টল করতে ব্যর্থ</string>
+    <string name="ext_failed_to_toggle">এক্সটেনশন টগল করতে ব্যর্থ</string>
+    <string name="lua_empty_error">খালি Lua ফাইল</string>
+    <string name="lua_compile_error">Lua কম্পাইলেশন ত্রুটি</string>
+    <string name="lua_save_error">Lua ফাইল সংরক্ষণ করতে ব্যর্থ</string>
+    <string name="lua_import_error">ইম্পোর্ট করা Lua ফাইল সংরক্ষণ করতে ব্যর্থ</string>
+    <string name="lua_duplicate_error">এক্সটেনশন \"%s\" ইতিমধ্যে স্থানীয়ভাবে বিদ্যমান</string>
+    <string name="lua_not_editable">সম্পাদনার জন্য সোর্স কোড উপলব্ধ নেই</string>
+    <string name="lua_restore_error">রিপোজিটরি থেকে Lua পুনরুদ্ধার করতে ব্যর্থ</string>
+    <string name="time_just_now">এইমাত্র</string>
+    <string name="time_minutes_ago">%dm আগে</string>
+    <string name="time_hours_ago">%dh আগে</string>
+    <string name="time_days_ago">%dd আগে</string>
+    <string name="time_weeks_ago">%dw আগে</string>
+    <string name="time_months_ago">%dmo আগে</string>
+    <string name="time_years_ago">%dy আগে</string>
+
 </resources>

@@ -620,4 +620,52 @@
 
     <string name="book_fix">Kitabı düzelt</string>
 
+
+    <!-- History -->
+    <string name="title_history">Geçmiş</string>
+    <string name="no_history_yet">Henüz okuma geçmişi yok</string>
+    <string name="clear_all_history">Tüm geçmişi temizle</string>
+    <string name="display_options_title">Görüntüle</string>
+    <string name="save_settings">Ayarları kaydet</string>
+    <string name="save_plugins">Eklentileri kaydet</string>
+    <string name="copying_plugins">Eklentiler kopyalanıyor…</string>
+    <string name="auto_backup_include_settings">Ayarları dahil et</string>
+    <string name="auto_backup_include_settings_description">Otomatik yedekte API anahtarlarını ve tercihleri kaydet</string>
+    <string name="auto_backup_include_plugins">Eklentileri dahil et</string>
+    <string name="auto_backup_include_plugins_description">Otomatik yedekte Lua kazıyıcı eklentilerini kaydet</string>
+    <string name="import_lua">Lua İçe Aktar</string>
+    <string name="edit_lua">Lua Düzenle</string>
+    <string name="reset">Sıfırla</string>
+    <string name="uninstall">Kaldır</string>
+    <string name="installing">Yükleniyor…</string>
+    <string name="install">Yükle</string>
+    <string name="update">Güncelle</string>
+    <string name="retry">Yeniden Dene</string>
+    <string name="top">↑ Üst</string>
+    <string name="copy">Kopyala</string>
+    <string name="paste">Yapıştır</string>
+    <string name="clear">Temizle</string>
+    <string name="no_extensions_available">Kullanılabilir eklenti yok</string>
+    <string name="local_extension_description">Yerel Lua eklentisi</string>
+    <string name="extension_author_local">Yerel</string>
+    <string name="ext_failed_to_load">Eklentiler yüklenemedi: %s</string>
+    <string name="ext_failed_to_download">%s için betik indirilemedi</string>
+    <string name="ext_failed_to_install">%1$s yüklenemedi: %2$s</string>
+    <string name="ext_failed_to_uninstall">Eklenti kaldırılamadı</string>
+    <string name="ext_failed_to_toggle">Eklenti durumu değiştirilemedi</string>
+    <string name="lua_empty_error">Boş Lua dosyası</string>
+    <string name="lua_compile_error">Lua derleme hatası</string>
+    <string name="lua_save_error">Lua dosyası kaydedilemedi</string>
+    <string name="lua_import_error">İçe aktarılan Lua dosyası kaydedilemedi</string>
+    <string name="lua_duplicate_error">\"%s\" eklentisi zaten yerel olarak mevcut</string>
+    <string name="lua_not_editable">Kaynak kod düzenleme için mevcut değil</string>
+    <string name="lua_restore_error">Lua depodan geri yüklenemedi</string>
+    <string name="time_just_now">az önce</string>
+    <string name="time_minutes_ago">%dm önce</string>
+    <string name="time_hours_ago">%dh önce</string>
+    <string name="time_days_ago">%dd önce</string>
+    <string name="time_weeks_ago">%dw önce</string>
+    <string name="time_months_ago">%dmo önce</string>
+    <string name="time_years_ago">%dy önce</string>
+
 </resources>
