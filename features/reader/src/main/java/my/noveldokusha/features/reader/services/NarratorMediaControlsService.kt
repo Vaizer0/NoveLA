@@ -151,24 +151,21 @@ internal class NarratorMediaControlsService : Service() {
     override fun onCreate() {
         super.onCreate()
         serviceInstance = this
+
+        val notification = narratorNotification.createNotificationMediaControls(this)
+        startForeground(narratorNotification.notificationId, notification ?: narratorNotification.createDefaultNotification(this))
+
         registerReceiver(
             becomingNoisyReceiver,
-            IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            Context.RECEIVER_NOT_EXPORTED
         )
         registerReceiver(
             dismissReceiver,
-            IntentFilter(ACTION_STOP_NARRATOR)
+            IntentFilter(ACTION_STOP_NARRATOR),
+            Context.RECEIVER_NOT_EXPORTED
         )
         requestAudioFocus()
-
-        val notification = narratorNotification.createNotificationMediaControls(this)
-        if (notification != null) {
-            startForeground(narratorNotification.notificationId, notification)
-        } else {
-            // Создаем минимальное уведомление, чтобы удовлетворить требования foreground сервиса
-            val defaultNotification = narratorNotification.createDefaultNotification(this)
-            startForeground(narratorNotification.notificationId, defaultNotification)
-        }
     }
 
     override fun onDestroy() {
