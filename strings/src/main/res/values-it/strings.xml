@@ -659,13 +659,13 @@
     <string name="ext_failed_to_load">Impossibile caricare le estensioni: %s</string>
     <string name="ext_failed_to_download">Impossibile scaricare lo script per %s</string>
     <string name="ext_failed_to_install">Impossibile installare %1$s: %2$s</string>
-    <string name="ext_failed_to_uninstall">Impossibile disinstallare l'estensione</string>
-    <string name="ext_failed_to_toggle">Impossibile attivare/disattivare l'estensione</string>
+    <string name="ext_failed_to_uninstall">Impossibile disinstallare l\'estensione</string>
+    <string name="ext_failed_to_toggle">Impossibile attivare/disattivare l\'estensione</string>
     <string name="lua_empty_error">File Lua vuoto</string>
     <string name="lua_compile_error">Errore di compilazione Lua</string>
     <string name="lua_save_error">Impossibile salvare il file Lua</string>
     <string name="lua_import_error">Impossibile salvare il file Lua importato</string>
-    <string name="lua_duplicate_error">L'estensione \"%s\" esiste già localmente</string>
+    <string name="lua_duplicate_error">L\'estensione \"%s\" esiste già localmente</string>
     <string name="lua_not_editable">Codice sorgente non disponibile per la modifica</string>
     <string name="lua_restore_error">Impossibile ripristinare Lua dal repository</string>
 

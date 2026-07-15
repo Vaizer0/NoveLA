@@ -624,7 +624,7 @@
     <!-- History -->
     <string name="title_history">Historique</string>
     <string name="no_history_yet">Aucun historique de lecture</string>
-    <string name="clear_all_history">Effacer tout l'historique</string>
+    <string name="clear_all_history">Effacer tout l\'historique</string>
 
     <!-- Display -->
     <string name="display_options_title">Affichage</string>
@@ -658,19 +658,19 @@
     <string name="extension_author_local">Local</string>
     <string name="ext_failed_to_load">Échec du chargement des extensions : %s</string>
     <string name="ext_failed_to_download">Échec du téléchargement du script pour %s</string>
-    <string name="ext_failed_to_install">Échec de l'installation de %1$s : %2$s</string>
-    <string name="ext_failed_to_uninstall">Échec de la désinstallation de l'extension</string>
-    <string name="ext_failed_to_toggle">Échec de l'activation/désactivation de l'extension</string>
+    <string name="ext_failed_to_install">Échec de l\'installation de %1$s : %2$s</string>
+    <string name="ext_failed_to_uninstall">Échec de la désinstallation de l\'extension</string>
+    <string name="ext_failed_to_toggle">Échec de l\'activation/désactivation de l\'extension</string>
     <string name="lua_empty_error">Fichier Lua vide</string>
     <string name="lua_compile_error">Erreur de compilation Lua</string>
-    <string name="lua_save_error">Échec de l'enregistrement du fichier Lua</string>
-    <string name="lua_import_error">Échec de l'enregistrement du fichier Lua importé</string>
-    <string name="lua_duplicate_error">L'extension \"%s\" existe déjà localement</string>
+    <string name="lua_save_error">Échec de l\'enregistrement du fichier Lua</string>
+    <string name="lua_import_error">Échec de l\'enregistrement du fichier Lua importé</string>
+    <string name="lua_duplicate_error">L\'extension \"%s\" existe déjà localement</string>
     <string name="lua_not_editable">Code source indisponible pour modification</string>
     <string name="lua_restore_error">Échec de la restauration de Lua depuis le dépôt</string>
 
     <!-- Relative Time -->
-    <string name="time_just_now">à l'instant</string>
+    <string name="time_just_now">à l\'instant</string>
     <string name="time_minutes_ago">il y a %dm</string>
     <string name="time_hours_ago">il y a %dh</string>
     <string name="time_days_ago">il y a %dd</string>
