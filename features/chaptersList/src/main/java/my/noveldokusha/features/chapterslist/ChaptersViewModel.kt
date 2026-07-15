@@ -39,7 +39,9 @@ import my.noveldokusha.core.utils.toState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
+import my.noveldokusha.feature.local_database.DAOs.ReadingHistoryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.feature.local_database.tables.ReadingHistory
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.chapterslist.BuildConfig
@@ -69,6 +71,7 @@ internal class ChaptersViewModel @Inject constructor(
     private val libraryDao: LibraryDao,
     private val chapterTranslationDao: ChapterTranslationDao,
     private val translationManager: TranslationManager,
+    private val readingHistoryDao: ReadingHistoryDao,
     stateHandle: SavedStateHandle,
 ) : ViewModel(), ChapterStateBundle {
 
@@ -467,10 +470,31 @@ internal class ChaptersViewModel @Inject constructor(
     suspend fun getLastReadChapter(): String? =
         chaptersRepository.getLastReadChapter(bookUrl = bookUrl)
 
+    private fun refreshReadingHistory() {
+        appScope.launch {
+            val total = appRepository.bookChapters.countByBookUrl(bookUrl)
+            val read = appRepository.bookChapters.countReadByBookUrl(bookUrl)
+            val book = appRepository.libraryBooks.get(bookUrl)
+            readingHistoryDao.upsert(
+                ReadingHistory(
+                    bookUrl = bookUrl,
+                    bookTitle = book?.title ?: "",
+                    bookCoverUrl = book?.coverImageUrl ?: "",
+                    lastReadChapterUrl = book?.lastReadChapter,
+                    lastReadChapterTitle = null,
+                    lastReadEpochTimeMilli = System.currentTimeMillis(),
+                    totalChapters = total,
+                    readChapters = read,
+                )
+            )
+        }
+    }
+
     fun setAsUnreadSelected() {
         val list = state.selectedChaptersUrl.toList()
         appScope.launch {
             appRepository.bookChapters.setAsUnread(list.map { it.first })
+            refreshReadingHistory()
         }
     }
 
@@ -478,6 +502,7 @@ internal class ChaptersViewModel @Inject constructor(
         val list = state.selectedChaptersUrl.toList()
         appScope.launch {
             appRepository.bookChapters.setAsRead(list.map { it.first })
+            refreshReadingHistory()
         }
     }
 
@@ -491,6 +516,7 @@ internal class ChaptersViewModel @Inject constructor(
             val chaptersToMarkAsRead = state.chapters.take(selectedIndex + 1).map { it.chapter.url }
             appScope.launch {
                 appRepository.bookChapters.setAsRead(chaptersToMarkAsRead)
+                refreshReadingHistory()
             }
         }
     }
@@ -505,6 +531,7 @@ internal class ChaptersViewModel @Inject constructor(
             val chaptersToMarkAsUnread = state.chapters.take(selectedIndex + 1).map { it.chapter.url }
             appScope.launch {
                 appRepository.bookChapters.setAsUnread(chaptersToMarkAsUnread)
+                refreshReadingHistory()
             }
         }
     }

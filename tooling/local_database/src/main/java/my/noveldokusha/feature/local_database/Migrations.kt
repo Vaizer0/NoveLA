@@ -350,6 +350,20 @@ internal fun databaseMigrations() = arrayOf(
         // Empty migration to recalculate Room identity hash
         // (entity annotations changed from initial v24 release)
     },
+    migration(25) {
+        it.execSQL("""
+            CREATE TABLE IF NOT EXISTS ReadingHistory (
+                bookUrl TEXT NOT NULL PRIMARY KEY,
+                bookTitle TEXT NOT NULL,
+                bookCoverUrl TEXT NOT NULL DEFAULT '',
+                lastReadChapterUrl TEXT,
+                lastReadChapterTitle TEXT,
+                lastReadEpochTimeMilli INTEGER NOT NULL DEFAULT 0,
+                totalChapters INTEGER NOT NULL DEFAULT 0,
+                readChapters INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+    },
 )
 
 internal fun migration(vi: Int, migrate: (SupportSQLiteDatabase) -> Unit) =

@@ -30,6 +30,7 @@ class BookChaptersRepository @Inject constructor(
     suspend fun getAll() = chapterDao.getAll()
     suspend fun count() = chapterDao.count()
     suspend fun countByBookUrl(bookUrl: String) = chapterDao.countByBookUrl(bookUrl)
+    suspend fun countReadByBookUrl(bookUrl: String) = chapterDao.countReadByBookUrl(bookUrl)
     suspend fun getChunk(limit: Int, offset: Int) = chapterDao.getChunk(limit, offset)
     suspend fun updateTitle(url: String, title: String) =
         chapterDao.updateTitle(url, title)

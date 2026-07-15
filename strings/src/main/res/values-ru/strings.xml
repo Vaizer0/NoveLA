@@ -7,6 +7,9 @@
     <string name="title_finder">Поиск</string>
 
     <string name="title_settings">Настройки</string>
+    <string name="title_history">История</string>
+    <string name="no_history_yet">История чтения пуста</string>
+    <string name="clear_all_history">Очистить всю историю</string>
 
     <string name="reader_no_more_chapters">༺  Последняя глава  ༻</string>
 
@@ -1052,6 +1055,14 @@
     <string name="lua_duplicate_error">Расширение «%s» уже существует локально</string>
     <string name="lua_not_editable">Исходник недоступен для редактирования</string>
     <string name="lua_restore_error">Не удалось восстановить Lua из репозитория</string>
+
+    <string name="time_just_now">только что</string>
+    <string name="time_minutes_ago">%d мин. назад</string>
+    <string name="time_hours_ago">%d ч. назад</string>
+    <string name="time_days_ago">%d дн. назад</string>
+    <string name="time_weeks_ago">%d нед. назад</string>
+    <string name="time_months_ago">%d мес. назад</string>
+    <string name="time_years_ago">%d г. назад</string>
 
 </resources>
 

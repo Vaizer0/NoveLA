@@ -20,6 +20,9 @@ interface ChapterDao {
     @Query("SELECT COUNT(*) FROM Chapter WHERE bookUrl = :bookUrl")
     suspend fun countByBookUrl(bookUrl: String): Int
 
+    @Query("SELECT COUNT(*) FROM Chapter WHERE bookUrl = :bookUrl AND read == 1")
+    suspend fun countReadByBookUrl(bookUrl: String): Int
+
     @Query("SELECT * FROM Chapter LIMIT :limit OFFSET :offset")
     suspend fun getChunk(limit: Int, offset: Int): List<Chapter>
 

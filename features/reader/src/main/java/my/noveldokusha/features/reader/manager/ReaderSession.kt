@@ -209,6 +209,7 @@ internal class ReaderSession(
                 bookUrl,
                 System.currentTimeMillis()
             )
+            readerRepository.upsertReadingHistory(bookUrl, chapterUrl)
         }
         initReaderTTSObservers()
     }

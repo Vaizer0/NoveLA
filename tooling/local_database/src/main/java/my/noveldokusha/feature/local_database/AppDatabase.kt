@@ -15,6 +15,7 @@ import my.noveldokusha.feature.local_database.DAOs.DownloadTaskDao
 import my.noveldokusha.feature.local_database.DAOs.ExtensionDao
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.DAOs.NovelMigrationDao
+import my.noveldokusha.feature.local_database.DAOs.ReadingHistoryDao
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.feature.local_database.tables.ChapterBody
@@ -22,6 +23,7 @@ import my.noveldokusha.feature.local_database.tables.ChapterTranslation
 import my.noveldokusha.feature.local_database.tables.DownloadTaskEntity
 import my.noveldokusha.feature.local_database.tables.Extension
 import my.noveldokusha.feature.local_database.tables.MigrationRecord
+import my.noveldokusha.feature.local_database.tables.ReadingHistory
 import java.io.InputStream
 
 
@@ -33,6 +35,7 @@ interface AppDatabase {
     fun downloadTaskDao(): DownloadTaskDao
     fun extensionDao(): ExtensionDao
     fun novelMigrationDao(): NovelMigrationDao
+    fun readingHistoryDao(): ReadingHistoryDao
     val name: String
 
     fun closeDatabase()
@@ -114,9 +117,10 @@ interface AppDatabase {
         ChapterTranslation::class,
         DownloadTaskEntity::class,
         Extension::class,
-        MigrationRecord::class
+        MigrationRecord::class,
+        ReadingHistory::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
@@ -127,6 +131,7 @@ internal abstract class AppRoomDatabase : RoomDatabase(), AppDatabase {
     abstract override fun downloadTaskDao(): DownloadTaskDao
     abstract override fun extensionDao(): ExtensionDao
     abstract override fun novelMigrationDao(): NovelMigrationDao
+    abstract override fun readingHistoryDao(): ReadingHistoryDao
     override lateinit var name: String
 
     override suspend fun <T> transaction(block: suspend () -> T): T = withTransaction(block)

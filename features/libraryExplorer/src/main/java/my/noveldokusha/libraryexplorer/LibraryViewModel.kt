@@ -35,8 +35,10 @@ import my.noveldokusha.coreui.states.title
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.ScraperRepository
 import my.noveldokusha.feature.local_database.BookWithContext
+import my.noveldokusha.feature.local_database.DAOs.ReadingHistoryDao
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.feature.local_database.tables.ReadingHistory
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.strings.R
 import javax.inject.Inject
@@ -66,6 +68,7 @@ internal class LibraryViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val libraryUpdatesInteractions: LibraryUpdatesInteractions,
     private val notificationsCenter: NotificationsCenter,
+    private val readingHistoryDao: ReadingHistoryDao,
     stateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -282,12 +285,34 @@ internal class LibraryViewModel @Inject constructor(
     fun markAllChaptersAsRead(bookUrl: String) {
         viewModelScope.launch {
             appRepository.bookChapters.setAllAsReadByBookUrl(bookUrl)
+            refreshReadingHistory(bookUrl)
         }
     }
 
     fun markAllChaptersAsUnread(bookUrl: String) {
         viewModelScope.launch {
             appRepository.bookChapters.setAllAsUnreadByBookUrl(bookUrl)
+            refreshReadingHistory(bookUrl)
+        }
+    }
+
+    private fun refreshReadingHistory(bookUrl: String) {
+        viewModelScope.launch {
+            val total = appRepository.bookChapters.countByBookUrl(bookUrl)
+            val read = appRepository.bookChapters.countReadByBookUrl(bookUrl)
+            val book = appRepository.libraryBooks.get(bookUrl)
+            readingHistoryDao.upsert(
+                ReadingHistory(
+                    bookUrl = bookUrl,
+                    bookTitle = book?.title ?: "",
+                    bookCoverUrl = book?.coverImageUrl ?: "",
+                    lastReadChapterUrl = book?.lastReadChapter,
+                    lastReadChapterTitle = null,
+                    lastReadEpochTimeMilli = System.currentTimeMillis(),
+                    totalChapters = total,
+                    readChapters = read,
+                )
+            )
         }
     }
 

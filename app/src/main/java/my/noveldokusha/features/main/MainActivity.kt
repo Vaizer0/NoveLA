@@ -66,6 +66,7 @@ import my.noveldokusha.catalogexplorer.CatalogExplorerScreen
 import my.noveldokusha.libraryexplorer.LibraryScreen
 import my.noveldokusha.settings.SettingsScreen
 import my.noveldokusha.tooling.epub_importer.BookImportService
+import my.noveldokusha.historyexplorer.HistoryScreen
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -78,6 +79,7 @@ private data class Page(
 private val pages = listOf(
     Page(iconRes = R.drawable.ic_baseline_home_24, stringRes = R.string.title_library),
     Page(iconRes = R.drawable.ic_baseline_menu_book_24, stringRes = R.string.title_finder),
+    Page(iconRes = R.drawable.ic_baseline_history_24, stringRes = R.string.title_history),
     Page(iconRes = R.drawable.ic_twotone_settings_24, stringRes = R.string.title_settings),
 )
 
@@ -123,7 +125,7 @@ open class MainActivity : BaseActivity() {
 
             Theme(themeProvider = themeProvider) {
                 Box(Modifier.fillMaxSize()) {
-                    // All three screens live in composition always.
+                    // All screens live in composition always.
                     // Switching is instant — only alpha changes via graphicsLayer.
                     val libraryAlpha by animateFloatAsState(
                         targetValue = if (activePageIndex == 0) 1f else 0f,
@@ -135,8 +137,13 @@ open class MainActivity : BaseActivity() {
                         animationSpec = tween(150), label = "finderAlpha"
                     )
 
-                    val settingsAlpha by animateFloatAsState(
+                    val historyAlpha by animateFloatAsState(
                         targetValue = if (activePageIndex == 2) 1f else 0f,
+                        animationSpec = tween(150), label = "historyAlpha"
+                    )
+
+                    val settingsAlpha by animateFloatAsState(
+                        targetValue = if (activePageIndex == 3) 1f else 0f,
                         animationSpec = tween(150), label = "settingsAlpha"
                     )
 
@@ -176,10 +183,24 @@ open class MainActivity : BaseActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { alpha = settingsAlpha }
+                                .graphicsLayer { alpha = historyAlpha }
                                 .zIndex(if (activePageIndex == 2) 1f else 0f)
                                 .then(
                                     if (activePageIndex != 2) Modifier.pointerInput(Unit) {
+                                        awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                                    } else Modifier
+                                )
+                        ) {
+                            HistoryScreen()
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = settingsAlpha }
+                                .zIndex(if (activePageIndex == 3) 1f else 0f)
+                                .then(
+                                    if (activePageIndex != 3) Modifier.pointerInput(Unit) {
                                         awaitPointerEventScope { while (true) { awaitPointerEvent() } }
                                     } else Modifier
                                 )
