@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.map
 import my.noveldokusha.network.NetworkClient
+import my.noveldokusha.network.getRequest
 import my.noveldokusha.network.toDocument
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.scraper.SourceInterface
@@ -17,6 +18,7 @@ import my.noveldokusha.scraper.TextExtractor
 import my.noveldokusha.feature.local_database.tables.Chapter
 import net.dankito.readability4j.extended.Readability4JExtended
 import org.jsoup.nodes.Document
+import okhttp3.CacheControl
 import java.net.SocketTimeoutException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -163,8 +165,12 @@ class DownloaderRepository @Inject constructor(
                     // возвращает пустую страницу или редирект на защиту.
                     val headers = buildChapterHeaders(chapterPageUrl)
 
-                    val doc = networkClient.getWithHeaders(chapterPageUrl, headers)
-                        .use { it.toDocument(source.charset) }
+                    val doc = networkClient.call(
+                        getRequest(chapterPageUrl).apply {
+                            headers.forEach { (k, v) -> header(k, v) }
+                            cacheControl(CacheControl.FORCE_NETWORK)
+                        }
+                    ).use { it.toDocument(source.charset) }
 
                     // Если getChapterText вернул null или пустую строку — выходим из блока скрапера
                     val body = source.getChapterText(doc)?.takeIf { it.isNotBlank() }
@@ -178,13 +184,17 @@ class DownloaderRepository @Inject constructor(
                 }
 
                 // Fallback: heuristic extraction с поддержкой JS-редиректов
-                val doc = networkClient.get(realUrl).use { it.toDocument() }
+                val doc = networkClient.call(
+                    getRequest(realUrl).cacheControl(CacheControl.FORCE_NETWORK)
+                ).use { it.toDocument() }
 
                 // Проверяем HTML на JS-редирект (window.location, meta refresh)
                 val redirectUrl = my.noveldokusha.network.JsRedirectResolver.resolveRedirectUrl(doc)
                 if (redirectUrl != null) {
                     Timber.d("JS redirect resolved: $redirectUrl")
-                    val redirectedDoc = networkClient.get(redirectUrl).use { it.toDocument() }
+                    val redirectedDoc = networkClient.call(
+                        getRequest(redirectUrl).cacheControl(CacheControl.FORCE_NETWORK)
+                    ).use { it.toDocument() }
                     val chapter = heuristicChapterExtraction(redirectUrl, redirectedDoc)
                     if (chapter != null) {
                         return@tryFlatConnect Response.Success(chapter)

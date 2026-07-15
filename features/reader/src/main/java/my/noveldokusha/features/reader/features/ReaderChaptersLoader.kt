@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -73,6 +74,8 @@ internal class ReaderChaptersLoader(
     private @Volatile var _hasLoadingError = false
     private var autoResetJob: kotlinx.coroutines.Job? = null
     private var errorRetryCount = 0
+    private var failedChapterIndex: Int = -1
+    private @Volatile var retryInProgress = false
     private @Volatile var pendingPruneChapterIndex: Int? = null
 
     var hasLoadingError: Boolean
@@ -86,10 +89,12 @@ internal class ReaderChaptersLoader(
                 val delayMs = (5_000L * errorRetryCount).coerceAtMost(60_000L)
                 autoResetJob = launch {
                     delay(delayMs)
+                    ensureActive()
                     _hasLoadingError = false
                     autoResetJob = null
-                    Timber.d("Auto-reset hasLoadingError after ${delayMs/1000}s timeout (attempt $errorRetryCount), resuming preload")
-                    tryLoadNext()
+                    Timber.d("Auto-reset hasLoadingError after ${delayMs/1000}s timeout (attempt $errorRetryCount), retrying chapter $failedChapterIndex")
+                    val idx = failedChapterIndex
+                    if (idx >= 0) retryChapter(idx) else tryLoadNext()
                 }
             } else {
                 errorRetryCount = 0
@@ -181,15 +186,23 @@ internal class ReaderChaptersLoader(
     }
 
     fun retryChapter(chapterIndex: Int) {
+        if (retryInProgress) {
+            Timber.d("retryChapter: already in progress, skipping chapter $chapterIndex")
+            return
+        }
+        retryInProgress = true
+        failedChapterIndex = -1
         if (chapterIndex < 0 || chapterIndex >= orderedChapters.size) {
             Timber.e("retryChapter: invalid chapterIndex $chapterIndex, size ${orderedChapters.size}")
+            retryInProgress = false
             return
         }
 
         launch(Dispatchers.Main.immediate) {
+            try {
             val chapterUrl = orderedChapters[chapterIndex].url
 
-            hasLoadingError = false
+            _hasLoadingError = false
             chaptersStats.remove(chapterUrl)
             loadedChapters.remove(chapterUrl)
             loaderQueue.remove(LoadChapter.Type.Next)
@@ -230,6 +243,9 @@ internal class ReaderChaptersLoader(
             if (success == true && !hasLoadingError) {
                 Timber.d("retryChapter: auto-resuming preload for next chapter")
                 tryLoadNext()
+            }
+            } finally {
+                retryInProgress = false
             }
         }
     }
@@ -544,10 +560,12 @@ internal class ReaderChaptersLoader(
         when (val res = readerRepository.downloadChapter(chapter.url)) {
             is Response.Success -> {
                 if (!isValidChapterContent(res.data)) {
+                    failedChapterIndex = chapterIndex
                     withContext(Dispatchers.Main.immediate) {
                         hasLoadingError = true
                         Timber.w("Chapter content invalid (possibly Cloudflare or Login), stopping auto-loading. Preview: ${res.data.take(160)}")
                     }
+                    readerRepository.deleteChapterBody(chapter.url)
                     maintainPosition {
                         // 1. Сначала подготавливаем сообщения
                         val preview = res.data.take(400).ifBlank { "<empty body>" }
@@ -736,6 +754,7 @@ internal class ReaderChaptersLoader(
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     Timber.e(e, "Translation failed for chapter ${chapter.title}: ${e.message}")
+                    failedChapterIndex = chapterIndex
                     withContext(Dispatchers.Main.immediate) {
                         chaptersStats[chapter.url] = ChapterStats(
                             chapter = chapter,
@@ -803,6 +822,7 @@ internal class ReaderChaptersLoader(
                 return@_addChapterInternal true
             }
             is Response.Error -> {
+                failedChapterIndex = chapterIndex
                 withContext(Dispatchers.Main.immediate) {
                     chaptersStats[chapter.url] = ChapterStats(
                         chapter = chapter,
