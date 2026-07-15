@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -86,6 +87,9 @@ internal fun GoToChapterDialog(
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
+                    val chapterIndexByUrl = remember(chapters) {
+                        chapters.withIndex().associate { (i, c) -> c.chapter.url to i + 1 }
+                    }
                     LazyColumn(
                         contentPadding = PaddingValues(vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
@@ -94,8 +98,7 @@ internal fun GoToChapterDialog(
                             items = filtered,
                             key = { it.chapter.url }
                         ) { chapterWithContext ->
-                            // Реальный индекс в оригинальном списке (+1 за header)
-                            val realIndex = chapters.indexOf(chapterWithContext) + 1
+                            val realIndex = chapterIndexByUrl[chapterWithContext.chapter.url] ?: 0
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()

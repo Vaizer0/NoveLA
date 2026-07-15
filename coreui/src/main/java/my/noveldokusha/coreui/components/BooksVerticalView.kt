@@ -73,7 +73,11 @@ fun BooksVerticalView(
             .padding(innerPadding),
         contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 160.dp)
     ) {
-        items(list) {
+        items(
+            items = list,
+            key = { it.url },
+            contentType = { if (layoutMode == ListLayoutMode.VerticalList) 1 else 2 }
+        ) {
             when (layoutMode) {
                 ListLayoutMode.VerticalList -> MyButton(
                     text = it.title,

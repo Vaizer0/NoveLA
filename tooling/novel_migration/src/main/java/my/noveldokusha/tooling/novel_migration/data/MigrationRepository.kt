@@ -71,11 +71,6 @@ class MigrationRepository @Inject constructor(
 
             val oldChapters = bookChapters.chapters(oldBookUrl)
             val oldChapterMap = oldChapters.associateBy { it.url }
-            val oldBodyMap = matchedChapters
-                .map { (old, _) -> old.url }
-                .mapNotNull { url -> db.chapterBodyDao().get(url)?.let { url to it } }
-                .toMap()
-
             val oldSourceId = scraper.getSourceId(oldBookUrl) ?: "unknown"
             val newSourceId = scraper.getSourceId(newBookUrl) ?: "unknown"
 
@@ -109,6 +104,8 @@ class MigrationRepository @Inject constructor(
                 val oldToNewChapterUrl = mutableMapOf<String, String>()
                 val matchedByNewUrl = matchedChapters.associate { (old, new) -> new.url to old }
 
+                val newChapterEntities = mutableListOf<Chapter>()
+
                 for ((idx, newResult) in newChapters.withIndex()) {
                     val oldResult = matchedByNewUrl[newResult.url]
                     val oldChapter = oldResult?.let { oldChapterMap[it.url] }
@@ -119,27 +116,42 @@ class MigrationRepository @Inject constructor(
                         lastReadPosition = if (options.transferProgress) (oldChapter?.lastReadPosition ?: 0) else 0,
                         lastReadOffset = if (options.transferProgress) (oldChapter?.lastReadOffset ?: 0) else 0,
                     )
-                    db.chapterDao().insertReplace(listOf(newChapter))
+                    newChapterEntities.add(newChapter)
                     if (oldResult != null) oldToNewChapterUrl[oldResult.url] = newResult.url
 
                     if (newChapter.read || newChapter.lastReadPosition > 0) chaptersWithProgressCount++
+                }
 
-                    if (options.transferBodies && oldResult != null) {
-                        oldBodyMap[oldResult.url]?.let { body ->
-                            db.chapterBodyDao().insertReplace(ChapterBody(url = newResult.url, body = body.body))
-                            chaptersWithBodyCount++
+                if (newChapterEntities.isNotEmpty()) db.chapterDao().insertReplace(newChapterEntities)
+
+                matchedChapters.chunked(500).forEach { chunk ->
+                    val chunkOldUrls = chunk.map { it.first.url }
+                    val chunkBodies = if (options.transferBodies)
+                        db.chapterBodyDao().getBodiesByUrls(chunkOldUrls).associateBy { it.url }
+                    else emptyMap()
+                    val chunkTranslations = if (options.transferTranslations)
+                        db.chapterTranslationDao().getTranslationsByChapterUrls(chunkOldUrls).groupBy { it.chapterUrl }
+                    else emptyMap()
+
+                    val batchBodies = mutableListOf<ChapterBody>()
+                    val batchTranslations = mutableListOf<ChapterTranslation>()
+
+                    for ((oldResult, newResult) in chunk) {
+                        if (options.transferBodies) {
+                            chunkBodies[oldResult.url]?.let { body ->
+                                batchBodies.add(ChapterBody(url = newResult.url, body = body.body))
+                                chaptersWithBodyCount++
+                            }
+                        }
+                        if (options.transferTranslations) {
+                            chunkTranslations[oldResult.url]?.forEach { t ->
+                                batchTranslations.add(t.copy(id = 0, chapterUrl = newResult.url))
+                            }
                         }
                     }
 
-                    if (options.transferTranslations && oldResult != null) {
-                        val translations = db.chapterTranslationDao().getTranslationsByChapterUrls(listOf(oldResult.url))
-                        for (t in translations) {
-                            db.chapterTranslationDao().insertReplace(t.copy(
-                                id = 0,
-                                chapterUrl = newResult.url
-                            ))
-                        }
-                    }
+                    if (batchBodies.isNotEmpty()) db.chapterBodyDao().insertReplace(batchBodies)
+                    if (batchTranslations.isNotEmpty()) db.chapterTranslationDao().insertReplace(batchTranslations)
                 }
 
                 oldBook.lastReadChapter?.let { oldLast ->

@@ -21,6 +21,9 @@ interface ChapterBodyDao {
     @Query("SELECT * FROM ChapterBody WHERE url = :url")
     suspend fun get(url: String): ChapterBody?
 
+    @Query("SELECT * FROM ChapterBody WHERE url IN (:urls)")
+    suspend fun getBodiesByUrls(urls: List<String>): List<ChapterBody>
+
     @Query("DELETE FROM ChapterBody WHERE ChapterBody.url NOT IN (SELECT Chapter.url FROM Chapter)")
     suspend fun removeAllNonChapterRows()
 

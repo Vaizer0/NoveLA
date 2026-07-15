@@ -121,7 +121,7 @@ class LibraryBooksRepository @Inject constructor(
                 chapterTranslationDao.deleteTranslationsByBookUrls(chunk)
                 chapterBodyDao.removeChapterBodiesByBookUrls(chunk)
                 chapterDao.removeAllFromBooks(chunk)
-                chunk.forEach { libraryDao.remove(it) }
+                libraryDao.removeBooksByUrls(chunk)
             }
         }
     }

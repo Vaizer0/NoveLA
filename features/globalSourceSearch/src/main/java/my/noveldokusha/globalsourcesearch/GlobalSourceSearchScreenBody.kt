@@ -48,7 +48,7 @@ internal fun GlobalSourceSearchScreenBody(
         modifier = Modifier.padding(contentPadding),
         contentPadding = PaddingValues(top = 12.dp, bottom = 240.dp)
     ) {
-        items(listSources) { entry ->
+        items(items = listSources, key = { it.source.catalog.id }) { entry ->
             Column(modifier = Modifier.padding(bottom = 16.dp)) {
                 Text(
                     text = entry.source.catalog.name
@@ -95,7 +95,7 @@ private fun SourceListView(
             .animateContentSize()
             .fillMaxWidth(),
     ) {
-        items(list) {
+        items(items = list, key = { it.url }) {
             BookImageButtonView(
                 title = it.title,
                 coverImageModel = rememberResolvedBookImagePath(
