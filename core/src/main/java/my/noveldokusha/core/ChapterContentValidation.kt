@@ -10,7 +10,6 @@ fun isValidChapterContent(text: String): Boolean {
     val lowerText = text.lowercase()
     val cloudflareMarkers = listOf(
         "cf-content",
-        "turnstile",
         "but-captcha",
         "cf-browser-verification",
         "challenge-running",

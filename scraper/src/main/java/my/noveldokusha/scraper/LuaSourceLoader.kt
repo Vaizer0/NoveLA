@@ -800,7 +800,6 @@ class LuaSourceLoader @Inject constructor(
     private val luaEngine: LuaEngine,
     private val extensionRepository: ExtensionManager
 ) {
-    private val yaml  = Yaml()
     // ponytail: LRU cache with fixed max size. Evicts least recently used VMs to keep native heap bounded.
     // Cost: ~100ms reload from disk .lua file on cache miss.
     // LruCache is already thread-safe (synchronized internally).
@@ -824,12 +823,14 @@ class LuaSourceLoader @Inject constructor(
         ?.readText(Charsets.UTF_8)
 
     suspend fun saveScript(id: String, code: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             atomicWrite(scriptFile(id), code.toByteArray(Charsets.UTF_8))
             cache.remove(id)
             Timber.d("Saved $id.lua")
             true
-        }.getOrElse { e ->
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             Timber.e(e, "saveScript failed for $id")
             false
         }
@@ -837,15 +838,26 @@ class LuaSourceLoader @Inject constructor(
 
     suspend fun validateScript(code: String, fileName: String = "local.lua"): Result<Unit> =
         withContext(Dispatchers.IO) {
-            runCatching { luaEngine.loadFromScriptWithFileName(code, fileName); Unit }
+            try {
+                luaEngine.loadFromScriptWithFileName(code, fileName)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
 
     suspend fun loadAllSources(): Result<List<SourceInterface>> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val sources = loadInstalledSources()
             sources.forEach { cache.put(it.id, it) }
             Timber.d("Loaded ${sources.size} Lua sources")
-            sources
+            Result.success(sources)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -927,9 +939,18 @@ class LuaSourceLoader @Inject constructor(
         if (raw.isNullOrBlank() || raw == "{}") return null
         return try {
             @Suppress("UNCHECKED_CAST")
-            yaml.load<Any>(raw) as? Map<String, Any>
+            if (raw.startsWith("{")) {
+                Gson().fromJson(raw, Map::class.java) as? Map<String, Any>
+            } else {
+                // Миграция со старого YAML-формата на JSON
+                val legacy = Yaml().loadAs(raw, Map::class.java) as? Map<String, Any>
+                if (legacy != null) {
+                    extensionRepository.updateExtensionSettings(ext.id, Gson().toJson(legacy))
+                }
+                legacy
+            }
         } catch (e: Exception) {
-            Timber.w(e, "Bad settings YAML for ${ext.id}: $raw")
+            Timber.w(e, "Bad settings for ${ext.id}: $raw")
             null
         }
     }

@@ -19,7 +19,12 @@ import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isHttpsUrl
 import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.core.isLocalUri
+import my.noveldokusha.core.Response
 import my.noveldokusha.data.CoverRepository
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -360,7 +365,9 @@ class LibraryUpdatesInteractions @Inject constructor(
         newUpdates: MutableStateFlow<Set<NewUpdate>>,
         failedUpdates: MutableStateFlow<Set<Book>>,
     ) {
-        downloaderRepository.bookChaptersList(bookUrl = book.url).onSuccess { chapters ->
+        retryOnNetworkError(maxRetries = 3) {
+            downloaderRepository.bookChaptersList(bookUrl = book.url)
+        }.onSuccess { chapters ->
             Timber.d("[legacy] \"${book.title}\" — fetched ${chapters.size} chapters total")
             mergeAndNotify(book, chapters, oldChaptersList, newUpdates)
             // Обновляем хэш для быстрого скипа в следующий раз
@@ -457,6 +464,36 @@ class LibraryUpdatesInteractions @Inject constructor(
         val coverFile = appFileResolver.getStorageBookCoverImageFile(appFileResolver.getLocalBookFolderName(bookUrl))
         if (!coverRepository.ensureCover(coverFile, remoteCoverUrl)) {
             Timber.w("Failed to download cover for $bookUrl")
+        }
+    }
+
+    private suspend fun <T> retryOnNetworkError(
+        maxRetries: Int = 3,
+        block: suspend () -> Response<T>
+    ): Response<T> {
+        repeat(maxRetries - 1) { attempt ->
+            val result = block()
+            if (result is Response.Success) return result
+            if (result is Response.Error && !isNetworkError(result)) return result
+            delay(1000L * (1 shl attempt))
+        }
+        return block()
+    }
+
+    private fun isNetworkError(error: Response.Error): Boolean {
+        val exception = error.exception
+        return when (exception) {
+            is UnknownHostException,
+            is ConnectException,
+            is SocketTimeoutException,
+            is SSLException -> true
+            else -> {
+                val msg = error.message
+                msg.contains("Unable to resolve host", ignoreCase = true) ||
+                    msg.contains("Failed to connect", ignoreCase = true) ||
+                    msg.contains("Network is unreachable", ignoreCase = true) ||
+                    msg.contains("hostname", ignoreCase = true)
+            }
         }
     }
 }

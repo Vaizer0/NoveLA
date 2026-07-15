@@ -9,7 +9,8 @@ import android.graphics.Bitmap
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.toBitmap
 import coil.Coil
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Size
@@ -49,6 +50,18 @@ internal class LibraryUpdateNotification @Inject constructor(
 
     private lateinit var notificationBuilder: NotificationCompat.Builder
 
+    fun createForegroundNotification(): Notification {
+        return notificationsCenter.showNotification(
+            channelId = channelId,
+            channelName = channelName,
+            notificationId = notificationId,
+            importance = NotificationManager.IMPORTANCE_LOW
+        ) {
+            setStyle(NotificationCompat.BigTextStyle())
+            title = context.getString(R.string.updating_library_notice)
+        }.build()
+    }
+
     fun closeNotification() {
         notificationsCenter.close(notificationId = notificationId)
     }
@@ -78,7 +91,7 @@ internal class LibraryUpdateNotification @Inject constructor(
         }
     }
 
-    fun showNewChaptersNotification(
+    suspend fun showNewChaptersNotification(
         book: Book,
         newChapters: List<Chapter>,
         silent: Boolean
@@ -149,7 +162,7 @@ internal class LibraryUpdateNotification @Inject constructor(
             .build()
 
         val bitmap = try {
-            when (val result = runBlocking { imageLoader.execute(request) }) {
+            when (val result = withContext(Dispatchers.IO) { imageLoader.execute(request) }) {
                 is SuccessResult -> result.drawable.toBitmap()
                 else -> null
             }

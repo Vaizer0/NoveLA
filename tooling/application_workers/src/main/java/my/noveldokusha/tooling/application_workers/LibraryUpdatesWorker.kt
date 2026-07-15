@@ -5,9 +5,11 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
@@ -74,7 +76,7 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
         ): OneTimeWorkRequest {
             return OneTimeWorkRequestBuilder<LibraryUpdatesWorker>()
                 .addTag(TAG_MANUAL)
-                .setInitialDelay(0, TimeUnit.SECONDS)
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setInputData(createInputData(updateCategory))
                 .build()
         }
@@ -85,6 +87,12 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
             .putString(DATA_UPDATE_CATEGORY, updateCategory.name)
             .build()
     }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        ForegroundInfo(
+            "Library update".hashCode(),
+            libraryUpdateNotification.createForegroundNotification()
+        )
 
     override suspend fun doWork(): Result {
         val updateCategory: LibraryCategory =
@@ -103,17 +111,24 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
             return Result.retry()
         }
 
-        val result = updateLibrary(updateCategory = updateCategory)
-            .onError { Timber.e(it.exception) }
-
-        if (result is Response.Success) {
-            appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value = System.currentTimeMillis()
-        }
-
-        return when (result) {
-            is Response.Error -> Result.failure()
-            is Response.Success -> Result.success()
-        }
+        return runCatching {
+            updateLibrary(updateCategory = updateCategory)
+                .onError { Timber.e(it.exception) }
+        }.fold(
+            onSuccess = { result ->
+                if (result is Response.Success) {
+                    appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value = System.currentTimeMillis()
+                }
+                when (result) {
+                    is Response.Error -> Result.failure()
+                    is Response.Success -> Result.success()
+                }
+            },
+            onFailure = { e ->
+                Timber.e(e, "LibraryUpdatesWorker: unexpected error")
+                Result.failure()
+            }
+        )
     }
 
     /**
@@ -126,50 +141,54 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
         withContext(Dispatchers.Main) {
 
             libraryUpdateNotification.createEmptyUpdatingNotification()
+            try {
+                val countingUpdating =
+                    MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
+                val currentUpdating = MutableStateFlow<Set<Book>>(setOf())
+                val newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(setOf())
+                val failedUpdates = MutableStateFlow<Set<Book>>(setOf())
 
-            val countingUpdating =
-                MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
-            val currentUpdating = MutableStateFlow<Set<Book>>(setOf())
-            val newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(setOf())
-            val failedUpdates = MutableStateFlow<Set<Book>>(setOf())
+                val currentUpdatingNotifyJob = launch(Dispatchers.Main) {
+                    combine(
+                        flow = countingUpdating,
+                        flow2 = currentUpdating,
+                    ) { counting, current ->
+                        libraryUpdateNotification.updateUpdatingNotification(
+                            countingUpdated = counting?.updated ?: 0,
+                            countingTotal = counting?.total ?: 0,
+                            books = current
+                        )
+                    }.collect()
+                }
 
-            val currentUpdatingNotifyJob = launch(Dispatchers.Main) {
-                combine(
-                    flow = countingUpdating,
-                    flow2 = currentUpdating,
-                ) { counting, current ->
-                    libraryUpdateNotification.updateUpdatingNotification(
-                        countingUpdated = counting?.updated ?: 0,
-                        countingTotal = counting?.total ?: 0,
-                        books = current
+                libraryUpdatesInteractions.updateLibraryBooks(
+                    completedOnes = updateCategory == LibraryCategory.COMPLETED,
+                    countingUpdating = countingUpdating,
+                    currentUpdating = currentUpdating,
+                    newUpdates = newUpdates,
+                    failedUpdates = failedUpdates,
+                )
+
+                val updates = newUpdates.value.toList()
+                for (index in updates.indices) {
+                    val newUpdate = updates[index]
+                    libraryUpdateNotification.showNewChaptersNotification(
+                        book = newUpdate.book,
+                        newChapters = newUpdate.newChapters,
+                        silent = index == 0
                     )
-                }.collect()
+                }
+
+                if (failedUpdates.value.isNotEmpty()) {
+                    libraryUpdateNotification.showFailedNotification(
+                        books = failedUpdates.value
+                    )
+                }
+
+                currentUpdatingNotifyJob.cancel()
+            } finally {
+                libraryUpdateNotification.closeNotification()
             }
-
-            libraryUpdatesInteractions.updateLibraryBooks(
-                completedOnes = updateCategory == LibraryCategory.COMPLETED,
-                countingUpdating = countingUpdating,
-                currentUpdating = currentUpdating,
-                newUpdates = newUpdates,
-                failedUpdates = failedUpdates,
-            )
-
-            newUpdates.value.forEachIndexed { index, newUpdate ->
-                libraryUpdateNotification.showNewChaptersNotification(
-                    book = newUpdate.book,
-                    newChapters = newUpdate.newChapters,
-                    silent = index == 0
-                )
-            }
-
-            if (failedUpdates.value.isNotEmpty()) {
-                libraryUpdateNotification.showFailedNotification(
-                    books = failedUpdates.value
-                )
-            }
-
-            currentUpdatingNotifyJob.cancel()
-            libraryUpdateNotification.closeNotification()
         }
     }
 

@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import com.google.gson.Gson
 import my.noveldokusha.core.ExtensionManager
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.ExtensionInfoCached
@@ -297,10 +298,10 @@ class ExtensionsManagerViewModel @Inject constructor(
                     imageUrl = extInfo.iconUrl,
                     codeUrl  = extInfo.codeUrl
                 )
-                // Шаг 2б: Сохранить codeUrl в settings как YAML,
+                // Шаг 2б: Сохранить codeUrl в settings как JSON,
                 // чтобы LuaSourceLoader знал откуда перескачать при следующем запуске
-                val settingsYaml = "codeUrl: \"${extInfo.codeUrl}\""
-                extensionManager.updateExtensionSettings(extensionId, settingsYaml)
+                val settingsJson = Gson().toJson(mapOf("codeUrl" to extInfo.codeUrl))
+                extensionManager.updateExtensionSettings(extensionId, settingsJson)
 
                 Timber.d("Installed extension: ${extInfo.name}")
                 // Шаг 3: Scraper обновится реактивно через extensionRepository.getInstalledExtensionsFlow()
@@ -348,9 +349,19 @@ class ExtensionsManagerViewModel @Inject constructor(
         if (raw.isBlank() || raw == "{}") return null
         return try {
             @Suppress("UNCHECKED_CAST")
-            Yaml().loadAs(raw, Map::class.java) as? Map<String, Any>
+            if (raw.startsWith("{")) {
+                Gson().fromJson(raw, Map::class.java) as? Map<String, Any>
+            } else {
+                // Миграция со старого YAML-формата на JSON
+                val legacy = Yaml().loadAs(raw, Map::class.java) as? Map<String, Any>
+                if (legacy != null) {
+                    val json = Gson().toJson(legacy)
+                    extensionManager.updateExtensionSettings(extensionId, json)
+                }
+                legacy
+            }
         } catch (e: Exception) {
-            Timber.w(e, "Bad settings YAML for $extensionId")
+            Timber.w(e, "Bad settings for $extensionId: $raw")
             null
         }
     }
@@ -412,7 +423,7 @@ class ExtensionsManagerViewModel @Inject constructor(
             if (extensionManager.isExtensionInstalled(storageId)) {
                 // Идемпотентный реимпорт того же файла — обновляем скрипт без создания дубля.
                 luaSourceLoader.saveScript(storageId, finalCode)
-                extensionManager.updateExtensionSettings(storageId, "sourceType: local")
+                extensionManager.updateExtensionSettings(storageId, """{"sourceType": "local"}""")
                 luaSourceProvider.reload()
                 return@withLock
             }
@@ -437,7 +448,7 @@ class ExtensionsManagerViewModel @Inject constructor(
                 imageUrl = icon.ifBlank { null },
                 codeUrl = null
             )
-            extensionManager.updateExtensionSettings(storageId, "sourceType: local")
+            extensionManager.updateExtensionSettings(storageId, """{"sourceType": "local"}""")
             luaSourceProvider.reload()
         }
     }

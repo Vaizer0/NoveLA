@@ -1,5 +1,6 @@
 package my.noveldokusha
 
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import my.noveldokusha.core.Extension
@@ -43,13 +44,11 @@ class ExtensionRepository @Inject constructor(
 
     override suspend fun installExtensionFromInfo(id: String, name: String, version: String, language: String, imageUrl: String?, codeUrl: String?) {
         try {
-            val settingsYaml = buildString {
-                if (!codeUrl.isNullOrBlank()) {
-                    appendLine("codeUrl: $codeUrl")
-                } else {
-                    appendLine("sourceType: local")
-                }
-            }.trim()
+            val settingsJson = if (!codeUrl.isNullOrBlank()) {
+                Gson().toJson(mapOf("codeUrl" to codeUrl))
+            } else {
+                """{"sourceType": "local"}"""
+            }
 
             val dbExtension = my.noveldokusha.feature.local_database.tables.Extension(
                 id = id,
@@ -62,7 +61,7 @@ class ExtensionRepository @Inject constructor(
                 enabled = true,
                 installed = true,
                 chapterType = "HTML",
-                settings = settingsYaml.ifBlank { "{}" }
+                settings = settingsJson
             )
             extensionDao.insert(dbExtension)
 

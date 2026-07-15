@@ -19,6 +19,7 @@ dependencies {
     implementation(projects.tooling.localDatabase)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.snakeyaml)
+    implementation(libs.gson)
 
     // Compose
     implementation(libs.compose.androidx.activity)
