@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.ExtensionManager
+import my.noveldokusha.core.atomicWrite
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -73,6 +74,7 @@ class LuaSourceProviderImpl @Inject constructor(
                     nameStrId = it.nameStrId.toIntOrNull() ?: 0,
                     baseUrl = it.baseUrl,
                     language = it.language?.let { lang -> my.noveldokusha.core.LanguageCode.entries.find { it.iso639_1 == lang } },
+                    iconUrl = it.iconUrl,
                 )
             }
         } catch (e: Exception) {
@@ -85,7 +87,7 @@ class LuaSourceProviderImpl @Inject constructor(
         try {
             val entries = sources.map { it.toCacheEntry() }
             val json = Gson().toJson(entries)
-            cacheFile().writeText(json)
+            atomicWrite(cacheFile(), json.toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             Timber.e(e, "LuaSourceProvider: failed to save cache")
         }
@@ -123,4 +125,5 @@ private fun SourceInterface.toCacheEntry(): SourceCacheEntry =
         nameStrId = nameStrId.toString(),
         baseUrl = baseUrl,
         language = (this as? SourceInterface.Catalog)?.language?.iso639_1,
+        iconUrl = (this as? SourceInterface.Catalog)?.iconUrl,
     )

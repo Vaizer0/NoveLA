@@ -33,6 +33,7 @@ import org.luaj.vm2.lib.jse.JsePlatform
 import org.yaml.snakeyaml.Yaml
 import androidx.core.os.ConfigurationCompat
 import timber.log.Timber
+import my.noveldokusha.core.atomicWrite
 import java.io.File
 import java.net.InetAddress
 import java.net.URI
@@ -772,7 +773,7 @@ class LuaSourceLoader @Inject constructor(
 
     suspend fun saveScript(id: String, code: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            scriptFile(id).writeText(code, Charsets.UTF_8)
+            atomicWrite(scriptFile(id), code.toByteArray(Charsets.UTF_8))
             cache.remove(id)
             Timber.d("Saved $id.lua")
             true
@@ -807,7 +808,7 @@ class LuaSourceLoader @Inject constructor(
                 Timber.e("Empty body for $id")
                 return@withContext false
             }
-            luaFile(id).writeText(code, Charsets.UTF_8)
+            atomicWrite(luaFile(id), code.toByteArray(Charsets.UTF_8))
             cache.remove(id)
             Timber.d("Saved $id.lua")
             true

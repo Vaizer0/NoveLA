@@ -10,4 +10,5 @@ data class SourceCacheEntry(
     val nameStrId: String,
     val baseUrl: String,
     val language: String? = null,
+    val iconUrl: String? = null,
 )

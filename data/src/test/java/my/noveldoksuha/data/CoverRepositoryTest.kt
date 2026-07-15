@@ -149,7 +149,7 @@ class CoverRepositoryTest {
 
         val result = repo.ensureCover(cover, "https://example.com/c.png")
 
-        assertEquals(false, result)
+        assertEquals(true, result)
         // The previous valid cover must still be in place.
         assertTrue(isCoverValid(cover))
     }

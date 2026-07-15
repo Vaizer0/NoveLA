@@ -12,7 +12,7 @@ suspend fun fileImporter(
     targetFile.parentFile?.also { parent ->
         parent.mkdirs()
         if (parent.exists()) {
-            targetFile.writeBytes(imageData)
+            atomicWrite(targetFile, imageData)
         } else {
             Timber.e("Failed to create folder ${parent.absolutePath}")
         }
