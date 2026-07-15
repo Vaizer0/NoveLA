@@ -13,6 +13,7 @@ import android.os.IBinder
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import my.noveldokusha.features.reader.features.ReaderTextToSpeech
+import my.noveldokusha.features.reader.manager.ReaderManager
 import my.noveldokusha.core.utils.isServiceRunning
 import timber.log.Timber
 import javax.inject.Inject
@@ -22,14 +23,14 @@ import javax.inject.Inject
 internal class NarratorMediaControlsService : Service() {
 
     companion object {
+        const val ACTION_STOP_NARRATOR = "my.noveldokusha.STOP_NARRATOR"
         private var serviceInstance: NarratorMediaControlsService? = null
 
         fun start(ctx: Context) {
-            if (!isRunning(ctx))
-                ContextCompat.startForegroundService(
-                    ctx,
-                    Intent(ctx, NarratorMediaControlsService::class.java)
-                )
+            ContextCompat.startForegroundService(
+                ctx,
+                Intent(ctx, NarratorMediaControlsService::class.java)
+            )
         }
 
         fun stop(ctx: Context) {
@@ -55,6 +56,9 @@ internal class NarratorMediaControlsService : Service() {
     @Inject
     lateinit var narratorNotification: NarratorMediaControlsNotification
 
+    @Inject
+    lateinit var readerManager: ReaderManager
+
     private var audioFocusRequest: AudioFocusRequest? = null
     private var wasPausedByFocusLoss = false
 
@@ -65,6 +69,16 @@ internal class NarratorMediaControlsService : Service() {
             ReaderTextToSpeech.isSystemPauseTrigger = true
             ReaderTextToSpeech.pausedBySystem = true
             narratorNotification.pause()
+        }
+    }
+
+    private val dismissReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_STOP_NARRATOR) {
+                Timber.d("dismissReceiver: STOP_NARRATOR — closing reader")
+                narratorNotification.close()
+                readerManager.closeReader()
+            }
         }
     }
 
@@ -141,6 +155,10 @@ internal class NarratorMediaControlsService : Service() {
             becomingNoisyReceiver,
             IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
         )
+        registerReceiver(
+            dismissReceiver,
+            IntentFilter(ACTION_STOP_NARRATOR)
+        )
         requestAudioFocus()
 
         val notification = narratorNotification.createNotificationMediaControls(this)
@@ -156,6 +174,7 @@ internal class NarratorMediaControlsService : Service() {
     override fun onDestroy() {
         serviceInstance = null
         runCatching { unregisterReceiver(becomingNoisyReceiver) }
+        runCatching { unregisterReceiver(dismissReceiver) }
         abandonAudioFocus()
         narratorNotification.close()
         super.onDestroy()

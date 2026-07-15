@@ -185,15 +185,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         )
         session.setMediaButtonReceiver(mbrPendingIntent)
 
-        val cancelButton = MediaButtonReceiver.buildMediaButtonPendingIntent(
-            context,
-            PlaybackStateCompat.ACTION_STOP
-        )
-
         val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
-            .setShowCancelButton(true)
             .setShowActionsInCompactView(0, 2, 4)
-            .setCancelButtonIntent(cancelButton)
             .setMediaSession(session.sessionToken)
 
         val readerIntent = ReaderActivity.IntentData(
@@ -296,14 +289,21 @@ internal class NarratorMediaControlsNotification @Inject constructor(
             title = ""
             text = ""
             defineActions(isPlaying = readerSession.readerTextToSpeech.state.isPlaying.value)
-            setOngoing(true)
+            setOngoing(false)
             setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             priority = NotificationCompat.PRIORITY_HIGH
             setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             setColorized(false)
             setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_logo))
             setStyle(mediaStyle)
-            setDeleteIntent(cancelButton)
+            setDeleteIntent(
+                PendingIntent.getBroadcast(
+                    context,
+                    1002,
+                    Intent(NarratorMediaControlsService.ACTION_STOP_NARRATOR).setPackage(context.packageName),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            )
             color = ContextCompat.getColor(context, CoreUiR.color.colorAccent)
             setContentIntent(generateIntentStack())
         }

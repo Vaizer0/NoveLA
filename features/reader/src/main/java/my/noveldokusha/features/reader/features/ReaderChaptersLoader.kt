@@ -556,21 +556,13 @@ internal class ReaderChaptersLoader(
                         else
                             "Content error: Cloudflare, empty chapter, or login required. Try opening in browser.\n\nCode snippet: ${preview.take(100)}..."
 
-                        // 2. Атомарно модифицируем список данных, не дёргая адаптер на каждое удаление
-                        // (Предполагается, что remove/insert у тебя работают напрямую с внутренним массивом)
-                        val updatedItems = items.toMutableList().apply {
-                            remove(itemProgressBar)
-                            remove(itemTitle)
-                            removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
-                            // Добавляем ошибку вместо удаленного прогресс-бара
-                            add(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
-                        }
+                        // 2. Модифицируем список на месте
+                        items.remove(itemProgressBar)
+                        items.remove(itemTitle)
+                        items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
+                        items.add(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
 
-                        // 3. Перезаписываем список в адаптере целиком
-                        items.clear()
-                        items.addAll(updatedItems)
-
-                        // 4. Только теперь уведомляем UI (внутри или сразу после этого блока)
+                        // 3. Уведомляем UI
                         readerViewHandlersActions.doForceUpdateListViewState()
                     }
                     return@_addChapterInternal false
@@ -613,7 +605,7 @@ internal class ReaderChaptersLoader(
 
                             if (batchTranslator != null) {
                                 val bodyTexts = itemsOriginal.filterIsInstance<ReaderItem.Body>().map { it.text }
-                                val bodyTextToIndex = bodyTexts.withIndex().associate { (idx, text) -> text to idx }
+                                val textToIndices = bodyTexts.withIndex().groupBy({ it.value }, { it.index })
 
                                 // Load existing cache entry (single row per chapter+language)
                                 val existingEntry = withContext(Dispatchers.IO) {
@@ -647,12 +639,12 @@ internal class ReaderChaptersLoader(
                                         Timber.d("Using full DB cache for chapter ${chapter.title} (${cachedBody.size} body translations)")
                                         itemsOriginal.map { item ->
                                             if (item is ReaderItem.Body) {
-                                                val idx = bodyTextToIndex[item.text] ?: return@map item
-                                                item.copy(textTranslated = cachedBody[idx] ?: item.text)
+                                                val indices = textToIndices[item.text] ?: return@map item
+                                                item.copy(textTranslated = indices.firstNotNullOfOrNull { cachedBody[it] } ?: item.text)
                                             } else item
                                         }
                                     } else {
-                                        val missingTexts = missingIndices.map { bodyTexts[it] }
+                                        val missingTexts = missingIndices.map { bodyTexts[it] }.distinct()
                                         Timber.d("DB cache partial: ${cachedBody.size}/${bodyTexts.size}, translating ${missingTexts.size} missing body paragraphs")
                                         val extraTranslations = withContext(Dispatchers.IO) {
                                             kotlinx.coroutines.withTimeout(60_000L) {
@@ -671,8 +663,8 @@ internal class ReaderChaptersLoader(
 
                                         itemsOriginal.map { item ->
                                             if (item is ReaderItem.Body) {
-                                                val idx = bodyTextToIndex[item.text] ?: return@map item
-                                                item.copy(textTranslated = fullBody[idx] ?: item.text)
+                                                val indices = textToIndices[item.text] ?: return@map item
+                                                item.copy(textTranslated = indices.firstNotNullOfOrNull { fullBody[it] } ?: item.text)
                                             } else item
                                         }
                                     }

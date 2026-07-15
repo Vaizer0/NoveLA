@@ -365,6 +365,7 @@ internal class ReaderSession(
         readerTextToSpeech.shutdownTts()
         scope.cancel()
         NarratorMediaControlsService.stop(context)
+        runCatching { FloatingTtsService.stop(context) }
     }
 
     fun requestTtsStop() {

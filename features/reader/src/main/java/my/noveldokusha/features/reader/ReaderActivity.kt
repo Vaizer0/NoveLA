@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
@@ -48,6 +49,7 @@ import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.ReaderItemAdapter
 import my.noveldokusha.features.reader.domain.ReaderState
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
+import my.noveldokusha.features.reader.manager.ReaderManager
 import my.noveldokusha.features.reader.services.NarratorMediaControlsService
 import my.noveldokusha.features.reader.tools.FontsLoader
 import my.noveldokusha.features.reader.ui.ReaderScreen
@@ -89,6 +91,9 @@ class ReaderActivity : BaseActivity() {
 
     @Inject
     internal lateinit var readerViewHandlersActions: ReaderViewHandlersActions
+
+    @Inject
+    internal lateinit var readerManager: ReaderManager
 
     private var listIsScrolling = false
     private val fadeInTextLiveData = MutableLiveData(false)
@@ -188,6 +193,11 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.onDisplaySettingsChanged.collect {
                 viewAdapter.listView.notifyDataSetChanged()
+            }
+        }
+        lifecycleScope.launch {
+            readerManager.onCloseRequested.receiveAsFlow().collect {
+                if (!isFinishing) finish()
             }
         }
         readerViewHandlersActions.forceUpdateListViewState = {
