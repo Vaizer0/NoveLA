@@ -392,6 +392,16 @@ class BackupDataService : Service() {
                                 })
                             }
                         })
+                        put("USER_REGEX_CLEANUP_RULES", org.json.JSONArray(
+                            appPreferences.USER_REGEX_CLEANUP_RULES.value.map { rule ->
+                                org.json.JSONObject().apply {
+                                    put("pattern", rule.pattern)
+                                    put("replacement", rule.replacement)
+                                    put("isEnabled", rule.isEnabled)
+                                    put("description", rule.description)
+                                }
+                            }
+                        ))
                     }.toString()
                     zip.putNextEntry(entry)
                     zip.write(settingsJson.toByteArray())

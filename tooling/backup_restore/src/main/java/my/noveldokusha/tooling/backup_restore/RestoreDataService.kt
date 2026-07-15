@@ -23,6 +23,7 @@ import my.noveldokusha.coreui.states.text
 import my.noveldokusha.coreui.states.title
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.NovelPromptData
+import my.noveldokusha.core.models.RegexRule
 import my.noveldokusha.core.isCoverValid
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.BookChaptersRepository
@@ -654,6 +655,21 @@ class RestoreDataService : Service() {
                     }
                     appPreferences.TRANSLATION_NOVEL_PROMPTS.value = promptsMap
                     Timber.d("mergeToSettings: Restored ${promptsMap.size} novel prompts")
+                }
+
+                if (settingsJson.has("USER_REGEX_CLEANUP_RULES")) {
+                    val rulesArray = settingsJson.getJSONArray("USER_REGEX_CLEANUP_RULES")
+                    val rules = (0 until rulesArray.length()).map { i ->
+                        val obj = rulesArray.getJSONObject(i)
+                        RegexRule(
+                            pattern = obj.getString("pattern"),
+                            replacement = obj.optString("replacement", ""),
+                            isEnabled = obj.optBoolean("isEnabled", true),
+                            description = obj.optString("description", "")
+                        )
+                    }
+                    appPreferences.USER_REGEX_CLEANUP_RULES.value = rules
+                    Timber.d("mergeToSettings: Restored ${rules.size} regex rules")
                 }
 
                 Timber.d("mergeToSettings: Settings merge completed")
