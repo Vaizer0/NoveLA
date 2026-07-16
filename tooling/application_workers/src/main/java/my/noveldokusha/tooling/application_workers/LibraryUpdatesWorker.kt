@@ -20,8 +20,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
+import androidx.work.BackoffPolicy
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.core.Response
@@ -30,6 +31,7 @@ import my.noveldokusha.core.tryAsResponse
 import my.noveldokusha.feature.local_database.tables.Book
 import my.noveldokusha.tooling.application_workers.notifications.LibraryUpdateNotification
 import timber.log.Timber
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.concurrent.TimeUnit
 
 @HiltWorker
@@ -66,7 +68,8 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
             return builder
                 .addTag(TAG)
                 .setConstraints(constrains)
-                .setInitialDelay(30, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+                .setInitialDelay(5, TimeUnit.MINUTES)
                 .setInputData(createInputData(updateCategory))
                 .build()
         }
@@ -111,24 +114,22 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
             return Result.retry()
         }
 
-        return runCatching {
-            updateLibrary(updateCategory = updateCategory)
-                .onError { Timber.e(it.exception) }
-        }.fold(
-            onSuccess = { result ->
-                if (result is Response.Success) {
-                    appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value = System.currentTimeMillis()
-                }
-                when (result) {
-                    is Response.Error -> Result.failure()
-                    is Response.Success -> Result.success()
-                }
-            },
-            onFailure = { e ->
-                Timber.e(e, "LibraryUpdatesWorker: unexpected error")
-                Result.failure()
+        return try {
+            val result = updateLibrary(updateCategory = updateCategory)
+            result.onError { Timber.e(it.exception) }
+            if (result is Response.Success) {
+                appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value = System.currentTimeMillis()
             }
-        )
+            when (result) {
+                is Response.Error -> Result.failure()
+                is Response.Success -> Result.success()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "LibraryUpdatesWorker: unexpected error")
+            Result.failure()
+        }
     }
 
     /**
@@ -138,16 +139,15 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
     private suspend fun updateLibrary(
         updateCategory: LibraryCategory
     ) = tryAsResponse {
-        withContext(Dispatchers.Main) {
+        libraryUpdateNotification.createEmptyUpdatingNotification()
+        try {
+            val countingUpdating =
+                MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
+            val currentUpdating = MutableStateFlow<Set<Book>>(setOf())
+            val newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(setOf())
+            val failedUpdates = MutableStateFlow<Set<Book>>(setOf())
 
-            libraryUpdateNotification.createEmptyUpdatingNotification()
-            try {
-                val countingUpdating =
-                    MutableStateFlow<LibraryUpdatesInteractions.CountingUpdating?>(null)
-                val currentUpdating = MutableStateFlow<Set<Book>>(setOf())
-                val newUpdates = MutableStateFlow<Set<LibraryUpdatesInteractions.NewUpdate>>(setOf())
-                val failedUpdates = MutableStateFlow<Set<Book>>(setOf())
-
+            coroutineScope {
                 val currentUpdatingNotifyJob = launch(Dispatchers.Main) {
                     combine(
                         flow = countingUpdating,
@@ -186,9 +186,9 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
                 }
 
                 currentUpdatingNotifyJob.cancel()
-            } finally {
-                libraryUpdateNotification.closeNotification()
             }
+        } finally {
+            libraryUpdateNotification.closeNotification()
         }
     }
 
