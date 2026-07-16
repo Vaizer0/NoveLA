@@ -183,8 +183,9 @@ class TextToSpeechManager<T : Utterance<T>>(
 
         Timber.d( "speak id=${textSynthesis.utteranceId} subItems=${subItems.size} queueSize=${_queueList.size}")
         var enqueueFailed = false
+        var currentOffset = 0
         subItems.forEachIndexed { index, textSlice ->
-            val uniqueID = "$index|${textSynthesis.utteranceId}"
+            val uniqueID = "$index|$currentOffset|${textSynthesis.utteranceId}"
             val bundle = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uniqueID)
             }
@@ -193,6 +194,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                 Timber.w( "speak failed id=$uniqueID result=$result")
                 enqueueFailed = true
             }
+            currentOffset += textSlice.length
         }
 
         if (!enqueueFailed) {
@@ -280,7 +282,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                     .toIntOrNull() ?: return
                 if (itemUtteranceIndex != 0) return
 
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.PLAYING)
                     ?: return
@@ -321,7 +323,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                 if (utteranceId == null) return
                 // Skip the broken item regardless of which sub-slice errored so reading
                 // continues instead of stalling on a permanently stuck queue entry.
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.FINISHED)
                     ?: return
@@ -339,7 +341,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                         Timber.w( "onFinished: cant parse index from $utteranceId")
                         return
                     }
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
 
                 val itemSize = _queueListItemSize[itemUtteranceId]?.minus(1) ?: run {
                     Timber.w( "onFinished: no itemSize for $itemUtteranceId")
