@@ -537,10 +537,10 @@ private fun FloatingTtsMiniPlayer(
                         }
                     } else {
                         val wordIndex = state.currentWordIndex.value
-                        val annotatedText = if (ttsHighlightEnabled && wordIndex >= 0) {
+                        val annotatedText: AnnotatedString = if (ttsHighlightEnabled && wordIndex >= 0) {
                             buildHighlightedText(displayText, wordIndex, ttsHighlightColor)
                         } else {
-                            displayText
+                            AnnotatedString(displayText)
                         }
                         Text(
                             text = annotatedText,

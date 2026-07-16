@@ -367,9 +367,9 @@ internal class ReaderTextToSpeech(
                             val currentSpeed = manager.voiceSpeed.floatValue
                             val cps = baseCharactersPerSecond.value * currentSpeed
                             totalEstimatedMs = if (cps > 0f) {
-                                ((text.length / cps) * 1000L).coerceAtLeast(1)
+                                ((text.length.toFloat() / cps) * 1000L).toLong().coerceAtLeast(1)
                             } else {
-                                (wordsCache.size * 500L).coerceAtLeast(1)
+                                (wordsCache.size.toLong() * 500L).coerceAtLeast(1)
                             }
                             currentUtteranceId = utterance.utteranceId
                             _currentWordIndex.value = 0
@@ -401,12 +401,12 @@ internal class ReaderTextToSpeech(
                 val currentSpeed = manager.voiceSpeed.floatValue
                 val cps = baseCharactersPerSecond.value * currentSpeed
                 val totalMs = if (cps > 0f) {
-                    ((text.length / cps) * 1000L).coerceAtLeast(1)
+                    ((text.length.toFloat() / cps) * 1000L).toLong().coerceAtLeast(1)
                 } else {
-                    (words.size * 500L).coerceAtLeast(1)
+                    (words.size.toLong() * 500L).coerceAtLeast(1)
                 }
 
-                val progress = (elapsedMs.toFloat() / totalMs).coerceIn(0f, 1f)
+                val progress = (elapsedMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
                 val wordIndex = (progress * words.size).toInt().coerceIn(0, words.size - 1)
                 _currentWordIndex.value = wordIndex
             }
