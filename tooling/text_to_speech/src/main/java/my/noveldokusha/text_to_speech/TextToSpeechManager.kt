@@ -64,6 +64,7 @@ class TextToSpeechManager<T : Utterance<T>>(
 
     val currentSpeakingText = mutableStateOf("")
     val speechStartTimeMs = mutableStateOf(0L)
+    val spokenWordRange = mutableStateOf<IntRange?>(null)
 
     private val auxiliaryServices = mutableListOf<TextToSpeech>()
 
@@ -285,6 +286,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                     ?: return
 
                 speechStartTimeMs.value = System.currentTimeMillis()
+                spokenWordRange.value = null
                 currentActiveItemState.value = res
                 scope.launch { _currentTextSpeakFlow.emit(res) }
             }
@@ -303,6 +305,16 @@ class TextToSpeechManager<T : Utterance<T>>(
             override fun onError(utteranceId: String?) {
                 Timber.w( "onError(deprecated) $utteranceId")
                 onErrorFinished(utteranceId)
+            }
+
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                if (utteranceId != null) {
+                    val parts = utteranceId.split('|')
+                    if (parts.size >= 3) {
+                        val offset = parts[1].toIntOrNull() ?: 0
+                        scope.launch { spokenWordRange.value = (start + offset) until (end + offset) }
+                    }
+                }
             }
 
             private fun onErrorFinished(utteranceId: String?) {

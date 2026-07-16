@@ -536,9 +536,9 @@ private fun FloatingTtsMiniPlayer(
                             )
                         }
                     } else {
-                        val wordIndex = state.currentWordIndex.value
-                        val annotatedText: AnnotatedString = if (ttsHighlightEnabled && wordIndex >= 0) {
-                            buildHighlightedText(displayText, wordIndex, ttsHighlightColor)
+                        val spokenRange = state.spokenWordRange.value
+                        val annotatedText: AnnotatedString = if (ttsHighlightEnabled && spokenRange != null) {
+                            buildHighlightedText(displayText, spokenRange, ttsHighlightColor)
                         } else {
                             AnnotatedString(displayText)
                         }
@@ -579,41 +579,24 @@ internal fun formatDurationCompact(seconds: Int): String {
     }.trimEnd()
 }
 
-private val TTS_WHITESPACE = Regex("\\s+")
-
-private fun buildHighlightedText(text: String, wordIndex: Int, highlightColorHex: String): AnnotatedString {
-    if (text.isBlank() || wordIndex < 0) return AnnotatedString(text)
+private fun buildHighlightedText(text: String, range: IntRange, highlightColorHex: String): AnnotatedString {
+    if (text.isBlank()) return AnnotatedString(text)
     val color = try {
         Color(android.graphics.Color.parseColor("#$highlightColorHex"))
     } catch (_: Exception) {
         Color(android.graphics.Color.parseColor("#FFFF6D00"))
     }
-    val words = TTS_WHITESPACE.split(text)
-    if (words.isEmpty() || wordIndex >= words.size) return AnnotatedString(text)
+    val start = range.first.coerceIn(0, text.length)
+    val end = (range.last + 1).coerceIn(0, text.length)
     return buildAnnotatedString {
-        var pos = 0
-        for ((i, word) in words.withIndex()) {
-            if (i > 0) {
-                val spaceStart = text.indexOf(word, pos)
-                if (spaceStart > pos) {
-                    append(text.substring(pos, spaceStart))
-                    pos = spaceStart
-                }
+        if (start > 0) append(text.substring(0, start))
+        if (start < end) {
+            withStyle(SpanStyle(color = Color.White, background = color, fontWeight = FontWeight.Bold)) {
+                append(text.substring(start, end))
             }
-            val start = text.indexOf(word, pos)
-            if (start == -1) { append(word); pos += word.length; continue }
-            val end = start + word.length
-            if (i == wordIndex) {
-                withStyle(SpanStyle(color = Color.White, background = color, fontWeight = FontWeight.Bold)) {
-                    append(word)
-                }
-            } else {
-                append(word)
-            }
-            pos = end
         }
-        if (pos < text.length) {
-            append(text.substring(pos))
+        if (end < text.length) {
+            append(text.substring(end))
         }
     }
 }

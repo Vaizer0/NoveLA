@@ -5,10 +5,8 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.SpannableString
-import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
-import android.text.style.ForegroundColorSpan
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -57,7 +55,7 @@ internal class ReaderItemAdapter(
     private val onClick: () -> Unit,
     private val currentTtsHighlightEnabled: () -> Boolean = { false },
     private val currentTtsHighlightColor: () -> String = { "FFFF6D00" },
-    private val currentTtsWordIndex: () -> Int = { -1 },
+    private val currentSpokenWordRange: () -> IntRange? = { null },
     private val currentTtsParagraphText: () -> String = { "" },
 ) : ArrayAdapter<ReaderItem>(ctx, 0, list) {
     private val appFileResolver = AppFileResolver(ctx)
@@ -165,7 +163,7 @@ internal class ReaderItemAdapter(
             val secondaryText = if (orderTranslationFirst) item.text else item.textTranslated ?: item.text
 
             val displayPrimary = if (isTtsActiveItem && currentTtsHighlightEnabled()) {
-                applyWordHighlight(primaryText, currentTtsWordIndex(), currentTtsHighlightColor())
+                applyWordHighlight(primaryText, 0, currentTtsHighlightColor())
             } else {
                 primaryText
             }
@@ -184,7 +182,7 @@ internal class ReaderItemAdapter(
             bind.bodyOriginal.visibility = View.VISIBLE
         } else {
             val displayText = if (isTtsActiveItem && currentTtsHighlightEnabled()) {
-                applyWordHighlight(item.textToDisplay, currentTtsWordIndex(), currentTtsHighlightColor())
+                applyWordHighlight(item.textToDisplay, 0, currentTtsHighlightColor())
             } else {
                 item.textToDisplay
             }
@@ -392,39 +390,23 @@ internal class ReaderItemAdapter(
     }
 
     private fun applyWordHighlight(text: String, wordIndex: Int, highlightColorHex: String): CharSequence {
-        if (!currentTtsHighlightEnabled() || wordIndex < 0 || text.isBlank()) return text
+        if (!currentTtsHighlightEnabled() || text.isBlank()) return text
+        val range = currentSpokenWordRange()
+        if (range == null || range.first >= text.length) return text
         val color = try {
             android.graphics.Color.parseColor("#$highlightColorHex")
         } catch (_: Exception) {
             android.graphics.Color.parseColor("#FFFF6D00")
         }
         val spannable = SpannableString(text)
-        val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (words.isEmpty() || wordIndex >= words.size) return text
-        var pos = 0
-        for ((i, word) in words.withIndex()) {
-            val start = text.indexOf(word, pos)
-            if (start == -1) { pos += word.length; continue }
-            val end = start + word.length
-            if (i == wordIndex) {
-                spannable.setSpan(
-                    BackgroundColorSpan(color),
-                    start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                spannable.setSpan(
-                    ForegroundColorSpan(android.graphics.Color.WHITE),
-                    start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            } else {
-                spannable.setSpan(
-                    ForegroundColorSpan(android.graphics.Color.TRANSPARENT),
-                    start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
-            pos = end
+        val start = range.first.coerceIn(0, text.length)
+        val end = (range.last + 1).coerceIn(0, text.length)
+        if (start < end) {
+            spannable.setSpan(
+                BackgroundColorSpan(color),
+                start, end,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
         }
         return spannable
     }
