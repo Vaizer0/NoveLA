@@ -518,7 +518,6 @@ private fun ViewsPreview(
         parallelEnabled = remember { mutableStateOf(false) },
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
-        currentWordIndex = remember { mutableStateOf(-1) },
         spokenWordRange = remember { mutableStateOf(null) },
     )
 

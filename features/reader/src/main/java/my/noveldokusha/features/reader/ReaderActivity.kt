@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -153,7 +154,6 @@ class ReaderActivity : BaseActivity() {
                 currentTtsHighlightEnabled = { appPreferences.TTS_HIGHLIGHT_ENABLED.value },
                 currentTtsHighlightColor = { appPreferences.TTS_HIGHLIGHT_COLOR.value },
                 currentSpokenWordRange = { viewModel.readerSpeaker.state.spokenWordRange.value },
-                currentTtsParagraphText = { viewModel.readerSpeaker.state.currentParagraphText.value },
             )
         }
     }
@@ -336,6 +336,7 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launch {
             var lastRange: IntRange? = null
             snapshotFlow { viewModel.readerSpeaker.state.spokenWordRange.value }
+                .debounce(50)
                 .collect {
                     if (appPreferences.TTS_HIGHLIGHT_ENABLED.value && it != null && it != lastRange) {
                         lastRange = it

@@ -63,7 +63,6 @@ class TextToSpeechManager<T : Utterance<T>>(
     )
 
     val currentSpeakingText = mutableStateOf("")
-    val speechStartTimeMs = mutableStateOf(0L)
     val spokenWordRange = mutableStateOf<IntRange?>(null)
 
     private val auxiliaryServices = mutableListOf<TextToSpeech>()
@@ -172,7 +171,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueListItemSize.clear()
     }
 
-    fun speak(text: String, textSynthesis: T) {
+    fun speak(text: String, textSynthesis: T, leadingOffset: Int = 0) {
         val subItems = delimiterAwareTextSplitter(
             fullText = text,
             maxSliceLength = maxStringLengthPerTextUnit(),
@@ -185,7 +184,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         var enqueueFailed = false
         var currentOffset = 0
         subItems.forEachIndexed { index, textSlice ->
-            val uniqueID = "$index|$currentOffset|${textSynthesis.utteranceId}"
+            val uniqueID = "$index|${currentOffset + leadingOffset}|${textSynthesis.utteranceId}"
             val bundle = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uniqueID)
             }
@@ -287,7 +286,6 @@ class TextToSpeechManager<T : Utterance<T>>(
                     ?.copyWithState(playState = Utterance.PlayState.PLAYING)
                     ?: return
 
-                speechStartTimeMs.value = System.currentTimeMillis()
                 spokenWordRange.value = null
                 currentActiveItemState.value = res
                 scope.launch { _currentTextSpeakFlow.emit(res) }

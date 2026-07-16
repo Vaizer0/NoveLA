@@ -67,7 +67,6 @@ internal data class TextToSpeechSettingData(
     val parallelEnabled: State<Boolean>,
     val originalVoiceId: State<String>,
     val setOriginalVoiceId: (String) -> Unit,
-    val currentWordIndex: State<Int>,
     val spokenWordRange: State<IntRange?>,
 )
 
@@ -273,7 +272,6 @@ internal class ReaderTextToSpeech(
             _originalVoiceId.value = voiceId
             onOriginalVoiceChanged()
         },
-        currentWordIndex = mutableStateOf(-1),
         spokenWordRange = manager.spokenWordRange,
     )
 
@@ -961,12 +959,17 @@ internal class ReaderTextToSpeech(
                 val cleanText = cleanTextForTts(displayText)
                 if (cleanText.isBlank()) return
 
+                val leadingOffset = displayText.lines().firstOrNull()?.let { line ->
+                    LEADING_DECORATIVE.find(line)?.value?.length
+                } ?: 0
+
                 manager.speak(
                     text = cleanText,
                     textSynthesis = TextSynthesis(
                         itemPos = item,
                         playState = Utterance.PlayState.PLAYING
-                    )
+                    ),
+                    leadingOffset = leadingOffset
                 )
             }
             else -> Unit

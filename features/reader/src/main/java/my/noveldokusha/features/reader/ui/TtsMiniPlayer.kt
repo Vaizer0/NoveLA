@@ -45,12 +45,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -522,12 +528,23 @@ private fun FloatingTtsMiniPlayer(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isBothMode) {
+                        val spokenRange = state.spokenWordRange.value
                         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                            Text(
-                                text = ttsParagraph,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                            if (ttsHighlightEnabled && spokenRange != null) {
+                                HighlightedText(
+                                    text = ttsParagraph,
+                                    range = spokenRange,
+                                    highlightColorHex = ttsHighlightColor,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                Text(
+                                    text = ttsParagraph,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = inverseParagraph,
@@ -537,17 +554,25 @@ private fun FloatingTtsMiniPlayer(
                         }
                     } else {
                         val spokenRange = state.spokenWordRange.value
-                        val annotatedText: AnnotatedString = if (ttsHighlightEnabled && spokenRange != null) {
-                            buildHighlightedText(displayText, spokenRange, ttsHighlightColor)
+                        val isInverse = paragraphMode == "inverse" && hasInverse
+                        if (ttsHighlightEnabled && spokenRange != null && !isInverse) {
+                            HighlightedText(
+                                text = displayText,
+                                range = spokenRange,
+                                highlightColorHex = ttsHighlightColor,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
                         } else {
-                            AnnotatedString(displayText)
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
                         }
-                        Text(
-                            text = annotatedText,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
                     }
                 }
             }
@@ -579,24 +604,59 @@ internal fun formatDurationCompact(seconds: Int): String {
     }.trimEnd()
 }
 
-private fun buildHighlightedText(text: String, range: IntRange, highlightColorHex: String): AnnotatedString {
-    if (text.isBlank()) return AnnotatedString(text)
-    val color = try {
-        Color(android.graphics.Color.parseColor("#$highlightColorHex"))
-    } catch (_: Exception) {
-        Color(android.graphics.Color.parseColor("#FFFF6D00"))
+@Composable
+private fun HighlightedText(
+    text: String,
+    range: IntRange,
+    highlightColorHex: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val bgColor = remember(highlightColorHex) {
+        try {
+            Color(android.graphics.Color.parseColor("#$highlightColorHex"))
+        } catch (_: Exception) {
+            Color(android.graphics.Color.parseColor("#FFFF6D00"))
+        }
     }
-    val start = range.first.coerceIn(0, text.length)
-    val end = (range.last + 1).coerceIn(0, text.length)
-    return buildAnnotatedString {
-        if (start > 0) append(text.substring(0, start))
-        if (start < end) {
-            withStyle(SpanStyle(color = Color.White, background = color, fontWeight = FontWeight.Bold)) {
-                append(text.substring(start, end))
+    val annotated = remember(text, range) {
+        val start = range.first.coerceIn(0, text.length)
+        val end = (range.last + 1).coerceIn(0, text.length)
+        buildAnnotatedString {
+            if (start > 0) append(text.substring(0, start))
+            if (start < end) {
+                withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Bold)) {
+                    append(text.substring(start, end))
+                }
+            }
+            if (end < text.length) append(text.substring(end))
+        }
+    }
+    Text(
+        text = annotated,
+        style = style,
+        onTextLayout = { layout = it },
+        modifier = modifier.drawBehind {
+            val l = layout ?: return@drawBehind
+            val start = range.first.coerceIn(0, text.length)
+            val end = (range.last + 1).coerceIn(0, text.length)
+            if (start >= end) return@drawBehind
+
+            val sLine = l.getLineForOffset(start)
+            val eLine = l.getLineForOffset(end - 1).coerceAtLeast(sLine)
+            for (line in sLine..eLine) {
+                val lineStartChar = l.getLineStart(line)
+                val lineEndChar = (l.getLineEnd(line) - 1).coerceAtLeast(lineStartChar)
+                val left = if (line == sLine) l.getBoundingBox(start).left else l.getBoundingBox(lineStartChar).left
+                val right = if (line == eLine) l.getBoundingBox(end - 1).right else l.getBoundingBox(lineEndChar).right
+                drawRoundRect(
+                    color = bgColor.copy(alpha = 0.5f),
+                    topLeft = Offset(left, l.getLineTop(line)),
+                    size = Size(right - left, l.getLineBottom(line) - l.getLineTop(line)),
+                    cornerRadius = CornerRadius(6f)
+                )
             }
         }
-        if (end < text.length) {
-            append(text.substring(end))
-        }
-    }
+    )
 }
