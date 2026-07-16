@@ -67,6 +67,7 @@ internal data class TextToSpeechSettingData(
     val parallelEnabled: State<Boolean>,
     val originalVoiceId: State<String>,
     val setOriginalVoiceId: (String) -> Unit,
+    val currentWordIndex: State<Int>,
 )
 
 internal data class TextSynthesis(
@@ -215,6 +216,9 @@ internal class ReaderTextToSpeech(
         }
     }
 
+    private val _currentWordIndex = mutableStateOf(-1)
+    val currentWordIndex: State<Int> = _currentWordIndex
+
     val alternateParagraphText = derivedStateOf {
         val itemPos = manager.currentActiveItemState.value.itemPos
         val itemIndex = indexOfReaderItem(
@@ -271,6 +275,7 @@ internal class ReaderTextToSpeech(
             _originalVoiceId.value = voiceId
             onOriginalVoiceChanged()
         },
+        currentWordIndex = _currentWordIndex,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }
@@ -344,6 +349,66 @@ internal class ReaderTextToSpeech(
                     }
                     else -> Unit
                 }
+            }
+        }
+
+        // Word index tracking for TTS highlight
+        coroutineScope.launch {
+            var wordsCache = emptyArray<String>()
+            var totalEstimatedMs = 1L
+            var currentUtteranceId = ""
+
+            manager.currentTextSpeakFlow.collect { utterance ->
+                when (utterance.playState) {
+                    Utterance.PlayState.PLAYING -> {
+                        val text = manager.currentSpeakingText.value
+                        if (text.isNotBlank()) {
+                            wordsCache = WHITESPACE.split(text).filter { it.isNotEmpty() }.toTypedArray()
+                            val currentSpeed = manager.voiceSpeed.floatValue
+                            val cps = baseCharactersPerSecond.value * currentSpeed
+                            totalEstimatedMs = if (cps > 0f) {
+                                ((text.length / cps) * 1000L).coerceAtLeast(1)
+                            } else {
+                                (wordsCache.size * 500L).coerceAtLeast(1)
+                            }
+                            currentUtteranceId = utterance.utteranceId
+                            _currentWordIndex.value = 0
+                        }
+                    }
+                    Utterance.PlayState.FINISHED -> {
+                        if (utterance.utteranceId == currentUtteranceId) {
+                            _currentWordIndex.value = -1
+                            currentUtteranceId = ""
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+
+        // Periodic word index update based on elapsed time
+        coroutineScope.launch {
+            while (true) {
+                delay(50)
+                val startTime = manager.speechStartTimeMs.value
+                val text = manager.currentSpeakingText.value
+                if (startTime <= 0L || text.isBlank() || _currentWordIndex.value < 0) continue
+
+                val elapsedMs = System.currentTimeMillis() - startTime
+                val words = WHITESPACE.split(text).filter { it.isNotEmpty() }
+                if (words.isEmpty()) continue
+
+                val currentSpeed = manager.voiceSpeed.floatValue
+                val cps = baseCharactersPerSecond.value * currentSpeed
+                val totalMs = if (cps > 0f) {
+                    ((text.length / cps) * 1000L).coerceAtLeast(1)
+                } else {
+                    (words.size * 500L).coerceAtLeast(1)
+                }
+
+                val progress = (elapsedMs.toFloat() / totalMs).coerceIn(0f, 1f)
+                val wordIndex = (progress * words.size).toInt().coerceIn(0, words.size - 1)
+                _currentWordIndex.value = wordIndex
             }
         }
     }

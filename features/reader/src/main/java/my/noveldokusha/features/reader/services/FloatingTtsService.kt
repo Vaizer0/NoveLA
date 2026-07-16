@@ -57,6 +57,8 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         var opacity = mutableFloatStateOf(0.6f)
         var panelWidth by mutableFloatStateOf(300f)
         var paragraphMode by mutableStateOf("tts")
+        var ttsHighlightEnabled = mutableStateOf(false)
+        var ttsHighlightColor = mutableStateOf("FFFF6D00")
         var activityWindowToken: IBinder? = null
 
         private var isExpanded = mutableStateOf(false)
@@ -387,6 +389,8 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                             paragraphMode = newMode
                             appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value = newMode
                         },
+                        ttsHighlightEnabled = ttsHighlightEnabled.value,
+                        ttsHighlightColor = ttsHighlightColor.value,
                     )
                 }
             }

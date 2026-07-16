@@ -62,6 +62,9 @@ class TextToSpeechManager<T : Utterance<T>>(
         started = SharingStarted.Eagerly
     )
 
+    val currentSpeakingText = mutableStateOf("")
+    val speechStartTimeMs = mutableStateOf(0L)
+
     private val auxiliaryServices = mutableListOf<TextToSpeech>()
 
     // Храним enginePackage сами — service.defaultEngine всегда возвращает системный дефолт,
@@ -191,6 +194,10 @@ class TextToSpeechManager<T : Utterance<T>>(
             }
         }
 
+        if (!enqueueFailed) {
+            currentSpeakingText.value = text
+        }
+
         // ponytail: speak() returning ERROR means none of the slices will play and no
         // callback fires -> the item would stay in the queue forever and freeze reading.
         // Skip it so the session keeps advancing.
@@ -277,6 +284,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                     ?.copyWithState(playState = Utterance.PlayState.PLAYING)
                     ?: return
 
+                speechStartTimeMs.value = System.currentTimeMillis()
                 currentActiveItemState.value = res
                 scope.launch { _currentTextSpeakFlow.emit(res) }
             }

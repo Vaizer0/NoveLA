@@ -188,6 +188,14 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_Boolean(name, preferences, false)
     }
 
+    val TTS_HIGHLIGHT_ENABLED = object : Preference<Boolean>("TTS_HIGHLIGHT_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
+    val TTS_HIGHLIGHT_COLOR = object : Preference<String>("TTS_HIGHLIGHT_COLOR") {
+        override var value by SharedPreference_String(name, preferences, "FFFF6D00")
+    }
+
     val CHAPTERS_SORT_ASCENDING = object : Preference<TernaryState>("CHAPTERS_SORT_ASCENDING") {
         override var value by SharedPreference_Enum(
             name,

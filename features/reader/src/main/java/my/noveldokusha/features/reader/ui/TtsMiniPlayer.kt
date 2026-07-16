@@ -45,10 +45,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +81,8 @@ internal fun TtsMiniPlayer(
     onShowTextToggle: (() -> Unit)? = null,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
+    ttsHighlightEnabled: Boolean = false,
+    ttsHighlightColor: String = "FFFF6D00",
 ) {
     FloatingTtsMiniPlayer(
         state = state,
@@ -95,6 +102,8 @@ internal fun TtsMiniPlayer(
         onShowTextToggle = onShowTextToggle,
         paragraphMode = paragraphMode,
         onParagraphModeChange = onParagraphModeChange,
+        ttsHighlightEnabled = ttsHighlightEnabled,
+        ttsHighlightColor = ttsHighlightColor,
     )
 }
 
@@ -286,6 +295,8 @@ private fun FloatingTtsMiniPlayer(
     onShowTextToggle: (() -> Unit)?,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
+    ttsHighlightEnabled: Boolean = false,
+    ttsHighlightColor: String = "FFFF6D00",
 ) {
     val total = state.estimatedTotalSeconds.value
     val remaining = state.estimatedRemainingSeconds.value
@@ -525,8 +536,14 @@ private fun FloatingTtsMiniPlayer(
                             )
                         }
                     } else {
+                        val wordIndex = state.currentWordIndex.value
+                        val annotatedText = if (ttsHighlightEnabled && wordIndex >= 0) {
+                            buildHighlightedText(displayText, wordIndex, ttsHighlightColor)
+                        } else {
+                            displayText
+                        }
                         Text(
-                            text = displayText,
+                            text = annotatedText,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -560,4 +577,43 @@ internal fun formatDurationCompact(seconds: Int): String {
         if (m > 0 || h > 0) append("${m}m ")
         if (s > 0 && h == 0) append("${s}s")
     }.trimEnd()
+}
+
+private val TTS_WHITESPACE = Regex("\\s+")
+
+private fun buildHighlightedText(text: String, wordIndex: Int, highlightColorHex: String): AnnotatedString {
+    if (text.isBlank() || wordIndex < 0) return AnnotatedString(text)
+    val color = try {
+        Color(android.graphics.Color.parseColor("#$highlightColorHex"))
+    } catch (_: Exception) {
+        Color(android.graphics.Color.parseColor("#FFFF6D00"))
+    }
+    val words = TTS_WHITESPACE.split(text)
+    if (words.isEmpty() || wordIndex >= words.size) return AnnotatedString(text)
+    return buildAnnotatedString {
+        var pos = 0
+        for ((i, word) in words.withIndex()) {
+            if (i > 0) {
+                val spaceStart = text.indexOf(word, pos)
+                if (spaceStart > pos) {
+                    append(text.substring(pos, spaceStart))
+                    pos = spaceStart
+                }
+            }
+            val start = text.indexOf(word, pos)
+            if (start == -1) { append(word); pos += word.length; continue }
+            val end = start + word.length
+            if (i == wordIndex) {
+                withStyle(SpanStyle(color = Color.White, background = color, fontWeight = FontWeight.Bold)) {
+                    append(word)
+                }
+            } else {
+                append(word)
+            }
+            pos = end
+        }
+        if (pos < text.length) {
+            append(text.substring(pos))
+        }
+    }
 }

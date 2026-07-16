@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -50,6 +55,10 @@ internal class ReaderItemAdapter(
     private val onRetryChapter: (chapterIndex: Int) -> Unit,
     private val onOpenChapterInBrowser: (url: String) -> Unit,
     private val onClick: () -> Unit,
+    private val currentTtsHighlightEnabled: () -> Boolean = { false },
+    private val currentTtsHighlightColor: () -> String = { "FFFF6D00" },
+    private val currentTtsWordIndex: () -> Int = { -1 },
+    private val currentTtsParagraphText: () -> String = { "" },
 ) : ArrayAdapter<ReaderItem>(ctx, 0, list) {
     private val appFileResolver = AppFileResolver(ctx)
     override fun getCount() = super.getCount() + 2
@@ -144,13 +153,24 @@ internal class ReaderItemAdapter(
 
         val parallelEnabled = currentParallelEnabled() && item.textTranslated != null
 
+        val isTtsActiveItem = item is ReaderItem.Position &&
+                currentSpeakerActiveItem().itemPos.chapterIndex == item.chapterIndex &&
+                currentSpeakerActiveItem().itemPos.chapterItemPosition == item.chapterItemPosition &&
+                currentSpeakerActiveItem().playState == Utterance.PlayState.PLAYING
+
         if (parallelEnabled) {
             val orderTranslationFirst = currentParallelOrder() == "TRANSLATION_FIRST"
 
             val primaryText = if (orderTranslationFirst) item.textTranslated ?: item.text else item.text
             val secondaryText = if (orderTranslationFirst) item.text else item.textTranslated ?: item.text
 
-            bind.bodyTranslated.text = primaryText
+            val displayPrimary = if (isTtsActiveItem && currentTtsHighlightEnabled()) {
+                applyWordHighlight(primaryText, currentTtsWordIndex(), currentTtsHighlightColor())
+            } else {
+                primaryText
+            }
+
+            bind.bodyTranslated.text = displayPrimary
             bind.bodyTranslated.textSize = currentFontSize()
             bind.bodyTranslated.typeface = currentTypeface()
             bind.bodyTranslated.updateTextSelectability()
@@ -163,7 +183,13 @@ internal class ReaderItemAdapter(
             bind.bodyOriginal.setLineSpacing(0f, currentLineHeight())
             bind.bodyOriginal.visibility = View.VISIBLE
         } else {
-            bind.bodyTranslated.text = item.textToDisplay
+            val displayText = if (isTtsActiveItem && currentTtsHighlightEnabled()) {
+                applyWordHighlight(item.textToDisplay, currentTtsWordIndex(), currentTtsHighlightColor())
+            } else {
+                item.textToDisplay
+            }
+
+            bind.bodyTranslated.text = displayText
             bind.bodyTranslated.textSize = currentFontSize()
             bind.bodyTranslated.typeface = currentTypeface()
             bind.bodyTranslated.updateTextSelectability()
@@ -363,6 +389,44 @@ internal class ReaderItemAdapter(
             setOnClickListener { onClick() }
             setOnTouchListener(null)
         }
+    }
+
+    private fun applyWordHighlight(text: String, wordIndex: Int, highlightColorHex: String): CharSequence {
+        if (!currentTtsHighlightEnabled() || wordIndex < 0 || text.isBlank()) return text
+        val color = try {
+            android.graphics.Color.parseColor("#$highlightColorHex")
+        } catch (_: Exception) {
+            android.graphics.Color.parseColor("#FFFF6D00")
+        }
+        val spannable = SpannableString(text)
+        val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty() || wordIndex >= words.size) return text
+        var pos = 0
+        for ((i, word) in words.withIndex()) {
+            val start = text.indexOf(word, pos)
+            if (start == -1) { pos += word.length; continue }
+            val end = start + word.length
+            if (i == wordIndex) {
+                spannable.setSpan(
+                    BackgroundColorSpan(color),
+                    start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                spannable.setSpan(
+                    ForegroundColorSpan(android.graphics.Color.WHITE),
+                    start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            } else {
+                spannable.setSpan(
+                    ForegroundColorSpan(android.graphics.Color.TRANSPARENT),
+                    start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            pos = end
+        }
+        return spannable
     }
 
     private fun getItemReadingStateBackground(item: ReaderItem): Drawable? {

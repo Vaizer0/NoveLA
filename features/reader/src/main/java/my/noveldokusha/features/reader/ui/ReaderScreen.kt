@@ -105,6 +105,8 @@ internal fun ReaderScreen(
     onParagraphSpacingChanged: (Float) -> Unit,
     onPressBack: () -> Unit,
     onOpenChapterInWeb: () -> Unit,
+    onTtsHighlightEnabledChange: (Boolean) -> Unit,
+    onTtsHighlightColorChange: (String) -> Unit,
     readerContent: @Composable (paddingValues: PaddingValues) -> Unit,
 ) {
     val showReaderInfo by state.showReaderInfo
@@ -223,6 +225,8 @@ internal fun ReaderScreen(
                         onKeepScreenOn = onKeepScreenOn,
                         onFullScreen = onFullScreen,
                         onSingleTapToOpenSettingsChange = onSingleTapToOpenSettingsChange,
+                        onTtsHighlightEnabledChange = onTtsHighlightEnabledChange,
+                        onTtsHighlightColorChange = onTtsHighlightColorChange,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     BottomAppBar(
@@ -324,6 +328,10 @@ internal fun ReaderScreen(
                         state.settings.floatingTts.showOutsideApp.value
                     my.noveldokusha.features.reader.services.FloatingTtsService.opacity.value =
                         state.settings.floatingTts.opacity.value
+                    my.noveldokusha.features.reader.services.FloatingTtsService.ttsHighlightEnabled.value =
+                        state.settings.ttsHighlight.isEnabled.value
+                    my.noveldokusha.features.reader.services.FloatingTtsService.ttsHighlightColor.value =
+                        state.settings.ttsHighlight.highlightColor.value
                     my.noveldokusha.features.reader.services.FloatingTtsService.start(context)
                 } else {
                     showOverlayPermissionDialog = true
@@ -337,11 +345,17 @@ internal fun ReaderScreen(
         LaunchedEffect(
             state.settings.floatingTts.showOutsideApp.value,
             state.settings.floatingTts.opacity.value,
+            state.settings.ttsHighlight.isEnabled.value,
+            state.settings.ttsHighlight.highlightColor.value,
         ) {
             my.noveldokusha.features.reader.services.FloatingTtsService.showOutsideApp.value =
                 state.settings.floatingTts.showOutsideApp.value
             my.noveldokusha.features.reader.services.FloatingTtsService.opacity.value =
                 state.settings.floatingTts.opacity.value
+            my.noveldokusha.features.reader.services.FloatingTtsService.ttsHighlightEnabled.value =
+                state.settings.ttsHighlight.isEnabled.value
+            my.noveldokusha.features.reader.services.FloatingTtsService.ttsHighlightColor.value =
+                state.settings.ttsHighlight.highlightColor.value
         }
 
         LaunchedEffect(
@@ -504,6 +518,7 @@ private fun ViewsPreview(
         parallelEnabled = remember { mutableStateOf(false) },
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
+        currentWordIndex = remember { mutableStateOf(-1) },
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(
@@ -541,6 +556,10 @@ private fun ViewsPreview(
                             showOutsideApp = remember { mutableStateOf(true) },
                             opacity = remember { mutableFloatStateOf(0.6f) },
                         ),
+                        ttsHighlight = ReaderScreenState.Settings.TtsHighlightSettingsData(
+                            isEnabled = remember { mutableStateOf(false) },
+                            highlightColor = remember { mutableStateOf("FFFF6D00") },
+                        ),
                     ),
                     showInvalidChapterDialog = remember { mutableStateOf(false) }
                 ),
@@ -557,6 +576,8 @@ private fun ViewsPreview(
                 onKeepScreenOn = {},
                 onFullScreen = {},
                 onSingleTapToOpenSettingsChange = {},
+                onTtsHighlightEnabledChange = {},
+                onTtsHighlightColorChange = {},
             )
         }
     }
