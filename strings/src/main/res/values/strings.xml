@@ -157,6 +157,7 @@
     <string name="loading_data">Loading data</string>
     <string name="pin_or_unpin_source">Pin or unpin source</string>
     <string name="allow_text_selection">Text selection</string>
+    <string name="tts_highlight">TTS Highlight</string>
     <string name="last_read">Last read</string>
     <string name="title">Title</string>
     <string name="unread_chapters">Unread chapters</string>

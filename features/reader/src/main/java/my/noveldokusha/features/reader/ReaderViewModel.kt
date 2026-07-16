@@ -74,6 +74,10 @@ internal class ReaderViewModel @Inject constructor(
                 showOutsideApp = appPreferences.FLOATING_TTS_SHOW_OUTSIDE_APP.state(viewModelScope),
                 opacity = appPreferences.FLOATING_TTS_OPACITY.state(viewModelScope),
             ),
+            ttsHighlight = ReaderScreenState.Settings.TtsHighlightSettingsData(
+                isEnabled = appPreferences.TTS_HIGHLIGHT_ENABLED.state(viewModelScope),
+                highlightColor = appPreferences.TTS_HIGHLIGHT_COLOR.state(viewModelScope),
+            ),
             style = ReaderScreenState.Settings.StyleSettingsData(
                 currentDarkMode = mutableStateOf(DarkMode.SYSTEM).also { state ->
                     viewModelScope.launch {

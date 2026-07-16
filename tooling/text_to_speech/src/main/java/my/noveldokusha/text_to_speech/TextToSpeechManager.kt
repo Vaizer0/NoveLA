@@ -62,6 +62,9 @@ class TextToSpeechManager<T : Utterance<T>>(
         started = SharingStarted.Eagerly
     )
 
+    val currentSpeakingText = mutableStateOf("")
+    val spokenWordRange = mutableStateOf<IntRange?>(null)
+
     private val auxiliaryServices = mutableListOf<TextToSpeech>()
 
     // Храним enginePackage сами — service.defaultEngine всегда возвращает системный дефолт,
@@ -168,7 +171,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueListItemSize.clear()
     }
 
-    fun speak(text: String, textSynthesis: T) {
+    fun speak(text: String, textSynthesis: T, leadingOffset: Int = 0) {
         val subItems = delimiterAwareTextSplitter(
             fullText = text,
             maxSliceLength = maxStringLengthPerTextUnit(),
@@ -179,8 +182,9 @@ class TextToSpeechManager<T : Utterance<T>>(
 
         Timber.d( "speak id=${textSynthesis.utteranceId} subItems=${subItems.size} queueSize=${_queueList.size}")
         var enqueueFailed = false
+        var currentOffset = 0
         subItems.forEachIndexed { index, textSlice ->
-            val uniqueID = "$index|${textSynthesis.utteranceId}"
+            val uniqueID = "$index|${currentOffset + leadingOffset}|${textSynthesis.utteranceId}"
             val bundle = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uniqueID)
             }
@@ -189,6 +193,11 @@ class TextToSpeechManager<T : Utterance<T>>(
                 Timber.w( "speak failed id=$uniqueID result=$result")
                 enqueueFailed = true
             }
+            currentOffset += textSlice.length
+        }
+
+        if (!enqueueFailed) {
+            currentSpeakingText.value = text
         }
 
         // ponytail: speak() returning ERROR means none of the slices will play and no
@@ -272,11 +281,12 @@ class TextToSpeechManager<T : Utterance<T>>(
                     .toIntOrNull() ?: return
                 if (itemUtteranceIndex != 0) return
 
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.PLAYING)
                     ?: return
 
+                spokenWordRange.value = null
                 currentActiveItemState.value = res
                 scope.launch { _currentTextSpeakFlow.emit(res) }
             }
@@ -297,11 +307,21 @@ class TextToSpeechManager<T : Utterance<T>>(
                 onErrorFinished(utteranceId)
             }
 
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                if (utteranceId != null) {
+                    val parts = utteranceId.split('|')
+                    if (parts.size >= 3) {
+                        val offset = parts[1].toIntOrNull() ?: 0
+                        scope.launch { spokenWordRange.value = (start + offset) until (end + offset) }
+                    }
+                }
+            }
+
             private fun onErrorFinished(utteranceId: String?) {
                 if (utteranceId == null) return
                 // Skip the broken item regardless of which sub-slice errored so reading
                 // continues instead of stalling on a permanently stuck queue entry.
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
                 val res: T = _queueList[itemUtteranceId]
                     ?.copyWithState(playState = Utterance.PlayState.FINISHED)
                     ?: return
@@ -319,7 +339,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                         Timber.w( "onFinished: cant parse index from $utteranceId")
                         return
                     }
-                val itemUtteranceId = utteranceId.substringAfter('|')
+                val itemUtteranceId = utteranceId.substringAfterLast('|')
 
                 val itemSize = _queueListItemSize[itemUtteranceId]?.minus(1) ?: run {
                     Timber.w( "onFinished: no itemSize for $itemUtteranceId")

@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -150,6 +151,9 @@ class ReaderActivity : BaseActivity() {
                         }
                     }
                 },
+                currentTtsHighlightEnabled = { appPreferences.TTS_HIGHLIGHT_ENABLED.value },
+                currentTtsHighlightColor = { appPreferences.TTS_HIGHLIGHT_COLOR.value },
+                currentSpokenWordRange = { viewModel.readerSpeaker.state.spokenWordRange.value },
             )
         }
     }
@@ -321,6 +325,27 @@ class ReaderActivity : BaseActivity() {
             .asLiveData()
             .observe(this) { viewAdapter.listView.notifyDataSetChanged() }
 
+        // Notify TTS highlight changed for list view
+        snapshotFlow {
+            appPreferences.TTS_HIGHLIGHT_ENABLED.value to appPreferences.TTS_HIGHLIGHT_COLOR.value
+        }.drop(1)
+            .asLiveData()
+            .observe(this) { viewAdapter.listView.notifyDataSetChanged() }
+
+        // Periodic refresh for TTS word highlighting while playing
+        lifecycleScope.launch {
+            var lastRange: IntRange? = null
+            snapshotFlow { viewModel.readerSpeaker.state.spokenWordRange.value }
+                .debounce(50)
+                .collect {
+                    if (appPreferences.TTS_HIGHLIGHT_ENABLED.value && it != null && it != lastRange) {
+                        lastRange = it
+                        viewAdapter.listView.notifyDataSetChanged()
+                    }
+                    if (it == null) lastRange = null
+                }
+        }
+
         // Set current screen to be kept bright always or not
         snapshotFlow { viewModel.state.settings.keepScreenOn.value }
             .asLiveData()
@@ -347,6 +372,8 @@ class ReaderActivity : BaseActivity() {
                     onAppThemeChanged = { appPreferences.APP_THEME.value = it.name; recreate() },
                     onFullScreen = { appPreferences.READER_FULL_SCREEN.value = it; recreate() },
                     onSingleTapToOpenSettingsChange = { appPreferences.READER_SINGLE_TAP_TO_OPEN_SETTINGS.value = it },
+                    onTtsHighlightEnabledChange = { appPreferences.TTS_HIGHLIGHT_ENABLED.value = it },
+                    onTtsHighlightColorChange = { appPreferences.TTS_HIGHLIGHT_COLOR.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
                         finish()
