@@ -13,7 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.Paintbrush
+import androidx.compose.material.icons.outlined.FormatPaint
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -75,7 +75,7 @@ internal fun MoreSettingDialog(
             },
             leadingContent = {
                 Icon(
-                    Icons.Outlined.Paintbrush,
+                    Icons.Outlined.FormatPaint,
                     null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
