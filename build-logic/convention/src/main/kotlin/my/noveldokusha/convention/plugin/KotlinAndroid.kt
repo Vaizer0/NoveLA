@@ -7,34 +7,34 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 internal fun Project.configureAndroid(
-    commonExtension: CommonExtension<*, *, *, *, *, *>
+    commonExtension: CommonExtension
 ) {
     commonExtension.apply {
         compileSdk = appConfig.COMPILE_SDK
 
-        defaultConfig {
+        defaultConfig.apply {
             minSdk = appConfig.MIN_SDK
 
             testInstrumentationRunnerArguments["clearPackageData"] = "true"
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
 
-        buildFeatures {
+        buildFeatures.apply {
             buildConfig = true
         }
 
-        compileOptions {
+        compileOptions.apply {
             sourceCompatibility = appConfig.javaVersion
             targetCompatibility = appConfig.javaVersion
         }
 
-        lint {
+        lint.apply {
             showAll = true
             abortOnError = false
             lintConfig = rootProject.file("lint.xml")
         }
 
-        testOptions {
+        testOptions.apply {
             execution = "ANDROIDX_TEST_ORCHESTRATOR"
         }
     }
