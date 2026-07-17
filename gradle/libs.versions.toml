@@ -1,13 +1,13 @@
 [versions]
 
-kotlin = "2.0.21"
+kotlin = "2.4.10"
 
 plugin-agp = "8.13.2"
 
-hilt = "2.52"
+hilt = "2.58"
 hilt-androidx = "1.2.0"
 
-ksp = "2.0.21-1.0.28"
+ksp = "2.3.10"
 
 kotlinx-coroutines-core = "1.9.0"
 kotlinx-serialization-json = "1.7.3"
@@ -66,6 +66,7 @@ okhttp-interceptor-logging = "5.0.0-alpha.14"
 readability4j = "1.0.8"
 
 timber = "5.0.1"
+kotlin-metadata-jvm = "2.4.0"
 foundationLayout = "1.7.5"
 
 [libraries]
@@ -125,6 +126,7 @@ test-androidx-core-ktx = { module = "androidx.test:core-ktx", version.ref = "and
 # Kotlin
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines-core" }
+kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version.ref = "kotlin-metadata-jvm" }
 
 # Android
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidx-constraintLayout" }
