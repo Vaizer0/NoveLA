@@ -69,7 +69,6 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
                 .addTag(TAG)
                 .setConstraints(constrains)
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-                .setInitialDelay(5, TimeUnit.MINUTES)
                 .setInputData(createInputData(updateCategory))
                 .build()
         }
