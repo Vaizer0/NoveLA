@@ -749,6 +749,11 @@ private fun PreviewText(
             )
             append(match.value)
             pop()
+            if (replacement.isNotEmpty()) {
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary))
+                append(replacement)
+                pop()
+            }
             lastEnd = match.range.last + 1
         }
         if (lastEnd < text.length) {

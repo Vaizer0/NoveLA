@@ -250,7 +250,7 @@ private fun countQuotes(str: String, quotes: Set<Char>): Int = str.count { it in
 
 private fun applyUserRegexRules(text: String, rules: List<RegexRule>): String {
     var result = text
-    rules.forEach { rule ->
+    rules.filter { it.isEnabled }.forEach { rule ->
         try {
             val regex = Regex(rule.pattern)
             result = result.replace(regex, rule.replacement)
