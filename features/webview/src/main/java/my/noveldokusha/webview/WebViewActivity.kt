@@ -128,7 +128,7 @@ class WebViewActivity : ComponentActivity() {
                         ?: ""
                     if (currentCfClearance.isNotEmpty() && currentCfClearance != oldCfClearance) {
                         isReady = true
-                        if (isBypassMode && pageLoadedOnce) {
+                        if (isBypassMode) {
                             delay(500)
                             CookieManager.getInstance().flush()
                             CloudflareBypassSignal.channel.trySend(Unit)
