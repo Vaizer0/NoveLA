@@ -623,6 +623,7 @@
     <!-- History -->
     <string name="title_history">기록</string>
     <string name="no_history_yet">아직 읽은 기록이 없습니다</string>
+    <string name="no_books_in_library">라이브러리에 책이 없습니다</string>
     <string name="clear_all_history">모든 기록 지우기</string>
 
     <!-- Display -->

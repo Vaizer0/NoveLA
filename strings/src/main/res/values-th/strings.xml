@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">ประวัติ</string>
     <string name="no_history_yet">ยังไม่มีประวัติการอ่าน</string>
+    <string name="no_books_in_library">ไม่มีหนังสือในห้องสมุด</string>
     <string name="clear_all_history">ล้างประวัติทั้งหมด</string>
     <string name="display_options_title">การแสดงผล</string>
     <string name="save_settings">บันทึกการตั้งค่า</string>

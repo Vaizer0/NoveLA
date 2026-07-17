@@ -6,6 +6,7 @@
     <string name="title_settings">Settings</string>
     <string name="title_history">History</string>
     <string name="no_history_yet">No reading history yet</string>
+    <string name="no_books_in_library">No books in library</string>
     <string name="clear_all_history">Clear all history</string>
     <string name="reader_no_more_chapters">༺  Last chapter  ༻</string>
     <string name="reader_first_chapter">༺  First chapter  ༻</string>

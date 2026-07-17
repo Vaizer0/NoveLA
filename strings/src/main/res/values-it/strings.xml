@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Cronologia</string>
     <string name="no_history_yet">Nessuna cronologia di lettura</string>
+    <string name="no_books_in_library">Nessun libro nella biblioteca</string>
     <string name="clear_all_history">Cancella tutta la cronologia</string>
 
     <!-- Display -->

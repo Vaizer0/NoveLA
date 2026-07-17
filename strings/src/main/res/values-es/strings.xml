@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Historial</string>
     <string name="no_history_yet">Aún no hay historial de lectura</string>
+    <string name="no_books_in_library">No hay libros en la biblioteca</string>
     <string name="clear_all_history">Borrar todo el historial</string>
 
     <!-- Display -->

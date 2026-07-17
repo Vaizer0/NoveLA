@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Sejarah</string>
     <string name="no_history_yet">Tiada sejarah bacaan lagi</string>
+    <string name="no_books_in_library">Tiada buku dalam perpustakaan</string>
     <string name="clear_all_history">Kosongkan semua sejarah</string>
     <string name="display_options_title">Paparan</string>
     <string name="save_settings">Simpan tetapan</string>

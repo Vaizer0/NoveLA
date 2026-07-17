@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Geçmiş</string>
     <string name="no_history_yet">Henüz okuma geçmişi yok</string>
+    <string name="no_books_in_library">Kütüphanede kitap yok</string>
     <string name="clear_all_history">Tüm geçmişi temizle</string>
     <string name="display_options_title">Görüntüle</string>
     <string name="save_settings">Ayarları kaydet</string>

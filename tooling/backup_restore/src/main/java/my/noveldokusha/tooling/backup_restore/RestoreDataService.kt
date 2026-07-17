@@ -826,17 +826,9 @@ class RestoreDataService : Service() {
             text = getString(R.string.data_restored)
         }
 
-        // Restart Activity to apply all changes (sources, settings, preferences)
-        try {
-            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                Timber.d("restoreData: Restarting Activity to apply changes")
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "restoreData: Failed to restart Activity")
-        }
+        // ponytail: activity restart removed — it caused NPE in deliverResultsIfNeeded
+        // and killed the ViewModel subscription to the Room Flow.
+        // Cache/source cleanup above handles everything the restart was meant to.
     }
 
     private fun compareVersions(v1: String, v2: String): Int {
