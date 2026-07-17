@@ -349,6 +349,8 @@ class RestoreDataService : Service() {
                             val existing = existingBooks[book.url]
                             if (existing == null) {
                                 toInsert.add(book)
+                            } else if (!existing.inLibrary) {
+                                toUpdate.add(book.copy(category = existing.category))
                             } else {
                                 val localCount = appRepository.bookChapters.countByBookUrl(book.url)
                                 val backupCount = backupDatabase.newDatabase.chapterDao().countByBookUrl(book.url)
