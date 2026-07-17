@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.states.NotificationsCenter
@@ -500,12 +501,16 @@ class RestoreDataService : Service() {
                         Timber.d("mergeToDatabase: Skipping all extensions (overwritePlugins=false)")
                     }
                 } else {
-                    Timber.d("mergeToDatabase: No extensions in backup")
-                }
+                        Timber.d("mergeToDatabase: No extensions in backup")
+                    }
 
-                backupDatabase.close()
-                backupDatabase.delete()
-                Timber.d("mergeToDatabase: Database merge completed successfully")
+                    // Restore reading history
+                    backupDatabase.newDatabase.readingHistoryDao().getAllFlow().first()
+                        .forEach { appDatabase.readingHistoryDao().upsert(it) }
+
+                    backupDatabase.close()
+                    backupDatabase.delete()
+                    Timber.d("mergeToDatabase: Database merge completed successfully")
 
             }.onError {
                 Timber.e(it.exception, "mergeToDatabase: Failed to merge database")
