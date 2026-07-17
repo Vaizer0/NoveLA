@@ -38,7 +38,6 @@ import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Book
-import okhttp3.internal.closeQuietly
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
@@ -768,7 +767,7 @@ class RestoreDataService : Service() {
             return@withContext
         }
 
-        inputStream.closeQuietly()
+        inputStream.close()
 
         // ponytail: merge database AFTER all files (covers, plugins) are on disk
         // so Room observers see valid local covers and don't fetch from network.

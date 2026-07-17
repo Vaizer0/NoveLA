@@ -32,7 +32,6 @@ import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
-import okhttp3.internal.closeQuietly
 import java.io.File
 import java.io.FileNotFoundException
 import org.json.JSONObject
@@ -493,7 +492,7 @@ class BackupDataService : Service() {
                 Timber.d("BackupDataService: images not included in backup")
             }
 
-            zip.closeQuietly()
+            zip.close()
             notificationsCenter.showNotification(
                 notificationId = "Backup saved success".hashCode(),
                 channelId = channelId,
