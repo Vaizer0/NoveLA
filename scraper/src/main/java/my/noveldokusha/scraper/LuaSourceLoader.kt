@@ -177,7 +177,7 @@ class LuaEngine @Inject constructor(
                     networkClient.getWithHeaders(url, headers).use { r ->
                         val bytes = r.body.bytes()
                         val body  = String(bytes, java.nio.charset.Charset.forName(charset))
-                        responseTable(r.isSuccessful, body, r.code)
+                        responseTable(r.isSuccessful, body, r.code, r.headers.toMultimap())
                     }
                 }
             } catch (e: CancellationException) {
@@ -211,7 +211,7 @@ class LuaEngine @Inject constructor(
                     networkClient.call(postRequest(url, body = body, headers = headers.toHeaders())).use { r ->
                         val bytes = r.body.bytes()
                         val s     = String(bytes, java.nio.charset.Charset.forName(charset))
-                        responseTable(r.isSuccessful, s, r.code)
+                        responseTable(r.isSuccessful, s, r.code, r.headers.toMultimap())
                     }
                 }
             } catch (e: CancellationException) {
@@ -224,10 +224,17 @@ class LuaEngine @Inject constructor(
         }
     }
 
-    private fun responseTable(success: Boolean, body: String, code: Int) = LuaTable().also { t ->
+    private fun responseTable(success: Boolean, body: String, code: Int, headers: Map<String, List<String>> = emptyMap()) = LuaTable().also { t ->
         t.set("success", LuaValue.valueOf(success))
         t.set("body",    LuaValue.valueOf(body))
         t.set("code",    LuaValue.valueOf(code))
+        val h = LuaTable()
+        headers.forEach { (k, values) ->
+            val vt = LuaTable()
+            values.forEachIndexed { i, v -> vt.set(i + 1, LuaValue.valueOf(v)) }
+            h.set(k.lowercase(), vt)
+        }
+        t.set("headers", h)
     }
 
     private fun errorTable(e: Exception) = LuaTable().also { t ->
@@ -326,24 +333,25 @@ class LuaEngine @Inject constructor(
                 urls.map { url ->
                     async(Dispatchers.IO) {
                         try {
-                            if (!isSsrfSafe(url)) return@async Triple(false, "", 0)
+                            if (!isSsrfSafe(url)) return@async false to Triple("", 0, emptyMap<String, List<String>>())
                             networkClient.getWithHeaders(url, defaultHeaders(url)).use { r ->
                                 val body = r.body.string()
-                                Triple(r.isSuccessful, body, r.code)
+                                r.isSuccessful to Triple(body, r.code, r.headers.toMultimap())
                             }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
                             Timber.e(e, "http_get_batch failed: $url")
-                            Triple(false, "", 0)
+                            false to Triple("", 0, emptyMap<String, List<String>>())
                         }
                     }
                 }.awaitAll()
             }
 
             return LuaTable().also { out ->
-                results.forEachIndexed { i, (success, body, code) ->
-                    out.set(i + 1, responseTable(success, body, code))
+                results.forEachIndexed { i, (success, triple) ->
+                    val (body, code, headers) = triple
+                    out.set(i + 1, responseTable(success, body, code, headers))
                 }
             }
         }

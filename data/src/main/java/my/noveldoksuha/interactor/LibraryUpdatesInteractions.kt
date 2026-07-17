@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
@@ -84,6 +86,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                     async {
                         hostGroupSemaphore.withPermit {
                             for (book in books) {
+                                ensureActive()
                                 updateBook(
                                     book = book,
                                     currentUpdating = currentUpdating,
@@ -117,6 +120,7 @@ class LibraryUpdatesInteractions @Inject constructor(
                 async {
                     hostGroupSemaphore.withPermit {
                         for (book in group) {
+                            ensureActive()
                             updateBook(book, countingUpdating, currentUpdating, newUpdates, failedUpdates)
                         }
                     }
@@ -259,6 +263,7 @@ class LibraryUpdatesInteractions @Inject constructor(
 
         // Загружаем оставшиеся страницы 2..totalPages
         for (page in 2..totalPages) {
+            currentCoroutineContext().ensureActive()
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
             if (pageData == null) {
                 Timber.d("[parsePage first-time] \"${book.title}\" — FAILED to load page $page, stopping early")
@@ -330,6 +335,7 @@ class LibraryUpdatesInteractions @Inject constructor(
             Timber.d("[parsePage incremental] \"${book.title}\" — ${newTotalPages - lastKnownPage} new page(s) detected (${lastKnownPage + 1}..$newTotalPages), loading...")
         }
         for (page in (lastKnownPage + 1)..newTotalPages) {
+            currentCoroutineContext().ensureActive()
             val pageData = (downloaderRepository.bookChaptersPage(book.url, page) as? my.noveldokusha.core.Response.Success)?.data
             if (pageData == null) {
                 Timber.d("[parsePage incremental] \"${book.title}\" — FAILED to load new page $page, stopping early")
