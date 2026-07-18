@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">السجل</string>
     <string name="no_history_yet">لا يوجد سجل قراءة بعد</string>
+    <string name="no_books_in_library">لا توجد كتب في المكتبة</string>
     <string name="clear_all_history">مسح كل السجل</string>
     <string name="display_options_title">العرض</string>
     <string name="save_settings">حفظ الإعدادات</string>

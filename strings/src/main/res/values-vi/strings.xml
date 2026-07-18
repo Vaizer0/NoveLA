@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Lịch sử</string>
     <string name="no_history_yet">Chưa có lịch sử đọc</string>
+    <string name="no_books_in_library">Không có sách trong thư viện</string>
     <string name="clear_all_history">Xóa tất cả lịch sử</string>
     <string name="display_options_title">Hiển thị</string>
     <string name="save_settings">Lưu cài đặt</string>

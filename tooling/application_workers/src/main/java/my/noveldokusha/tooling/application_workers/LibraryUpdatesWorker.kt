@@ -69,7 +69,6 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
                 .addTag(TAG)
                 .setConstraints(constrains)
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-                .setInitialDelay(5, TimeUnit.MINUTES)
                 .setInputData(createInputData(updateCategory))
                 .build()
         }
@@ -103,6 +102,13 @@ internal class LibraryUpdatesWorker @AssistedInject constructor(
                 ?: LibraryCategory.DEFAULT
 
         Timber.d("LibraryUpdatesWorker: starting $updateCategory")
+
+        val lastTimestamp = appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_LAST_TIMESTAMP.value
+        val intervalMs = appPreferences.GLOBAL_APP_AUTOMATIC_LIBRARY_UPDATES_INTERVAL_HOURS.value * 60 * 60 * 1000L
+        if (lastTimestamp > 0 && (System.currentTimeMillis() - lastTimestamp) < intervalMs) {
+            Timber.d("LibraryUpdatesWorker: skipped — last update was too recent")
+            return Result.success()
+        }
 
         // Ждём загрузки реальных Lua-скриптов (CachedSource заглушки не подходят для данных)
         try {

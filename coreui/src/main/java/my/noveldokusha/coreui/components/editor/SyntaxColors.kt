@@ -2,6 +2,8 @@ package my.noveldokusha.coreui.components.editor
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 
 data class SyntaxColors(
     val background:     Color,
@@ -18,6 +20,28 @@ data class SyntaxColors(
     val type:           Color,
     val operator:       Color,
 )
+
+fun SyntaxColors.toEditorColorScheme(): EditorColorScheme {
+    return object : EditorColorScheme(true) {
+        override fun applyDefault() {
+            super.applyDefault()
+            setColor(EditorColorScheme.WHOLE_BACKGROUND, background.toArgb())
+            setColor(EditorColorScheme.TEXT_NORMAL, foreground.toArgb())
+            setColor(EditorColorScheme.LINE_NUMBER, gutterText.toArgb())
+            setColor(EditorColorScheme.LINE_NUMBER_PANEL, gutter.toArgb())
+            setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, background.toArgb())
+            setColor(EditorColorScheme.CURRENT_LINE, currentLine.toArgb())
+            setColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND, selection.toArgb())
+            setColor(EditorColorScheme.KEYWORD, keyword.toArgb())
+            setColor(EditorColorScheme.COMMENT, comment.toArgb())
+            setColor(EditorColorScheme.OPERATOR, operator.toArgb())
+            setColor(EditorColorScheme.FUNCTION_NAME, function.toArgb())
+            setColor(EditorColorScheme.LITERAL, number.toArgb())
+            setColor(EditorColorScheme.IDENTIFIER_VAR, string.toArgb())
+            setColor(EditorColorScheme.ANNOTATION, type.toArgb())
+        }
+    }
+}
 
 val LocalSyntaxColors = staticCompositionLocalOf {
     // Fallback to default Dark+ colors if none provided

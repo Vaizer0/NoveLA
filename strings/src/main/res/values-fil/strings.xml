@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Kasaysayan</string>
     <string name="no_history_yet">Wala pang kasaysayan ng pagbasa</string>
+    <string name="no_books_in_library">Walang aklat sa library</string>
     <string name="clear_all_history">Alisin lahat ng kasaysayan</string>
     <string name="display_options_title">Display</string>
     <string name="save_settings">I-save ang mga setting</string>

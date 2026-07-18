@@ -3,7 +3,6 @@ package my.noveldokusha.network.interceptors
 import okhttp3.Interceptor
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.asResponseBody
-import okhttp3.internal.http.promisesBody
 import okio.GzipSource
 import okio.buffer
 import okio.source
@@ -20,7 +19,8 @@ internal class DecodeResponseInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val response = chain.proceed(chain.request())
 
-        if (!response.promisesBody()) {
+        val code = response.code
+        if (code == 204 || code == 304 || response.request.method == "HEAD") {
             return response
         }
 

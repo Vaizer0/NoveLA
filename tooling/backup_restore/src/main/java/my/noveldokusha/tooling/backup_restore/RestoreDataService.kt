@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.states.NotificationsCenter
@@ -38,7 +39,6 @@ import my.noveldokusha.core.utils.Extra_Uri
 import my.noveldokusha.core.utils.isServiceRunning
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Book
-import okhttp3.internal.closeQuietly
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
@@ -349,6 +349,8 @@ class RestoreDataService : Service() {
                             val existing = existingBooks[book.url]
                             if (existing == null) {
                                 toInsert.add(book)
+                            } else if (!existing.inLibrary) {
+                                toUpdate.add(book.copy(category = existing.category))
                             } else {
                                 val localCount = appRepository.bookChapters.countByBookUrl(book.url)
                                 val backupCount = backupDatabase.newDatabase.chapterDao().countByBookUrl(book.url)
@@ -501,12 +503,16 @@ class RestoreDataService : Service() {
                         Timber.d("mergeToDatabase: Skipping all extensions (overwritePlugins=false)")
                     }
                 } else {
-                    Timber.d("mergeToDatabase: No extensions in backup")
-                }
+                        Timber.d("mergeToDatabase: No extensions in backup")
+                    }
 
-                backupDatabase.close()
-                backupDatabase.delete()
-                Timber.d("mergeToDatabase: Database merge completed successfully")
+                    // Restore reading history
+                    backupDatabase.newDatabase.readingHistoryDao().getAllFlow().first()
+                        .forEach { appDatabase.readingHistoryDao().upsert(it) }
+
+                    backupDatabase.close()
+                    backupDatabase.delete()
+                    Timber.d("mergeToDatabase: Database merge completed successfully")
 
             }.onError {
                 Timber.e(it.exception, "mergeToDatabase: Failed to merge database")
@@ -768,7 +774,7 @@ class RestoreDataService : Service() {
             return@withContext
         }
 
-        inputStream.closeQuietly()
+        inputStream.close()
 
         // ponytail: merge database AFTER all files (covers, plugins) are on disk
         // so Room observers see valid local covers and don't fetch from network.
@@ -822,17 +828,9 @@ class RestoreDataService : Service() {
             text = getString(R.string.data_restored)
         }
 
-        // Restart Activity to apply all changes (sources, settings, preferences)
-        try {
-            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                Timber.d("restoreData: Restarting Activity to apply changes")
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "restoreData: Failed to restart Activity")
-        }
+        // ponytail: activity restart removed — it caused NPE in deliverResultsIfNeeded
+        // and killed the ViewModel subscription to the Room Flow.
+        // Cache/source cleanup above handles everything the restart was meant to.
     }
 
     private fun compareVersions(v1: String, v2: String): Int {

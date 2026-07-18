@@ -9,6 +9,7 @@
     <string name="title_settings">Настройки</string>
     <string name="title_history">История</string>
     <string name="no_history_yet">История чтения пуста</string>
+    <string name="no_books_in_library">В библиотеке нет книг</string>
     <string name="clear_all_history">Очистить всю историю</string>
 
     <string name="reader_no_more_chapters">༺  Последняя глава  ༻</string>

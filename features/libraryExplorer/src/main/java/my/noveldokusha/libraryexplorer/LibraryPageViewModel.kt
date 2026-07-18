@@ -230,6 +230,15 @@ internal class LibraryPageViewModel @Inject constructor(
                 searchQuery = newQuery
             }
         }
+
+        // Listen for data restore (e.g. backup recovery) to refresh caches.
+        // Room Flow handles DB updates automatically, but we need to clear the
+        // source name cache so that restored/different plugins resolve anew.
+        viewModelScope.launch {
+            appRepository.eventDataRestored.collect {
+                sourceNameCache.clear()
+            }
+        }
     }
 
     fun updateSearchQuery(query: String) {

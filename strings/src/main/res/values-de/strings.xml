@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">Verlauf</string>
     <string name="no_history_yet">Noch kein Leseverlauf</string>
+    <string name="no_books_in_library">Keine Bücher in der Bibliothek</string>
     <string name="clear_all_history">Gesamten Verlauf löschen</string>
 
     <!-- Display -->

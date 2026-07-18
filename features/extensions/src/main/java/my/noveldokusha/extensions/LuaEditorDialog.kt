@@ -2,16 +2,16 @@ package my.noveldokusha.extensions
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -31,15 +31,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import my.noveldokusha.coreui.components.editor.CodeEditorField
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun LuaEditorDialog(
     title: String,
@@ -53,18 +51,8 @@ fun LuaEditorDialog(
     val clipboardManager = LocalClipboardManager.current
     val normalizedCode = remember(code) { code.replace("\r\n", "\n") }
 
-    var textFieldValue by remember {
-        mutableStateOf(TextFieldValue(normalizedCode))
-    }
-
     var wordWrap by remember { mutableStateOf(false) }
     var editorFontSize by remember { mutableStateOf(11) }
-    if (textFieldValue.text.replace("\r\n", "\n") != normalizedCode) {
-        textFieldValue = textFieldValue.copy(
-            text = normalizedCode,
-            selection = TextRange(normalizedCode.length)
-        )
-    }
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
@@ -86,47 +74,44 @@ fun LuaEditorDialog(
                 textAlign = TextAlign.Center
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val compactBtn = Modifier.height(32.dp)
-                val compactPadding = PaddingValues(horizontal = 10.dp)
+                val compactBtn = Modifier.height(24.dp)
+                val compactPadding = PaddingValues(horizontal = 4.dp)
                 FilledTonalButton(
                     onClick = { clipboardManager.setText(AnnotatedString(normalizedCode)) },
                     modifier = compactBtn,
                     contentPadding = compactPadding,
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.copy), fontSize = 11.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.copy), fontSize = 9.sp)
                 }
-                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
                     onClick = { clipboardManager.getText()?.text?.let(onCodeChange) },
                     modifier = compactBtn,
                     contentPadding = compactPadding,
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.paste), fontSize = 11.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.paste), fontSize = 9.sp)
                 }
-                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
                     onClick = { onCodeChange("") },
                     modifier = compactBtn,
                     contentPadding = compactPadding,
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.clear), fontSize = 11.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.clear), fontSize = 9.sp)
                 }
-                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
                     onClick = { wordWrap = !wordWrap },
                     modifier = compactBtn,
                     contentPadding = compactPadding,
                 ) {
-                    Text(if (wordWrap) "No Wrap" else "Wrap", fontSize = 11.sp)
+                    Text(if (wordWrap) "No Wrap" else "Wrap", fontSize = 9.sp)
                 }
-                Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
-                        .height(32.dp)
+                        .height(24.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -136,9 +121,8 @@ fun LuaEditorDialog(
                         } },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("${editorFontSize}sp", fontSize = 9.sp, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp))
+                    Text("${editorFontSize}sp", fontSize = 8.sp, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 4.dp))
                 }
-                Spacer(Modifier.weight(1f))
                 FilledTonalButton(
                     onClick = onDismiss,
                     modifier = compactBtn,
@@ -149,9 +133,8 @@ fun LuaEditorDialog(
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.cancel), fontSize = 11.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.cancel), fontSize = 9.sp)
                 }
-                Spacer(Modifier.width(4.dp))
                 FilledTonalButton(
                     onClick = onSave,
                     modifier = compactBtn,
@@ -162,7 +145,7 @@ fun LuaEditorDialog(
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) {
-                    Text(stringResource(my.noveldokusha.strings.R.string.save), fontSize = 11.sp)
+                    Text(stringResource(my.noveldokusha.strings.R.string.save), fontSize = 9.sp)
                 }
             }
 
@@ -186,12 +169,8 @@ fun LuaEditorDialog(
                     .padding(4.dp)
             ) {
                 CodeEditorField(
-                    value = textFieldValue,
-                    onValueChange = {
-                        textFieldValue = it
-                        onCodeChange(it.text)
-                    },
-                    language = "lua",
+                    text = normalizedCode,
+                    onTextChange = onCodeChange,
                     fontSize = editorFontSize,
                     showLineNumbers = true,
                     wordWrap = wordWrap,

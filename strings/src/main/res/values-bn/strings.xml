@@ -624,6 +624,7 @@
     <!-- History -->
     <string name="title_history">ইতিহাস</string>
     <string name="no_history_yet">এখনো কোনো পড়ার ইতিহাস নেই</string>
+    <string name="no_books_in_library">লাইব্রেরিতে কোনো বই নেই</string>
     <string name="clear_all_history">সমস্ত ইতিহাস সাফ করুন</string>
     <string name="display_options_title">প্রদর্শন</string>
     <string name="save_settings">সেটিংস সংরক্ষণ করুন</string>

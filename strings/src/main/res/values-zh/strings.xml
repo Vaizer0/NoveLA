@@ -623,6 +623,7 @@
     <!-- History -->
     <string name="title_history">历史</string>
     <string name="no_history_yet">暂无阅读历史</string>
+    <string name="no_books_in_library">图书馆中没有书籍</string>
     <string name="clear_all_history">清除所有历史</string>
 
     <!-- Display -->

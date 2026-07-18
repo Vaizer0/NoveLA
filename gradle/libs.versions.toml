@@ -63,6 +63,7 @@ readability4j = "1.0.8"
 
 timber = "5.0.1"
 kotlin-metadata-jvm = "2.4.0"
+sora-editor = "0.24.4"
 [libraries]
 
 # Compose
@@ -143,6 +144,10 @@ androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fr
 androidx-preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "androidx-preference-ktx" }
 
 material = { module = "com.google.android.material:material", version.ref = "androidx-material" }
+
+# Sora Editor
+sora-editor-bom = { module = "io.github.rosemoe:editor-bom", version.ref = "sora-editor" }
+sora-editor-core = { module = "io.github.rosemoe:editor" }
 
 # Logging
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
