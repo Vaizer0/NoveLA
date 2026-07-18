@@ -51,7 +51,6 @@ import my.noveldokusha.features.reader.domain.ReaderItemAdapter
 import my.noveldokusha.features.reader.domain.ReaderState
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.features.reader.manager.ReaderManager
-import my.noveldokusha.features.reader.services.FloatingTtsService
 import my.noveldokusha.features.reader.services.NarratorMediaControlsService
 import my.noveldokusha.features.reader.tools.FontsLoader
 import my.noveldokusha.features.reader.ui.ReaderScreen
@@ -107,7 +106,6 @@ class ReaderActivity : BaseActivity() {
     // Double-tap detection for showing/hiding reader info
     private var lastTapTime = 0L
     private val doubleTapThresholdMs = 350L
-    private lateinit var readerAdapter: ReaderItemAdapter
 
     private val viewModel by viewModels<ReaderViewModel>()
 
@@ -146,46 +144,13 @@ class ReaderActivity : BaseActivity() {
                     } else {
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < doubleTapThresholdMs) {
-                            val tappedIndex = readerAdapter.lastTappedAdapterPosition
-                            if (tappedIndex >= 0) {
-                                readerAdapter.toggleOuterlayer(tappedIndex)
-                                if (readerAdapter.hasActiveOuterlayer()) {
-                                    if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
-                                        FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
-                                        FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
-                                        FloatingTtsService.start(this@ReaderActivity)
-                                        FloatingTtsService.setOverlayHidden(false)
-                                    }
-                                } else {
-                                    if (appPreferences.FLOATING_TTS_ENABLED.value) {
-                                        FloatingTtsService.setOverlayHidden(true)
-                                    }
-                                }
-                            } else {
-                                viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
-                            }
+                            viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
                             lastTapTime = 0L
                         } else {
                             lastTapTime = now
                         }
                     }
                 },
-                onParagraphDoubleTap = { itemIndex ->
-                    readerAdapter.toggleOuterlayer(itemIndex)
-                    if (readerAdapter.hasActiveOuterlayer()) {
-                        if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
-                            FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
-                            FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
-                            FloatingTtsService.start(this@ReaderActivity)
-                            FloatingTtsService.setOverlayHidden(false)
-                        }
-                    } else {
-                        if (appPreferences.FLOATING_TTS_ENABLED.value) {
-                            FloatingTtsService.setOverlayHidden(true)
-                        }
-                    }
-                },
-                appPreferences = appPreferences,
                 currentTtsHighlightEnabled = { appPreferences.TTS_HIGHLIGHT_ENABLED.value },
                 currentTtsHighlightColor = { appPreferences.TTS_HIGHLIGHT_COLOR.value },
                 currentSpokenWordRange = { viewModel.readerSpeaker.state.spokenWordRange.value },
@@ -216,7 +181,6 @@ class ReaderActivity : BaseActivity() {
 
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
         viewBind.listView.adapter = viewAdapter.listView
-        readerAdapter = viewAdapter.listView
         readerViewHandlersActions.listView = viewBind.listView
 
         fadeInTextLiveData.distinctUntilChanged().observe(this) {

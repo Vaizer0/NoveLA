@@ -4,8 +4,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,6 +91,8 @@ internal fun TtsMiniPlayer(
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
     ttsHighlightColor: String = "FFFF6D00",
+    showParagraphOuterlayer: Boolean = false,
+    onToggleParagraphOuterlayer: (() -> Unit)? = null,
 ) {
     FloatingTtsMiniPlayer(
         state = state,
@@ -110,6 +114,8 @@ internal fun TtsMiniPlayer(
         onParagraphModeChange = onParagraphModeChange,
         ttsHighlightEnabled = ttsHighlightEnabled,
         ttsHighlightColor = ttsHighlightColor,
+        showParagraphOuterlayer = showParagraphOuterlayer,
+        onToggleParagraphOuterlayer = onToggleParagraphOuterlayer,
     )
 }
 
@@ -303,6 +309,8 @@ private fun FloatingTtsMiniPlayer(
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
     ttsHighlightColor: String = "FFFF6D00",
+    showParagraphOuterlayer: Boolean = false,
+    onToggleParagraphOuterlayer: (() -> Unit)? = null,
 ) {
     val total = state.estimatedTotalSeconds.value
     val remaining = state.estimatedRemainingSeconds.value
@@ -522,10 +530,30 @@ private fun FloatingTtsMiniPlayer(
 
             if (hasParagraphText) {
                 Spacer(modifier = Modifier.height(4.dp))
+                val outerlayerAlpha by animateFloatAsState(
+                    targetValue = if (showParagraphOuterlayer) 1f else 0f,
+                    animationSpec = tween(durationMillis = 250),
+                    label = ""
+                )
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (outerlayerAlpha > 0f) {
+                                Modifier.border(
+                                    width = (2 * outerlayerAlpha).dp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = outerlayerAlpha * 0.7f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            } else Modifier
+                        )
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = { onToggleParagraphOuterlayer?.invoke() }
+                            )
+                        }
                 ) {
                     if (isBothMode) {
                         val spokenRange = state.spokenWordRange.value
