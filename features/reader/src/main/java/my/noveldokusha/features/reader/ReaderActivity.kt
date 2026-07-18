@@ -51,6 +51,7 @@ import my.noveldokusha.features.reader.domain.ReaderItemAdapter
 import my.noveldokusha.features.reader.domain.ReaderState
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.features.reader.manager.ReaderManager
+import my.noveldokusha.features.reader.services.FloatingTtsService
 import my.noveldokusha.features.reader.services.NarratorMediaControlsService
 import my.noveldokusha.features.reader.tools.FontsLoader
 import my.noveldokusha.features.reader.ui.ReaderScreen
@@ -144,13 +145,46 @@ class ReaderActivity : BaseActivity() {
                     } else {
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < doubleTapThresholdMs) {
-                            viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
+                            val tappedIndex = viewAdapter.listView.lastTappedAdapterPosition
+                            if (tappedIndex >= 0) {
+                                viewAdapter.listView.toggleOuterlayer(tappedIndex)
+                                if (viewAdapter.listView.hasActiveOuterlayer()) {
+                                    if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
+                                        FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
+                                        FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
+                                        FloatingTtsService.start(this@ReaderActivity)
+                                        FloatingTtsService.setOverlayHidden(false)
+                                    }
+                                } else {
+                                    if (appPreferences.FLOATING_TTS_ENABLED.value) {
+                                        FloatingTtsService.setOverlayHidden(true)
+                                    }
+                                }
+                            } else {
+                                viewModel.state.showReaderInfo.value = !viewModel.state.showReaderInfo.value
+                            }
                             lastTapTime = 0L
                         } else {
                             lastTapTime = now
                         }
                     }
                 },
+                onParagraphDoubleTap = { itemIndex ->
+                    viewAdapter.listView.toggleOuterlayer(itemIndex)
+                    if (viewAdapter.listView.hasActiveOuterlayer()) {
+                        if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
+                            FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
+                            FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
+                            FloatingTtsService.start(this@ReaderActivity)
+                            FloatingTtsService.setOverlayHidden(false)
+                        }
+                    } else {
+                        if (appPreferences.FLOATING_TTS_ENABLED.value) {
+                            FloatingTtsService.setOverlayHidden(true)
+                        }
+                    }
+                },
+                appPreferences = appPreferences,
                 currentTtsHighlightEnabled = { appPreferences.TTS_HIGHLIGHT_ENABLED.value },
                 currentTtsHighlightColor = { appPreferences.TTS_HIGHLIGHT_COLOR.value },
                 currentSpokenWordRange = { viewModel.readerSpeaker.state.spokenWordRange.value },
