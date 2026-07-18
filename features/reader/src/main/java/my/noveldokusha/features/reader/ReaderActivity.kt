@@ -107,6 +107,7 @@ class ReaderActivity : BaseActivity() {
     // Double-tap detection for showing/hiding reader info
     private var lastTapTime = 0L
     private val doubleTapThresholdMs = 350L
+    private lateinit var readerAdapter: ReaderItemAdapter
 
     private val viewModel by viewModels<ReaderViewModel>()
 
@@ -145,10 +146,10 @@ class ReaderActivity : BaseActivity() {
                     } else {
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < doubleTapThresholdMs) {
-                            val tappedIndex = viewAdapter.listView.lastTappedAdapterPosition
+                            val tappedIndex = readerAdapter.lastTappedAdapterPosition
                             if (tappedIndex >= 0) {
-                                viewAdapter.listView.toggleOuterlayer(tappedIndex)
-                                if (viewAdapter.listView.hasActiveOuterlayer()) {
+                                readerAdapter.toggleOuterlayer(tappedIndex)
+                                if (readerAdapter.hasActiveOuterlayer()) {
                                     if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
                                         FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
                                         FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
@@ -170,8 +171,8 @@ class ReaderActivity : BaseActivity() {
                     }
                 },
                 onParagraphDoubleTap = { itemIndex ->
-                    viewAdapter.listView.toggleOuterlayer(itemIndex)
-                    if (viewAdapter.listView.hasActiveOuterlayer()) {
+                    readerAdapter.toggleOuterlayer(itemIndex)
+                    if (readerAdapter.hasActiveOuterlayer()) {
                         if (appPreferences.FLOATING_TTS_ENABLED.value && android.provider.Settings.canDrawOverlays(this@ReaderActivity)) {
                             FloatingTtsService.activityWindowToken = viewBind.listView.windowToken
                             FloatingTtsService.ttsState.value = viewModel.state.settings.textToSpeech
@@ -215,6 +216,7 @@ class ReaderActivity : BaseActivity() {
 
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
         viewBind.listView.adapter = viewAdapter.listView
+        readerAdapter = viewAdapter.listView
         readerViewHandlersActions.listView = viewBind.listView
 
         fadeInTextLiveData.distinctUntilChanged().observe(this) {
