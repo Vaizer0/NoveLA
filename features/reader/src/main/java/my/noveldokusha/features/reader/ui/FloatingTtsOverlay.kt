@@ -43,8 +43,8 @@ internal fun FloatingTtsOverlayContent(
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
     ttsHighlightColor: String = "FFFF6D00",
-    showParagraphOuterlayer: Boolean = false,
-    onToggleParagraphOuterlayer: (() -> Unit)? = null,
+    menuHidden: Boolean = false,
+    onToggleMenuHidden: (() -> Unit)? = null,
 ) {
     if (isExpanded) {
         TtsMiniPlayer(
@@ -65,8 +65,8 @@ internal fun FloatingTtsOverlayContent(
             onParagraphModeChange = onParagraphModeChange,
             ttsHighlightEnabled = ttsHighlightEnabled,
             ttsHighlightColor = ttsHighlightColor,
-            showParagraphOuterlayer = showParagraphOuterlayer,
-            onToggleParagraphOuterlayer = onToggleParagraphOuterlayer,
+            menuHidden = menuHidden,
+            onToggleMenuHidden = onToggleMenuHidden,
         )
     } else {
         FloatingBubble(
