@@ -21,12 +21,16 @@ internal suspend fun textToItemsConverter(
     userRegexRules: List<RegexRule> = emptyList()
 ): List<ReaderItem> = withContext(Dispatchers.Default) {
 
+    Timber.d("convert[%d] start: text.length=%d, displacement=%d", chapterIndex, text.length, chapterItemPositionDisplacement)
+
     val items = mutableListOf<ReaderItem>()
     var itemPosition = chapterItemPositionDisplacement
     var remaining = text
+    var imgMatchCount = 0
 
     while (true) {
         val match = IMG_TAG_REGEX.find(remaining) ?: break
+        imgMatchCount++
 
         val before = remaining.substring(0, match.range.first)
         if (before.isNotBlank()) {
@@ -59,6 +63,9 @@ internal suspend fun textToItemsConverter(
         remaining = if (endIdx >= 0) afterMatch.substring(endIdx + 1) else ""
     }
 
+    Timber.d("convert[%d] after loop: remaining.length=%d, items.size=%d, imgMatchCount=%d",
+        chapterIndex, remaining.length, items.size, imgMatchCount)
+
     if (remaining.isNotBlank()) {
         val bodyItems = buildBodyItems(
             text = remaining,
@@ -72,6 +79,7 @@ internal suspend fun textToItemsConverter(
 
     // Assign locations
     if (items.isNotEmpty()) {
+        val firstType = items[0]::class.simpleName
         items[0] = items[0].let {
             when (it) {
                 is ReaderItem.Body -> it.copy(location = ReaderItem.Location.FIRST)
@@ -79,13 +87,20 @@ internal suspend fun textToItemsConverter(
                 else -> it
             }
         }
-        items[items.lastIndex] = items[items.lastIndex].let {
+        val lastIdx = items.lastIndex
+        val lastType = items[lastIdx]::class.simpleName
+        val lastBodyIdx = items.indexOfLast { it is ReaderItem.Body }
+        items[lastIdx] = items[lastIdx].let {
             when (it) {
                 is ReaderItem.Body -> it.copy(location = ReaderItem.Location.LAST)
                 is ReaderItem.Image -> it.copy(location = ReaderItem.Location.LAST)
                 else -> it
             }
         }
+        Timber.d("convert[%d] locations: items.size=%d, first=%s, lastIdx=%d lastType=%s, lastBodyIdx=%d",
+            chapterIndex, items.size, firstType, lastIdx, lastType, lastBodyIdx)
+    } else {
+        Timber.d("convert[%d] locations: items IS EMPTY", chapterIndex)
     }
 
     items

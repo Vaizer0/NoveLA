@@ -2,6 +2,7 @@ package my.noveldokusha.features.reader.manager
 
 import kotlinx.coroutines.channels.Channel
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +40,7 @@ internal class ReaderManager @Inject constructor(
     }
 
     fun close() {
+        Timber.d("ReaderManager.close")
         session?.close()
         session = null
     }
@@ -49,6 +51,7 @@ internal class ReaderManager @Inject constructor(
     }
 
     fun detachSession() {
+        Timber.d("ReaderManager.detachSession")
         readerViewHandlersActions.invalidate()
     }
 }

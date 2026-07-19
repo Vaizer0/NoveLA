@@ -689,7 +689,8 @@ class ReaderActivity : BaseActivity() {
 
         if (viewModel.readerSpeaker.isSpeaking.value) {
             viewModel.readerSpeaker.forceUpdateCurrentItemState()
-            val position = viewModel.readerSpeaker.getActualPlayingPosition() ?: return
+            val position = viewModel.readerSpeaker.getActualPlayingPosition()
+                ?: viewModel.readerSpeaker.currentTextPlaying.value.itemPos
             val itemIndex = indexOfReaderItem(
                 list = viewModel.items,
                 chapterIndex = position.chapterIndex,

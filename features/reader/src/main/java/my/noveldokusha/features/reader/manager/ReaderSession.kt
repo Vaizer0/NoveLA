@@ -271,6 +271,9 @@ internal class ReaderSession(
             readerTextToSpeech.reachedChapterEndFlowChapterIndex.collect { chapterIndex ->
                 withContext(Dispatchers.Main.immediate) {
                     runCatching {
+                        val chapterUrl = readerChaptersLoader.orderedChapters
+                            .getOrNull(chapterIndex)?.url ?: return@withContext
+                        markChapterEndAsSeen(chapterUrl)
                         if (readerChaptersLoader.isLastChapter(chapterIndex)) return@withContext
                         if (readerChaptersLoader.hasLoadingError) return@withContext
                         val nextChapterIndex = chapterIndex + 1
@@ -318,7 +321,11 @@ internal class ReaderSession(
                 .filter { savePositionMode.value == SavePositionMode.Speaking }
                 .collect {
                     val item = it.itemPos
-                    if (item !is ReaderItem.ParagraphLocation) return@collect
+                    if (item !is ReaderItem.ParagraphLocation) {
+                        Timber.d("readStatus-collect: skip non-ParagraphLocation: ${item::class.simpleName} pos=${item.chapterItemPosition}")
+                        return@collect
+                    }
+                    Timber.d("readStatus-collect: ${item.location} chapterUrl=${item.chapterUrl} pos=${item.chapterItemPosition}")
                     when (item.location) {
                         ReaderItem.Location.FIRST -> markChapterStartAsSeen(chapterUrl = item.chapterUrl)
                         ReaderItem.Location.LAST -> markChapterEndAsSeen(chapterUrl = item.chapterUrl)
@@ -374,6 +381,8 @@ internal class ReaderSession(
         }
         readerTextToSpeech.stop()
         readerLiveTranslation.close()
+        Timber.d("ReaderSession.close: calling readRoutine.sync()")
+        readRoutine.sync()
         readRoutine.close()
         readerTextToSpeech.shutdownTts()
         NarratorMediaControlsService.stop(context)
@@ -447,10 +456,12 @@ internal class ReaderSession(
     }
 
     fun markChapterStartAsSeen(chapterUrl: String) {
+        Timber.d("markChapterStartAsSeen: $chapterUrl")
         readRoutine.setReadStart(chapterUrl = chapterUrl)
     }
 
     fun markChapterEndAsSeen(chapterUrl: String) {
+        Timber.d("markChapterEndAsSeen: $chapterUrl")
         readRoutine.setReadEnd(chapterUrl = chapterUrl)
     }
 

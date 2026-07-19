@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.ViewModel
+import timber.log.Timber
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppPreferences
@@ -138,6 +139,7 @@ internal class ReaderViewModel @Inject constructor(
     val ttsScrolledToTheBottom = readerSession.readerTextToSpeech.scrolledToTheBottom
 
     fun onCloseManually() {
+        Timber.d("onCloseManually: isActive=${readerSession.readerTextToSpeech.isActive.value} isSpeaking=${readerSession.readerTextToSpeech.isSpeaking.value}")
         if (readerSession.readerTextToSpeech.isActive.value) {
             readerManager.detachSession()
         } else {
