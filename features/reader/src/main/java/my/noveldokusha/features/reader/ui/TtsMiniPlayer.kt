@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -366,52 +367,13 @@ private fun FloatingTtsMiniPlayer(
     val currentPanelWidth by rememberUpdatedState(panelWidth)
     val dragModifier = if (onDrag != null) {
         Modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                val firstDown = awaitFirstDown()
-                var prevPosition = firstDown.position
-                var prevSpan = 0f
-                var wasPinching = false
-                var wasDragging = false
-
-                do {
-                    val event = awaitPointerEvent()
-                    val pressed = event.changes.filter { it.pressed }
-
-                    if (pressed.size >= 2) {
-                        wasPinching = true
-                        val p1 = pressed[0].position
-                        val p2 = pressed[1].position
-                        val span = (p1 - p2).getDistance()
-                        val centroid = Offset((p1.x + p2.x) / 2f, (p1.y + p2.y) / 2f)
-
-                        if (prevSpan > 0f && onPanelWidthChange != null) {
-                            val zoom = span / prevSpan
-                            val newWidth = (currentPanelWidth * zoom).coerceIn(minWidth, maxWidth)
-                            onPanelWidthChange(newWidth)
-                            val pan = centroid - prevPosition
-                            if (pan.getDistance() > 0.5f) {
-                                onDrag(pan.x, pan.y)
-                            }
-                        }
-                        prevSpan = span
-                        prevPosition = centroid
-                        event.changes.forEach { it.consume() }
-                    } else if (pressed.size == 1 && !wasPinching) {
-                        wasDragging = true
-                        val pos = pressed[0].position
-                        val pan = pos - prevPosition
-                        if (pan.getDistance() > 0.5f) {
-                            onDrag(pan.x, pan.y)
-                            prevPosition = pos
-                        }
-                        event.changes.forEach { it.consume() }
-                    }
-                } while (event.changes.any { it.pressed })
-
-                if (wasDragging || wasPinching) {
-                    onDragEnd?.invoke()
-                }
-            }
+            detectDragGestures(
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount.x, dragAmount.y)
+                },
+                onDragEnd = { onDragEnd?.invoke() }
+            )
         }
     } else {
         Modifier
@@ -611,13 +573,40 @@ private fun FloatingTtsMiniPlayer(
                             var lastTapTime = 0L
                             awaitEachGesture {
                                 val down = awaitFirstDown()
+                                var isPinch = false
+
                                 val released = withTimeoutOrNull(1200L) {
-                                    do {
+                                    while (true) {
                                         val event = awaitPointerEvent()
-                                    } while (event.changes.any { it.pressed })
+                                        val pressed = event.changes.filter { it.pressed }
+                                        if (pressed.size >= 2) {
+                                            isPinch = true
+                                            break
+                                        }
+                                        if (pressed.isEmpty()) break
+                                    }
                                     true
                                 }
-                                if (released == null) {
+
+                                if (isPinch) {
+                                    var prevSpan = 0f
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val pressed = event.changes.filter { it.pressed }
+                                        if (pressed.size >= 2) {
+                                            val p1 = pressed[0].position
+                                            val p2 = pressed[1].position
+                                            val span = (p1 - p2).getDistance()
+                                            if (prevSpan > 0f) {
+                                                val zoom = span / prevSpan
+                                                val newWidth = (currentPanelWidth * zoom).coerceIn(minWidth, maxWidth)
+                                                onPanelWidthChange?.invoke(newWidth)
+                                            }
+                                            prevSpan = span
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                } else if (released == null) {
                                     onToggleGlow?.invoke()
                                     do {
                                         val event = awaitPointerEvent()
