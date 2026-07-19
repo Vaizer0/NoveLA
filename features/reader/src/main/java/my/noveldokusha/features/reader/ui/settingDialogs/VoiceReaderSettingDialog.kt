@@ -97,6 +97,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.TtsSeekRow
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
