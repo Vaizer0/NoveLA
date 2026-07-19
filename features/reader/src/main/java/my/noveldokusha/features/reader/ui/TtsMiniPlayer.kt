@@ -10,6 +10,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -187,45 +189,7 @@ private fun MiniPlayerControls(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-                .height(progressHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
-            ) {
-                Icon(
-                    Icons.Rounded.AccessTime,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = formatDuration(remaining),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
+        Spacer(modifier = Modifier.weight(1f))
 
         IconButton(
             onClick = debouncedAction(waitMillis = 100) { state.playPreviousItem() },
@@ -468,6 +432,7 @@ private fun FloatingTtsMiniPlayer(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.width(32.dp),
                             )
+                            val sliderInteractionSource = remember { MutableInteractionSource() }
                             Slider(
                                 value = displayElapsed,
                                 valueRange = 0f..totalSeconds,
@@ -479,12 +444,30 @@ private fun FloatingTtsMiniPlayer(
                                     isSeeking = false
                                     state.seekToTime(seekTarget)
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(24.dp),
                                 colors = SliderDefaults.colors(
                                     thumbColor = MaterialTheme.colorScheme.primary,
                                     activeTrackColor = MaterialTheme.colorScheme.primary,
                                     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                                 ),
+                                thumb = {
+                                    SliderDefaults.Thumb(
+                                        interactionSource = sliderInteractionSource,
+                                        thumbSize = DpSize(10.dp, 10.dp),
+                                        colors = SliderDefaults.thumbColors(
+                                            disabledThumbColor = MaterialTheme.colorScheme.primary,
+                                        ),
+                                    )
+                                },
+                                track = { sliderState ->
+                                    SliderDefaults.Track(
+                                        sliderState = sliderState,
+                                        modifier = Modifier.height(2.dp),
+                                    )
+                                },
+                                interactionSource = sliderInteractionSource,
                             )
                             Text(
                                 text = formatDurationCompact(totalSeconds.toInt()),

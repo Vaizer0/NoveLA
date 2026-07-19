@@ -149,16 +149,12 @@ internal class ReaderTextToSpeech(
 
     // --- Duration timing system ---
 
-    private data class ChapterTimings(
-        val chapterIndex: Int,
-        val paragraphStartTimes: List<Float>,
-        val totalDuration: Float,
-        val speed: Float,
-    )
-
     // Remove XML/HTML tags, bracket content, timestamps, decorative chars for accurate char counting
-    private val TTS_SILENT_PATTERN = Regex("""<[^>]+>|\[[^\]]*\]|\([^)]*\)|\d{1,2}:\d{2}(:\d{2})?|【[^】]*】|「[^」]*」|『[^』]*』|〈[^〉]*〉|「[^」]*」""")
+    private val TTS_SILENT_PATTERN = Regex("""<[^>]+>|\[[^\]]*\]|\([^)]*\)|\d{1,2}:\d{2}(:\d{2})?|【[^】]*】|「[^」]*」|『[^』]*』|〈[^〉]*〉""")
     private val MULTI_SPACE = Regex("""\s+""")
+
+    // Estimated delay between paragraph switches by TTS engine (seconds)
+    private val INTER_PARAGRAPH_DELAY = 0.12f
 
     private fun cleanTextForDuration(text: String): String {
         return TTS_SILENT_PATTERN.replace(text, " ")
@@ -166,35 +162,48 @@ internal class ReaderTextToSpeech(
             .trim()
     }
 
-    private fun computeChapterTimings(chapterIndex: Int, speed: Float): ChapterTimings? {
-        if (!isChapterIndexValid(chapterIndex)) return null
+    // Locked chapter timings — computed once per chapter, only recompute on speed change
+    private val _lockedTotalSeconds = mutableStateOf(0)
+    private val _lockedParagraphStartTimes = mutableListOf<Float>()
+    private var lockedChapterIndex: Int = -1
+    private var lockedSpeed: Float = 0f
+
+    private fun lockChapterTimings(chapterIndex: Int, speed: Float) {
+        if (!isChapterIndexValid(chapterIndex)) return
         val cps = baseCharactersPerSecond.value * speed
-        if (cps <= 0f) return null
+        if (cps <= 0f) return
+
+        // Skip if already locked for this chapter at this speed
+        if (lockedChapterIndex == chapterIndex && lockedSpeed == speed) return
 
         val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
             .filter { it.chapterIndex == chapterIndex }
             .sortedBy { it.chapterItemPosition }
 
-        if (chapterParagraphs.isEmpty()) return null
+        if (chapterParagraphs.isEmpty()) return
 
         val startTimes = mutableListOf<Float>()
         var cumulative = 0f
 
-        for (paragraph in chapterParagraphs) {
+        for ((index, paragraph) in chapterParagraphs.withIndex()) {
             startTimes.add(cumulative)
             val cleanLength = cleanTextForDuration(paragraph.textToDisplay).length
             cumulative += cleanLength / cps
+            // Add inter-paragraph delay (TTS engine processing gap), except after last paragraph
+            if (index < chapterParagraphs.size - 1) {
+                cumulative += INTER_PARAGRAPH_DELAY
+            }
         }
 
-        return ChapterTimings(
-            chapterIndex = chapterIndex,
-            paragraphStartTimes = startTimes,
-            totalDuration = cumulative,
-            speed = speed,
-        )
+        synchronized(_lockedParagraphStartTimes) {
+            _lockedParagraphStartTimes.clear()
+            _lockedParagraphStartTimes.addAll(startTimes)
+        }
+        _lockedTotalSeconds.value = cumulative.toInt()
+        lockedChapterIndex = chapterIndex
+        lockedSpeed = speed
     }
 
-    private val _chapterTimings = mutableStateOf<ChapterTimings?>(null)
     private val _liveElapsedSeconds = mutableStateOf(0f)
     private var elapsedBase = 0f
     private var tickerJob: Job? = null
@@ -217,27 +226,31 @@ internal class ReaderTextToSpeech(
     private var paragraphStartTime = 0L
 
     private fun onParagraphStarted(chapterIndex: Int, paragraphIndex: Int) {
-        val timings = _chapterTimings.value
-        if (timings != null && timings.chapterIndex == chapterIndex && paragraphIndex < timings.paragraphStartTimes.size) {
-            elapsedBase = timings.paragraphStartTimes[paragraphIndex]
-        } else {
-            // Fallback: compute on the fly
-            val cps = baseCharactersPerSecond.value * manager.voiceSpeed.floatValue
-            if (cps > 0f) {
-                val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
-                    .filter { it.chapterIndex == chapterIndex }
-                    .sortedBy { it.chapterItemPosition }
-                var charCount = 0
-                for (i in 0 until paragraphIndex.coerceAtMost(chapterParagraphs.size)) {
-                    charCount += cleanTextForDuration(chapterParagraphs[i].textToDisplay).length
-                }
-                elapsedBase = charCount / cps
+        synchronized(_lockedParagraphStartTimes) {
+            if (chapterIndex == lockedChapterIndex && paragraphIndex < _lockedParagraphStartTimes.size) {
+                elapsedBase = _lockedParagraphStartTimes[paragraphIndex]
+                paragraphStartTime = System.currentTimeMillis()
+                return
             }
+        }
+
+        // Fallback: compute on the fly if timings not locked yet
+        val cps = baseCharactersPerSecond.value * manager.voiceSpeed.floatValue
+        if (cps > 0f) {
+            val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
+                .filter { it.chapterIndex == chapterIndex }
+                .sortedBy { it.chapterItemPosition }
+            var charCount = 0
+            for (i in 0 until paragraphIndex.coerceAtMost(chapterParagraphs.size)) {
+                charCount += cleanTextForDuration(chapterParagraphs[i].textToDisplay).length
+                if (i < paragraphIndex) charCount += (INTER_PARAGRAPH_DELAY * cps).toInt()
+            }
+            elapsedBase = charCount / cps
         }
         paragraphStartTime = System.currentTimeMillis()
     }
 
-    // Keep existing state for backward compatibility with UI that still uses these
+    // Keep existing state for word/character counts
     private val baseCharactersPerSecond = mutableStateOf(13.0f)
 
     val chapterWordCount = derivedStateOf {
@@ -283,21 +296,13 @@ internal class ReaderTextToSpeech(
         (baseCharactersPerSecond.value * currentSpeed * 12.0f).toInt().coerceAtLeast(30)
     }
 
-    // Fixed total duration from pre-computed timings, recalculates only on speed change
+    // Fixed total duration — LOCKED, only changes when speed changes
     val estimatedTotalSeconds = derivedStateOf {
-        val timings = _chapterTimings.value
-        val currentSpeed = manager.voiceSpeed.floatValue
-        if (timings != null && timings.speed == currentSpeed) {
-            timings.totalDuration.toInt()
-        } else {
-            // Fallback: compute from cleaned character count
-            val cps = baseCharactersPerSecond.value * currentSpeed
-            if (cps > 0f) (chapterCharacterCount.value / cps).toInt() else 0
-        }
+        _lockedTotalSeconds.value
     }
 
     val estimatedRemainingSeconds = derivedStateOf {
-        val total = estimatedTotalSeconds.value
+        val total = _lockedTotalSeconds.value
         val elapsed = _liveElapsedSeconds.value.toInt()
         (total - elapsed).coerceAtLeast(0)
     }
@@ -425,11 +430,10 @@ internal class ReaderTextToSpeech(
                         val chapterIndex = utterance.itemPos.chapterIndex
                         val currentItemPos = utterance.itemPos.chapterItemPosition
 
-                        // When new chapter starts, compute timings once
+                        // When new chapter starts, lock timings once
                         if (lastPlayedChapterIndex != chapterIndex) {
                             lastPlayedChapterIndex = chapterIndex
-                            val timings = computeChapterTimings(chapterIndex, manager.voiceSpeed.floatValue)
-                            _chapterTimings.value = timings
+                            lockChapterTimings(chapterIndex, manager.voiceSpeed.floatValue)
                             elapsedBase = 0f
                             _liveElapsedSeconds.value = 0f
                         }
@@ -458,24 +462,14 @@ internal class ReaderTextToSpeech(
                             val text = item?.textToDisplay ?: ""
                             val cleanCharCount = cleanTextForDuration(text).length
 
+                            // Calibration: update baseCPS from measured duration (does NOT change total)
                             if (cleanCharCount > 10 && durationMs > 200) {
                                 val measuredCps = (cleanCharCount * 1000.0f) / durationMs
                                 val currentSpeed = manager.voiceSpeed.floatValue
                                 if (currentSpeed > 0f) {
                                     val baseCps = measuredCps / currentSpeed
                                     if (baseCps in 3.0f..40.0f) {
-                                        val oldCps = baseCharactersPerSecond.value
-                                        baseCharactersPerSecond.value = 0.2f * baseCps + 0.8f * oldCps
-
-                                        // Recompute timings with updated calibration
-                                        if (oldCps != baseCharactersPerSecond.value) {
-                                            val timings = _chapterTimings.value
-                                            if (timings != null && timings.chapterIndex == currentChapterIndex) {
-                                                _chapterTimings.value = computeChapterTimings(
-                                                    currentChapterIndex, currentSpeed
-                                                )
-                                            }
-                                        }
+                                        baseCharactersPerSecond.value = 0.2f * baseCps + 0.8f * baseCharactersPerSecond.value
                                     }
                                 }
                             }
@@ -1009,6 +1003,12 @@ internal class ReaderTextToSpeech(
         val success = manager.trySetVoiceSpeed(value)
         if (success) {
             setPreferredVoiceSpeed(value)
+            // Recompute locked timings for new speed
+            lockedChapterIndex = -1
+            val chapterIndex = currentTextPlaying.value.itemPos.chapterIndex
+            if (isChapterIndexValid(chapterIndex)) {
+                lockChapterTimings(chapterIndex, value)
+            }
             resumeFromCurrentState()
         }
     }
@@ -1017,76 +1017,50 @@ internal class ReaderTextToSpeech(
         val chapterIndex = currentTextPlaying.value.itemPos.chapterIndex
         if (!isChapterIndexValid(chapterIndex)) return
 
-        // Use paragraph timings if available for accurate seeking
-        val timings = _chapterTimings.value
-        if (timings != null && timings.chapterIndex == chapterIndex) {
-            val paragraphs = items.filterIsInstance<ReaderItem.Text>()
-                .filter { it.chapterIndex == chapterIndex }
-                .sortedBy { it.chapterItemPosition }
+        val paragraphs = items.filterIsInstance<ReaderItem.Text>()
+            .filter { it.chapterIndex == chapterIndex }
+            .sortedBy { it.chapterItemPosition }
+        if (paragraphs.isEmpty()) return
 
-            // Binary search for the paragraph at target time
-            var lo = 0
-            var hi = timings.paragraphStartTimes.size - 1
-            var resultIndex = 0
-            while (lo <= hi) {
-                val mid = (lo + hi) / 2
-                if (timings.paragraphStartTimes[mid] <= targetSeconds) {
-                    resultIndex = mid
-                    lo = mid + 1
-                } else {
-                    hi = mid - 1
+        // Use locked paragraph timings for binary search
+        var resultIndex = 0
+        synchronized(_lockedParagraphStartTimes) {
+            if (chapterIndex == lockedChapterIndex && _lockedParagraphStartTimes.isNotEmpty()) {
+                var lo = 0
+                var hi = _lockedParagraphStartTimes.size - 1
+                while (lo <= hi) {
+                    val mid = (lo + hi) / 2
+                    if (_lockedParagraphStartTimes[mid] <= targetSeconds) {
+                        resultIndex = mid
+                        lo = mid + 1
+                    } else {
+                        hi = mid - 1
+                    }
+                }
+            } else {
+                // Fallback: character-based estimation
+                val currentSpeed = manager.voiceSpeed.floatValue
+                val cps = baseCharactersPerSecond.value * currentSpeed
+                if (cps <= 0f) return
+                val targetCharCount = (targetSeconds * cps).toInt()
+                var charAccumulated = 0
+                for ((index, p) in paragraphs.withIndex()) {
+                    charAccumulated += cleanTextForDuration(p.textToDisplay).length
+                    if (charAccumulated >= targetCharCount) {
+                        resultIndex = index
+                        break
+                    }
                 }
             }
-
-            val targetItem = paragraphs.getOrNull(resultIndex) ?: return
-            stop()
-            start()
-            coroutineScope.launch {
-                onParagraphStarted(chapterIndex, resultIndex)
-                readChapterStartingFromItemIndex(
-                    itemIndex = indexOfReaderItem(
-                        list = items,
-                        chapterIndex = targetItem.chapterIndex,
-                        chapterItemPosition = targetItem.chapterItemPosition,
-                    ),
-                    chapterIndex = chapterIndex
-                )
-                scrollToReaderItem.emit(targetItem)
-            }
-            return
         }
 
-        // Fallback: character-based estimation
-        val currentSpeed = manager.voiceSpeed.floatValue
-        val cps = baseCharactersPerSecond.value * currentSpeed
-        if (cps <= 0f) return
-
-        val targetCharCount = (targetSeconds * cps).toInt()
-
-        val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
-            .filter { it.chapterIndex == chapterIndex }
-
-        var charAccumulated = 0
-        var targetItem: ReaderItem.Text? = null
-        var targetParaIndex = 0
-        for ((index, p) in chapterParagraphs.withIndex()) {
-            charAccumulated += cleanTextForDuration(p.textToDisplay).length
-            if (charAccumulated >= targetCharCount) {
-                targetItem = p
-                targetParaIndex = index
-                break
-            }
-        }
-        if (targetItem == null) {
-            targetItem = chapterParagraphs.lastOrNull()
-            targetParaIndex = (chapterParagraphs.size - 1).coerceAtLeast(0)
-        }
-        if (targetItem == null) return
+        resultIndex = resultIndex.coerceIn(0, paragraphs.size - 1)
+        val targetItem = paragraphs[resultIndex]
 
         stop()
         start()
         coroutineScope.launch {
-            onParagraphStarted(chapterIndex, targetParaIndex)
+            onParagraphStarted(chapterIndex, resultIndex)
             readChapterStartingFromItemIndex(
                 itemIndex = indexOfReaderItem(
                     list = items,
