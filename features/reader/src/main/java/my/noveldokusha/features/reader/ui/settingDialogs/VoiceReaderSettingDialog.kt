@@ -48,6 +48,7 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
@@ -83,7 +84,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -106,6 +106,7 @@ import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun VoiceReaderSettingDialog(
     state: TextToSpeechSettingData,
@@ -419,21 +420,6 @@ internal fun VoiceReaderSettingDialog(
                                 activeTrackColor = MaterialTheme.colorScheme.primary,
                                 inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                             ),
-                            thumb = {
-                                SliderDefaults.Thumb(
-                                    interactionSource = sliderInteractionSource,
-                                    thumbSize = DpSize(10.dp, 10.dp),
-                                    colors = SliderDefaults.thumbColors(
-                                        disabledThumbColor = MaterialTheme.colorScheme.primary,
-                                    ),
-                                )
-                            },
-                            track = { sliderState ->
-                                SliderDefaults.Track(
-                                    sliderState = sliderState,
-                                    modifier = Modifier.height(2.dp),
-                                )
-                            },
                             interactionSource = sliderInteractionSource,
                         )
                         Text(

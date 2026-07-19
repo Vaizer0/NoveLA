@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -73,7 +74,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -266,6 +266,7 @@ private fun MiniPlayerControls(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FloatingTtsMiniPlayer(
     state: TextToSpeechSettingData,
@@ -452,21 +453,6 @@ private fun FloatingTtsMiniPlayer(
                                     activeTrackColor = MaterialTheme.colorScheme.primary,
                                     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                                 ),
-                                thumb = {
-                                    SliderDefaults.Thumb(
-                                        interactionSource = sliderInteractionSource,
-                                        thumbSize = DpSize(10.dp, 10.dp),
-                                        colors = SliderDefaults.thumbColors(
-                                            disabledThumbColor = MaterialTheme.colorScheme.primary,
-                                        ),
-                                    )
-                                },
-                                track = { sliderState ->
-                                    SliderDefaults.Track(
-                                        sliderState = sliderState,
-                                        modifier = Modifier.height(2.dp),
-                                    )
-                                },
                                 interactionSource = sliderInteractionSource,
                             )
                             Text(
