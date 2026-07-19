@@ -392,7 +392,7 @@ internal fun VoiceReaderSettingDialog(
                 // Seekable TTS progress bar
                 if (state.isThereActiveItem.value) {
                     val totalSeconds = state.estimatedTotalSeconds.value.toFloat()
-                    val elapsedSeconds = state.currentPlayTime.value
+                    val elapsedSeconds = state.liveElapsedSeconds.value
                     var isSeeking by remember { mutableStateOf(false) }
                     var seekTarget by remember { mutableFloatStateOf(0f) }
                     val displayElapsed = if (isSeeking) seekTarget else elapsedSeconds

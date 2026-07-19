@@ -450,7 +450,7 @@ private fun FloatingTtsMiniPlayer(
 
                     // Compact seekable progress bar
                     val totalSeconds = state.estimatedTotalSeconds.value.toFloat()
-                    val elapsedSeconds = state.currentPlayTime.value
+                    val elapsedSeconds = state.liveElapsedSeconds.value
                     if (totalSeconds > 0f) {
                         var isSeeking by remember { mutableStateOf(false) }
                         var seekTarget by remember { mutableFloatStateOf(0f) }
