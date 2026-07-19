@@ -188,6 +188,10 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_Boolean(name, preferences, false)
     }
 
+    val FLOATING_TTS_GLOW_ENABLED = object : Preference<Boolean>("FLOATING_TTS_GLOW_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
     val TTS_HIGHLIGHT_ENABLED = object : Preference<Boolean>("TTS_HIGHLIGHT_ENABLED") {
         override var value by SharedPreference_Boolean(name, preferences, false)
     }
