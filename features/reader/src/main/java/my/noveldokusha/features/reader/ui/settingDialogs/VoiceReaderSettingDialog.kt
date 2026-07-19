@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -93,6 +94,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.coreui.components.MyOutlinedTextField
 import my.noveldokusha.coreui.components.MySlider
 import my.noveldokusha.coreui.components.SlimListItem
+import my.noveldokusha.features.reader.ui.TtsProgressSeekBar
 import my.noveldokusha.coreui.composableActions.debouncedAction
 import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
@@ -158,10 +160,23 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
                     AssistChip(
                         label = { Text(text = stringResource(id = R.string.start_here)) },
                         onClick = debouncedAction { state.playFirstVisibleItem() },
@@ -218,6 +233,7 @@ internal fun VoiceReaderSettingDialog(
                             disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
+                    }
                     Box {
                         DropdownCustomSavedVoices(
                             expanded = dropdownCustomSavedVoicesExpanded,
@@ -384,6 +400,23 @@ internal fun VoiceReaderSettingDialog(
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
+                }
+
+                val ttsProgressTotal = state.ttsTotalSeconds.value
+                val ttsProgressElapsed = state.ttsElapsedSeconds.value
+                val ttsProgressFraction =
+                    if (ttsProgressTotal > 0) ttsProgressElapsed.toFloat() / ttsProgressTotal else 0f
+                if (state.ttsSeekEnabled.value && ttsProgressTotal > 0) {
+                    TtsProgressSeekBar(
+                        progress = ttsProgressFraction,
+                        elapsedSeconds = ttsProgressElapsed,
+                        totalSeconds = ttsProgressTotal,
+                        enabled = state.ttsSeekEnabled.value,
+                        onSeek = state.onSeekToPosition,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                    )
                 }
             }
         }

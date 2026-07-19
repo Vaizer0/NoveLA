@@ -519,6 +519,10 @@ private fun ViewsPreview(
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
         spokenWordRange = remember { mutableStateOf(null) },
+        ttsElapsedSeconds = remember { mutableStateOf(0) },
+        ttsTotalSeconds = remember { mutableStateOf(0) },
+        ttsSeekEnabled = remember { mutableStateOf(false) },
+        onSeekToPosition = {},
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(

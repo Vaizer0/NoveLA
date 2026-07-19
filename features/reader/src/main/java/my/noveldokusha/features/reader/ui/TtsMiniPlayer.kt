@@ -78,6 +78,7 @@ import my.noveldokusha.coreui.composableActions.debouncedAction
 import my.noveldokusha.reader.R
 import kotlinx.coroutines.withTimeoutOrNull
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.TtsProgressSeekBar
 
 @Composable
 internal fun TtsMiniPlayer(
@@ -141,6 +142,10 @@ private fun MiniPlayerControls(
     chaptersCount: Int,
     animatedProgress: Float,
     remaining: Int,
+    elapsed: Int = 0,
+    total: Int = 0,
+    seekEnabled: Boolean = false,
+    onSeek: (Float) -> Unit = {},
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
@@ -153,11 +158,14 @@ private fun MiniPlayerControls(
     val badgeHorizPad = 6.dp
     val badgeVertPad = 2.dp
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp),
-        modifier = Modifier.padding(start = 2.dp, end = 8.dp, top = 1.dp, bottom = 1.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth()
     ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            modifier = Modifier.padding(start = 2.dp, end = 8.dp, top = 1.dp, bottom = 1.dp)
+        ) {
         IconButton(
             onClick = debouncedAction(waitMillis = 100, action = onClose),
             modifier = Modifier.size(buttonSize)
@@ -186,45 +194,7 @@ private fun MiniPlayerControls(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-                .height(progressHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
-            ) {
-                Icon(
-                    Icons.Rounded.AccessTime,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = formatDuration(remaining),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
+        Spacer(Modifier.width(2.dp))
 
         IconButton(
             onClick = debouncedAction(waitMillis = 100) { state.playPreviousItem() },
@@ -298,6 +268,21 @@ private fun MiniPlayerControls(
         }
 
         trailingAction()
+        }
+
+        if (seekEnabled && total > 0) {
+            val fraction = if (total > 0) elapsed.toFloat() / total else 0f
+            TtsProgressSeekBar(
+                progress = fraction,
+                elapsedSeconds = elapsed,
+                totalSeconds = total,
+                enabled = seekEnabled,
+                onSeek = onSeek,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
+            )
+        }
     }
 }
 
@@ -403,6 +388,10 @@ private fun FloatingTtsMiniPlayer(
                         chaptersCount = chaptersCount,
                         animatedProgress = animatedProgress,
                         remaining = remaining,
+                        elapsed = state.ttsElapsedSeconds.value,
+                        total = state.ttsTotalSeconds.value,
+                        seekEnabled = state.ttsSeekEnabled.value,
+                        onSeek = state.onSeekToPosition,
                         buttonSize = buttonSize,
                         iconSize = iconSize,
                         iconCircleSize = iconCircleSize,
