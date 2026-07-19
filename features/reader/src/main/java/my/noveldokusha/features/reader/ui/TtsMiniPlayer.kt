@@ -379,18 +379,20 @@ private fun FloatingTtsMiniPlayer(
         Modifier
     }
 
+    val isMenuVisible = !menuHidden
+
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = opacity),
+        color = if (isMenuVisible) MaterialTheme.colorScheme.surfaceContainer.copy(alpha = opacity) else Color.Transparent,
         shadowElevation = 0.dp,
         modifier = Modifier
             .then(dragModifier)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier.padding(if (isMenuVisible) 8.dp else 0.dp)
         ) {
             AnimatedVisibility(
-                visible = !menuHidden,
+                visible = isMenuVisible,
                 enter = fadeIn(tween(200)) + expandVertically(tween(200)),
                 exit = fadeOut(tween(200)) + shrinkVertically(tween(200)),
             ) {
@@ -553,7 +555,7 @@ private fun FloatingTtsMiniPlayer(
             }
 
             if (hasParagraphText) {
-                Spacer(modifier = Modifier.height(4.dp))
+                if (isMenuVisible) Spacer(modifier = Modifier.height(4.dp))
                 val glowColor = MaterialTheme.colorScheme.primary
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
