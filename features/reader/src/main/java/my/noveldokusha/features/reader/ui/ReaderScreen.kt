@@ -78,6 +78,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.features.LiveTranslationSettingData
+import my.noveldokusha.features.reader.features.ParagraphTiming
 import my.noveldokusha.features.reader.features.TextSynthesis
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
 import my.noveldokusha.features.reader.ui.ReaderScreenState.Settings.Type
@@ -519,6 +520,12 @@ private fun ViewsPreview(
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
         spokenWordRange = remember { mutableStateOf(null) },
+        elapsedSeconds = remember { mutableStateOf(0) },
+        totalDuration = remember { mutableStateOf(0) },
+        showRemaining = remember { mutableStateOf(false) },
+        seekToTime = {},
+        toggleShowRemaining = {},
+        paragraphTimings = remember { mutableStateOf(emptyList()) },
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(

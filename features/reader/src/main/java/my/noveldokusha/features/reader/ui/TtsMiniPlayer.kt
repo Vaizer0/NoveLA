@@ -2,7 +2,6 @@ package my.noveldokusha.features.reader.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,14 +13,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,6 +74,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -139,14 +143,11 @@ private fun MiniPlayerControls(
     onStartHere: () -> Unit,
     chapterCurrentNumber: Int,
     chaptersCount: Int,
-    animatedProgress: Float,
-    remaining: Int,
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
     playButtonSize: Dp = 40.dp,
     playIconSize: Dp = 36.dp,
-    progressHeight: Dp = 8.dp,
     extraAction: @Composable () -> Unit = {},
     trailingAction: @Composable () -> Unit = {},
 ) {
@@ -182,46 +183,6 @@ private fun MiniPlayerControls(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-                .height(progressHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
-            ) {
-                Icon(
-                    Icons.Rounded.AccessTime,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = formatDuration(remaining),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         }
@@ -327,15 +288,6 @@ private fun FloatingTtsMiniPlayer(
     glowEnabled: Boolean = false,
     onToggleGlow: (() -> Unit)? = null,
 ) {
-    val total = state.estimatedTotalSeconds.value
-    val remaining = state.estimatedRemainingSeconds.value
-    val progress = if (total > 0) (total - remaining).toFloat() / total else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 300),
-        label = ""
-    )
-
     val ttsParagraph = state.currentParagraphText.value
     val inverseParagraph = state.alternateParagraphText.value
     val hasInverse = inverseParagraph.isNotBlank()
@@ -401,14 +353,11 @@ private fun FloatingTtsMiniPlayer(
                         onStartHere = onStartHere,
                         chapterCurrentNumber = chapterCurrentNumber,
                         chaptersCount = chaptersCount,
-                        animatedProgress = animatedProgress,
-                        remaining = remaining,
                         buttonSize = buttonSize,
                         iconSize = iconSize,
                         iconCircleSize = iconCircleSize,
                         playButtonSize = playButtonSize,
                         playIconSize = playIconSize,
-                        progressHeight = progressHeight,
                         extraAction = {
                             if (onOpacityChange != null) {
                                 IconButton(
@@ -445,6 +394,18 @@ private fun FloatingTtsMiniPlayer(
                                 }
                             }
                         },
+                    )
+
+                    // YouTube-like progress bar with time labels
+                    TtsSeekRow(
+                        elapsedSeconds = state.elapsedSeconds.value,
+                        totalDuration = state.totalDuration.value,
+                        showRemaining = state.showRemaining.value,
+                        onSeek = state.seekToTime,
+                        onToggleShowRemaining = state.toggleShowRemaining,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
 
                     if (onOpacityChange != null && showOpacitySlider) {
@@ -672,6 +633,120 @@ private fun FloatingTtsMiniPlayer(
                 }
             }
         }
+    }
+}
+
+/**
+ * YouTube-like thin seekable progress bar for TTS playback.
+ * Shows elapsed time (left) and a clickable total/remaining time (right).
+ * Tapping or dragging the bar seeks to the corresponding time.
+ */
+@Composable
+internal fun TtsSeekRow(
+    elapsedSeconds: Int,
+    totalDuration: Int,
+    showRemaining: Boolean,
+    onSeek: (Float) -> Unit,
+    onToggleShowRemaining: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (totalDuration <= 0) return
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = formatDuration(elapsedSeconds),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(40.dp),
+            textAlign = TextAlign.Start,
+        )
+        TtsProgressBar(
+            elapsedSeconds = elapsedSeconds,
+            totalDuration = totalDuration,
+            onSeek = onSeek,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp),
+        )
+        val rightLabel = if (showRemaining) {
+            "-${formatDuration((totalDuration - elapsedSeconds).coerceAtLeast(0))}"
+        } else {
+            formatDuration(totalDuration)
+        }
+        Text(
+            text = rightLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .width(48.dp)
+                .clickable { onToggleShowRemaining() },
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+internal fun TtsProgressBar(
+    elapsedSeconds: Int,
+    totalDuration: Int,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (totalDuration <= 0) return
+
+    val fraction = (elapsedSeconds.toFloat() / totalDuration).coerceIn(0f, 1f)
+    val trackHeight = 3.dp
+    val thumbSize = 12.dp
+
+    BoxWithConstraints(
+        modifier = modifier
+            .height(24.dp)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                        onSeek(ratio * totalDuration)
+                    },
+                    onDrag = { change, _ ->
+                        val ratio = (change.position.x / size.width).coerceIn(0f, 1f)
+                        onSeek(ratio * totalDuration)
+                    }
+                )
+            }
+    ) {
+        val trackWidth = maxWidth
+        val thumbOffsetX = (fraction * (trackWidth - thumbSize)).coerceAtLeast(0.dp)
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .width(trackWidth)
+                .height(trackHeight)
+                .background(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                    RoundedCornerShape(2.dp)
+                )
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .width((fraction * trackWidth.value).dp)
+                .height(trackHeight)
+                .background(
+                    MaterialTheme.colorScheme.primary,
+                    RoundedCornerShape(2.dp)
+                )
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = thumbOffsetX)
+                .size(thumbSize)
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+        )
     }
 }
 

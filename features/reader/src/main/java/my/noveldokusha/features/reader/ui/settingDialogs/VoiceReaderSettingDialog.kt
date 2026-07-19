@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -43,8 +43,6 @@ import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -158,96 +157,86 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                // Action buttons (Start Here, Focus, Voices, Saved Voices) in a single horizontal row
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.start_here)) },
-                        onClick = debouncedAction { state.playFirstVisibleItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.focus)) },
-                        onClick = debouncedAction { state.scrollToActiveItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.voices)) },
-                        onClick = { openVoicesDialog = !openVoicesDialog },
-                        leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    if (parallelEnabled?.value == true) {
-                        AssistChip(
-                            label = { Text(text = stringResource(R.string.original_voice)) },
-                            onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
-                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 30.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        TtsActionButton(
+                            label = stringResource(id = R.string.start_here),
+                            icon = Icons.Filled.CenterFocusWeak,
+                            onClick = debouncedAction { state.playFirstVisibleItem() },
                         )
-                    }
-                    AssistChip(
-                        label = { Text(text = stringResource(R.string.saved_voices)) },
-                        onClick = {
-                            dropdownCustomSavedVoicesExpanded.let {
-                                it.value = !it.value
-                            }
-                        },
-                        leadingIcon = { Icon(Icons.Filled.Bookmarks, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    Box {
-                        DropdownCustomSavedVoices(
-                            expanded = dropdownCustomSavedVoicesExpanded,
-                            list = state.customSavedVoices.value,
-                            currentVoice = state.activeVoice.value,
-                            currentVoiceSpeed = state.voiceSpeed.value,
-                            currentVoicePitch = state.voicePitch.value,
-                            onPredefinedSelected = {
-                                state.setVoiceSpeed(it.speed)
-                                state.setVoicePitch(it.pitch)
-                                state.setVoiceId(it.voiceId)
+                        TtsActionButton(
+                            label = stringResource(id = R.string.focus),
+                            icon = Icons.Filled.CenterFocusStrong,
+                            onClick = debouncedAction { state.scrollToActiveItem() },
+                        )
+                        TtsActionButton(
+                            label = stringResource(id = R.string.voices),
+                            icon = Icons.Filled.RecordVoiceOver,
+                            onClick = { openVoicesDialog = !openVoicesDialog },
+                        )
+                        if (parallelEnabled?.value == true) {
+                            TtsActionButton(
+                                label = stringResource(R.string.original_voice),
+                                icon = Icons.Filled.RecordVoiceOver,
+                                onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
+                            )
+                        }
+                        TtsActionButton(
+                            label = stringResource(R.string.saved_voices),
+                            icon = Icons.Filled.Bookmarks,
+                            onClick = {
+                                dropdownCustomSavedVoicesExpanded.let {
+                                    it.value = !it.value
+                                }
                             },
-                            setCustomSavedVoices = state.setCustomSavedVoices
                         )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.activeVoice.value,
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = state.setVoiceId,
-                            isDialogOpen = openVoicesDialog,
-                            setDialogOpen = { openVoicesDialog = it }
-                        )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = { state.setOriginalVoiceId(it) },
-                            isDialogOpen = openOriginalVoiceDialog,
-                            setDialogOpen = { openOriginalVoiceDialog = it }
-                        )
+
+                        Box {
+                            DropdownCustomSavedVoices(
+                                expanded = dropdownCustomSavedVoicesExpanded,
+                                list = state.customSavedVoices.value,
+                                currentVoice = state.activeVoice.value,
+                                currentVoiceSpeed = state.voiceSpeed.value,
+                                currentVoicePitch = state.voicePitch.value,
+                                onPredefinedSelected = {
+                                    state.setVoiceSpeed(it.speed)
+                                    state.setVoicePitch(it.pitch)
+                                    state.setVoiceId(it.voiceId)
+                                },
+                                setCustomSavedVoices = state.setCustomSavedVoices
+                            )
+                            VoiceSelectorDialog(
+                                availableVoices = state.availableVoices,
+                                currentVoice = state.activeVoice.value,
+                                inputTextFilter = rememberSaveable { mutableStateOf("") },
+                                setVoice = state.setVoiceId,
+                                isDialogOpen = openVoicesDialog,
+                                setDialogOpen = { openVoicesDialog = it }
+                            )
+                            VoiceSelectorDialog(
+                                availableVoices = state.availableVoices,
+                                currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
+                                inputTextFilter = rememberSaveable { mutableStateOf("") },
+                                setVoice = { state.setOriginalVoiceId(it) },
+                                isDialogOpen = openOriginalVoiceDialog,
+                                setDialogOpen = { openOriginalVoiceDialog = it }
+                            )
+                        }
                     }
                 }
 
@@ -384,6 +373,20 @@ internal fun VoiceReaderSettingDialog(
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
                         )
                     }
+                }
+
+                if (state.totalDuration.value > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TtsSeekRow(
+                        elapsedSeconds = state.elapsedSeconds.value,
+                        totalDuration = state.totalDuration.value,
+                        showRemaining = state.showRemaining.value,
+                        onSeek = state.seekToTime,
+                        onToggleShowRemaining = state.toggleShowRemaining,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
                 }
             }
         }
@@ -572,6 +575,35 @@ private fun VoiceSelectorDialog(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TtsActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+        modifier = Modifier.height(32.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
 
