@@ -59,6 +59,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -563,7 +564,24 @@ private fun FloatingTtsMiniPlayer(
                         .then(
                             if (glowEnabled) {
                                 Modifier
-                                    .shadow(10.dp, RoundedCornerShape(8.dp), clip = false, ambientColor = glowColor, spotColor = glowColor)
+                                    .drawBehind {
+                                        val glowLayers = 10
+                                        val maxOffset = 10.dp.toPx()
+                                        val strokeWidth = 1.5.dp.toPx()
+                                        val cornerRadius = 8.dp.toPx()
+                                        for (i in 1..glowLayers) {
+                                            val fraction = i.toFloat() / glowLayers
+                                            val offset = maxOffset * fraction
+                                            val alpha = 0.4f * (1f - fraction)
+                                            drawRoundRect(
+                                                color = glowColor.copy(alpha = alpha),
+                                                topLeft = Offset(-offset, -offset),
+                                                size = Size(size.width + 2 * offset, size.height + 2 * offset),
+                                                cornerRadius = CornerRadius(cornerRadius + offset),
+                                                style = Stroke(strokeWidth)
+                                            )
+                                        }
+                                    }
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
