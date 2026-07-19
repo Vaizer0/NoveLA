@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -25,10 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toDp
 
 /**
  * YouTube-like thin seekable progress bar for TTS playback.
@@ -48,12 +45,8 @@ internal fun TtsProgressSeekBar(
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    val barHeight = 3.dp
-    val thumbSize = 12.dp
-    var showRemaining by remember { mutableStateOf(false) }
-
     val clamped = progress.coerceIn(0f, 1f)
+    var showRemaining by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -69,50 +62,50 @@ internal fun TtsProgressSeekBar(
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
-                .height(thumbSize)
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
-                    detectTapGestures { offset ->
-                        val w = size.width.toFloat()
-                        if (w > 0f) onSeek((offset.x / w).coerceIn(0f, 1f))
+                .height(12.dp)
+                .then(
+                    if (enabled) {
+                        Modifier
+                            .pointerInput(Unit) {
+                                detectTapGestures { offset ->
+                                    val w = size.width.toFloat()
+                                    if (w > 0f) onSeek((offset.x / w).coerceIn(0f, 1f))
+                                }
+                            }
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, _ ->
+                                    val w = size.width.toFloat()
+                                    if (w > 0f) onSeek((change.position.x / w).coerceIn(0f, 1f))
+                                }
+                            }
+                    } else {
+                        Modifier
                     }
-                }
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
-                    detectDragGestures { change, _ ->
-                        val w = size.width.toFloat()
-                        if (w > 0f) onSeek((change.position.x / w).coerceIn(0f, 1f))
-                    }
-                },
+                ),
             contentAlignment = Alignment.CenterStart,
         ) {
-            val trackWidth = maxWidth
-            val thumbPx = with(density) { thumbSize.toPx() }
-            val trackPx = with(density) { trackWidth.toPx() }
-            val thumbOffsetPx = (trackPx - thumbPx).coerceAtLeast(0f) * clamped
+            val trackWidth: Dp = maxWidth
+            val thumbOffset: Dp = trackWidth * clamped
 
-            // Background track
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(barHeight)
+                    .height(3.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
             )
-            // Progress fill
             Box(
                 modifier = Modifier
-                    .width(with(density) { (trackPx * clamped).toDp() })
-                    .height(barHeight)
+                    .width(trackWidth * clamped)
+                    .height(3.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(MaterialTheme.colorScheme.primary)
             )
-            // Thumb dot
             if (enabled) {
                 Box(
                     modifier = Modifier
-                        .offset { IntOffset(thumbOffsetPx.toInt(), 0) }
-                        .size(thumbSize)
+                        .offset(x = thumbOffset)
+                        .size(12.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
                 )
@@ -134,7 +127,9 @@ internal fun TtsProgressSeekBar(
                         Modifier.pointerInput(Unit) {
                             detectTapGestures { showRemaining = !showRemaining }
                         }
-                    } else Modifier
+                    } else {
+                        Modifier
+                    }
                 ),
         )
     }
