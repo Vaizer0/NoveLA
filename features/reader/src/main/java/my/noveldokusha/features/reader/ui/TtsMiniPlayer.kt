@@ -381,7 +381,7 @@ private fun FloatingTtsMiniPlayer(
 
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = opacity),
+        color = if (!menuHidden) MaterialTheme.colorScheme.surfaceContainer.copy(alpha = opacity) else Color.Transparent,
         shadowElevation = 0.dp,
         modifier = Modifier
             .then(dragModifier)
@@ -553,7 +553,7 @@ private fun FloatingTtsMiniPlayer(
             }
 
             if (hasParagraphText) {
-                Spacer(modifier = Modifier.height(4.dp))
+                if (!menuHidden) Spacer(modifier = Modifier.height(4.dp))
                 val glowColor = MaterialTheme.colorScheme.primary
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
