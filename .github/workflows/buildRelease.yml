@@ -75,17 +75,48 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}
           draft: true
           body: |
-            # <img src="https://github.com/HnDK0/NoveLA/raw/default/screenshots/NoveLA.png" width="36" valign="middle"> NoveLA — Light Novel Reader & Parser
-            <details>
-            <summary><b>🇷🇺 Russian Version</b></summary>
-            ### [КАТЕГОРИЯ]
-            - [ОПИСАНИЕ ИЗМЕНЕНИЯ]
-            </details>
+            <h1>
+              <img src="https://raw.githubusercontent.com/Vaizer0/NoveLA/default/screenshots/NoveLA.png" alt="NoveLA" width="40" align="center">
+              NoveLA — Light Novel Reader & Parser
+            </h1>
+
             <details open>
             <summary><b>🇺🇸 English Version</b></summary>
-            ### [CATEGORY]
-            - [CHANGE DESCRIPTION]
+
+            ### ✨ Floating TTS Overlay
+            - **Double-tap** paragraph text to hide/show TTS menu controls
+            - Outer container background hides with menu on double-tap for a compact, clean look
+            - **Pinch-to-resize** the floating TTS panel width
+            - **Long-press** paragraph text to toggle glow border
+            - Paragraph background opacity now connected to the opacity slider
+            - Simplified glow to a clean border-only style (removed shadow artifact)
+            - Overall floating TTS looks cleaner, smaller, and tighter when collapsed
+
+            ### 🐛 Bug Fixes
+            - Fixed black rectangle artifact appearing behind paragraph when glow is enabled
+            - Fixed outer container not hiding properly on double-tap
+            - Fixed paragraph opacity not responding to slider
+
+            ### 🧹 Code Cleanup
+            - Removed unused imports and shadow-related code
+            - Minimal, safe change set — only floating TTS overlay modified
+
             </details>
-            ## Screenshots
-            [ССЫЛКИ НА ИЗОБРАЖЕНИЯ]
+
+            <details>
+            <summary><b>🇷🇺 Russian Version</b></summary>
+
+            ### ✨ Плавающее TTS-меню
+            - **Двойное нажатие** на текст абзаца для скрытия/показа панели управления TTS
+            - Внешний контейнер скрывается вместе с меню для компактного вида
+            - ** pinch-to-resize** — изменение ширины плавающей панели жестом
+            - **Долгое нажатие** на абзац для включения/выключения свечения
+            - Прозрачность фона абзаца теперь управляется слайдером
+            - Упрощён эффект свечения до чистой рамки
+
+            ### 🐛 Исправления
+            - Исправлен чёрный прямоугольник за абзацем при включённом свечении
+            - Исправлено скрытие внешнего контейнера при двойном нажатии
+
+            </details>
           files: release-artifacts/*.apk
