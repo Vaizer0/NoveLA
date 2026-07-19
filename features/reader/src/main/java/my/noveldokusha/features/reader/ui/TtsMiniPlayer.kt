@@ -59,7 +59,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -564,18 +563,6 @@ private fun FloatingTtsMiniPlayer(
                         .then(
                             if (glowEnabled) {
                                 Modifier
-                                    .drawBehind {
-                                        val offset = 2.dp.toPx()
-                                        val strokeWidth = 1.5.dp.toPx()
-                                        val cornerRadius = 8.dp.toPx()
-                                        drawRoundRect(
-                                            color = glowColor.copy(alpha = 0.4f),
-                                            topLeft = Offset(-offset, -offset),
-                                            size = Size(size.width + 2 * offset, size.height + 2 * offset),
-                                            cornerRadius = CornerRadius(cornerRadius + offset),
-                                            style = Stroke(strokeWidth)
-                                        )
-                                    }
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
