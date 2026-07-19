@@ -481,9 +481,6 @@ internal class ReaderTextToSpeech(
                             }
                         }
                     }
-                    Utterance.PlayState.STOPPED -> {
-                        paragraphStartTimesMap.remove(utteranceId)
-                    }
                     else -> Unit
                 }
             }
