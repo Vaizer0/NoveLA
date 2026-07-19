@@ -565,22 +565,16 @@ private fun FloatingTtsMiniPlayer(
                             if (glowEnabled) {
                                 Modifier
                                     .drawBehind {
-                                        val glowLayers = 10
-                                        val maxOffset = 10.dp.toPx()
+                                        val offset = 2.dp.toPx()
                                         val strokeWidth = 1.5.dp.toPx()
                                         val cornerRadius = 8.dp.toPx()
-                                        for (i in 1..glowLayers) {
-                                            val fraction = i.toFloat() / glowLayers
-                                            val offset = maxOffset * fraction
-                                            val alpha = 0.4f * (1f - fraction)
-                                            drawRoundRect(
-                                                color = glowColor.copy(alpha = alpha),
-                                                topLeft = Offset(-offset, -offset),
-                                                size = Size(size.width + 2 * offset, size.height + 2 * offset),
-                                                cornerRadius = CornerRadius(cornerRadius + offset),
-                                                style = Stroke(strokeWidth)
-                                            )
-                                        }
+                                        drawRoundRect(
+                                            color = glowColor.copy(alpha = 0.4f),
+                                            topLeft = Offset(-offset, -offset),
+                                            size = Size(size.width + 2 * offset, size.height + 2 * offset),
+                                            cornerRadius = CornerRadius(cornerRadius + offset),
+                                            style = Stroke(strokeWidth)
+                                        )
                                     }
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
