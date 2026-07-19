@@ -67,7 +67,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -447,54 +446,6 @@ private fun FloatingTtsMiniPlayer(
                             }
                         },
                     )
-
-                    // Compact seekable progress bar
-                    val totalSeconds = state.estimatedTotalSeconds.value.toFloat()
-                    val elapsedSeconds = state.currentPlayTime.value
-                    if (totalSeconds > 0f) {
-                        var isSeeking by remember { mutableStateOf(false) }
-                        var seekTarget by remember { mutableFloatStateOf(0f) }
-                        val displayElapsed = if (isSeeking) seekTarget else elapsedSeconds
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 0.dp),
-                        ) {
-                            Text(
-                                text = formatDurationCompact(displayElapsed.toInt()),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.width(32.dp),
-                            )
-                            Slider(
-                                value = displayElapsed,
-                                valueRange = 0f..totalSeconds,
-                                onValueChange = {
-                                    isSeeking = true
-                                    seekTarget = it
-                                },
-                                onValueChangeFinished = {
-                                    isSeeking = false
-                                    state.seekToTime(seekTarget)
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                            )
-                            Text(
-                                text = formatDurationCompact(totalSeconds.toInt()),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.width(32.dp),
-                                textAlign = TextAlign.End,
-                            )
-                        }
-                    }
 
                     if (onOpacityChange != null && showOpacitySlider) {
                         Spacer(modifier = Modifier.height(2.dp))

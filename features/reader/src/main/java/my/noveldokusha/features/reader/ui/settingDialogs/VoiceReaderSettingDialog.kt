@@ -56,8 +56,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,7 +98,6 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
-import my.noveldokusha.features.reader.ui.formatDurationCompact
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -385,54 +382,6 @@ internal fun VoiceReaderSettingDialog(
                             modifier = Modifier
                                 .size(28.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
-                        )
-                    }
-                }
-
-                // Seekable TTS progress bar
-                if (state.isThereActiveItem.value) {
-                    val totalSeconds = state.estimatedTotalSeconds.value.toFloat()
-                    val elapsedSeconds = state.currentPlayTime.value
-                    var isSeeking by remember { mutableStateOf(false) }
-                    var seekTarget by remember { mutableFloatStateOf(0f) }
-                    val displayElapsed = if (isSeeking) seekTarget else elapsedSeconds
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 0.dp),
-                    ) {
-                        Text(
-                            text = formatDurationCompact(displayElapsed.toInt()),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(40.dp),
-                        )
-                        Slider(
-                            value = displayElapsed,
-                            valueRange = 0f..totalSeconds.coerceAtLeast(1f),
-                            onValueChange = {
-                                isSeeking = true
-                                seekTarget = it
-                            },
-                            onValueChangeFinished = {
-                                isSeeking = false
-                                state.seekToTime(seekTarget)
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary,
-                                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                        )
-                        Text(
-                            text = formatDurationCompact(totalSeconds.toInt()),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(40.dp),
-                            textAlign = TextAlign.End,
                         )
                     }
                 }

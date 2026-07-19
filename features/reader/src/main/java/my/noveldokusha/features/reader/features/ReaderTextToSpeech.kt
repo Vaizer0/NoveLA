@@ -68,8 +68,6 @@ internal data class TextToSpeechSettingData(
     val originalVoiceId: State<String>,
     val setOriginalVoiceId: (String) -> Unit,
     val spokenWordRange: State<IntRange?>,
-    val seekToTime: (Float) -> Unit,
-    val currentPlayTime: State<Float>,
 )
 
 internal data class TextSynthesis(
@@ -204,28 +202,6 @@ internal class ReaderTextToSpeech(
         if (cps > 0f) (remainingCharacterCount.value / cps).toInt() else 0
     }
 
-    val currentPlayTime = derivedStateOf {
-        val itemPos = currentTextPlaying.value.itemPos
-        if (!isChapterIndexValid(itemPos.chapterIndex)) {
-            0f
-        } else {
-            val currentSpeed = manager.voiceSpeed.floatValue
-            val cps = baseCharactersPerSecond.value * currentSpeed
-            if (cps <= 0f) {
-                0f
-            } else {
-                val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
-                    .filter { it.chapterIndex == itemPos.chapterIndex }
-                var charCount = 0
-                for (p in chapterParagraphs) {
-                    if (p.chapterItemPosition >= itemPos.chapterItemPosition) break
-                    charCount += p.textToDisplay.length
-                }
-                charCount / cps
-            }
-        }
-    }
-
     val currentParagraphText = derivedStateOf {
         val itemPos = manager.currentActiveItemState.value.itemPos
         val itemIndex = indexOfReaderItem(
@@ -297,8 +273,6 @@ internal class ReaderTextToSpeech(
             onOriginalVoiceChanged()
         },
         spokenWordRange = manager.spokenWordRange,
-        seekToTime = ::seekToTime,
-        currentPlayTime = currentPlayTime,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }
@@ -899,46 +873,6 @@ internal class ReaderTextToSpeech(
         if (success) {
             setPreferredVoiceSpeed(value)
             resumeFromCurrentState()
-        }
-    }
-
-    fun seekToTime(targetSeconds: Float) {
-        val chapterIndex = currentTextPlaying.value.itemPos.chapterIndex
-        if (!isChapterIndexValid(chapterIndex)) return
-
-        val currentSpeed = manager.voiceSpeed.floatValue
-        val cps = baseCharactersPerSecond.value * currentSpeed
-        if (cps <= 0f) return
-
-        val targetCharCount = (targetSeconds * cps).toInt()
-
-        val chapterParagraphs = items.filterIsInstance<ReaderItem.Text>()
-            .filter { it.chapterIndex == chapterIndex }
-
-        var charAccumulated = 0
-        var targetItem: ReaderItem.Text? = null
-        for (p in chapterParagraphs) {
-            charAccumulated += p.textToDisplay.length
-            if (charAccumulated >= targetCharCount) {
-                targetItem = p
-                break
-            }
-        }
-        if (targetItem == null) targetItem = chapterParagraphs.lastOrNull()
-        if (targetItem == null) return
-
-        stop()
-        start()
-        coroutineScope.launch {
-            readChapterStartingFromItemIndex(
-                itemIndex = indexOfReaderItem(
-                    list = items,
-                    chapterIndex = targetItem.chapterIndex,
-                    chapterItemPosition = targetItem.chapterItemPosition,
-                ),
-                chapterIndex = chapterIndex
-            )
-            scrollToReaderItem.emit(targetItem)
         }
     }
 
