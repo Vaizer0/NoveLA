@@ -10,6 +10,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -17,6 +18,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Offset
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -133,6 +136,63 @@ internal fun TtsMiniPlayer(
         glowEnabled = glowEnabled,
         onToggleGlow = onToggleGlow,
     )
+}
+
+@Composable
+internal fun YouTubeProgressBar(
+    elapsed: Float,
+    total: Float,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val progress = if (total > 0f) (elapsed / total).coerceIn(0f, 1f) else 0f
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(20.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val w = size.width.toFloat()
+                    onSeek((offset.x / w).coerceIn(0f, 1f) * total)
+                }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    val w = size.width.toFloat()
+                    onSeek((change.position.x / w).coerceIn(0f, 1f) * total)
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        // Inactive track — thin line
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        // Active track — thin line
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress)
+                .height(3.dp)
+                .align(Alignment.CenterStart)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        // Thumb — small circle dot
+        Box(
+            modifier = Modifier
+                .offset(x = (maxWidth * progress) - 6.dp)
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+        )
+    }
 }
 
 @Composable
@@ -413,7 +473,7 @@ private fun FloatingTtsMiniPlayer(
                         },
                     )
 
-                    // Compact seekable progress bar
+                    // YouTube-like seekable progress bar
                     val totalSeconds = state.estimatedTotalSeconds.value.toFloat()
                     val elapsedSeconds = state.liveElapsedSeconds.value
                     if (totalSeconds > 0f) {
@@ -425,7 +485,7 @@ private fun FloatingTtsMiniPlayer(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 0.dp),
+                                .padding(horizontal = 4.dp),
                         ) {
                             Text(
                                 text = formatDurationCompact(displayElapsed.toInt()),
@@ -433,27 +493,14 @@ private fun FloatingTtsMiniPlayer(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.width(32.dp),
                             )
-                            val sliderInteractionSource = remember { MutableInteractionSource() }
-                            Slider(
-                                value = displayElapsed,
-                                valueRange = 0f..totalSeconds,
-                                onValueChange = {
-                                    isSeeking = true
-                                    seekTarget = it
-                                },
-                                onValueChangeFinished = {
+                            YouTubeProgressBar(
+                                elapsed = displayElapsed,
+                                total = totalSeconds,
+                                onSeek = { target ->
                                     isSeeking = false
-                                    state.seekToTime(seekTarget)
+                                    state.seekToTime(target)
                                 },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(24.dp),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                                interactionSource = sliderInteractionSource,
+                                modifier = Modifier.weight(1f),
                             )
                             Text(
                                 text = formatDurationCompact(totalSeconds.toInt()),

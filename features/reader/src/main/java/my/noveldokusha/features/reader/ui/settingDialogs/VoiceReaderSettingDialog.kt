@@ -101,6 +101,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.YouTubeProgressBar
 import my.noveldokusha.features.reader.ui.formatDurationCompact
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
@@ -162,56 +163,67 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.start_here), style = MaterialTheme.typography.labelSmall) },
-                        onClick = debouncedAction { state.playFirstVisibleItem() },
-                        modifier = Modifier.heightIn(min = 28.dp).weight(1f),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.focus), style = MaterialTheme.typography.labelSmall) },
-                        onClick = debouncedAction { state.scrollToActiveItem() },
-                        modifier = Modifier.heightIn(min = 28.dp).weight(1f),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.voices), style = MaterialTheme.typography.labelSmall) },
-                        onClick = { openVoicesDialog = !openVoicesDialog },
-                        modifier = Modifier.heightIn(min = 28.dp).weight(1f),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    if (parallelEnabled?.value == true) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    ) {
                         AssistChip(
-                            label = { Text(text = stringResource(R.string.original_voice), style = MaterialTheme.typography.labelSmall) },
-                            onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
-                            modifier = Modifier.heightIn(min = 28.dp).weight(1f),
+                            label = { Text(text = stringResource(id = R.string.start_here), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            onClick = debouncedAction { state.playFirstVisibleItem() },
+                            leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null, Modifier.size(14.dp)) },
+                            modifier = Modifier.heightIn(min = 30.dp).weight(1f),
                             colors = AssistChipDefaults.assistChipColors(
                                 leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         )
-                    }
-                    AssistChip(
-                        label = { Text(text = stringResource(R.string.saved_voices), style = MaterialTheme.typography.labelSmall) },
-                        onClick = {
-                            dropdownCustomSavedVoicesExpanded.let {
-                                it.value = !it.value
-                            }
-                        },
-                        modifier = Modifier.heightIn(min = 28.dp).weight(1f),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+                        AssistChip(
+                            label = { Text(text = stringResource(id = R.string.focus), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            onClick = debouncedAction { state.scrollToActiveItem() },
+                            leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null, Modifier.size(14.dp)) },
+                            modifier = Modifier.heightIn(min = 30.dp).weight(1f),
+                            colors = AssistChipDefaults.assistChipColors(
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                        AssistChip(
+                            label = { Text(text = stringResource(id = R.string.voices), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            onClick = { openVoicesDialog = !openVoicesDialog },
+                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
+                            modifier = Modifier.heightIn(min = 30.dp).weight(1f),
+                            colors = AssistChipDefaults.assistChipColors(
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                        if (parallelEnabled?.value == true) {
+                            AssistChip(
+                                label = { Text(text = stringResource(R.string.original_voice), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
+                                leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
+                                modifier = Modifier.heightIn(min = 30.dp).weight(1f),
+                                colors = AssistChipDefaults.assistChipColors(
+                                    leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            )
+                        }
+                        AssistChip(
+                            label = { Text(text = stringResource(R.string.saved_voices), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            onClick = {
+                                dropdownCustomSavedVoicesExpanded.let {
+                                    it.value = !it.value
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Bookmarks, null, Modifier.size(14.dp)) },
+                            modifier = Modifier.heightIn(min = 30.dp).weight(1f),
+                            colors = AssistChipDefaults.assistChipColors(
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
                     Box {
                         DropdownCustomSavedVoices(
                             expanded = dropdownCustomSavedVoicesExpanded,
@@ -392,41 +404,28 @@ internal fun VoiceReaderSettingDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 0.dp),
+                            .padding(horizontal = 4.dp),
                     ) {
                         Text(
                             text = formatDurationCompact(displayElapsed.toInt()),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(40.dp),
+                            modifier = Modifier.width(36.dp),
                         )
-                        val sliderInteractionSource = remember { MutableInteractionSource() }
-                        Slider(
-                            value = displayElapsed,
-                            valueRange = 0f..totalSeconds.coerceAtLeast(1f),
-                            onValueChange = {
-                                isSeeking = true
-                                seekTarget = it
-                            },
-                            onValueChangeFinished = {
+                        YouTubeProgressBar(
+                            elapsed = displayElapsed,
+                            total = totalSeconds.coerceAtLeast(1f),
+                            onSeek = { target ->
                                 isSeeking = false
-                                state.seekToTime(seekTarget)
+                                state.seekToTime(target)
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(24.dp),
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary,
-                                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                            interactionSource = sliderInteractionSource,
+                            modifier = Modifier.weight(1f),
                         )
                         Text(
                             text = formatDurationCompact(totalSeconds.toInt()),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(40.dp),
+                            modifier = Modifier.width(36.dp),
                             textAlign = TextAlign.End,
                         )
                     }

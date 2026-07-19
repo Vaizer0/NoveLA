@@ -205,6 +205,7 @@ internal class ReaderTextToSpeech(
     }
 
     private val _liveElapsedSeconds = mutableStateOf(0f)
+    private val _isTimerRunning = mutableStateOf(false)
     private var elapsedBase = 0f
     private var tickerJob: Job? = null
 
@@ -214,13 +215,16 @@ internal class ReaderTextToSpeech(
         tickerJob?.cancel()
         tickerJob = coroutineScope.launch(Dispatchers.Default) {
             while (true) {
-                val playState = currentTextPlaying.value.playState
-                if (playState == Utterance.PlayState.PLAYING) {
+                if (_isTimerRunning.value) {
                     _liveElapsedSeconds.value = elapsedBase + (System.currentTimeMillis() - paragraphStartTime) / 1000f
                 }
                 delay(1000)
             }
         }
+    }
+
+    private fun pauseTicker() {
+        _isTimerRunning.value = false
     }
 
     private var paragraphStartTime = 0L
@@ -248,6 +252,7 @@ internal class ReaderTextToSpeech(
             elapsedBase = charCount / cps
         }
         paragraphStartTime = System.currentTimeMillis()
+        _isTimerRunning.value = true
     }
 
     // Keep existing state for word/character counts
@@ -607,6 +612,7 @@ internal class ReaderTextToSpeech(
         try {
             Timber.d("stop()")
             state.isPlaying.value = false
+            pauseTicker()
             updateJob?.cancel()
             manager.stop()
         } finally {
