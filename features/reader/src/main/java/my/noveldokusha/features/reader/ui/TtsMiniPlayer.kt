@@ -556,14 +556,14 @@ private fun FloatingTtsMiniPlayer(
                 if (!menuHidden) Spacer(modifier = Modifier.height(4.dp))
                 val glowColor = MaterialTheme.colorScheme.primary
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = opacity),
+                    color = Color.Black.copy(alpha = opacity),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
                             if (glowEnabled) {
                                 Modifier
-                                    .shadow(10.dp, RoundedCornerShape(8.dp), ambientColor = glowColor, spotColor = glowColor)
+                                    .shadow(10.dp, RoundedCornerShape(8.dp), clip = false, ambientColor = glowColor, spotColor = glowColor)
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
