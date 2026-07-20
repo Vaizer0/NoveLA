@@ -80,8 +80,9 @@ internal class NarratorMediaControlsNotification @Inject constructor(
     val isMediaSessionReady: Boolean get() = mediaSession != null
 
     private fun refreshMediaSessionMetadata() {
+        val durationMs = (readerManager.session?.readerTextToSpeech?.chapterTotalSeconds?.value?.toLong() ?: -1L) * 1000
         val builder = MediaMetadataCompat.Builder()
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, -1L)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
         currentChapterTitle?.let { builder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, it) }
         currentBookTitle?.let { builder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, it) }
         currentCoverBitmap?.let {
@@ -160,6 +161,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
 
             val initialIsPlaying = readerSession.readerTextToSpeech.state.isPlaying.value
             val playbackState = if (initialIsPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+            val initialPosition = readerSession.readerTextToSpeech.chapterElapsedSeconds.value.toLong() * 1000
             val stateBuilder = PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
@@ -168,9 +170,11 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                     PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                     PlaybackStateCompat.ACTION_REWIND or
-                    PlaybackStateCompat.ACTION_FAST_FORWARD
+                    PlaybackStateCompat.ACTION_FAST_FORWARD or
+                    PlaybackStateCompat.ACTION_SEEK_TO
                 )
-                .setState(playbackState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, if (initialIsPlaying) 1.0f else 0.0f)
+                .setState(playbackState, initialPosition, if (initialIsPlaying) 1.0f else 0.0f)
+                .setActivePlaybackSpeed(readerSession.readerTextToSpeech.state.voiceSpeed.value)
             setPlaybackState(stateBuilder.build())
         }
         this.mediaSession = session
@@ -319,6 +323,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                         defineActions(isPlaying = isPlaying)
                     }
                     val playbackState = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+                    val position = readerSession.readerTextToSpeech.chapterElapsedSeconds.value.toLong() * 1000
                     val stateBuilder = PlaybackStateCompat.Builder()
                         .setActions(
                             PlaybackStateCompat.ACTION_PLAY or
@@ -327,9 +332,11 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                             PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                             PlaybackStateCompat.ACTION_REWIND or
-                            PlaybackStateCompat.ACTION_FAST_FORWARD
+                            PlaybackStateCompat.ACTION_FAST_FORWARD or
+                            PlaybackStateCompat.ACTION_SEEK_TO
                         )
-                        .setState(playbackState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, if (isPlaying) 1.0f else 0.0f)
+                        .setState(playbackState, position, if (isPlaying) 1.0f else 0.0f)
+                        .setActivePlaybackSpeed(readerSession.readerTextToSpeech.state.voiceSpeed.value)
                     this@NarratorMediaControlsNotification.mediaSession?.setPlaybackState(stateBuilder.build())
                 }
         }
@@ -349,6 +356,15 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     ) {
                         title = chapterTitle
                     }
+                }
+        }
+
+        // Update media session duration when chapter total changes
+        scope.launch {
+            snapshotFlow { readerSession.readerTextToSpeech.chapterTotalSeconds.value }
+                .distinctUntilChanged()
+                .collectLatest {
+                    refreshMediaSessionMetadata()
                 }
         }
 
@@ -375,27 +391,28 @@ internal class NarratorMediaControlsNotification @Inject constructor(
             combine(
                 snapshotFlow { readerSession.speakerStats.value },
                 snapshotFlow { readerSession.readerTextToSpeech.state.estimatedRemainingSeconds.value },
-            ) { stats, remainingSecs -> stats to remainingSecs }
-                .collectLatest { pair ->
-                    val stats = pair.first ?: return@collectLatest
-                    val remainingSecs = pair.second
+                snapshotFlow { readerSession.readerTextToSpeech.chapterElapsedSeconds.value },
+                snapshotFlow { readerSession.readerTextToSpeech.chapterTotalSeconds.value },
+            ) { stats, _, elapsed, total -> Triple(stats, elapsed, total) }
+                .collectLatest { triple ->
+                    val stats = triple.first ?: return@collectLatest
+                    val elapsed = triple.second
+                    val total = triple.third
                     val chapterPos = context.getString(
                         R.string.chapter_x_over_n,
                         stats.chapterIndex + 1,
                         stats.chapterCount
                     )
-                    val progress = context.getString(
-                        R.string.progress_x_percentage,
-                        stats.chapterReadPercentage()
-                    )
-                    val remainingStr = if (remainingSecs > 0) {
-                        "  •  -${formatDuration(remainingSecs)}"
-                    } else ""
+                    val progressText = if (total > 0) {
+                        "${formatDuration(elapsed)} / ${formatDuration(total)}"
+                    } else {
+                        context.getString(R.string.progress_x_percentage, stats.chapterReadPercentage())
+                    }
                     notificationsCenter.modifyNotification(
                         builder = notificationBuilder,
                         notificationId = notificationId,
                     ) {
-                        text = "$chapterPos  $progress$remainingStr"
+                        text = "$chapterPos  $progressText"
                     }
                 }
         }
