@@ -269,6 +269,7 @@ internal class ReaderSession(
 
         scope.launch {
             readerTextToSpeech.reachedChapterEndFlowChapterIndex.collect { chapterIndex ->
+                readerTextToSpeech.clearChapterTiming(chapterIndex)
                 withContext(Dispatchers.Main.immediate) {
                     runCatching {
                         if (readerChaptersLoader.isLastChapter(chapterIndex)) return@withContext
@@ -418,6 +419,9 @@ internal class ReaderSession(
         }
 
         if (chapterIndex != lastChapterIndex) {
+            if (lastChapterIndex >= 0) {
+                readerTextToSpeech.clearChapterTiming(lastChapterIndex)
+            }
             if (lastChapterIndex != -1 && readerChaptersLoader.hasLoadingError) {
                 readerChaptersLoader.hasLoadingError = false
                 Timber.d("Reset hasLoadingError on chapter change: $lastChapterIndex -> $chapterIndex")
