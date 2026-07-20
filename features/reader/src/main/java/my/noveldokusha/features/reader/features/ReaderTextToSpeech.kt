@@ -153,7 +153,7 @@ internal class ReaderTextToSpeech(
     private val baseCharactersPerSecond = mutableStateOf(13.0f)
 
     // Per-chapter timing cache: chapterIndex → list of start times (seconds)
-    private val paragraphStartTimes = mutableMapOf<Int, List<Float>>()
+    private val paragraphStartTimes = java.util.concurrent.ConcurrentHashMap<Int, List<Float>>()
 
     // Timing states
     val chapterTotalSeconds = mutableStateOf(0)
@@ -328,15 +328,15 @@ internal class ReaderTextToSpeech(
 
         // Калибровка скорости чтения в реальном времени
         coroutineScope.launch {
-            val paragraphStartTimes = mutableMapOf<String, Long>()
+            val calibrationTimestamps = mutableMapOf<String, Long>()
             manager.currentTextSpeakFlow.collect { utterance ->
                 val utteranceId = utterance.utteranceId
                 when (utterance.playState) {
                     Utterance.PlayState.PLAYING -> {
-                        paragraphStartTimes[utteranceId] = System.currentTimeMillis()
+                        calibrationTimestamps[utteranceId] = System.currentTimeMillis()
                     }
                     Utterance.PlayState.FINISHED -> {
-                        val startTime = paragraphStartTimes.remove(utteranceId)
+                        val startTime = calibrationTimestamps.remove(utteranceId)
                         if (startTime != null) {
                             val durationMs = System.currentTimeMillis() - startTime
                             val currentChapterIndex = utterance.itemPos.chapterIndex
@@ -974,6 +974,9 @@ internal class ReaderTextToSpeech(
         val success = manager.trySetVoiceSpeed(value)
         if (success) {
             setPreferredVoiceSpeed(value)
+            // Clear timing cache since speed changed
+            val currentChapter = currentTextPlaying.value.itemPos.chapterIndex
+            if (currentChapter >= 0) clearChapterTiming(currentChapter)
             resumeFromCurrentState()
         }
     }

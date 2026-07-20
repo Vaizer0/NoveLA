@@ -117,7 +117,10 @@ fun TtsProgressSeekBar(
                 modifier = Modifier
                     .size(thumbSize)
                     .align(Alignment.CenterStart)
-                    .offset(x = (displayProgress * (size.width - thumbSize.toPx())).toDp())
+                    .offset { intSize ->
+                        val offset = (displayProgress * (intSize.width - thumbSize.toPx())).toInt()
+                        androidx.compose.ui.unit.IntOffset(offset, 0)
+                    }
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
             )
