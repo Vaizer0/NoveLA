@@ -577,7 +577,7 @@ internal class ReaderTextToSpeech(
                                 chapterItemPosition = currentItemPos,
                             )
                             val item = items.getOrNull(itemIndex) as? ReaderItem.Text
-                            val charCount = spokenUnitCount(ttsText(item))
+                            val charCount = if (item != null) spokenUnitCount(ttsText(item)) else 0
 
                             if (charCount > 10 && durationMs > 200) {
                                 val measuredCps = (charCount * 1000.0f) / durationMs
