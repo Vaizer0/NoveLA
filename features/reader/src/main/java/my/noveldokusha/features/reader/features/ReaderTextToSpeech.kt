@@ -676,7 +676,7 @@ internal class ReaderTextToSpeech(
                                 if (currentSpeed > 0f) {
                                     val baseCps = measuredCps / currentSpeed
                                     if (baseCps in 3.0f..40.0f) {
-                                        baseCharactersPerSecond.value = 0.2f * baseCps + 0.8f * baseCharactersPerSecond.value
+                                        baseCharactersPerSecond.value = (0.2f * baseCps + 0.8f * baseCharactersPerSecond.value).toFloat()
                                     }
                                 }
                             }
