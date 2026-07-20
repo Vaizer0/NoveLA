@@ -100,10 +100,10 @@ jobs:
             - Bordered Surface card with comfortable spacing from voice speed slider
 
             ### ✨ Floating TTS Menu Enhancements
-            - **Action buttons** (Start Here, Focus, Voices, Saved Voices) added above paragraph text in the floating TTS menu, matching the reader's main TTS menu style
+            - Existing floating TTS controls (Close, chapter badge, prev/play/next, tune, text toggle) wrapped in a **bordered Surface card** for a cleaner, more organized look
+            - **Horizontally scrollable** on narrow screens so all controls remain accessible
             - **Paragraph-based progress %** — replaced duration timer with percentage based on current paragraph position within the chapter (e.g., 41%)
             - **Dynamic paragraph resizing** — padding adapts based on text length for better readability
-            - Removed redundant "Start Here" from floating control bar (now in action buttons row)
 
             ### 🐛 Bug Fixes
             - Fixed black rectangle artifact appearing behind paragraph when glow is enabled
@@ -126,6 +126,10 @@ jobs:
             - **Долгое нажатие** на абзац для включения/выключения свечения
             - Прозрачность фона абзаца теперь управляется слайдером
             - Упрощён эффект свечения до чистой рамки
+            - Элементы управления плавающим TTS (закрытие, номер главы, prev/play/next, настройки, текст) обёрнуты в **рамку Surface** для более чистого вида
+            - **Горизонтальная прокрутка** на узких экранах для доступа ко всем кнопкам
+            - **Процент главы** — вместо таймера показывается процент текущего абзаца в главе (например, 41%)
+            - **Динамический размер абзаца** — отступы адаптируются в зависимости от длины текста
 
             ### ✨ Компактная панель TTS
             - **Start Here, Focus, Voices и Saved Voices** теперь расположены в одну горизонтальную строку (иконки и подписи сохранены), чтобы плеер оставался маленьким и компактным
