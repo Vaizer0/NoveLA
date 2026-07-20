@@ -52,7 +52,6 @@ internal fun FloatingTtsOverlayContent(
         TtsMiniPlayer(
             state = state,
             onClose = onClose,
-            onStartHere = { state.playFirstVisibleItem() },
             showParagraphText = showText,
             opacity = opacity,
             onDrag = onDrag,

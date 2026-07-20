@@ -510,6 +510,8 @@ private fun ViewsPreview(
         customSavedVoices = rememberMutableStateOf(value = listOf()),
         chapterWordCount = remember { mutableStateOf(0) },
         remainingWordCount = remember { mutableStateOf(0) },
+        totalParagraphsInChapter = remember { mutableStateOf(0) },
+        currentParagraphIndex = remember { mutableStateOf(0) },
         estimatedWpm = remember { mutableStateOf(0) },
         estimatedTotalSeconds = remember { mutableStateOf(0) },
         estimatedRemainingSeconds = remember { mutableStateOf(0) },
