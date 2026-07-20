@@ -57,3 +57,4 @@ package-lock.json
 package.json
 repomix.config.json
 /.codegraph
+.superpowers/
