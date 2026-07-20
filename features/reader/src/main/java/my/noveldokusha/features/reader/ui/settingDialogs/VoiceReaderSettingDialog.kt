@@ -156,12 +156,12 @@ internal fun VoiceReaderSettingDialog(
                 )
 
                 Row(
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 2.dp)
+                        .padding(horizontal = 4.dp)
                 ) {
                     CompactControlChip(
                         label = stringResource(id = R.string.start_here),
