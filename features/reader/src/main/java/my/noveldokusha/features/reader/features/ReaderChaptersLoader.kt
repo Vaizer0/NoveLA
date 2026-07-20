@@ -112,18 +112,11 @@ internal class ReaderChaptersLoader(
         val item = items.getOrNull(itemIndex) ?: return null
         if (item !is ReaderItem.Position) return null
         val chapterStats = chaptersStats[chapterUrl] ?: return null
-        val textItems = items.filterIsInstance<ReaderItem.Text>()
-            .filter { it.chapterIndex == item.chapterIndex }
-        val textItemPosition = textItems.count {
-            it.chapterItemPosition <= item.chapterItemPosition
-        }
         return ReadingChapterPosStats(
             chapterIndex = item.chapterIndex,
             chapterCount = orderedChapters.size,
             chapterItemPosition = item.chapterItemPosition,
             chapterItemsCount = chapterStats.itemsCount,
-            chapterTextItemPosition = textItemPosition,
-            chapterTextItemsCount = textItems.size,
             chapterTitle = chapterStats.chapter.title,
             chapterUrl = chapterStats.chapter.url,
         )
@@ -138,18 +131,11 @@ internal class ReaderChaptersLoader(
         val item = items.getOrNull(itemIndex) ?: return null
         if (item !is ReaderItem.Position) return null
         val chapterStats = chaptersStats[item.chapterUrl] ?: return null
-        val textItems = items.filterIsInstance<ReaderItem.Text>()
-            .filter { it.chapterIndex == chapterIndex }
-        val textItemPosition = textItems.count {
-            it.chapterItemPosition <= chapterItemPosition
-        }
         return ReadingChapterPosStats(
             chapterIndex = chapterIndex,
             chapterCount = orderedChapters.size,
             chapterItemPosition = item.chapterItemPosition,
             chapterItemsCount = chapterStats.itemsCount,
-            chapterTextItemPosition = textItemPosition,
-            chapterTextItemsCount = textItems.size,
             chapterTitle = chapterStats.chapter.title,
             chapterUrl = chapterStats.chapter.url,
         )
