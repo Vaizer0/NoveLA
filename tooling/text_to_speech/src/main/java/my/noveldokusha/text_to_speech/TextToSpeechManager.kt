@@ -7,6 +7,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ interface Utterance<T : Utterance<T>> {
     fun copyWithState(playState: PlayState): T
 }
 
+@Immutable
 data class VoiceData(
     val id: String,
     val language: String,

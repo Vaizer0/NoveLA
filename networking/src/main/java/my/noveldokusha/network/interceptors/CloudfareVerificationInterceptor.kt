@@ -85,8 +85,8 @@ internal class CloudFareVerificationInterceptor(
     private val appPreferences: AppPreferences
 ) : Interceptor {
 
-    private val lock = ReentrantLock()
-    private val resolvedDomains = mutableSetOf<String>()
+    private val hostLocks = ConcurrentHashMap<String, ReentrantLock>()
+    private val resolvedDomains = ConcurrentHashMap<String, Boolean>()
     private val manualAttempts = ConcurrentHashMap<String, Int>()
 
     private val ALL_CF_MARKERS = listOf(
@@ -146,17 +146,19 @@ internal class CloudFareVerificationInterceptor(
 
         Timber.d( "CF: Challenge detected. URL: ${bufferedRequest.url}")
 
-        return lock.withLock {
-            response.close()
+        response.close()
 
-            val siteUrl = bufferedRequest.url.toString()
-            val host = bufferedRequest.url.host
+        val siteUrl = bufferedRequest.url.toString()
+        val host = bufferedRequest.url.host
+
+        val hostLock = hostLocks.getOrPut(host) { ReentrantLock() }
+        return hostLock.withLock {
             val cookieManager = CookieManager.getInstance()
                 ?: throw WebViewCookieManagerInitializationFailedException()
             val userAgent = resolveUserAgent(appPreferences)
 
             val existingCookie = cookieManager.getCookie(siteUrl) ?: ""
-            if (resolvedDomains.contains(host) || existingCookie.contains("cf_clearance")) {
+            if (resolvedDomains.containsKey(host) || existingCookie.contains("cf_clearance")) {
                 Timber.d( "CF: cf_clearance cached for $host, trying direct retry")
                 val retryRequest = bufferedRequest.newBuilder()
                     .header("Cookie", formatCookies(existingCookie))
@@ -204,7 +206,7 @@ internal class CloudFareVerificationInterceptor(
         val firstRetryResponse = chain.proceed(firstRetryRequest)
 
         if (isNotCloudflare(firstRetryResponse, peekBodySafe(firstRetryResponse))) {
-            resolvedDomains.add(host)
+            resolvedDomains[host] = true
             manualAttempts.remove(host)
             CloudflareBypassSignal.notifyBypassCompleted(host)
             return firstRetryResponse
@@ -242,7 +244,7 @@ internal class CloudFareVerificationInterceptor(
             throw CloudfareVerificationBypassFailedException()
         }
 
-        resolvedDomains.add(host)
+        resolvedDomains[host] = true
         manualAttempts.remove(host)
         CloudflareBypassSignal.notifyBypassCompleted(host)
         return finalResponse

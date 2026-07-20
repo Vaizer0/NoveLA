@@ -1,8 +1,10 @@
 package my.noveldokusha.text_translator.domain
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import java.util.Locale
 
+@Immutable
 data class TranslationModelState(
     val language: String,
     val available: Boolean,
