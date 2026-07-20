@@ -3,6 +3,7 @@ package my.noveldokusha.features.reader.ui.settingDialogs
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -155,41 +157,56 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 2.dp)
+                // Action buttons (Start Here, Focus, Voices, Saved Voices) in a single horizontal row
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    CompactControlChip(
-                        label = stringResource(id = R.string.start_here),
-                        icon = Icons.Filled.CenterFocusWeak,
-                        onClick = debouncedAction { state.playFirstVisibleItem() },
-                    )
-                    CompactControlChip(
-                        label = stringResource(id = R.string.focus),
-                        icon = Icons.Filled.CenterFocusStrong,
-                        onClick = debouncedAction { state.scrollToActiveItem() },
-                    )
-                    CompactControlChip(
-                        label = stringResource(id = R.string.voices),
-                        icon = Icons.Filled.RecordVoiceOver,
-                        onClick = { openVoicesDialog = !openVoicesDialog },
-                    )
-                    if (parallelEnabled?.value == true) {
-                        CompactControlChip(
-                            label = stringResource(R.string.original_voice),
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        TtsActionButton(
+                            label = stringResource(id = R.string.start_here),
+                            icon = Icons.Filled.CenterFocusWeak,
+                            onClick = debouncedAction { state.playFirstVisibleItem() },
+                        )
+                        TtsActionButton(
+                            label = stringResource(id = R.string.focus),
+                            icon = Icons.Filled.CenterFocusStrong,
+                            onClick = debouncedAction { state.scrollToActiveItem() },
+                        )
+                        TtsActionButton(
+                            label = stringResource(id = R.string.voices),
                             icon = Icons.Filled.RecordVoiceOver,
-                            onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
+                            onClick = { openVoicesDialog = !openVoicesDialog },
+                        )
+                        if (parallelEnabled?.value == true) {
+                            TtsActionButton(
+                                label = stringResource(R.string.original_voice),
+                                icon = Icons.Filled.RecordVoiceOver,
+                                onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
+                            )
+                        }
+                        TtsActionButton(
+                            label = stringResource(id = R.string.saved_voices),
+                            icon = Icons.Filled.Bookmarks,
+                            onClick = {
+                                dropdownCustomSavedVoicesExpanded.let {
+                                    it.value = !it.value
+                                }
+                            },
                         )
                     }
-                    CompactControlChip(
-                        label = stringResource(id = R.string.saved_voices),
-                        icon = Icons.Filled.Bookmarks,
-                        onClick = { dropdownCustomSavedVoicesExpanded.value = !dropdownCustomSavedVoicesExpanded.value },
-                    )
                 }
 
                 Box {
@@ -361,7 +378,7 @@ internal fun VoiceReaderSettingDialog(
 }
 
 @Composable
-private fun CompactControlChip(
+private fun TtsActionButton(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
