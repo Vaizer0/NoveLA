@@ -318,7 +318,11 @@ internal class ReaderSession(
                 .filter { savePositionMode.value == SavePositionMode.Speaking }
                 .collect {
                     val item = it.itemPos
-                    if (item !is ReaderItem.ParagraphLocation) return@collect
+                    // Only spoken BODY paragraphs should mark a chapter's
+                    // start/end as seen — images also implement ParagraphLocation
+                    // and would wrongly mark a chapter read when an illustration
+                    // happens to be the first/last item.
+                    if (item !is ReaderItem.Body) return@collect
                     when (item.location) {
                         ReaderItem.Location.FIRST -> markChapterStartAsSeen(chapterUrl = item.chapterUrl)
                         ReaderItem.Location.LAST -> markChapterEndAsSeen(chapterUrl = item.chapterUrl)
@@ -425,7 +429,10 @@ internal class ReaderSession(
             lastChapterIndex = chapterIndex
             preloadTriggeredForChapter = -1
             scope.launch {
-                readerChaptersLoader.pruneItems(chapterIndex)
+                readerChaptersLoader.pruneItems(
+                    chapterIndex,
+                    keepChapterIndex = ttsCurrentChapterIndex,
+                )
             }
         }
 

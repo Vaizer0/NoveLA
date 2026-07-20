@@ -862,14 +862,27 @@ internal class ReaderChaptersLoader(
         }
     }
 
-    suspend fun pruneItems(currentChapterIndex: Int) = withContext(Dispatchers.Main.immediate) {
+    suspend fun pruneItems(
+        currentChapterIndex: Int,
+        keepChapterIndex: Int = -1,
+    ) = withContext(Dispatchers.Main.immediate) {
         if (readerState == ReaderState.LOADING) {
             pendingPruneChapterIndex = currentChapterIndex
             return@withContext
         }
 
-        val minKeep = (currentChapterIndex - WINDOW_BEHIND).coerceAtLeast(0)
-        val maxKeep = currentChapterIndex + WINDOW_AHEAD
+        // Never prune the chapter the TTS engine is currently speaking, even if it
+        // falls outside the reading window (e.g. the user scrolled away while a
+        // resumed chapter keeps playing). Evicting it would empty `items` of the
+        // spoken chapter and break TTS navigation/seek for the active item.
+        val minKeep = minOf(
+            (currentChapterIndex - WINDOW_BEHIND).coerceAtLeast(0),
+            if (keepChapterIndex >= 0) (keepChapterIndex - WINDOW_BEHIND).coerceAtLeast(0) else Int.MAX_VALUE,
+        )
+        val maxKeep = maxOf(
+            currentChapterIndex + WINDOW_AHEAD,
+            if (keepChapterIndex >= 0) keepChapterIndex + WINDOW_AHEAD else Int.MIN_VALUE,
+        )
 
         val toRemoveChapterIndices = mutableSetOf<Int>()
         val toRemoveItems = mutableListOf<ReaderItem>()
@@ -886,7 +899,10 @@ internal class ReaderChaptersLoader(
         val listView = readerViewHandlersActions.listView
         val savedFirstVisible = listView?.firstVisiblePosition ?: 0
         val savedTop = listView?.getChildAt(0)?.top ?: 0
-        val removedCountFront = toRemoveItems.count { it.chapterIndex < currentChapterIndex }
+        // Count items removed strictly before the kept window's lower bound so the
+        // list-view selection stays correct even when the TTS chapter (kept via
+        // keepChapterIndex) sits below the reading chapter.
+        val removedCountFront = toRemoveItems.count { it.chapterIndex < minKeep }
 
         items.removeAll(toRemoveItems)
         readerViewHandlersActions.doForceUpdateListViewState()
