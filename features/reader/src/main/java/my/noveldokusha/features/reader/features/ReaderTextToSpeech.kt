@@ -1045,7 +1045,7 @@ internal class ReaderTextToSpeech(
         val startTimes = mutableListOf<Float>()
         var currentTime = 0f
         val speed = manager.voiceSpeed.floatValue
-        val pauseMs = 500f / speed
+        val pauseMs = 400f / speed
         val pauseSec = pauseMs / 1000f
 
         for ((index, item) in chapterItems.withIndex()) {
