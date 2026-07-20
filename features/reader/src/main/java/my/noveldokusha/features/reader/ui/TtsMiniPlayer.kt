@@ -314,8 +314,13 @@ private fun FloatingTtsMiniPlayer(
     glowEnabled: Boolean = false,
     onToggleGlow: (() -> Unit)? = null,
 ) {
-    val total = state.estimatedTotalSeconds.value
-    val remaining = state.estimatedRemainingSeconds.value
+    // Prefer the measured chapter timings (ttsTotalSeconds/ttsElapsedSeconds) for the
+    // seek bar so the bar fill matches the elapsed/total clock. Fall back to the older
+    // whole-chapter word-count estimates only when measured timings are not ready.
+    val ttsTotal = state.ttsTotalSeconds.value
+    val ttsElapsed = state.ttsElapsedSeconds.value
+    val total = if (ttsTotal > 0) ttsTotal else state.estimatedTotalSeconds.value
+    val remaining = if (ttsTotal > 0) (ttsTotal - ttsElapsed).coerceAtLeast(0) else state.estimatedRemainingSeconds.value
     val progress = if (total > 0) (total - remaining).toFloat() / total else 0f
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),

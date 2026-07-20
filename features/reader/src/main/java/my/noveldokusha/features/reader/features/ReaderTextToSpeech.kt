@@ -354,6 +354,16 @@ internal class ReaderTextToSpeech(
     private fun syncElapsedToActiveParagraph() {
         if (activeTimings.isEmpty()) return
         val itemPos = state.currentActiveItemState.value.itemPos
+        // The chapter title is not spoken body, so it contributes no elapsed time.
+        // Force it to 0 (never seed from a stale value, e.g. after a pause/resume
+        // mid-title) so the counter stays coherent while the title is read.
+        if (itemPos is ReaderItem.Title) {
+            _ttsElapsedSeconds.value = 0
+            elapsedAnchorMs = System.currentTimeMillis()
+            elapsedAnchorSeconds = 0
+            updateTitleActiveFlag()
+            return
+        }
         val match = activeTimings.firstOrNull { it.itemPos == itemPos }
             ?: activeTimings.firstOrNull { it.itemPos.chapterIndex == itemPos.chapterIndex }
         val startMs = match?.startMs ?: 0L
@@ -452,6 +462,11 @@ internal class ReaderTextToSpeech(
 
         // Update the elapsed counter to reflect the seek position.
         _ttsElapsedSeconds.value = (targetMs / 1000).toInt().coerceAtMost(_ttsTotalSeconds.value)
+        // Re-anchor the tick timer to the seeked position so the next 250ms tick
+        // continues from this baseline instead of the pre-seek anchor (which would
+        // otherwise make the counter drift/jump immediately after a seek).
+        elapsedAnchorMs = System.currentTimeMillis()
+        elapsedAnchorSeconds = _ttsElapsedSeconds.value
 
         // Scroll reader to show the target paragraph in view.
         coroutineScope.launch {
@@ -1084,6 +1099,7 @@ internal class ReaderTextToSpeech(
                     state.isLoadingChapter.value = false
                 }
                 readChapterStartingFromStart(nextChapterIndex)
+                syncElapsedToActiveParagraph()
                 scrollToChapterTop.emit(nextChapterIndex)
             }
         } finally {
@@ -1123,6 +1139,7 @@ internal class ReaderTextToSpeech(
                     state.isLoadingChapter.value = false
                 }
                 readChapterStartingFromStart(targetChapterIndex)
+                syncElapsedToActiveParagraph()
                 scrollToChapterTop.emit(targetChapterIndex)
             }
         } finally {
@@ -1189,6 +1206,12 @@ internal class ReaderTextToSpeech(
             if (isChapterIndexValid(chapterIndex)) {
                 recomputeChapterTimings(chapterIndex)
                 timingsChapterIndex = chapterIndex
+                // Keep the elapsed counter consistent with the freshly recomputed
+                // (speed-adjusted) total even when playback is currently paused, so a
+                // later play() does not anchor to a stale value that exceeds the new total.
+                if (!state.isPlaying.value) {
+                    syncElapsedToActiveParagraph()
+                }
             }
             resumeFromCurrentState()
         }
