@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -137,13 +136,11 @@ private fun MiniPlayerControls(
     onClose: () -> Unit,
     chapterCurrentNumber: Int,
     chaptersCount: Int,
-    animatedProgress: Float,
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
     playButtonSize: Dp = 40.dp,
     playIconSize: Dp = 36.dp,
-    progressHeight: Dp = 8.dp,
     extraAction: @Composable () -> Unit = {},
     trailingAction: @Composable () -> Unit = {},
 ) {
@@ -181,22 +178,6 @@ private fun MiniPlayerControls(
                     modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
                 )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-                .height(progressHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
         }
 
         Surface(
@@ -382,13 +363,11 @@ private fun FloatingTtsMiniPlayer(
                             onClose = onClose,
                             chapterCurrentNumber = chapterCurrentNumber,
                             chaptersCount = chaptersCount,
-                            animatedProgress = animatedProgress,
                             buttonSize = buttonSize,
                             iconSize = iconSize,
                             iconCircleSize = iconCircleSize,
                             playButtonSize = playButtonSize,
-                        playIconSize = playIconSize,
-                        progressHeight = progressHeight,
+                            playIconSize = playIconSize,
                         extraAction = {
                             if (onOpacityChange != null) {
                                 IconButton(
