@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -117,10 +118,7 @@ fun TtsProgressSeekBar(
                 modifier = Modifier
                     .size(thumbSize)
                     .align(Alignment.CenterStart)
-                    .offset { intSize ->
-                        val offset = (displayProgress * (intSize.width - thumbSize.toPx())).toInt()
-                        androidx.compose.ui.unit.IntOffset(offset, 0)
-                    }
+                    .offset(x = (displayProgress * 100).dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
             )

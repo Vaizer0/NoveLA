@@ -519,6 +519,11 @@ private fun ViewsPreview(
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
         spokenWordRange = remember { mutableStateOf(null) },
+        chapterTotalSeconds = remember { mutableStateOf(0) },
+        chapterElapsedSeconds = remember { mutableStateOf(0) },
+        isCalculatingDuration = remember { mutableStateOf(true) },
+        showRemainingTime = remember { mutableStateOf(false) },
+        seekToPosition = {},
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(

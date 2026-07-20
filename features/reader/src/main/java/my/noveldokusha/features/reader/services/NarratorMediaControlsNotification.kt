@@ -335,8 +335,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                             PlaybackStateCompat.ACTION_FAST_FORWARD or
                             PlaybackStateCompat.ACTION_SEEK_TO
                         )
-                        .setState(playbackState, position, if (isPlaying) 1.0f else 0.0f)
-                        .setActivePlaybackSpeed(readerSession.readerTextToSpeech.state.voiceSpeed.value)
+                .setState(playbackState, position, if (isPlaying) 1.0f else 0.0f)
                     this@NarratorMediaControlsNotification.mediaSession?.setPlaybackState(stateBuilder.build())
                 }
         }
