@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -158,6 +160,7 @@ internal fun VoiceReaderSettingDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 2.dp)
                 ) {
                     CompactControlChip(
@@ -187,37 +190,38 @@ internal fun VoiceReaderSettingDialog(
                         icon = Icons.Filled.Bookmarks,
                         onClick = { dropdownCustomSavedVoicesExpanded.value = !dropdownCustomSavedVoicesExpanded.value },
                     )
-                    Box {
-                        DropdownCustomSavedVoices(
-                            expanded = dropdownCustomSavedVoicesExpanded,
-                            list = state.customSavedVoices.value,
-                            currentVoice = state.activeVoice.value,
-                            currentVoiceSpeed = state.voiceSpeed.value,
-                            currentVoicePitch = state.voicePitch.value,
-                            onPredefinedSelected = {
-                                state.setVoiceSpeed(it.speed)
-                                state.setVoicePitch(it.pitch)
-                                state.setVoiceId(it.voiceId)
-                            },
-                            setCustomSavedVoices = state.setCustomSavedVoices
-                        )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.activeVoice.value,
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = state.setVoiceId,
-                            isDialogOpen = openVoicesDialog,
-                            setDialogOpen = { openVoicesDialog = it }
-                        )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = { state.setOriginalVoiceId(it) },
-                            isDialogOpen = openOriginalVoiceDialog,
-                            setDialogOpen = { openOriginalVoiceDialog = it }
-                        )
-                    }
+                }
+
+                Box {
+                    DropdownCustomSavedVoices(
+                        expanded = dropdownCustomSavedVoicesExpanded,
+                        list = state.customSavedVoices.value,
+                        currentVoice = state.activeVoice.value,
+                        currentVoiceSpeed = state.voiceSpeed.value,
+                        currentVoicePitch = state.voicePitch.value,
+                        onPredefinedSelected = {
+                            state.setVoiceSpeed(it.speed)
+                            state.setVoicePitch(it.pitch)
+                            state.setVoiceId(it.voiceId)
+                        },
+                        setCustomSavedVoices = state.setCustomSavedVoices
+                    )
+                    VoiceSelectorDialog(
+                        availableVoices = state.availableVoices,
+                        currentVoice = state.activeVoice.value,
+                        inputTextFilter = rememberSaveable { mutableStateOf("") },
+                        setVoice = state.setVoiceId,
+                        isDialogOpen = openVoicesDialog,
+                        setDialogOpen = { openVoicesDialog = it }
+                    )
+                    VoiceSelectorDialog(
+                        availableVoices = state.availableVoices,
+                        currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
+                        inputTextFilter = rememberSaveable { mutableStateOf("") },
+                        setVoice = { state.setOriginalVoiceId(it) },
+                        isDialogOpen = openOriginalVoiceDialog,
+                        setDialogOpen = { openOriginalVoiceDialog = it }
+                    )
                 }
 
                 if (floatingTtsState != null) {
