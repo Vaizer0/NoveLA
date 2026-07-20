@@ -27,11 +27,13 @@ internal data class ReadingChapterPosStats(
     val chapterCount: Int,
     val chapterItemPosition: Int,
     val chapterItemsCount: Int,
+    val chapterTextItemPosition: Int,
+    val chapterTextItemsCount: Int,
     val chapterTitle: String,
     val chapterUrl: String,
 )
 
-internal fun ReadingChapterPosStats.chapterReadPercentage() = when (chapterItemsCount) {
+internal fun ReadingChapterPosStats.chapterReadPercentage() = when (chapterTextItemsCount) {
     0 -> 100f
-    else -> ceil((chapterItemPosition.toFloat() / chapterItemsCount.toFloat()) * 100f)
+    else -> ceil((chapterTextItemPosition.toFloat() / chapterTextItemsCount.toFloat()) * 100f)
 }
