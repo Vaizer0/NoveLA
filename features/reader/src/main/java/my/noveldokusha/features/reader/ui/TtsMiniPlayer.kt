@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
-import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
@@ -83,7 +82,6 @@ import my.noveldokusha.features.reader.features.TextToSpeechSettingData
 internal fun TtsMiniPlayer(
     state: TextToSpeechSettingData,
     onClose: () -> Unit,
-    onStartHere: () -> Unit,
     chapterCurrentNumber: Int = 0,
     chaptersCount: Int = 0,
     showParagraphText: Boolean = false,
@@ -112,7 +110,6 @@ internal fun TtsMiniPlayer(
         onClose = onClose,
         onDrag = onDrag,
         onDragEnd = onDragEnd,
-        onStartHere = onStartHere,
         chapterCurrentNumber = chapterCurrentNumber,
         chaptersCount = chaptersCount,
         panelWidth = panelWidth,
@@ -136,7 +133,6 @@ internal fun TtsMiniPlayer(
 private fun MiniPlayerControls(
     state: TextToSpeechSettingData,
     onClose: () -> Unit,
-    onStartHere: () -> Unit,
     chapterCurrentNumber: Int,
     chaptersCount: Int,
     animatedProgress: Float,
@@ -282,21 +278,6 @@ private fun MiniPlayerControls(
 
         extraAction()
 
-        IconButton(
-            onClick = debouncedAction(waitMillis = 100, action = onStartHere),
-            enabled = state.isThereActiveItem.value,
-            modifier = Modifier.size(buttonSize)
-        ) {
-            Icon(
-                Icons.Filled.CenterFocusWeak,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(iconCircleSize)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
-            )
-        }
-
         trailingAction()
     }
 }
@@ -309,7 +290,6 @@ private fun FloatingTtsMiniPlayer(
     onClose: () -> Unit,
     onDrag: ((Float, Float) -> Unit)?,
     onDragEnd: (() -> Unit)?,
-    onStartHere: () -> Unit,
     chapterCurrentNumber: Int,
     chaptersCount: Int,
     panelWidth: Float,
@@ -398,7 +378,6 @@ private fun FloatingTtsMiniPlayer(
                     MiniPlayerControls(
                         state = state,
                         onClose = onClose,
-                        onStartHere = onStartHere,
                         chapterCurrentNumber = chapterCurrentNumber,
                         chaptersCount = chaptersCount,
                         animatedProgress = animatedProgress,
@@ -622,9 +601,22 @@ private fun FloatingTtsMiniPlayer(
                             }
                         }
                 ) {
+                    val textLen = displayText.length.coerceAtLeast(1)
+                    val dynHPad = when {
+                        textLen < 60 -> 14.dp
+                        textLen < 150 -> 12.dp
+                        textLen < 300 -> 10.dp
+                        else -> 8.dp
+                    }
+                    val dynVPad = when {
+                        textLen < 60 -> 8.dp
+                        textLen < 150 -> 6.dp
+                        textLen < 300 -> 5.dp
+                        else -> 4.dp
+                    }
                     if (isBothMode) {
                         val spokenRange = state.spokenWordRange.value
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = dynHPad, vertical = dynVPad)) {
                             if (ttsHighlightEnabled && spokenRange != null) {
                                 HighlightedText(
                                     text = ttsParagraph,
@@ -658,14 +650,14 @@ private fun FloatingTtsMiniPlayer(
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    .padding(horizontal = dynHPad, vertical = dynVPad),
                             )
                         } else {
                             Text(
                                 text = displayText,
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = paragraphFontSize),
                                 color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                modifier = Modifier.padding(horizontal = dynHPad, vertical = dynVPad)
                             )
                         }
                     }
