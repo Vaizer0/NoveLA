@@ -96,6 +96,14 @@ jobs:
             - **Start Here, Focus, Voices, and Saved Voices** now sit together on a single horizontal row (original icons + labels preserved), so the player stays small and minimal instead of spreading out
             - Controls are evenly spaced left-to-right and grouped neatly as a tidy player strip with comfortable tap size and no wasted padding
             - **Floating TTS** and **Show Outside App** toggles moved into their own single horizontal row directly below the control buttons
+            - Horizontally scrollable on narrow screens so all buttons remain accessible
+            - Bordered Surface card with comfortable spacing from voice speed slider
+
+            ### ✨ Floating TTS Menu Enhancements
+            - **Action buttons** (Start Here, Focus, Voices, Saved Voices) added above paragraph text in the floating TTS menu, matching the reader's main TTS menu style
+            - **Paragraph-based progress %** — replaced duration timer with percentage based on current paragraph position within the chapter (e.g., 41%)
+            - **Dynamic paragraph resizing** — padding adapts based on text length for better readability
+            - Removed redundant "Start Here" from floating control bar (now in action buttons row)
 
             ### 🐛 Bug Fixes
             - Fixed black rectangle artifact appearing behind paragraph when glow is enabled
