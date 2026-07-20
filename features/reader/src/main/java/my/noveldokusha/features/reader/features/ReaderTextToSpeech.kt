@@ -149,7 +149,10 @@ internal class ReaderTextToSpeech(
     val scrollToReaderItem = MutableSharedFlow<ReaderItem>()
     val scrollToChapterTop = MutableSharedFlow<ChapterIndex>()
 
-    private val baseCharactersPerSecond = mutableStateOf(13.0f)
+    // Initial speech rate in "duration units" per second (words/pauses), before the
+    // live calibration locks in a measured rate. ~3.0 matches typical English TTS
+    // (≈150 wpm) including punctuation pauses; recalibrated after the first chapters.
+    private val baseCharactersPerSecond = mutableStateOf(3.0f)
 
     val chapterWordCount = derivedStateOf {
         val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
@@ -287,43 +290,105 @@ internal class ReaderTextToSpeech(
         '\u2212', // minus (Unicode minus sign)
     )
 
-    // Count the speech "units" Android Google TTS actually utters for a piece of text,
-    // following how the engine parses text rather than how it is written:
-    //  - invisible Unicode is removed entirely (silent).
-    //  - a leading run of punctuation/symbols (before the first letter/digit) is read
-    //    aloud symbol-by-symbol, each counting as one unit (e.g. "..." -> "dot dot dot").
-    //  - letters and digits count as one unit each.
-    //  - spoken symbols (~ * + −) count as one unit each, anywhere.
-    //  - every other character (normal sentence punctuation, whitespace, ASCII hyphen,
-    //    em dash, = _ # etc.) is ignored — TTS treats it only as a pause, which adds
-    //    negligible duration.
+    // Normal sentence punctuation that is NOT spoken (only a pause). Excludes the
+    // spoken symbols above and the leading-run symbols handled separately.
+    private val SILENT_PUNCTUATION = setOf(
+        ',', '.', '?', '!', ':', ';',
+        '(', ')', '[', ']', '{', '}',
+        '"', '\'', '`',
+        '\u2018', '\u2019', '\u201C', '\u201D', // ‘ ’ “ ”
+        '\u2026', // ellipsis …
+        '-', // ASCII hyphen (word-word, E-)
+        '\u2010', // non-breaking hyphen
+        '\u2013', // en dash
+        '\u2014', // em dash — (attached to words => 0 units)
+        '=', '_', '#', '@', '%', '&', '/', '\\', '|', '<', '>', '^',
+    )
+
+    /**
+     * Speech "units" Android Google TTS actually utters, following its parsing rules:
+     *  1. start from the exact final text sent to TTS;
+     *  2. strip invisible Unicode (U+2060 U+2063 U+200B U+200C U+200D);
+     *  3. a leading run of punctuation/symbols (before first letter/digit) is read
+     *     aloud symbol-by-symbol, each counting as one unit;
+     *  4. inside normal text, punctuation counts as 0 unless it is a spoken symbol;
+     *  5. a normal word = 1 unit, a number chunk = 1 unit;
+     *  6. ~ * + − count as 1 unit (between letters/numbers too); ASCII hyphen - and
+     *     em dash — attached to words count as 0.
+     */
     private fun spokenUnitCount(text: String): Int {
         val cleaned = buildString {
             for (ch in text) if (ch !in INVISIBLE_CHARS) append(ch)
         }
         if (cleaned.isEmpty()) return 0
+
+        // Split into whitespace-delimited tokens (words / number chunks / symbol runs).
+        val tokens = cleaned.split(WHITESPACE).filter { it.isNotEmpty() }
+
         var count = 0
-        var seenContent = false
-        for (ch in cleaned) {
-            when {
-                ch.isLetterOrDigit() -> {
-                    seenContent = true
-                    count++
+        var firstContentTokenSeen = false
+        for (token in tokens) {
+            if (!firstContentTokenSeen) {
+                // Leading run: every symbol is spoken individually.
+                var allPunct = true
+                for (ch in token) {
+                    if (ch.isLetterOrDigit()) {
+                        allPunct = false
+                        break
+                    }
                 }
-                ch in SPOKEN_SYMBOLS -> {
-                    seenContent = true
-                    count++
+                if (allPunct) {
+                    for (ch in token) count++
+                    continue
                 }
-                !seenContent -> {
-                    // Leading punctuation run: spoken individually.
-                    count++
-                }
-                else -> {
-                    // Punctuation/whitespace inside or after text: silent pause only.
-                }
+                firstContentTokenSeen = true
             }
+            // Regular token.
+            count += countToken(token)
         }
         return count
+    }
+
+    private fun countToken(token: String): Int {
+        // A token made entirely of digits => one number chunk.
+        if (token.all { it.isDigit() }) return 1
+        // Count letters and spoken symbols; everything else in the token is 0.
+        var units = 0
+        for (ch in token) {
+            when {
+                ch.isLetter() -> units++
+                ch in SPOKEN_SYMBOLS -> units++
+                // ASCII hyphen / em dash / silent punctuation attached => 0.
+                else -> Unit
+            }
+        }
+        return if (units > 0) units else 0
+    }
+
+    /**
+     * Extra "units" contributed by the pauses TTS inserts at punctuation. Punctuation
+     * is not spoken (0 units), but it DOES consume real time; folding the pause into the
+     * same unit basis keeps the live CPS calibration consistent with the estimate and
+     * prevents the timer from finishing before the audio.
+     */
+    private fun punctuationPauseUnits(text: String): Double {
+        var units = 0.0
+        for (ch in text) {
+            when (ch) {
+                '.', '!', '?' -> units += 0.45
+                ',', ';', ':' -> units += 0.18
+                '\u2026' -> units += 0.35 // …
+                '\u2014', '\u2013' -> units += 0.25 // — –
+                '"', '\'', '\u2018', '\u2019', '\u201C', '\u201D' -> units += 0.1
+                else -> Unit
+            }
+        }
+        return units
+    }
+
+    /** Total duration units for a paragraph: spoken content + punctuation pauses. */
+    private fun durationUnits(text: String): Double {
+        return spokenUnitCount(text).toDouble() + punctuationPauseUnits(text)
     }
 
     private fun recomputeChapterTimings(chapterIndex: Int) {
@@ -332,6 +397,7 @@ internal class ReaderTextToSpeech(
         activeCps = cps
         val paragraphs = items
             .filterIsInstance<ReaderItem.Text>()
+            .filter { it !is ReaderItem.Title } // chapter titles are not spoken body
             .filter { it.chapterIndex == chapterIndex }
             .filter { !isOnlyDecorators(ttsText(it)) }
         if (paragraphs.isEmpty()) {
@@ -343,15 +409,15 @@ internal class ReaderTextToSpeech(
         val timings = ArrayList<ParagraphTiming>(paragraphs.size)
         var accMs = 0L
         paragraphs.forEachIndexed { index, item ->
-            val cleaned = spokenUnitCount(ttsText(item))
+            val units = durationUnits(ttsText(item))
             timings.add(
                 ParagraphTiming(
                     itemPos = item,
                     startMs = accMs,
-                    cleanedCharCount = cleaned,
+                    cleanedCharCount = units.toInt(),
                 )
             )
-            val durationMs = if (cleaned > 0) (cleaned * 1000.0 / cps).toLong() else 0L
+            val durationMs = if (units > 0.0) (units * 1000.0 / cps).toLong() else 0L
             accMs += durationMs
             if (index < paragraphs.lastIndex) accMs += INTER_PARAGRAPH_GAP_MS
         }
@@ -489,6 +555,13 @@ internal class ReaderTextToSpeech(
 
     val onSeekToPosition: (Float) -> Unit = { fraction -> seekToFraction(fraction) }
 
+    /** Seek to an absolute position (ms) — used by the lockscreen/notification scrubber. */
+    fun seekToPositionMs(positionMs: Long) {
+        val total = _ttsTotalSeconds.value
+        if (total <= 0) return
+        seekToFraction((positionMs.coerceAtLeast(0L) / (total * 1000L).toFloat()).coerceIn(0f, 1f))
+    }
+
     val state = TextToSpeechSettingData(
         isPlaying = mutableStateOf(false),
         isLoadingChapter = mutableStateOf(false),
@@ -595,9 +668,9 @@ internal class ReaderTextToSpeech(
                                 chapterItemPosition = currentItemPos,
                             )
                             val item = items.getOrNull(itemIndex) as? ReaderItem.Text
-                            val charCount = if (item != null) spokenUnitCount(ttsText(item)) else 0
+                            val charCount = if (item != null) durationUnits(ttsText(item)) else 0.0
 
-                            if (charCount > 10 && durationMs > 200) {
+                            if (charCount > 10.0 && durationMs > 200) {
                                 val measuredCps = (charCount * 1000.0f) / durationMs
                                 val currentSpeed = manager.voiceSpeed.floatValue
                                 if (currentSpeed > 0f) {
@@ -969,12 +1042,13 @@ internal class ReaderTextToSpeech(
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
                 if (itemIndex <= -1 || itemIndex >= items.lastIndex) return@launch
+                // Jump to the next spoken body paragraph (titles are not in the timings).
                 val nextItemRelativeIndex = items
                     .subList(itemIndex + 1, items.size)
-                    .indexOfFirst { it is ReaderItem.Position }
+                    .indexOfFirst { it is ReaderItem.Body }
                 if (nextItemRelativeIndex == -1) return@launch
                 val nextItemIndex = itemIndex + 1 + nextItemRelativeIndex
-                val nextItem = items.getOrNull(nextItemIndex) as? ReaderItem.Position ?: return@launch
+                val nextItem = items.getOrNull(nextItemIndex) as? ReaderItem.Body ?: return@launch
                 stop()
                 start()
                 readChapterStartingFromItemIndex(
@@ -1002,13 +1076,15 @@ internal class ReaderTextToSpeech(
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
                 if (itemIndex <= 0) return@launch
+                // Jump to the previous spoken body paragraph (titles are not in the timings).
                 val previousItemRelativeIndex = items
                     .subList(0, itemIndex)
                     .asReversed()
-                    .indexOfFirst { it is ReaderItem.Position }
+                    .indexOfFirst { it is ReaderItem.Body }
                 if (previousItemRelativeIndex == -1) return@launch
                 val previousItemIndex = itemIndex - 1 - previousItemRelativeIndex
-                val previousItem = items.getOrNull(previousItemIndex) ?: return@launch
+                val previousItem = items.getOrNull(previousItemIndex) as? ReaderItem.Body
+                    ?: return@launch
                 stop()
                 start()
                 readChapterStartingFromItemIndex(

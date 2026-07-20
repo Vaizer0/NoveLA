@@ -84,4 +84,8 @@ internal class NarratorMediaControlsCallback(
     override fun onFastForward() {
         readerTextToSpeech.state.playNextItem()
     }
+
+    override fun onSeekTo(pos: Long) {
+        readerTextToSpeech.seekToPositionMs(pos)
+    }
 }

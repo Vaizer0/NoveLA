@@ -175,7 +175,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                     PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                     PlaybackStateCompat.ACTION_REWIND or
-                    PlaybackStateCompat.ACTION_FAST_FORWARD
+                    PlaybackStateCompat.ACTION_FAST_FORWARD or
+                    PlaybackStateCompat.ACTION_SEEK_TO
                 )
                 .setState(playbackState, initialElapsedMs, if (initialIsPlaying) 1.0f else 0.0f)
             setPlaybackState(stateBuilder.build())
@@ -336,7 +337,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                             PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                             PlaybackStateCompat.ACTION_REWIND or
-                            PlaybackStateCompat.ACTION_FAST_FORWARD
+                            PlaybackStateCompat.ACTION_FAST_FORWARD or
+                            PlaybackStateCompat.ACTION_SEEK_TO
                         )
                         .setState(playbackState, elapsedMs, if (isPlaying) 1.0f else 0.0f)
                     this@NarratorMediaControlsNotification.mediaSession?.setPlaybackState(stateBuilder.build())
@@ -363,7 +365,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                             PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                             PlaybackStateCompat.ACTION_REWIND or
-                            PlaybackStateCompat.ACTION_FAST_FORWARD
+                            PlaybackStateCompat.ACTION_FAST_FORWARD or
+                            PlaybackStateCompat.ACTION_SEEK_TO
                         )
                         .setState(
                             if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
