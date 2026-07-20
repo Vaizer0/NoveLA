@@ -98,6 +98,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.TtsProgressSeekBar
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -385,6 +386,16 @@ internal fun VoiceReaderSettingDialog(
                         )
                     }
                 }
+
+                TtsProgressSeekBar(
+                    elapsed = state.chapterElapsedSeconds.value,
+                    total = state.chapterTotalSeconds.value,
+                    isCalculating = state.isCalculatingDuration.value,
+                    showRemaining = state.showRemainingTime.value,
+                    onSeek = { state.seekToPosition(it) },
+                    onToggleRemaining = { state.showRemainingTime.value = !state.showRemainingTime.value },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
         }
 
