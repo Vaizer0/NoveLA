@@ -269,14 +269,16 @@ internal class ReaderTextToSpeech(
     val ttsSeekEnabled: State<Boolean> = _ttsSeekEnabled
 
     private fun cleanCharsForDuration(text: String): Int {
-        // Characters that Android TTS ignores or that carry no spoken time:
-        // decorative separators and pure whitespace. We count only "real" characters.
+        // Android TTS speaks letters, digits and most punctuation (punctuation also
+        // adds short pauses). Only truly decorative/unspoken box-drawing symbols are
+        // excluded — whitespace is kept because word/line breaks still consume time
+        // and over-excluding characters made the predicted total too short (TTS ran
+        // 3-7s past the timer). Counting more characters yields a more accurate total.
         val cleaned = cleanTextForTts(text)
         if (cleaned.isBlank()) return 0
         var count = 0
         for (ch in cleaned) {
-            if (ch.isWhitespace()) continue
-            if (ch in "-=*_~+#·•°─┿") continue
+            if (ch in "·•°─┿") continue
             count++
         }
         return count

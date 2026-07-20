@@ -80,8 +80,13 @@ internal class NarratorMediaControlsNotification @Inject constructor(
     val isMediaSessionReady: Boolean get() = mediaSession != null
 
     private fun refreshMediaSessionMetadata() {
+        val ttsTotalSeconds = readerManager.session?.readerTextToSpeech?.state?.ttsTotalSeconds?.value ?: 0
+        val durationMs = (ttsTotalSeconds * 1000L).coerceAtLeast(0L)
         val builder = MediaMetadataCompat.Builder()
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, -1L)
+            .putLong(
+                MediaMetadataCompat.METADATA_KEY_DURATION,
+                if (durationMs > 0L) durationMs else -1L
+            )
         currentChapterTitle?.let { builder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, it) }
         currentBookTitle?.let { builder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, it) }
         currentCoverBitmap?.let {
@@ -160,6 +165,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
 
             val initialIsPlaying = readerSession.readerTextToSpeech.state.isPlaying.value
             val playbackState = if (initialIsPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+            val initialElapsedMs = (readerSession.readerTextToSpeech.state.ttsElapsedSeconds.value * 1000L)
+                .coerceAtLeast(0L)
             val stateBuilder = PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
@@ -170,7 +177,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     PlaybackStateCompat.ACTION_REWIND or
                     PlaybackStateCompat.ACTION_FAST_FORWARD
                 )
-                .setState(playbackState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, if (initialIsPlaying) 1.0f else 0.0f)
+                .setState(playbackState, initialElapsedMs, if (initialIsPlaying) 1.0f else 0.0f)
             setPlaybackState(stateBuilder.build())
         }
         this.mediaSession = session
@@ -318,6 +325,8 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     ) {
                         defineActions(isPlaying = isPlaying)
                     }
+                    val elapsedMs = (readerSession.readerTextToSpeech.state.ttsElapsedSeconds.value * 1000L)
+                        .coerceAtLeast(0L)
                     val playbackState = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
                     val stateBuilder = PlaybackStateCompat.Builder()
                         .setActions(
@@ -329,7 +338,38 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                             PlaybackStateCompat.ACTION_REWIND or
                             PlaybackStateCompat.ACTION_FAST_FORWARD
                         )
-                        .setState(playbackState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, if (isPlaying) 1.0f else 0.0f)
+                        .setState(playbackState, elapsedMs, if (isPlaying) 1.0f else 0.0f)
+                    this@NarratorMediaControlsNotification.mediaSession?.setPlaybackState(stateBuilder.build())
+                }
+        }
+
+        // Keep the lockscreen/notification media progress bar in sync with the TTS
+        // elapsed/total duration. Updates the chapter duration metadata and the
+        // playback position so the scrubber reflects real reading progress.
+        scope.launch {
+            combine(
+                snapshotFlow { readerSession.readerTextToSpeech.state.ttsElapsedSeconds.value },
+                snapshotFlow { readerSession.readerTextToSpeech.state.ttsTotalSeconds.value },
+            ) { elapsed, total -> elapsed to total }
+                .collectLatest { (elapsed, total) ->
+                    refreshMediaSessionMetadata()
+                    val isPlaying = readerSession.readerTextToSpeech.state.isPlaying.value
+                    val elapsedMs = (elapsed * 1000L).coerceAtLeast(0L)
+                    val stateBuilder = PlaybackStateCompat.Builder()
+                        .setActions(
+                            PlaybackStateCompat.ACTION_PLAY or
+                            PlaybackStateCompat.ACTION_PAUSE or
+                            PlaybackStateCompat.ACTION_STOP or
+                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                            PlaybackStateCompat.ACTION_REWIND or
+                            PlaybackStateCompat.ACTION_FAST_FORWARD
+                        )
+                        .setState(
+                            if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                            elapsedMs,
+                            if (isPlaying) 1.0f else 0.0f
+                        )
                     this@NarratorMediaControlsNotification.mediaSession?.setPlaybackState(stateBuilder.build())
                 }
         }
