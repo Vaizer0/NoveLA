@@ -417,11 +417,15 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         scope.launch {
             combine(
                 snapshotFlow { readerSession.speakerStats.value },
+                snapshotFlow { readerSession.readerTextToSpeech.state.ttsTotalSeconds.value },
+                snapshotFlow { readerSession.readerTextToSpeech.state.ttsElapsedSeconds.value },
                 snapshotFlow { readerSession.readerTextToSpeech.state.estimatedRemainingSeconds.value },
-            ) { stats, remainingSecs -> stats to remainingSecs }
-                .collectLatest { pair ->
-                    val stats = pair.first ?: return@collectLatest
-                    val remainingSecs = pair.second
+                ) { stats, ttsTotal, ttsElapsed, estimatedRemaining ->
+                val measuredRemaining = if (ttsTotal > 0) (ttsTotal - ttsElapsed).coerceAtLeast(0) else estimatedRemaining
+                stats to measuredRemaining
+            }
+                .collectLatest { (stats, remainingSecs) ->
+                    if (stats == null) return@collectLatest
                     val chapterPos = context.getString(
                         R.string.chapter_x_over_n,
                         stats.chapterIndex + 1,

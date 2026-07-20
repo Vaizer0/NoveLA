@@ -41,7 +41,7 @@ internal fun indexOfReaderItemBinarySearch(
     var low = 0
     var high = list.lastIndex
 
-    while (low < high) {
+    while (low <= high) {
         var mid = low + (high - low) / 2
         val it = list[mid]
         val compare = when (val compareChapter = it.chapterIndex.compareTo(chapterIndex)) {
