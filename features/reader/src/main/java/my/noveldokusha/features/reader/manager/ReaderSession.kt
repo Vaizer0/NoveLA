@@ -351,7 +351,6 @@ internal class ReaderSession(
             readerTextToSpeech.readChapterStartingFromItemIndex(
                 itemIndex = itemIndex,
                 chapterIndex = startingItem.chapterIndex,
-                syncElapsedToStart = true
             )
         }
     }
