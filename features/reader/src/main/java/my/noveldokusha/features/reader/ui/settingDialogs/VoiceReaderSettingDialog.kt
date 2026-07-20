@@ -3,7 +3,6 @@ package my.noveldokusha.features.reader.ui.settingDialogs
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,10 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -102,7 +98,6 @@ import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VoiceReaderSettingDialog(
     state: TextToSpeechSettingData,
@@ -158,65 +153,39 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                Row(
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp)
                 ) {
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.start_here)) },
+                    CompactControlChip(
+                        label = stringResource(id = R.string.start_here),
+                        icon = Icons.Filled.CenterFocusWeak,
                         onClick = debouncedAction { state.playFirstVisibleItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
                     )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.focus)) },
+                    CompactControlChip(
+                        label = stringResource(id = R.string.focus),
+                        icon = Icons.Filled.CenterFocusStrong,
                         onClick = debouncedAction { state.scrollToActiveItem() },
-                        leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
                     )
-                    AssistChip(
-                        label = { Text(text = stringResource(id = R.string.voices)) },
+                    CompactControlChip(
+                        label = stringResource(id = R.string.voices),
+                        icon = Icons.Filled.RecordVoiceOver,
                         onClick = { openVoicesDialog = !openVoicesDialog },
-                        leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
                     )
                     if (parallelEnabled?.value == true) {
-                        AssistChip(
-                            label = { Text(text = stringResource(R.string.original_voice)) },
+                        CompactControlChip(
+                            label = stringResource(R.string.original_voice),
+                            icon = Icons.Filled.RecordVoiceOver,
                             onClick = { openOriginalVoiceDialog = !openOriginalVoiceDialog },
-                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 30.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
                         )
                     }
-                    AssistChip(
-                        label = { Text(text = stringResource(R.string.saved_voices)) },
-                        onClick = {
-                            dropdownCustomSavedVoicesExpanded.let {
-                                it.value = !it.value
-                            }
-                        },
-                        leadingIcon = { Icon(Icons.Filled.Bookmarks, null, Modifier.size(14.dp)) },
-                        modifier = Modifier.heightIn(min = 30.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
+                    CompactControlChip(
+                        label = stringResource(id = R.string.saved_voices),
+                        icon = Icons.Filled.Bookmarks,
+                        onClick = { dropdownCustomSavedVoicesExpanded.value = !dropdownCustomSavedVoicesExpanded.value },
                     )
                     Box {
                         DropdownCustomSavedVoices(
@@ -252,47 +221,42 @@ internal fun VoiceReaderSettingDialog(
                 }
 
                 if (floatingTtsState != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.tts_floating),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Switch(
-                                    checked = floatingTtsState.isEnabled.value,
-                                    onCheckedChange = { floatingTtsState.isEnabled.value = it }
-                                )
-                            }
-                            HorizontalDivider()
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.tts_floating_show_outside_app),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Switch(
-                                    checked = floatingTtsState.showOutsideApp.value,
-                                    onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
-                                    enabled = floatingTtsState.isEnabled.value
-                                )
-                            }
+                            Text(
+                                text = stringResource(R.string.tts_floating),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Switch(
+                                checked = floatingTtsState.isEnabled.value,
+                                onCheckedChange = { floatingTtsState.isEnabled.value = it }
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.tts_floating_show_outside_app),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Switch(
+                                checked = floatingTtsState.showOutsideApp.value,
+                                onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
+                                enabled = floatingTtsState.isEnabled.value
+                            )
                         }
                     }
                 }
@@ -390,6 +354,31 @@ internal fun VoiceReaderSettingDialog(
 
 
     }
+}
+
+@Composable
+private fun CompactControlChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AssistChip(
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+        },
+        onClick = onClick,
+        leadingIcon = { Icon(icon, null, Modifier.size(16.dp)) },
+        modifier = modifier.heightIn(min = 32.dp),
+        colors = AssistChipDefaults.assistChipColors(
+            leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
