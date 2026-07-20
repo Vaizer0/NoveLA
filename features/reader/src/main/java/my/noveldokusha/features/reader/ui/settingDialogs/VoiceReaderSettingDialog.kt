@@ -168,12 +168,12 @@ internal fun VoiceReaderSettingDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         TtsActionButton(
                             label = stringResource(id = R.string.start_here),
@@ -395,8 +395,7 @@ private fun TtsActionButton(
         onClick = onClick,
         leadingIcon = { Icon(icon, null, Modifier.size(16.dp)) },
         modifier = modifier
-            .heightIn(min = 34.dp)
-            .padding(horizontal = 4.dp),
+            .heightIn(min = 34.dp),
         colors = AssistChipDefaults.assistChipColors(
             leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
