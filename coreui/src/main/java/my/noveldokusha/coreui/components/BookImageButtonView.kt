@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -52,7 +53,7 @@ fun BookImageButtonView(
     modifier: Modifier = Modifier,
     bookTitlePosition: BookTitlePosition = BookTitlePosition.Inside,
     indication: Indication = LocalIndication.current,
-    interactionSource: MutableInteractionSource = MutableInteractionSource(),
+    interactionSource: MutableInteractionSource? = null,
     sourceIcon: (@Composable () -> Unit)? = null,
     sourceText: String? = null,
     topLeftBadge: (@Composable () -> Unit)? = null,
@@ -61,6 +62,8 @@ fun BookImageButtonView(
     onClick: () -> Unit,
     onLongClick: () -> Unit = { },
 ) {
+    val rememberedInteractionSource = remember { MutableInteractionSource() }
+    val effectiveInteractionSource = interactionSource ?: rememberedInteractionSource
     Column(modifier = modifier.testTag(AppTestTags.BOOK_IMAGE_BUTTON_VIEW)) {
         Box(
             Modifier
@@ -77,7 +80,7 @@ fun BookImageButtonView(
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .combinedClickable(
                         indication = indication,
-                        interactionSource = interactionSource,
+                        interactionSource = effectiveInteractionSource,
                         role = Role.Button,
                         onClick = onClick,
                         onLongClick = onLongClick

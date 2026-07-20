@@ -80,7 +80,7 @@ fun ExpandableText(
                 modifier = modifier
                     .ifCase(target.isNotBlank()) { animateContentSize() }
                     .clickable(
-                        interactionSource = MutableInteractionSource(),
+                        interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = { expanded = !expanded }
                     )
