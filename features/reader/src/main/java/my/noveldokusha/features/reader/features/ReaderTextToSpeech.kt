@@ -268,18 +268,60 @@ internal class ReaderTextToSpeech(
     val ttsElapsedSeconds: State<Int> = _ttsElapsedSeconds
     val ttsSeekEnabled: State<Boolean> = _ttsSeekEnabled
 
-    private fun cleanCharsForDuration(text: String): Int {
-        // Android TTS speaks letters, digits and most punctuation (punctuation also
-        // adds short pauses). Only truly decorative/unspoken box-drawing symbols are
-        // excluded — whitespace is kept because word/line breaks still consume time
-        // and over-excluding characters made the predicted total too short (TTS ran
-        // 3-7s past the timer). Counting more characters yields a more accurate total.
-        val cleaned = cleanTextForTts(text)
-        if (cleaned.isBlank()) return 0
+    // Invisible Unicode characters: silent, contribute no speech duration.
+    private val INVISIBLE_CHARS = setOf(
+        '\u200B', // zero width space
+        '\u200C', // zero width non-joiner
+        '\u200D', // zero width joiner
+        '\u2060', // word joiner
+        '\u2063', // invisible separator
+        '\uFEFF', // zero width no-break space / BOM
+        '\u00AD', // soft hyphen
+    )
+
+    // Symbols Android Google TTS reads aloud individually (independent of position).
+    private val SPOKEN_SYMBOLS = setOf(
+        '~', // tilde
+        '*', // asterisk
+        '+', // plus
+        '\u2212', // minus (Unicode minus sign)
+    )
+
+    // Count the speech "units" Android Google TTS actually utters for a piece of text,
+    // following how the engine parses text rather than how it is written:
+    //  - invisible Unicode is removed entirely (silent).
+    //  - a leading run of punctuation/symbols (before the first letter/digit) is read
+    //    aloud symbol-by-symbol, each counting as one unit (e.g. "..." -> "dot dot dot").
+    //  - letters and digits count as one unit each.
+    //  - spoken symbols (~ * + −) count as one unit each, anywhere.
+    //  - every other character (normal sentence punctuation, whitespace, ASCII hyphen,
+    //    em dash, = _ # etc.) is ignored — TTS treats it only as a pause, which adds
+    //    negligible duration.
+    private fun spokenUnitCount(text: String): Int {
+        val cleaned = buildString {
+            for (ch in text) if (ch !in INVISIBLE_CHARS) append(ch)
+        }
+        if (cleaned.isEmpty()) return 0
         var count = 0
+        var seenContent = false
         for (ch in cleaned) {
-            if (ch in "·•°─┿") continue
-            count++
+            when {
+                ch.isLetterOrDigit() -> {
+                    seenContent = true
+                    count++
+                }
+                ch in SPOKEN_SYMBOLS -> {
+                    seenContent = true
+                    count++
+                }
+                !seenContent -> {
+                    // Leading punctuation run: spoken individually.
+                    count++
+                }
+                else -> {
+                    // Punctuation/whitespace inside or after text: silent pause only.
+                }
+            }
         }
         return count
     }
@@ -301,7 +343,7 @@ internal class ReaderTextToSpeech(
         val timings = ArrayList<ParagraphTiming>(paragraphs.size)
         var accMs = 0L
         paragraphs.forEachIndexed { index, item ->
-            val cleaned = cleanCharsForDuration(ttsText(item))
+            val cleaned = spokenUnitCount(ttsText(item))
             timings.add(
                 ParagraphTiming(
                     itemPos = item,
@@ -535,8 +577,7 @@ internal class ReaderTextToSpeech(
                                 chapterItemPosition = currentItemPos,
                             )
                             val item = items.getOrNull(itemIndex) as? ReaderItem.Text
-                            val text = item?.textToDisplay ?: ""
-                            val charCount = text.length
+                            val charCount = spokenUnitCount(ttsText(item))
 
                             if (charCount > 10 && durationMs > 200) {
                                 val measuredCps = (charCount * 1000.0f) / durationMs
