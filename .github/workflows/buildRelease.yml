@@ -92,6 +92,11 @@ jobs:
             - Simplified glow to a clean border-only style (removed shadow artifact)
             - Overall floating TTS looks cleaner, smaller, and tighter when collapsed
 
+            ### ✨ Compact TTS Player Strip
+            - **Start Here, Focus, Voices, and Saved Voices** now sit together on a single horizontal row (original icons + labels preserved), so the player stays small and minimal instead of spreading out
+            - Controls are evenly spaced left-to-right and grouped neatly as a tidy player strip with comfortable tap size and no wasted padding
+            - **Floating TTS** and **Show Outside App** toggles moved into their own single horizontal row directly below the control buttons
+
             ### 🐛 Bug Fixes
             - Fixed black rectangle artifact appearing behind paragraph when glow is enabled
             - Fixed outer container not hiding properly on double-tap
@@ -113,6 +118,11 @@ jobs:
             - **Долгое нажатие** на абзац для включения/выключения свечения
             - Прозрачность фона абзаца теперь управляется слайдером
             - Упрощён эффект свечения до чистой рамки
+
+            ### ✨ Компактная панель TTS
+            - **Start Here, Focus, Voices и Saved Voices** теперь расположены в одну горизонтальную строку (иконки и подписи сохранены), чтобы плеер оставался маленьким и компактным
+            - Кнопки равномерно распределены слева направо и аккуратно сгруппированы в компактную панель с удобной зоной нажатия без лишних отступов
+            - Переключатели **Floating TTS** и **Show Outside App** перенесены в отдельную горизонтальную строку под кнопками управления
 
             ### 🐛 Исправления
             - Исправлен чёрный прямоугольник за абзацем при включённом свечении
