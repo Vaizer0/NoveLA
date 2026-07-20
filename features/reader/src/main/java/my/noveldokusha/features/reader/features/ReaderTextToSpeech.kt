@@ -71,6 +71,7 @@ internal data class TextToSpeechSettingData(
     val ttsElapsedSeconds: State<Int>,
     val ttsTotalSeconds: State<Int>,
     val ttsSeekEnabled: State<Boolean>,
+    val ttsTitleActive: State<Boolean>,
     val onSeekToPosition: (Float) -> Unit,
 )
 
@@ -261,6 +262,7 @@ internal class ReaderTextToSpeech(
     private var activeTimings: List<ParagraphTiming> = emptyList()
     private var activeCps: Float = 13.0f
     private var timingsChapterIndex: Int = -1
+    private val _ttsTitleActive = mutableStateOf(false)
     // Wall-clock anchor used to drive the elapsed timer tick.
     private var elapsedAnchorMs: Long = 0L
     private var elapsedAnchorSeconds: Int = 0
@@ -271,6 +273,7 @@ internal class ReaderTextToSpeech(
     val ttsTotalSeconds: State<Int> = _ttsTotalSeconds
     val ttsElapsedSeconds: State<Int> = _ttsElapsedSeconds
     val ttsSeekEnabled: State<Boolean> = _ttsSeekEnabled
+    val ttsTitleActive: State<Boolean> = _ttsTitleActive
 
     // Invisible Unicode characters: silent, contribute no speech duration.
     private val INVISIBLE_CHARS = setOf(
@@ -480,6 +483,17 @@ internal class ReaderTextToSpeech(
         // Re-anchor the wall-clock timer so the counter continues from this position.
         elapsedAnchorMs = System.currentTimeMillis()
         elapsedAnchorSeconds = _ttsElapsedSeconds.value
+        updateTitleActiveFlag()
+    }
+
+    /**
+     * Reflect whether the currently active item is the chapter title. While the title is
+     * being read there is no spoken body yet, so the seeker shows a "calculating
+     * duration" hint instead of a misleading 0:00 / total.
+     */
+    private fun updateTitleActiveFlag() {
+        val item = state.currentActiveItemState.value.itemPos
+        _ttsTitleActive.value = item is ReaderItem.Title
     }
 
     /**
@@ -608,6 +622,7 @@ internal class ReaderTextToSpeech(
         ttsElapsedSeconds = ttsElapsedSeconds,
         ttsTotalSeconds = ttsTotalSeconds,
         ttsSeekEnabled = ttsSeekEnabled,
+        ttsTitleActive = ttsTitleActive,
         onSeekToPosition = onSeekToPosition,
     )
 
@@ -651,12 +666,19 @@ internal class ReaderTextToSpeech(
                 when (utterance.playState) {
                     Utterance.PlayState.PLAYING -> {
                         paragraphStartTimes[utteranceId] = System.currentTimeMillis()
+                        // Keep the title-active flag in sync on every paragraph transition
+                        // (not just chapter starts) so the "calculating duration" hint
+                        // clears as soon as the first body paragraph begins.
+                        updateTitleActiveFlag()
                         // When a new chapter starts playing, lock in its timings.
                         val ci = utterance.itemPos.chapterIndex
                         if (isChapterIndexValid(ci) && ci != timingsChapterIndex && state.isPlaying.value) {
                             recomputeChapterTimings(ci)
                             timingsChapterIndex = ci
-                            _ttsElapsedSeconds.value = 0
+                            // Sync elapsed to the actual starting paragraph (resume mid-chapter
+                            // or the title -> 0). Do NOT blindly reset to 0.
+                            syncElapsedToActiveParagraph()
+                            updateTitleActiveFlag()
                             startElapsedTimer()
                         }
                     }
@@ -1047,10 +1069,11 @@ internal class ReaderTextToSpeech(
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
                 if (itemIndex <= -1 || itemIndex >= items.lastIndex) return@launch
-                // Jump to the next spoken body paragraph (titles are not in the timings).
+                // Jump to the next spoken body paragraph within THIS chapter (titles are not
+                // in the timings, and we must not cross into the next chapter).
                 val nextItemRelativeIndex = items
                     .subList(itemIndex + 1, items.size)
-                    .indexOfFirst { it is ReaderItem.Body }
+                    .indexOfFirst { it is ReaderItem.Body && it.chapterIndex == currentItemPos.chapterIndex }
                 if (nextItemRelativeIndex == -1) return@launch
                 val nextItemIndex = itemIndex + 1 + nextItemRelativeIndex
                 val nextItem = items.getOrNull(nextItemIndex) as? ReaderItem.Body ?: return@launch
@@ -1081,11 +1104,11 @@ internal class ReaderTextToSpeech(
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
                 if (itemIndex <= 0) return@launch
-                // Jump to the previous spoken body paragraph (titles are not in the timings).
+                // Jump to the previous spoken body paragraph within THIS chapter.
                 val previousItemRelativeIndex = items
                     .subList(0, itemIndex)
                     .asReversed()
-                    .indexOfFirst { it is ReaderItem.Body }
+                    .indexOfFirst { it is ReaderItem.Body && it.chapterIndex == currentItemPos.chapterIndex }
                 if (previousItemRelativeIndex == -1) return@launch
                 val previousItemIndex = itemIndex - 1 - previousItemRelativeIndex
                 val previousItem = items.getOrNull(previousItemIndex) as? ReaderItem.Body

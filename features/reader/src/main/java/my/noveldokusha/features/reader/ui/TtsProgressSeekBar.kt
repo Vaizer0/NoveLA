@@ -45,6 +45,7 @@ internal fun TtsProgressSeekBar(
     enabled: Boolean,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    statusText: String? = null,
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     var showRemaining by remember { mutableStateOf(false) }
@@ -54,7 +55,7 @@ internal fun TtsProgressSeekBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = formatDuration(elapsedSeconds),
+            text = statusText ?: formatDuration(elapsedSeconds),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 8.dp),
@@ -114,7 +115,7 @@ internal fun TtsProgressSeekBar(
         }
 
         Text(
-            text = if (showRemaining && totalSeconds > 0) {
+            text = statusText ?: if (showRemaining && totalSeconds > 0) {
                 "-${formatDuration((totalSeconds - elapsedSeconds).coerceAtLeast(0))}"
             } else {
                 formatDuration(totalSeconds)

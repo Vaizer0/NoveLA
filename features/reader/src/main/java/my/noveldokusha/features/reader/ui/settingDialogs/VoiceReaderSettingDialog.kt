@@ -414,6 +414,7 @@ internal fun VoiceReaderSettingDialog(
                         totalSeconds = ttsProgressTotal,
                         enabled = state.ttsSeekEnabled.value,
                         onSeek = state.onSeekToPosition,
+                        statusText = if (state.ttsTitleActive.value) "calculating…" else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp, vertical = 6.dp),

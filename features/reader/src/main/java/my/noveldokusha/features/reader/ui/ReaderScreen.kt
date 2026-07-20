@@ -522,6 +522,7 @@ private fun ViewsPreview(
         ttsElapsedSeconds = remember { mutableStateOf(0) },
         ttsTotalSeconds = remember { mutableStateOf(0) },
         ttsSeekEnabled = remember { mutableStateOf(false) },
+        ttsTitleActive = remember { mutableStateOf(false) },
         onSeekToPosition = {},
     )
 

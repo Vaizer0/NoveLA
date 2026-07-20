@@ -146,6 +146,7 @@ private fun MiniPlayerControls(
     total: Int = 0,
     seekEnabled: Boolean = false,
     onSeek: (Float) -> Unit = {},
+    statusText: String? = null,
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
@@ -278,6 +279,7 @@ private fun MiniPlayerControls(
                 totalSeconds = total,
                 enabled = seekEnabled,
                 onSeek = onSeek,
+                statusText = statusText,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
@@ -392,6 +394,7 @@ private fun FloatingTtsMiniPlayer(
                         total = state.ttsTotalSeconds.value,
                         seekEnabled = state.ttsSeekEnabled.value,
                         onSeek = state.onSeekToPosition,
+                        statusText = if (state.ttsTitleActive.value) "calculating…" else null,
                         buttonSize = buttonSize,
                         iconSize = iconSize,
                         iconCircleSize = iconCircleSize,
