@@ -403,7 +403,11 @@ internal class ReaderTextToSpeech(
             .filterIsInstance<ReaderItem.Text>()
             .filter { it !is ReaderItem.Title } // chapter titles are not spoken body
             .filter { it.chapterIndex == chapterIndex }
-            .filter { !isOnlyDecorators(ttsText(it)) }
+            // Keep every paragraph that still has content after the same decorative
+            // stripping used for speaking: special-char-only paragraphs (e.g. """ or ...)
+            // are spoken aloud by TTS ("back quote back quote…" / "dot dot dot") and
+            // must be included in the duration; only truly blank lines are skipped.
+            .filter { cleanTextForTts(ttsText(it)).isNotBlank() }
         if (paragraphs.isEmpty()) {
             activeTimings = emptyList()
             _ttsTotalSeconds.value = 0
