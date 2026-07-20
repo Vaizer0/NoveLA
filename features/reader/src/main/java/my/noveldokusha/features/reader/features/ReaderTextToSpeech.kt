@@ -68,6 +68,11 @@ internal data class TextToSpeechSettingData(
     val originalVoiceId: State<String>,
     val setOriginalVoiceId: (String) -> Unit,
     val spokenWordRange: State<IntRange?>,
+    val chapterTotalSeconds: State<Int>,
+    val chapterElapsedSeconds: State<Int>,
+    val isCalculatingDuration: State<Boolean>,
+    val showRemainingTime: MutableState<Boolean>,
+    val seekToPosition: (Int) -> Unit,
 )
 
 internal data class TextSynthesis(
@@ -282,6 +287,11 @@ internal class ReaderTextToSpeech(
             onOriginalVoiceChanged()
         },
         spokenWordRange = manager.spokenWordRange,
+        chapterTotalSeconds = chapterTotalSeconds,
+        chapterElapsedSeconds = chapterElapsedSeconds,
+        isCalculatingDuration = isCalculatingDuration,
+        showRemainingTime = showRemainingTime,
+        seekToPosition = ::seekToPosition,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }
