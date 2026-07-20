@@ -265,7 +265,7 @@ internal class ReaderTextToSpeech(
     private var elapsedAnchorSeconds: Int = 0
 
     // Base pause between paragraphs at 1.0x TTS speed; scaled by current speed.
-    private val BASE_PARAGRAPH_PAUSE_MS = 400.0
+    private val BASE_PARAGRAPH_PAUSE_MS = 500.0
 
     val ttsTotalSeconds: State<Int> = _ttsTotalSeconds
     val ttsElapsedSeconds: State<Int> = _ttsElapsedSeconds
@@ -343,6 +343,36 @@ internal class ReaderTextToSpeech(
             _ttsElapsedSeconds.value = 0
         }
         _ttsTitleActive.value = isTitle
+    }
+
+    /**
+     * Reset elapsed to the start time of the currently active paragraph. Used when
+     * playback (re)starts from a position that is NOT the chapter start (resuming a
+     * saved position, pressing next/prev paragraph, or jumping to another chapter) so
+     * the seeker reflects where we actually are instead of starting from 0.
+     */
+    private fun syncElapsedToActiveParagraph() {
+        if (activeTimings.isEmpty()) return
+        val itemPos = state.currentActiveItemState.value.itemPos
+        val match = activeTimings.firstOrNull { it.itemPos == itemPos }
+            ?: activeTimings.firstOrNull { it.itemPos.chapterIndex == itemPos.chapterIndex }
+        val startMs = match?.startMs ?: 0L
+        _ttsElapsedSeconds.value = (startMs / 1000).toLong().toInt()
+        elapsedAnchorMs = System.currentTimeMillis()
+        elapsedAnchorSeconds = _ttsElapsedSeconds.value
+        updateTitleActiveFlag()
+    }
+
+    /**
+     * Drop all per-chapter cached timing state. Called whenever we leave a chapter
+     * (finish / transition) so nothing stale lingers in memory in the background.
+     */
+    private fun clearChapterDurationCache() {
+        activeTimings = emptyList()
+        timingsChapterIndex = -1
+        _ttsTotalSeconds.value = 0
+        _ttsElapsedSeconds.value = 0
+        _ttsTitleActive.value = false
     }
 
     private fun startElapsedTimer() {
@@ -559,9 +589,10 @@ internal class ReaderTextToSpeech(
                         // When a new chapter starts playing, lock in its timings.
                         val ci = utterance.itemPos.chapterIndex
                         if (isChapterIndexValid(ci) && ci != timingsChapterIndex && state.isPlaying.value) {
+                            clearChapterDurationCache()
                             recomputeChapterTimings(ci)
                             timingsChapterIndex = ci
-                            _ttsElapsedSeconds.value = 0
+                            syncElapsedToActiveParagraph()
                             startElapsedTimer()
                         }
                     }
@@ -687,11 +718,18 @@ internal class ReaderTextToSpeech(
             // Lock in the total duration for the current chapter (recompute only if
             // we have not already done so for this chapter index or after a speed change).
             val chapterIndex = state.currentActiveItemState.value.itemPos.chapterIndex
-            if (isChapterIndexValid(chapterIndex) && chapterIndex != timingsChapterIndex) {
-                recomputeChapterTimings(chapterIndex)
-                timingsChapterIndex = chapterIndex
+            if (isChapterIndexValid(chapterIndex)) {
+                if (chapterIndex != timingsChapterIndex) {
+                    // Leaving the previous chapter: drop its cached timings entirely
+                    // and (re)compute for the new chapter, then seat the elapsed
+                    // counter at the active paragraph's start time.
+                    clearChapterDurationCache()
+                    recomputeChapterTimings(chapterIndex)
+                    timingsChapterIndex = chapterIndex
+                    syncElapsedToActiveParagraph()
+                }
+                startElapsedTimer()
             }
-            startElapsedTimer()
             updateJob?.cancel()
             updateJob = coroutineScope.launch {
                 manager
@@ -715,6 +753,9 @@ internal class ReaderTextToSpeech(
                                 }
                                 0 -> {
                                     launch {
+                                        // Chapter finished: drop all cached timing state so
+                                        // it is not kept around in the background.
+                                        clearChapterDurationCache()
                                         reachedChapterEndFlowChapterIndex.emit(it.itemPos.chapterIndex)
                                     }
                                 }
@@ -944,12 +985,17 @@ internal class ReaderTextToSpeech(
                     chapterIndex = currentItemPos.chapterIndex,
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
-                if (itemIndex <= -1 || itemIndex >= items.lastIndex) return@launch
-                val nextItemRelativeIndex = items
+                if (itemIndex <= -1) return@launch
+                // Move to the next BODY paragraph within the current chapter. Restricting
+                // to BODY (and the same chapter) keeps "next paragraph" from jumping across
+                // a chapter title boundary into the following chapter.
+                val nextItemIndex = items
                     .subList(itemIndex + 1, items.size)
-                    .indexOfFirst { it is ReaderItem.Position }
-                if (nextItemRelativeIndex == -1) return@launch
-                val nextItemIndex = itemIndex + 1 + nextItemRelativeIndex
+                    .indexOfFirst {
+                        it is ReaderItem.Body && it.chapterIndex == currentItemPos.chapterIndex
+                    }
+                    .let { if (it == -1) -1 else itemIndex + 1 + it }
+                if (nextItemIndex == -1) return@launch
                 val nextItem = items.getOrNull(nextItemIndex) as? ReaderItem.Position ?: return@launch
                 stop()
                 start()
@@ -957,6 +1003,7 @@ internal class ReaderTextToSpeech(
                     itemIndex = nextItemIndex,
                     chapterIndex = nextItem.chapterIndex
                 )
+                syncElapsedToActiveParagraph()
                 scrollToReaderItem.emit(nextItem)
             }
         } finally {
@@ -977,19 +1024,25 @@ internal class ReaderTextToSpeech(
                     chapterItemPosition = currentItemPos.chapterItemPosition,
                 )
                 if (itemIndex <= 0) return@launch
+                // Move to the previous BODY paragraph. We search across all earlier
+                // items for a BODY (which excludes chapter titles, the cause of the
+                // spurious forward jump on repeated presses) and since the search goes
+                // strictly backwards it can only step into the PREVIOUS chapter, never
+                // forward into the next one.
                 val previousItemRelativeIndex = items
                     .subList(0, itemIndex)
                     .asReversed()
-                    .indexOfFirst { it is ReaderItem.Position }
+                    .indexOfFirst { it is ReaderItem.Body }
                 if (previousItemRelativeIndex == -1) return@launch
                 val previousItemIndex = itemIndex - 1 - previousItemRelativeIndex
-                val previousItem = items.getOrNull(previousItemIndex) ?: return@launch
+                val previousItem = items.getOrNull(previousItemIndex) as? ReaderItem.Position ?: return@launch
                 stop()
                 start()
                 readChapterStartingFromItemIndex(
                     itemIndex = previousItemIndex,
                     chapterIndex = previousItem.chapterIndex
                 )
+                syncElapsedToActiveParagraph()
                 scrollToReaderItem.emit(previousItem)
             }
         } finally {
@@ -1154,6 +1207,7 @@ internal class ReaderTextToSpeech(
                     chapterIndex = currentState.itemPos.chapterIndex,
                     chapterItemPosition = currentState.itemPos.chapterItemPosition
                 )
+                syncElapsedToActiveParagraph()
             }
         }
     }
