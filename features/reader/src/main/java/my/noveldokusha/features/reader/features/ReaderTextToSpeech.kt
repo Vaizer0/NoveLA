@@ -59,6 +59,8 @@ internal data class TextToSpeechSettingData(
     val setVoicePitch: (Float) -> Unit,
     val chapterWordCount: State<Int>,
     val remainingWordCount: State<Int>,
+    val totalParagraphsInChapter: State<Int>,
+    val currentParagraphIndex: State<Int>,
     val estimatedWpm: State<Int>,
     val estimatedTotalSeconds: State<Int>,
     val estimatedRemainingSeconds: State<Int>,
@@ -166,6 +168,24 @@ internal class ReaderTextToSpeech(
         } else 0
     }
 
+    val totalParagraphsInChapter = derivedStateOf {
+        val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
+        if (isChapterIndexValid(currentChapterIndex)) {
+            items.filterIsInstance<ReaderItem.Text>()
+                .count { it.chapterIndex == currentChapterIndex }
+        } else 0
+    }
+
+    val currentParagraphIndex = derivedStateOf {
+        val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
+        val currentItemPos = currentTextPlaying.value.itemPos.chapterItemPosition
+        if (isChapterIndexValid(currentChapterIndex)) {
+            items.filterIsInstance<ReaderItem.Text>()
+                .filter { it.chapterIndex == currentChapterIndex && it.chapterItemPosition <= currentItemPos }
+                .count()
+        } else 0
+    }
+
     val chapterCharacterCount = derivedStateOf {
         val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
         if (isChapterIndexValid(currentChapterIndex)) {
@@ -260,6 +280,8 @@ internal class ReaderTextToSpeech(
         setVoiceSpeed = ::setVoiceSpeed,
         chapterWordCount = chapterWordCount,
         remainingWordCount = remainingWordCount,
+        totalParagraphsInChapter = totalParagraphsInChapter,
+        currentParagraphIndex = currentParagraphIndex,
         estimatedWpm = estimatedWpm,
         estimatedTotalSeconds = estimatedTotalSeconds,
         estimatedRemainingSeconds = estimatedRemainingSeconds,

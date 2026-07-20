@@ -405,7 +405,7 @@ private fun TtsActionButton(
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
-private fun VoiceSelectorDialog(
+internal fun VoiceSelectorDialog(
     availableVoices: List<VoiceData>,
     currentVoice: VoiceData?,
     inputTextFilter: MutableState<String>,
@@ -588,7 +588,7 @@ private fun VoiceSelectorDialog(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DropdownCustomSavedVoices(
+internal fun DropdownCustomSavedVoices(
     expanded: MutableState<Boolean>,
     list: List<VoicePredefineState>,
     currentVoice: VoiceData?,
