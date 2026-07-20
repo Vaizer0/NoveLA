@@ -350,7 +350,8 @@ internal class ReaderSession(
         scope.launch {
             readerTextToSpeech.readChapterStartingFromItemIndex(
                 itemIndex = itemIndex,
-                chapterIndex = startingItem.chapterIndex
+                chapterIndex = startingItem.chapterIndex,
+                syncElapsedToStart = true
             )
         }
     }

@@ -394,6 +394,24 @@ internal class ReaderTextToSpeech(
     }
 
     /**
+     * When playback starts at a paragraph other than the chapter's first one (e.g. the
+     * "Start Here" action), the elapsed counter must begin at that paragraph's start time
+     * rather than 0, otherwise the progress bar shows 0:00 of the full chapter while the
+     * audio is already partway through. Looks up the paragraph's startMs in [activeTimings].
+     */
+    private fun syncElapsedToActiveParagraph() {
+        if (activeTimings.isEmpty()) return
+        val itemPos = state.currentActiveItemState.value.itemPos
+        val match = activeTimings.firstOrNull { it.itemPos == itemPos }
+            ?: activeTimings.firstOrNull { it.itemPos.chapterIndex == itemPos.chapterIndex }
+        val startMs = match?.startMs ?: 0L
+        _ttsElapsedSeconds.value = (startMs / 1000).toInt()
+        // Re-anchor the wall-clock timer so the counter continues from this position.
+        elapsedAnchorMs = System.currentTimeMillis()
+        elapsedAnchorSeconds = _ttsElapsedSeconds.value
+    }
+
+    /**
      * Seek to a fraction (0f..1f) of the chapter duration. Finds the target paragraph
      * via binary search over pre-computed start times, scrolls the reader to it, and
      * sets a spoken-word-range hint so the correct word position is shown visually.
@@ -752,17 +770,20 @@ internal class ReaderTextToSpeech(
     }
 
     suspend fun readChapterStartingFromStart(
-        chapterIndex: Int
+        chapterIndex: Int,
+        syncElapsedToStart: Boolean = false,
     ) = withContext(Dispatchers.Main.immediate) {
         readChapterStartingFromChapterItemPosition(
             chapterIndex = chapterIndex,
-            chapterItemPosition = 0
+            chapterItemPosition = 0,
+            syncElapsedToStart = syncElapsedToStart
         )
     }
 
     private suspend fun readChapterStartingFromChapterItemPosition(
         chapterIndex: Int,
         chapterItemPosition: Int,
+        syncElapsedToStart: Boolean = false,
     ) = withContext(Dispatchers.Main.immediate) {
         val itemIndex = indexOfReaderItem(
             list = items,
@@ -775,13 +796,15 @@ internal class ReaderTextToSpeech(
         }
         readChapterStartingFromItemIndex(
             itemIndex = itemIndex,
-            chapterIndex = chapterIndex
+            chapterIndex = chapterIndex,
+            syncElapsedToStart = syncElapsedToStart
         )
     }
 
     suspend fun readChapterStartingFromItemIndex(
         itemIndex: Int,
         chapterIndex: Int,
+        syncElapsedToStart: Boolean = false,
     ) = withContext(Dispatchers.Main.immediate) {
         val nextItems = getChapterNextItems(
             itemIndex = itemIndex,
@@ -801,6 +824,8 @@ internal class ReaderTextToSpeech(
                 playState = Utterance.PlayState.LOADING
             )
         )
+
+        if (syncElapsedToStart) syncElapsedToActiveParagraph()
 
         nextItems.forEach(::speakItem)
     }
@@ -913,11 +938,12 @@ internal class ReaderTextToSpeech(
             start()
             val state = state.currentActiveItemState.value
 
-            if (isChapterIndexValid(state.itemPos.chapterIndex)) {
+                if (isChapterIndexValid(state.itemPos.chapterIndex)) {
                 coroutineScope.launch {
                     readChapterStartingFromChapterItemPosition(
                         chapterIndex = state.itemPos.chapterIndex,
-                        chapterItemPosition = state.itemPos.chapterItemPosition
+                        chapterItemPosition = state.itemPos.chapterItemPosition,
+                        syncElapsedToStart = true
                     )
                 }
             } else {
@@ -953,7 +979,8 @@ internal class ReaderTextToSpeech(
                 start()
                 readChapterStartingFromItemIndex(
                     itemIndex = nextItemIndex,
-                    chapterIndex = nextItem.chapterIndex
+                    chapterIndex = nextItem.chapterIndex,
+                    syncElapsedToStart = true
                 )
                 scrollToReaderItem.emit(nextItem)
             }
@@ -986,7 +1013,8 @@ internal class ReaderTextToSpeech(
                 start()
                 readChapterStartingFromItemIndex(
                     itemIndex = previousItemIndex,
-                    chapterIndex = previousItem.chapterIndex
+                    chapterIndex = previousItem.chapterIndex,
+                    syncElapsedToStart = true
                 )
                 scrollToReaderItem.emit(previousItem)
             }
@@ -1028,7 +1056,7 @@ internal class ReaderTextToSpeech(
                         .collect()
                     state.isLoadingChapter.value = false
                 }
-                readChapterStartingFromStart(nextChapterIndex)
+                readChapterStartingFromStart(nextChapterIndex, syncElapsedToStart = true)
                 scrollToChapterTop.emit(nextChapterIndex)
             }
         } finally {
@@ -1067,7 +1095,7 @@ internal class ReaderTextToSpeech(
                         .collect()
                     state.isLoadingChapter.value = false
                 }
-                readChapterStartingFromStart(targetChapterIndex)
+                readChapterStartingFromStart(targetChapterIndex, syncElapsedToStart = true)
                 scrollToChapterTop.emit(targetChapterIndex)
             }
         } finally {
@@ -1150,7 +1178,8 @@ internal class ReaderTextToSpeech(
             coroutineScope.launch {
                 readChapterStartingFromChapterItemPosition(
                     chapterIndex = currentState.itemPos.chapterIndex,
-                    chapterItemPosition = currentState.itemPos.chapterItemPosition
+                    chapterItemPosition = currentState.itemPos.chapterItemPosition,
+                    syncElapsedToStart = true
                 )
             }
         }
