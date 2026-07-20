@@ -2,7 +2,6 @@ package my.noveldokusha.features.reader.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -46,7 +45,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -281,15 +279,6 @@ private fun FloatingTtsMiniPlayer(
     glowEnabled: Boolean = false,
     onToggleGlow: (() -> Unit)? = null,
 ) {
-    val total = state.estimatedTotalSeconds.value
-    val remaining = state.estimatedRemainingSeconds.value
-    val progress = if (total > 0) (total - remaining).toFloat() / total else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 300),
-        label = ""
-    )
-
     val ttsParagraph = state.currentParagraphText.value
     val inverseParagraph = state.alternateParagraphText.value
     val hasInverse = inverseParagraph.isNotBlank()
@@ -646,30 +635,6 @@ private fun FloatingTtsMiniPlayer(
             }
         }
     }
-}
-
-private fun formatDuration(seconds: Int): String {
-    if (seconds <= 0) return "0:00"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) {
-        "${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}"
-    } else {
-        "${m}:${s.toString().padStart(2, '0')}"
-    }
-}
-
-internal fun formatDurationCompact(seconds: Int): String {
-    if (seconds <= 0) return "0s"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return buildString {
-        if (h > 0) append("${h}h ")
-        if (m > 0 || h > 0) append("${m}m ")
-        if (s > 0 && h == 0) append("${s}s")
-    }.trimEnd()
 }
 
 @Composable
