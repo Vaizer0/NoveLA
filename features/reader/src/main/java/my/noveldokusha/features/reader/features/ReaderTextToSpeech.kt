@@ -119,7 +119,10 @@ internal class ReaderTextToSpeech(
         var userPaused: Boolean = false
     }
 
-    private val DECORATIVE_CHARS = """\-=*_~+#·•°─-┿"""
+    // NOTE: the hyphen must be the first character inside the class so it is treated
+    // as a literal and does NOT form a range (e.g. "─-┿" would otherwise match the
+    // whole U+2500..U+253F block and wrongly classify paragraphs as decorators).
+    private val DECORATIVE_CHARS = "-=*_~+#·•°─┿"
     private val SEPARATOR_ONLY = Regex("""^\s*[$DECORATIVE_CHARS]{3,}\s*$""")
     private val LEADING_DECORATIVE = Regex("""^[$DECORATIVE_CHARS]{3,}\s*""")
     private val TRAILING_DECORATIVE = Regex("""\s*[$DECORATIVE_CHARS]{3,}$""")
@@ -1173,6 +1176,10 @@ internal class ReaderTextToSpeech(
                             chapterIndex = currentState.itemPos.chapterIndex,
                             chapterItemPosition = currentState.itemPos.chapterItemPosition
                         )
+                        // Re-sync the elapsed counter to the active paragraph after the
+                        // engine rebuild (the same-engine path does this via
+                        // resumeFromCurrentState, so keep the behaviour consistent).
+                        syncElapsedToActiveParagraph()
                     }
                 }
             }
@@ -1265,6 +1272,10 @@ internal class ReaderTextToSpeech(
             .asSequence()
             .filter { it is ReaderItem.Title || it is ReaderItem.Body }
             .filterIsInstance<ReaderItem.Position>()
+            // Skip decorator-only paragraphs: speakItem() drops them silently, so
+            // including them would waste buffer slots (and could even make the first
+            // buffered item one that never emits a PLAYING utterance).
+            .filter { it !is ReaderItem.Text || !isOnlyDecorators(ttsText(it)) }
             .takeWhile { it.chapterIndex == chapterIndex }
             .take(quantity)
             .toList()
