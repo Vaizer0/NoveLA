@@ -265,7 +265,8 @@ internal class ReaderTextToSpeech(
     private var elapsedAnchorMs: Long = 0L
     private var elapsedAnchorSeconds: Int = 0
 
-    private val INTER_PARAGRAPH_GAP_MS = 120L
+    // Base pause between paragraphs at 1.0x TTS speed; scaled by current speed.
+    private val BASE_PARAGRAPH_PAUSE_MS = 400.0
 
     val ttsTotalSeconds: State<Int> = _ttsTotalSeconds
     val ttsElapsedSeconds: State<Int> = _ttsElapsedSeconds
@@ -419,7 +420,11 @@ internal class ReaderTextToSpeech(
             )
             val durationMs = if (units > 0.0) (units * 1000.0 / cps).toLong() else 0L
             accMs += durationMs
-            if (index < paragraphs.lastIndex) accMs += INTER_PARAGRAPH_GAP_MS
+            // Pause between paragraphs scales with TTS speed (≈400ms at 1.0x).
+            if (index < paragraphs.lastIndex) {
+                val paragraphPauseMs = (BASE_PARAGRAPH_PAUSE_MS / speed).toLong().coerceAtLeast(0L)
+                accMs += paragraphPauseMs
+            }
         }
         activeTimings = timings
         _ttsTotalSeconds.value = (accMs / 1000).toInt().coerceAtLeast(0)
