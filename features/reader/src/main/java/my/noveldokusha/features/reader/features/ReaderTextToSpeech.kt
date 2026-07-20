@@ -1037,7 +1037,7 @@ internal class ReaderTextToSpeech(
         }
     }
 
-    private fun calculateParagraphStartTimes(chapterIndex: Int) {
+    private suspend fun calculateParagraphStartTimes(chapterIndex: Int) = withContext(Dispatchers.Default) {
         val chapterItems = items
             .filterIsInstance<ReaderItem.Text>()
             .filter { it.chapterIndex == chapterIndex }

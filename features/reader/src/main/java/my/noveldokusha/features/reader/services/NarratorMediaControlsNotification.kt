@@ -390,10 +390,9 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         scope.launch {
             combine(
                 snapshotFlow { readerSession.speakerStats.value },
-                snapshotFlow { readerSession.readerTextToSpeech.state.estimatedRemainingSeconds.value },
                 snapshotFlow { readerSession.readerTextToSpeech.chapterElapsedSeconds.value },
                 snapshotFlow { readerSession.readerTextToSpeech.chapterTotalSeconds.value },
-            ) { stats, _, elapsed, total -> Triple(stats, elapsed, total) }
+            ) { stats, elapsed, total -> Triple(stats, elapsed, total) }
                 .collectLatest { triple ->
                     val stats = triple.first ?: return@collectLatest
                     val elapsed = triple.second

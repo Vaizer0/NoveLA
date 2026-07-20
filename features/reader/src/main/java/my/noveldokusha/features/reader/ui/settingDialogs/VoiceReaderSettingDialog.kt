@@ -373,15 +373,17 @@ internal fun VoiceReaderSettingDialog(
                     }
                 }
 
-                TtsProgressSeekBar(
-                    elapsed = state.chapterElapsedSeconds.value,
-                    total = state.chapterTotalSeconds.value,
-                    isCalculating = state.isCalculatingDuration.value,
-                    showRemaining = state.showRemainingTime.value,
-                    onSeek = { state.seekToPosition(it) },
-                    onToggleRemaining = { state.showRemainingTime.value = !state.showRemainingTime.value },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                if (state.isThereActiveItem.value || state.isPlaying.value) {
+                    TtsProgressSeekBar(
+                        elapsed = state.chapterElapsedSeconds.value,
+                        total = state.chapterTotalSeconds.value,
+                        isCalculating = state.isCalculatingDuration.value,
+                        showRemaining = state.showRemainingTime.value,
+                        onSeek = { state.seekToPosition(it) },
+                        onToggleRemaining = { state.showRemainingTime.value = !state.showRemainingTime.value },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
         }
 
