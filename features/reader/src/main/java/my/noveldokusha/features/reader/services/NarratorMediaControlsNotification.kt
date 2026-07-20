@@ -174,7 +174,6 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                     PlaybackStateCompat.ACTION_SEEK_TO
                 )
                 .setState(playbackState, initialPosition, if (initialIsPlaying) 1.0f else 0.0f)
-                .setActivePlaybackSpeed(readerSession.readerTextToSpeech.state.voiceSpeed.value)
             setPlaybackState(stateBuilder.build())
         }
         this.mediaSession = session
