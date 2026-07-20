@@ -907,14 +907,18 @@ internal class ReaderTextToSpeech(
         // Seek to that paragraph
         stop()
         start()
-        readChapterStartingFromItemIndex(
-            itemIndex = indexOfReaderItem(
-                list = items,
-                chapterIndex = currentChapterIndex,
-                chapterItemPosition = targetItem.chapterItemPosition
-            ),
-            chapterIndex = currentChapterIndex
-        )
+        // Reset elapsed to target position immediately
+        chapterElapsedSeconds.value = getElapsedTimeForPosition(currentChapterIndex, targetItem.chapterItemPosition)
+        coroutineScope.launch {
+            readChapterStartingFromItemIndex(
+                itemIndex = indexOfReaderItem(
+                    list = items,
+                    chapterIndex = currentChapterIndex,
+                    chapterItemPosition = targetItem.chapterItemPosition
+                ),
+                chapterIndex = currentChapterIndex
+            )
+        }
     }
 
     fun clearChapterTiming(chapterIndex: Int) {
