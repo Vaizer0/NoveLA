@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,17 +33,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
-import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.CenterFocusWeak
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,8 +76,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import my.noveldokusha.coreui.composableActions.debouncedAction
-import my.noveldokusha.features.reader.ui.settingDialogs.DropdownCustomSavedVoices
-import my.noveldokusha.features.reader.ui.settingDialogs.VoiceSelectorDialog
 import my.noveldokusha.reader.R
 import kotlinx.coroutines.withTimeoutOrNull
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
@@ -330,8 +321,6 @@ private fun FloatingTtsMiniPlayer(
 
     val density = LocalDensity.current
     var showOpacitySlider by remember { mutableStateOf(false) }
-    var openVoicesDialog by remember { mutableStateOf(false) }
-    val dropdownCustomSavedVoicesExpanded = remember { mutableStateOf(false) }
 
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.toFloat()
     val minWidth = 100f
@@ -379,16 +368,25 @@ private fun FloatingTtsMiniPlayer(
                 exit = fadeOut(tween(200)) + shrinkVertically(tween(200)),
             ) {
                 Column {
-                    MiniPlayerControls(
-                        state = state,
-                        onClose = onClose,
-                        chapterCurrentNumber = chapterCurrentNumber,
-                        chaptersCount = chaptersCount,
-                        animatedProgress = animatedProgress,
-                        buttonSize = buttonSize,
-                        iconSize = iconSize,
-                        iconCircleSize = iconCircleSize,
-                        playButtonSize = playButtonSize,
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        MiniPlayerControls(
+                            state = state,
+                            onClose = onClose,
+                            chapterCurrentNumber = chapterCurrentNumber,
+                            chaptersCount = chaptersCount,
+                            animatedProgress = animatedProgress,
+                            buttonSize = buttonSize,
+                            iconSize = iconSize,
+                            iconCircleSize = iconCircleSize,
+                            playButtonSize = playButtonSize,
                         playIconSize = playIconSize,
                         progressHeight = progressHeight,
                         extraAction = {
@@ -427,7 +425,8 @@ private fun FloatingTtsMiniPlayer(
                                 }
                             }
                         },
-                    )
+                        )
+                    }
 
                     if (onOpacityChange != null && showOpacitySlider) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -531,88 +530,6 @@ private fun FloatingTtsMiniPlayer(
                             }
                         }
                     }
-                }
-            }
-
-            if (!menuHidden) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        AssistChip(
-                            label = { Text(stringResource(id = R.string.start_here), style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-                            onClick = debouncedAction { state.playFirstVisibleItem() },
-                            leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 28.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                        AssistChip(
-                            label = { Text(stringResource(id = R.string.focus), style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-                            onClick = debouncedAction { state.scrollToActiveItem() },
-                            leadingIcon = { Icon(Icons.Filled.CenterFocusStrong, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 28.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                        AssistChip(
-                            label = { Text(stringResource(id = R.string.voices), style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-                            onClick = { openVoicesDialog = !openVoicesDialog },
-                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 28.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                        AssistChip(
-                            label = { Text(stringResource(id = R.string.saved_voices), style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-                            onClick = { dropdownCustomSavedVoicesExpanded.value = !dropdownCustomSavedVoicesExpanded.value },
-                            leadingIcon = { Icon(Icons.Filled.Bookmarks, null, Modifier.size(14.dp)) },
-                            modifier = Modifier.heightIn(min = 28.dp),
-                            colors = AssistChipDefaults.assistChipColors(
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                    }
-                }
-
-                Box {
-                    DropdownCustomSavedVoices(
-                        expanded = dropdownCustomSavedVoicesExpanded,
-                        list = state.customSavedVoices.value,
-                        currentVoice = state.activeVoice.value,
-                        currentVoiceSpeed = state.voiceSpeed.value,
-                        currentVoicePitch = state.voicePitch.value,
-                        onPredefinedSelected = {
-                            state.setVoiceSpeed(it.speed)
-                            state.setVoicePitch(it.pitch)
-                            state.setVoiceId(it.voiceId)
-                        },
-                        setCustomSavedVoices = state.setCustomSavedVoices
-                    )
-                    VoiceSelectorDialog(
-                        availableVoices = state.availableVoices,
-                        currentVoice = state.activeVoice.value,
-                        inputTextFilter = remember { mutableStateOf("") },
-                        setVoice = state.setVoiceId,
-                        isDialogOpen = openVoicesDialog,
-                        setDialogOpen = { openVoicesDialog = it }
-                    )
                 }
             }
 
