@@ -153,7 +153,31 @@ internal class ReaderTextToSpeech(
     val scrollToReaderItem = MutableSharedFlow<ReaderItem>()
     val scrollToChapterTop = MutableSharedFlow<ChapterIndex>()
 
-    private val baseCharactersPerSecond = mutableStateOf(13.0f)
+    @Volatile
+    private var lastTrackedChapterIndex = -1
+
+    private val _durationProgress = mutableStateOf(0f)
+    private val _durationElapsedMs = mutableStateOf(0L)
+    private val _durationRemainingMs = mutableStateOf(0L)
+    private val _durationTotalMs = mutableStateOf(0L)
+
+    private fun updateDurationStates() {
+        _durationProgress.value = durationTracker.getProgress()
+        _durationElapsedMs.value = durationTracker.getElapsedMs()
+        _durationRemainingMs.value = durationTracker.getRemainingMs()
+        _durationTotalMs.value = durationTracker.cachedChapterDurationMs
+    }
+
+    private fun ensureChapterTracking(chapterIndex: Int) {
+        if (chapterIndex != lastTrackedChapterIndex && isChapterIndexValid(chapterIndex)) {
+            val chapterTexts = getChapterTexts(chapterIndex)
+            val speed = manager.voiceSpeed.floatValue
+            durationTracker.predictChapterDuration(chapterTexts, speed)
+            durationTracker.onChapterStart(chapterTexts, speed)
+            lastTrackedChapterIndex = chapterIndex
+            updateDurationStates()
+        }
+    }
 
     val totalParagraphsInChapter = derivedStateOf {
         val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
@@ -173,43 +197,14 @@ internal class ReaderTextToSpeech(
         } else 0
     }
 
-    val chapterCharacterCount = derivedStateOf {
-        val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
-        if (isChapterIndexValid(currentChapterIndex)) {
-            items.filterIsInstance<ReaderItem.Text>()
-                .filter { it.chapterIndex == currentChapterIndex }
-                .sumOf { it.textToDisplay.length }
-        } else 0
-    }
-
-    val remainingCharacterCount = derivedStateOf {
-        val currentChapterIndex = currentTextPlaying.value.itemPos.chapterIndex
-        val currentItemPos = currentTextPlaying.value.itemPos.chapterItemPosition
-        if (isChapterIndexValid(currentChapterIndex)) {
-            items.filterIsInstance<ReaderItem.Text>()
-                .filter { it.chapterIndex == currentChapterIndex && it.chapterItemPosition >= currentItemPos }
-                .sumOf { it.textToDisplay.length }
-        } else 0
-    }
-
     val estimatedTotalSeconds = derivedStateOf {
-        val trackerMs = durationTracker.cachedChapterDurationMs
-        if (trackerMs > 0) (trackerMs / 1000).toInt()
-        else {
-            val currentSpeed = manager.voiceSpeed.floatValue
-            val cps = baseCharactersPerSecond.value * currentSpeed
-            if (cps > 0f) (chapterCharacterCount.value / cps).toInt() else 0
-        }
+        val totalMs = _durationTotalMs.value
+        if (totalMs > 0) (totalMs / 1000).toInt() else 0
     }
 
     val estimatedRemainingSeconds = derivedStateOf {
-        val trackerMs = durationTracker.getRemainingMs()
-        if (trackerMs > 0) (trackerMs / 1000).toInt()
-        else {
-            val currentSpeed = manager.voiceSpeed.floatValue
-            val cps = baseCharactersPerSecond.value * currentSpeed
-            if (cps > 0f) (remainingCharacterCount.value / cps).toInt() else 0
-        }
+        val remainingMs = _durationRemainingMs.value
+        if (remainingMs > 0) (remainingMs / 1000).toInt() else 0
     }
 
     val currentParagraphText = derivedStateOf {
@@ -282,10 +277,10 @@ internal class ReaderTextToSpeech(
             onOriginalVoiceChanged()
         },
         spokenWordRange = manager.spokenWordRange,
-        durationProgress = derivedStateOf { durationTracker.getProgress() },
-        durationElapsedMs = derivedStateOf { durationTracker.getElapsedMs() },
-        durationRemainingMs = derivedStateOf { durationTracker.getRemainingMs() },
-        durationTotalMs = derivedStateOf { durationTracker.cachedChapterDurationMs },
+        durationProgress = _durationProgress,
+        durationElapsedMs = _durationElapsedMs,
+        durationRemainingMs = _durationRemainingMs,
+        durationTotalMs = _durationTotalMs,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }
@@ -320,25 +315,20 @@ internal class ReaderTextToSpeech(
 
         manager.init()
 
-        // Duration tracker: learn from completed chapters
+        // Duration tracker: single collector for chapter lifecycle
         coroutineScope.launch {
-            var lastChapterIndex = -1
             manager.currentTextSpeakFlow.collect { utterance ->
                 val chapterIndex = utterance.itemPos.chapterIndex
 
                 when (utterance.playState) {
                     Utterance.PlayState.PLAYING -> {
-                        if (chapterIndex != lastChapterIndex && isChapterIndexValid(chapterIndex)) {
-                            val chapterTexts = getChapterTexts(chapterIndex)
-                            val speed = manager.voiceSpeed.floatValue
-                            durationTracker.predictChapterDuration(chapterTexts, speed)
-                            durationTracker.onChapterStart(chapterTexts, speed)
-                            lastChapterIndex = chapterIndex
-                        }
+                        ensureChapterTracking(chapterIndex)
                     }
                     Utterance.PlayState.FINISHED -> {
-                        if (chapterIndex == lastChapterIndex) {
+                        if (chapterIndex == lastTrackedChapterIndex) {
                             durationTracker.onChapterFinish()
+                            lastTrackedChapterIndex = -1
+                            updateDurationStates()
                         }
                     }
                     else -> Unit
@@ -355,45 +345,13 @@ internal class ReaderTextToSpeech(
                 }
         }
 
-        // Калибровка скорости чтения в реальном времени
+        // Periodic duration state update for progress bar
         coroutineScope.launch {
-            val paragraphStartTimes = mutableMapOf<String, Long>()
-            manager.currentTextSpeakFlow.collect { utterance ->
-                val utteranceId = utterance.utteranceId
-                when (utterance.playState) {
-                    Utterance.PlayState.PLAYING -> {
-                        paragraphStartTimes[utteranceId] = System.currentTimeMillis()
-                    }
-                    Utterance.PlayState.FINISHED -> {
-                        val startTime = paragraphStartTimes.remove(utteranceId)
-                        if (startTime != null) {
-                            val durationMs = System.currentTimeMillis() - startTime
-                            val currentChapterIndex = utterance.itemPos.chapterIndex
-                            val currentItemPos = utterance.itemPos.chapterItemPosition
-
-                            val itemIndex = indexOfReaderItem(
-                                list = items,
-                                chapterIndex = currentChapterIndex,
-                                chapterItemPosition = currentItemPos,
-                            )
-                            val item = items.getOrNull(itemIndex) as? ReaderItem.Text
-                            val text = item?.textToDisplay ?: ""
-                            val charCount = text.length
-
-                            if (charCount > 10 && durationMs > 200) {
-                                val measuredCps = (charCount * 1000.0f) / durationMs
-                                val currentSpeed = manager.voiceSpeed.floatValue
-                                if (currentSpeed > 0f) {
-                                    val baseCps = measuredCps / currentSpeed
-                                    if (baseCps in 3.0f..40.0f) {
-                                        baseCharactersPerSecond.value = 0.2f * baseCps + 0.8f * baseCharactersPerSecond.value
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else -> Unit
+            while (true) {
+                if (state.isThereActiveItem.value || state.isPlaying.value) {
+                    updateDurationStates()
                 }
+                kotlinx.coroutines.delay(200)
             }
         }
     }
@@ -483,6 +441,11 @@ internal class ReaderTextToSpeech(
             NarratorMediaControlsService.reacquireFocus()
             switchVoiceForMode()
             state.isPlaying.value = true
+            
+            // Ensure chapter tracking for current chapter if already playing
+            val currentChapterIndex = manager.currentActiveItemState.value.itemPos.chapterIndex
+            ensureChapterTracking(currentChapterIndex)
+
             updateJob?.cancel()
             updateJob = coroutineScope.launch {
                 manager

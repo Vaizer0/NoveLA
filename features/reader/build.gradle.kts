@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.noveldokusha.android.library)
     alias(libs.plugins.noveldokusha.android.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -38,6 +39,7 @@ dependencies {
 
     // Kotlin reflection for dynamic batch translator lookup
     implementation(kotlin("reflect"))
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.test.junit)
 }

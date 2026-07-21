@@ -1,47 +1,49 @@
 package my.noveldokusha.features.reader.features
 
 import android.content.SharedPreferences
-import org.json.JSONObject
+import kotlinx.coroutines.Mutex
+import kotlinx.coroutines.withLock
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 
-/**
- * Self-learning TTS duration predictor.
- *
- * Tracks per-character-type speaking costs (ms per char) learned from
- * completed chapters. Predicts chapter duration before playback starts.
- * Learning happens at chapter boundaries — not during playback.
- */
 internal class TTSDurationTracker(
     private val preferences: SharedPreferences,
 ) {
 
+    @Serializable
     private data class ModelData(
-        val costs: MutableMap<String, Double> = mutableMapOf(),
-        var sampleCount: Int = 0,
+        val costs: Map<String, Double> = mapOf(),
+        val sampleCounts: Map<String, Int> = mapOf(),
+        val totalSamples: Int = 0,
     )
 
+    private val modelMutex = Mutex()
     private var model = loadModel()
 
-    // Chapter tracking state
     private var chapterStartTimeMs: Long = 0L
     private var chapterPauseAccumMs: Long = 0L
     private var chapterPauseStartMs: Long = 0L
     private var isPaused: Boolean = false
     private var currentChapterTexts: List<String> = emptyList()
     private var currentSpeed: Float = 1.0f
+    private var chapterStartSpeed: Float = 1.0f
 
-    // Prediction cache
+    @Volatile
     var cachedChapterDurationMs: Long = 0L
         private set
+
     private var cachedProgress: Float = 0f
     private var cachedElapsedMs: Long = 0L
     private var cachedRemainingMs: Long = 0L
 
     companion object {
         private const val PREF_KEY = "TTS_DURATION_MODEL"
-        private const val LEARNING_RATE = 0.25
-        private const val MIN_COST = 15.0
-        private const val MAX_COST = 500.0
+        private const val LEARNING_RATE = 0.15
+        private const val MIN_COST = 10.0
+        private const val MAX_COST = 800.0
 
         private val DEFAULT_COSTS = mapOf(
             "cjk" to 85.0,
@@ -58,48 +60,63 @@ internal class TTSDurationTracker(
     }
 
     fun predictChapterDuration(texts: List<String>, speed: Float): Long {
-        currentSpeed = speed
         val totalMs = texts.sumOf { predictParagraphDuration(it, speed) }
         cachedChapterDurationMs = totalMs
         return totalMs
     }
 
     fun onChapterStart(texts: List<String>, speed: Float) {
-        chapterStartTimeMs = System.currentTimeMillis()
-        chapterPauseAccumMs = 0L
-        chapterPauseStartMs = 0L
-        isPaused = false
-        currentChapterTexts = texts
-        currentSpeed = speed
+        modelMutex.withLock {
+            chapterStartTimeMs = System.currentTimeMillis()
+            chapterPauseAccumMs = 0L
+            chapterPauseStartMs = 0L
+            isPaused = false
+            currentChapterTexts = texts
+            currentSpeed = speed
+            chapterStartSpeed = speed
+        }
     }
 
     fun onPause() {
-        if (!isPaused) {
-            isPaused = true
-            chapterPauseStartMs = System.currentTimeMillis()
+        modelMutex.withLock {
+            if (!isPaused) {
+                isPaused = true
+                chapterPauseStartMs = System.currentTimeMillis()
+            }
         }
     }
 
     fun onResume() {
-        if (isPaused) {
-            chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
-            isPaused = false
+        modelMutex.withLock {
+            if (isPaused) {
+                chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
+                isPaused = false
+            }
         }
     }
 
     fun onChapterFinish() {
-        if (isPaused) {
-            chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
-            isPaused = false
+        modelMutex.withLock {
+            if (isPaused) {
+                chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
+                isPaused = false
+            }
+            val actualDurationMs = System.currentTimeMillis() - chapterStartTimeMs - chapterPauseAccumMs
+            if (actualDurationMs < 1000 || currentChapterTexts.isEmpty()) {
+                resetChapterState()
+                return
+            }
+
+            val predictedMs = predictChapterDuration(currentChapterTexts, chapterStartSpeed)
+            if (predictedMs < 100) {
+                resetChapterState()
+                return
+            }
+
+            updateModel(currentChapterTexts, actualDurationMs, chapterStartSpeed)
+            Timber.d("TTSDurationTracker: chapter learned actual=${actualDurationMs}ms predicted=${predictedMs}ms error=${((actualDurationMs - predictedMs) * 100 / predictedMs).toInt()}% samples=${model.totalSamples}")
+            resetChapterState()
         }
-        val actualDurationMs = System.currentTimeMillis() - chapterStartTimeMs - chapterPauseAccumMs
-        if (actualDurationMs < 1000 || currentChapterTexts.isEmpty()) return
-
-        val predictedMs = predictChapterDuration(currentChapterTexts, currentSpeed)
-        if (predictedMs < 100) return
-
-        updateModel(currentChapterTexts, actualDurationMs)
-        Timber.d("TTSDurationTracker: chapter learned actual=${actualDurationMs}ms predicted=${predictedMs}ms error=${((actualDurationMs - predictedMs) * 100 / predictedMs).toInt()}%")
     }
 
     fun getProgress(): Float {
@@ -112,7 +129,7 @@ internal class TTSDurationTracker(
     fun getElapsedMs(): Long {
         if (chapterStartTimeMs == 0L) return 0L
         val now = if (isPaused) chapterPauseStartMs else System.currentTimeMillis()
-        return now - chapterStartTimeMs - chapterPauseAccumMs
+        return (now - chapterStartTimeMs - chapterPauseAccumMs).coerceAtLeast(0L)
     }
 
     fun getRemainingMs(): Long {
@@ -120,15 +137,42 @@ internal class TTSDurationTracker(
     }
 
     fun reset() {
+        modelMutex.withLock {
+            chapterStartTimeMs = 0L
+            chapterPauseAccumMs = 0L
+            chapterPauseStartMs = 0L
+            isPaused = false
+            currentChapterTexts = emptyList()
+            cachedChapterDurationMs = 0L
+            cachedProgress = 0f
+            cachedElapsedMs = 0L
+            cachedRemainingMs = 0L
+        }
+    }
+
+    fun clearLearningCache() {
+        modelMutex.withLock {
+            // Retain only the learned costs and sample counts for future predictions
+            // Clear transient chapter state but keep the model
+            chapterStartTimeMs = 0L
+            chapterPauseAccumMs = 0L
+            chapterPauseStartMs = 0L
+            isPaused = false
+            currentChapterTexts = emptyList()
+            cachedChapterDurationMs = 0L
+            cachedProgress = 0f
+            cachedElapsedMs = 0L
+            cachedRemainingMs = 0L
+            // Model is kept for future predictions - only transient state is cleared
+        }
+    }
+
+    private fun resetChapterState() {
         chapterStartTimeMs = 0L
         chapterPauseAccumMs = 0L
         chapterPauseStartMs = 0L
         isPaused = false
         currentChapterTexts = emptyList()
-        cachedChapterDurationMs = 0L
-        cachedProgress = 0f
-        cachedElapsedMs = 0L
-        cachedRemainingMs = 0L
     }
 
     private fun predictParagraphDuration(text: String, speed: Float): Long {
@@ -147,11 +191,11 @@ internal class TTSDurationTracker(
     private fun charType(c: Char): String = when {
         c.isWhitespace() -> "space"
         c.category == CharCategory.OTHER_LETTER -> "cjk"
-        c == '\uFF0C' || c == '\u3001' -> "comma"        // ，、
-        c == '\u3002' || c == '\uFF0E' -> "period"       // 。
-        c == '\uFF1F' || c == '?' -> "question"           // ？
-        c == '\uFF01' || c == '!' -> "exclamation"        // ！
-        c == '\u2026' -> "ellipsis"                       // …
+        c == '\uFF0C' || c == '\u3001' || c == ',' -> "comma"
+        c == '\u3002' || c == '\uFF0E' || c == '.' -> "period"
+        c == '\uFF1F' || c == '?' -> "question"
+        c == '\uFF01' || c == '!' -> "exclamation"
+        c == '\u2026' -> "ellipsis"
         c.isLetter() -> "latin"
         c.isDigit() -> "digit"
         c.category in setOf(
@@ -166,11 +210,11 @@ internal class TTSDurationTracker(
         else -> "other_punct"
     }
 
-    private fun updateModel(texts: List<String>, actualDurationMs: Long) {
+    private fun updateModel(texts: List<String>, actualDurationMs: Long, speed: Float) {
         val fullText = texts.joinToString("")
         if (fullText.isEmpty()) return
 
-        val predictedMs = predictChapterDuration(texts, currentSpeed)
+        val predictedMs = predictChapterDuration(texts, speed)
         if (predictedMs <= 0) return
 
         val charCounts = mutableMapOf<String, Int>()
@@ -183,6 +227,9 @@ internal class TTSDurationTracker(
 
         val errorMs = actualDurationMs - predictedMs
 
+        val newCosts = model.costs.toMutableMap()
+        val newSampleCounts = model.sampleCounts.toMutableMap()
+
         charCounts.forEach { (type, count) ->
             val weight = count.toDouble() / totalChars
             val currentCost = model.costs[type] ?: (DEFAULT_COSTS[type] ?: 50.0)
@@ -190,25 +237,26 @@ internal class TTSDurationTracker(
             val perCharAdjustment = typeErrorShare / count
             val newCost = (currentCost + perCharAdjustment * LEARNING_RATE)
                 .coerceIn(MIN_COST, MAX_COST)
-            model.costs[type] = newCost
+            newCosts[type] = newCost
+            newSampleCounts[type] = (model.sampleCounts[type] ?: 0) + 1
         }
 
-        model.sampleCount++
+        model = ModelData(
+            costs = newCosts,
+            sampleCounts = newSampleCounts,
+            totalSamples = model.totalSamples + 1
+        )
         saveModel()
     }
 
     private fun loadModel(): ModelData {
         return try {
             val json = preferences.getString(PREF_KEY, null) ?: return ModelData()
-            val obj = JSONObject(json)
-            val costs = mutableMapOf<String, Double>()
-            val costsObj = obj.optJSONObject("costs")
-            if (costsObj != null) {
-                for (key in costsObj.keys()) {
-                    costs[key] = costsObj.getDouble(key)
-                }
+            val jsonConfig = Json {
+                ignoreUnknownKeys = true
+                isLenient = true
             }
-            ModelData(costs = costs, sampleCount = obj.optInt("sampleCount", 0))
+            jsonConfig.decodeFromString(ModelData.serializer(), json)
         } catch (e: Exception) {
             Timber.w(e, "TTSDurationTracker: failed to load model, using defaults")
             ModelData()
@@ -217,13 +265,13 @@ internal class TTSDurationTracker(
 
     private fun saveModel() {
         try {
-            val costsObj = JSONObject()
-            model.costs.forEach { (key, value) -> costsObj.put(key, value) }
-            val obj = JSONObject().apply {
-                put("costs", costsObj)
-                put("sampleCount", model.sampleCount)
+            val jsonConfig = Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                prettyPrint = false
             }
-            preferences.edit().putString(PREF_KEY, obj.toString()).apply()
+            val json = jsonConfig.encodeToString(ModelData.serializer(), model)
+            preferences.edit().putString(PREF_KEY, json).apply()
         } catch (e: Exception) {
             Timber.w(e, "TTSDurationTracker: failed to save model")
         }
