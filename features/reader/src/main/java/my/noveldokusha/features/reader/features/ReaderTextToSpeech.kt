@@ -316,23 +316,32 @@ internal class ReaderTextToSpeech(
 
         manager.init()
 
-        // Duration tracker: single collector for chapter lifecycle
+        // Duration tracker: chapter lifecycle via utterance flow
         coroutineScope.launch {
             manager.currentTextSpeakFlow.collect { utterance ->
                 val chapterIndex = utterance.itemPos.chapterIndex
 
                 when (utterance.playState) {
                     Utterance.PlayState.PLAYING -> {
-                        ensureChapterTracking(chapterIndex)
-                    }
-                    Utterance.PlayState.FINISHED -> {
-                        if (chapterIndex == lastTrackedChapterIndex) {
+                        if (lastTrackedChapterIndex != -1 && chapterIndex != lastTrackedChapterIndex) {
                             durationTracker.onChapterFinish()
                             lastTrackedChapterIndex = -1
-                            updateDurationStates()
                         }
+                        ensureChapterTracking(chapterIndex)
                     }
+                    Utterance.PlayState.FINISHED -> Unit
                     else -> Unit
+                }
+            }
+        }
+
+        // Duration tracker: learn from naturally completed chapters
+        coroutineScope.launch {
+            reachedChapterEndFlowChapterIndex.collect { chapterIndex ->
+                if (lastTrackedChapterIndex != -1 && chapterIndex == lastTrackedChapterIndex) {
+                    durationTracker.onChapterFinish()
+                    lastTrackedChapterIndex = -1
+                    updateDurationStates()
                 }
             }
         }
@@ -490,7 +499,6 @@ internal class ReaderTextToSpeech(
             state.isPlaying.value = false
             updateJob?.cancel()
             manager.stop()
-            durationTracker.reset()
         } finally {
             lifecycleLock.unlock()
         }
