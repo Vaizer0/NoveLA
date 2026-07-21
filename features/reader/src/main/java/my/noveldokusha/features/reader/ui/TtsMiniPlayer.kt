@@ -100,8 +100,6 @@ internal fun TtsMiniPlayer(
     ttsHighlightColor: String = "FFFF6D00",
     menuHidden: Boolean = false,
     onToggleMenuHidden: (() -> Unit)? = null,
-    glowEnabled: Boolean = false,
-    onToggleGlow: (() -> Unit)? = null,
 ) {
     FloatingTtsMiniPlayer(
         state = state,
@@ -125,8 +123,6 @@ internal fun TtsMiniPlayer(
         ttsHighlightColor = ttsHighlightColor,
         menuHidden = menuHidden,
         onToggleMenuHidden = onToggleMenuHidden,
-        glowEnabled = glowEnabled,
-        onToggleGlow = onToggleGlow,
     )
 }
 
@@ -322,8 +318,6 @@ private fun FloatingTtsMiniPlayer(
     ttsHighlightColor: String = "FFFF6D00",
     menuHidden: Boolean = false,
     onToggleMenuHidden: (() -> Unit)? = null,
-    glowEnabled: Boolean = false,
-    onToggleGlow: (() -> Unit)? = null,
 ) {
     val total = state.estimatedTotalSeconds.value
     val remaining = state.estimatedRemainingSeconds.value
@@ -343,6 +337,7 @@ private fun FloatingTtsMiniPlayer(
     }
     val isBothMode = paragraphMode == "both" && hasInverse
     val hasParagraphText = showParagraphText && (displayText.isNotBlank() || isBothMode)
+    val autoGlow = state.isPlaying.value && hasParagraphText
 
     var showOpacitySlider by remember { mutableStateOf(false) }
     val lastTapTime = remember { mutableLongStateOf(0L) }
@@ -563,7 +558,7 @@ private fun FloatingTtsMiniPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (glowEnabled) {
+                            if (autoGlow) {
                                 Modifier
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
@@ -614,16 +609,7 @@ private fun FloatingTtsMiniPlayer(
                                             event.changes.forEach { it.consume() }
                                         }
                                     } while (event.changes.any { it.pressed })
-                                } else if (released == null && !wasDrag) {
-                                    onToggleGlow?.invoke()
-                                    do {
-                                        val event = awaitPointerEvent()
-                                    } while (event.changes.any { it.pressed })
-                                } else if (released == null) {
-                                    do {
-                                        val event = awaitPointerEvent()
-                                    } while (event.changes.any { it.pressed })
-                                } else {
+                                } else if (released != null && !wasDrag) {
                                     val now = System.currentTimeMillis()
                                     if (now - lastTapTime.longValue < 350) {
                                         onToggleMenuHidden?.invoke()
@@ -631,6 +617,10 @@ private fun FloatingTtsMiniPlayer(
                                     } else {
                                         lastTapTime.longValue = now
                                     }
+                                } else {
+                                    do {
+                                        val event = awaitPointerEvent()
+                                    } while (event.changes.any { it.pressed })
                                 }
                             }
                         }
