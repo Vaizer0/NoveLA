@@ -1,8 +1,6 @@
 package my.noveldokusha.features.reader.features
 
 import android.content.SharedPreferences
-import kotlinx.coroutines.Mutex
-import kotlinx.coroutines.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -20,7 +18,7 @@ internal class TTSDurationTracker(
         val totalSamples: Int = 0,
     )
 
-    private val modelMutex = Mutex()
+    private val modelLock = Any()
     private var model = loadModel()
 
     private var chapterStartTimeMs: Long = 0L
@@ -66,7 +64,7 @@ internal class TTSDurationTracker(
     }
 
     fun onChapterStart(texts: List<String>, speed: Float) {
-        modelMutex.withLock {
+        synchronized(modelLock) {
             chapterStartTimeMs = System.currentTimeMillis()
             chapterPauseAccumMs = 0L
             chapterPauseStartMs = 0L
@@ -78,7 +76,7 @@ internal class TTSDurationTracker(
     }
 
     fun onPause() {
-        modelMutex.withLock {
+        synchronized(modelLock) {
             if (!isPaused) {
                 isPaused = true
                 chapterPauseStartMs = System.currentTimeMillis()
@@ -87,7 +85,7 @@ internal class TTSDurationTracker(
     }
 
     fun onResume() {
-        modelMutex.withLock {
+        synchronized(modelLock) {
             if (isPaused) {
                 chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
                 isPaused = false
@@ -96,7 +94,7 @@ internal class TTSDurationTracker(
     }
 
     fun onChapterFinish() {
-        modelMutex.withLock {
+        synchronized(modelLock) {
             if (isPaused) {
                 chapterPauseAccumMs += System.currentTimeMillis() - chapterPauseStartMs
                 isPaused = false
@@ -137,7 +135,7 @@ internal class TTSDurationTracker(
     }
 
     fun reset() {
-        modelMutex.withLock {
+        synchronized(modelLock) {
             chapterStartTimeMs = 0L
             chapterPauseAccumMs = 0L
             chapterPauseStartMs = 0L
@@ -151,9 +149,7 @@ internal class TTSDurationTracker(
     }
 
     fun clearLearningCache() {
-        modelMutex.withLock {
-            // Retain only the learned costs and sample counts for future predictions
-            // Clear transient chapter state but keep the model
+        synchronized(modelLock) {
             chapterStartTimeMs = 0L
             chapterPauseAccumMs = 0L
             chapterPauseStartMs = 0L
@@ -163,7 +159,6 @@ internal class TTSDurationTracker(
             cachedProgress = 0f
             cachedElapsedMs = 0L
             cachedRemainingMs = 0L
-            // Model is kept for future predictions - only transient state is cleared
         }
     }
 
