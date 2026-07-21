@@ -98,6 +98,7 @@ import my.noveldokusha.coreui.theme.InternalTheme
 import my.noveldokusha.coreui.theme.rememberMutableStateOf
 import my.noveldokusha.core.appPreferences.VoicePredefineState
 import my.noveldokusha.features.reader.features.TextToSpeechSettingData
+import my.noveldokusha.features.reader.ui.TtsProgressBar
 import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -367,6 +368,19 @@ internal fun VoiceReaderSettingDialog(
                             modifier = Modifier
                                 .size(28.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+                        )
+                    }
+                }
+
+                // Duration progress bar
+                if (state.isPlaying.value || state.isThereActiveItem.value) {
+                    val totalMs by state.durationTotalMs
+                    if (totalMs > 0) {
+                        TtsProgressBar(
+                            progress = state.durationProgress.value,
+                            elapsedMs = state.durationElapsedMs.value,
+                            remainingMs = state.durationRemainingMs.value,
+                            totalMs = totalMs,
                         )
                     }
                 }
