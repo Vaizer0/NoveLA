@@ -37,6 +37,7 @@ internal data class ReaderScreenState(
         val selectedSetting: MutableState<Type>,
         val floatingTts: FloatingTtsSettingsData,
         val ttsHighlight: TtsHighlightSettingsData,
+        val lockScreenTtsWords: MutableState<Boolean>,
     ) {
         @Stable
         data class StyleSettingsData(

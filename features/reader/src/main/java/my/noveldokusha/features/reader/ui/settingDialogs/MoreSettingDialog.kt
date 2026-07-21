@@ -58,6 +58,8 @@ internal fun MoreSettingDialog(
     onFullScreen: (Boolean) -> Unit,
     singleTapToOpenSettings: Boolean,
     onSingleTapToOpenSettingsChange: (Boolean) -> Unit,
+    lockScreenTtsWords: Boolean,
+    onLockScreenTtsWordsChange: (Boolean) -> Unit,
     ttsHighlightEnabled: Boolean,
     onTtsHighlightEnabledChange: (Boolean) -> Unit,
     ttsHighlightColor: String,
@@ -66,6 +68,31 @@ internal fun MoreSettingDialog(
     ElevatedCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
     ) {
+        // Lock Screen Live TTS Words
+        SlimListItem(
+            modifier = Modifier
+                .clickable { onLockScreenTtsWordsChange(!lockScreenTtsWords) },
+            headlineContent = {
+                Text(text = stringResource(id = R.string.lock_screen_tts_words))
+            },
+            leadingContent = {
+                Icon(
+                    Icons.Outlined.FormatPaint,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = lockScreenTtsWords,
+                    onCheckedChange = onLockScreenTtsWordsChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
+                    )
+                )
+            }
+        )
         // TTS Highlight
         SlimListItem(
             modifier = Modifier

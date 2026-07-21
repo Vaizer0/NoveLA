@@ -23,6 +23,7 @@ import coil.request.SuccessResult
 import coil.size.Size
 import dagger.hilt.android.qualifiers.ApplicationContext
 import my.noveldokusha.core.AppFileResolver
+import my.noveldokusha.core.appPreferences.AppPreferences
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -58,6 +59,7 @@ internal class NarratorMediaControlsNotification @Inject constructor(
     private val readerManager: ReaderManager,
     private val navigationRoutes: NavigationRoutes,
     private val appFileResolver: AppFileResolver,
+    private val appPreferences: AppPreferences,
 ) {
     private val scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main.immediate + CoroutineName("NarratorNotificationService") +
@@ -400,6 +402,58 @@ internal class NarratorMediaControlsNotification @Inject constructor(
                 }
         }
 
+        // Update lock screen with current spoken word when feature is enabled
+        scope.launch {
+            combine(
+                combine(
+                    snapshotFlow { readerSession.readerTextToSpeech.state.spokenWordRange.value },
+                    snapshotFlow { readerSession.readerTextToSpeech.state.currentParagraphText.value },
+                ) { wordRange, paragraphText -> wordRange to paragraphText },
+                combine(
+                    snapshotFlow { appPreferences.LOCK_SCREEN_TTS_WORDS.value },
+                    snapshotFlow { readerSession.readerTextToSpeech.state.isPlaying.value },
+                ) { enabled, isPlaying -> enabled to isPlaying },
+            ) { (wordRange, paragraphText), (enabled, isPlaying) ->
+                LockScreenWordUpdate(wordRange, paragraphText, enabled, isPlaying)
+            }
+                .collectLatest { (wordRange, paragraphText, enabled, isPlaying) ->
+                    if (!enabled || !isPlaying || wordRange == null || paragraphText.isEmpty()) {
+                        // Fall back to default text when feature is off or no word to show
+                        val stats = readerSession.speakerStats.value
+                        if (stats != null) {
+                            val chapterPos = context.getString(
+                                R.string.chapter_x_over_n,
+                                stats.chapterIndex + 1,
+                                stats.chapterCount
+                            )
+                            val progress = context.getString(
+                                R.string.progress_x_percentage,
+                                stats.chapterReadPercentage()
+                            )
+                            notificationsCenter.modifyNotification(
+                                builder = notificationBuilder,
+                                notificationId = notificationId,
+                            ) {
+                                text = "$chapterPos  $progress"
+                            }
+                        }
+                        return@collectLatest
+                    }
+                    val start = wordRange.first.coerceIn(0, paragraphText.length)
+                    val end = wordRange.last.coerceIn(0, paragraphText.length - 1)
+                    if (start > end || start >= paragraphText.length) return@collectLatest
+                    val currentWord = paragraphText.substring(start, end + 1).trim()
+                    if (currentWord.isNotEmpty()) {
+                        notificationsCenter.modifyNotification(
+                            builder = notificationBuilder,
+                            notificationId = notificationId,
+                        ) {
+                            text = currentWord
+                        }
+                    }
+                }
+        }
+
         // Load cover image and update session metadata + notification
         scope.launch {
             val coverBitmap = loadCoverBitmap(readerSession.bookCoverUrl, readerSession.bookUrl)
@@ -480,3 +534,10 @@ private fun formatDuration(seconds: Int): String {
         "%d:%02d".format(m, s)
     }
 }
+
+private data class LockScreenWordUpdate(
+    val wordRange: IntRange?,
+    val paragraphText: String,
+    val enabled: Boolean,
+    val isPlaying: Boolean,
+)

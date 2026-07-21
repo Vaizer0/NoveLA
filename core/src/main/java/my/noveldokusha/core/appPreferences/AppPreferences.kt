@@ -192,6 +192,10 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_Boolean(name, preferences, false)
     }
 
+    val LOCK_SCREEN_TTS_WORDS = object : Preference<Boolean>("LOCK_SCREEN_TTS_WORDS") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
     val TTS_HIGHLIGHT_ENABLED = object : Preference<Boolean>("TTS_HIGHLIGHT_ENABLED") {
         override var value by SharedPreference_Boolean(name, preferences, false)
     }

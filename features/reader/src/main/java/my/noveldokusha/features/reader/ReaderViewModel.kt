@@ -78,6 +78,7 @@ internal class ReaderViewModel @Inject constructor(
                 isEnabled = appPreferences.TTS_HIGHLIGHT_ENABLED.state(viewModelScope),
                 highlightColor = appPreferences.TTS_HIGHLIGHT_COLOR.state(viewModelScope),
             ),
+            lockScreenTtsWords = appPreferences.LOCK_SCREEN_TTS_WORDS.state(viewModelScope),
             style = ReaderScreenState.Settings.StyleSettingsData(
                 currentDarkMode = mutableStateOf(DarkMode.SYSTEM).also { state ->
                     viewModelScope.launch {

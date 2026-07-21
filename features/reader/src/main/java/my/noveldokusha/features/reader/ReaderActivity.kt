@@ -374,6 +374,7 @@ class ReaderActivity : BaseActivity() {
                     onSingleTapToOpenSettingsChange = { appPreferences.READER_SINGLE_TAP_TO_OPEN_SETTINGS.value = it },
                     onTtsHighlightEnabledChange = { appPreferences.TTS_HIGHLIGHT_ENABLED.value = it },
                     onTtsHighlightColorChange = { appPreferences.TTS_HIGHLIGHT_COLOR.value = it },
+                    onLockScreenTtsWordsChange = { appPreferences.LOCK_SCREEN_TTS_WORDS.value = it },
                     onPressBack = {
                         viewModel.onCloseManually()
                         finish()

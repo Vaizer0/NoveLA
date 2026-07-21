@@ -107,6 +107,7 @@ internal fun ReaderScreen(
     onOpenChapterInWeb: () -> Unit,
     onTtsHighlightEnabledChange: (Boolean) -> Unit,
     onTtsHighlightColorChange: (String) -> Unit,
+    onLockScreenTtsWordsChange: (Boolean) -> Unit,
     readerContent: @Composable (paddingValues: PaddingValues) -> Unit,
 ) {
     val showReaderInfo by state.showReaderInfo
@@ -225,6 +226,7 @@ internal fun ReaderScreen(
                         onKeepScreenOn = onKeepScreenOn,
                         onFullScreen = onFullScreen,
                         onSingleTapToOpenSettingsChange = onSingleTapToOpenSettingsChange,
+                        onLockScreenTtsWordsChange = onLockScreenTtsWordsChange,
                         onTtsHighlightEnabledChange = onTtsHighlightEnabledChange,
                         onTtsHighlightColorChange = onTtsHighlightColorChange,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -559,6 +561,7 @@ private fun ViewsPreview(
                             isEnabled = remember { mutableStateOf(false) },
                             highlightColor = remember { mutableStateOf("FFFF6D00") },
                         ),
+                        lockScreenTtsWords = remember { mutableStateOf(false) },
                     ),
                     showInvalidChapterDialog = remember { mutableStateOf(false) }
                 ),
@@ -577,6 +580,7 @@ private fun ViewsPreview(
                 onSingleTapToOpenSettingsChange = {},
                 onTtsHighlightEnabledChange = {},
                 onTtsHighlightColorChange = {},
+                onLockScreenTtsWordsChange = {},
             )
         }
     }
