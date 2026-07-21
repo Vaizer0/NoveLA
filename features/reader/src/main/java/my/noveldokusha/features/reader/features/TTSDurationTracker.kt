@@ -1,9 +1,7 @@
 package my.noveldokusha.features.reader.features
 
 import android.content.SharedPreferences
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import org.json.JSONObject
 import timber.log.Timber
 
 /**
@@ -17,7 +15,6 @@ internal class TTSDurationTracker(
     private val preferences: SharedPreferences,
 ) {
 
-    @Serializable
     private data class ModelData(
         val costs: MutableMap<String, Double> = mutableMapOf(),
         var sampleCount: Int = 0,
@@ -150,11 +147,11 @@ internal class TTSDurationTracker(
     private fun charType(c: Char): String = when {
         c.isWhitespace() -> "space"
         c.category == CharCategory.OTHER_LETTER -> "cjk"
-        c in '，、' -> "comma"
-        c in '。．' -> "period"
-        c in '？?' -> "question"
-        c in '！!' -> "exclamation"
-        c == '…' -> "ellipsis"
+        c == '\uFF0C' || c == '\u3001' -> "comma"        // ，、
+        c == '\u3002' || c == '\uFF0E' -> "period"       // 。
+        c == '\uFF1F' || c == '?' -> "question"           // ？
+        c == '\uFF01' || c == '!' -> "exclamation"        // ！
+        c == '\u2026' -> "ellipsis"                       // …
         c.isLetter() -> "latin"
         c.isDigit() -> "digit"
         c.category in setOf(
@@ -203,7 +200,15 @@ internal class TTSDurationTracker(
     private fun loadModel(): ModelData {
         return try {
             val json = preferences.getString(PREF_KEY, null) ?: return ModelData()
-            Json.decodeFromString<ModelData>(json)
+            val obj = JSONObject(json)
+            val costs = mutableMapOf<String, Double>()
+            val costsObj = obj.optJSONObject("costs")
+            if (costsObj != null) {
+                for (key in costsObj.keys()) {
+                    costs[key] = costsObj.getDouble(key)
+                }
+            }
+            ModelData(costs = costs, sampleCount = obj.optInt("sampleCount", 0))
         } catch (e: Exception) {
             Timber.w(e, "TTSDurationTracker: failed to load model, using defaults")
             ModelData()
@@ -212,8 +217,13 @@ internal class TTSDurationTracker(
 
     private fun saveModel() {
         try {
-            val json = Json.encodeToString(model)
-            preferences.edit().putString(PREF_KEY, json).apply()
+            val costsObj = JSONObject()
+            model.costs.forEach { (key, value) -> costsObj.put(key, value) }
+            val obj = JSONObject().apply {
+                put("costs", costsObj)
+                put("sampleCount", model.sampleCount)
+            }
+            preferences.edit().putString(PREF_KEY, obj.toString()).apply()
         } catch (e: Exception) {
             Timber.w(e, "TTSDurationTracker: failed to save model")
         }
