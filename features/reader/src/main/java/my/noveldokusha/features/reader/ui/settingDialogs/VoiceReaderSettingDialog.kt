@@ -11,9 +11,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +44,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,7 +56,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -102,7 +101,6 @@ import my.noveldokusha.reader.R
 import my.noveldokusha.text_to_speech.VoiceData
 
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VoiceReaderSettingDialog(
     state: TextToSpeechSettingData,
@@ -158,9 +156,11 @@ internal fun VoiceReaderSettingDialog(
                     onValueChangeFinished = { state.setVoiceSpeed(localSpeed) },
                 )
 
-                FlowRow(
+                Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                 ) {
                     AssistChip(
                         label = { Text(text = stringResource(id = R.string.start_here)) },
@@ -218,82 +218,71 @@ internal fun VoiceReaderSettingDialog(
                             disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
-                    Box {
-                        DropdownCustomSavedVoices(
-                            expanded = dropdownCustomSavedVoicesExpanded,
-                            list = state.customSavedVoices.value,
-                            currentVoice = state.activeVoice.value,
-                            currentVoiceSpeed = state.voiceSpeed.value,
-                            currentVoicePitch = state.voicePitch.value,
-                            onPredefinedSelected = {
-                                state.setVoiceSpeed(it.speed)
-                                state.setVoicePitch(it.pitch)
-                                state.setVoiceId(it.voiceId)
-                            },
-                            setCustomSavedVoices = state.setCustomSavedVoices
-                        )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.activeVoice.value,
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = state.setVoiceId,
-                            isDialogOpen = openVoicesDialog,
-                            setDialogOpen = { openVoicesDialog = it }
-                        )
-                        VoiceSelectorDialog(
-                            availableVoices = state.availableVoices,
-                            currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
-                            inputTextFilter = rememberSaveable { mutableStateOf("") },
-                            setVoice = { state.setOriginalVoiceId(it) },
-                            isDialogOpen = openOriginalVoiceDialog,
-                            setDialogOpen = { openOriginalVoiceDialog = it }
-                        )
-                    }
+                }
+                Box {
+                    DropdownCustomSavedVoices(
+                        expanded = dropdownCustomSavedVoicesExpanded,
+                        list = state.customSavedVoices.value,
+                        currentVoice = state.activeVoice.value,
+                        currentVoiceSpeed = state.voiceSpeed.value,
+                        currentVoicePitch = state.voicePitch.value,
+                        onPredefinedSelected = {
+                            state.setVoiceSpeed(it.speed)
+                            state.setVoicePitch(it.pitch)
+                            state.setVoiceId(it.voiceId)
+                        },
+                        setCustomSavedVoices = state.setCustomSavedVoices
+                    )
+                    VoiceSelectorDialog(
+                        availableVoices = state.availableVoices,
+                        currentVoice = state.activeVoice.value,
+                        inputTextFilter = rememberSaveable { mutableStateOf("") },
+                        setVoice = state.setVoiceId,
+                        isDialogOpen = openVoicesDialog,
+                        setDialogOpen = { openVoicesDialog = it }
+                    )
+                    VoiceSelectorDialog(
+                        availableVoices = state.availableVoices,
+                        currentVoice = state.availableVoices.find { it.id == state.originalVoiceId.value },
+                        inputTextFilter = rememberSaveable { mutableStateOf("") },
+                        setVoice = { state.setOriginalVoiceId(it) },
+                        isDialogOpen = openOriginalVoiceDialog,
+                        setDialogOpen = { openOriginalVoiceDialog = it }
+                    )
                 }
 
                 if (floatingTtsState != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.tts_floating),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
+                        FilterChip(
+                            selected = floatingTtsState.isEnabled.value,
+                            onClick = { floatingTtsState.isEnabled.value = !floatingTtsState.isEnabled.value },
+                            label = { Text(text = stringResource(R.string.tts_floating)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.RecordVoiceOver,
+                                    null,
+                                    Modifier.size(14.dp)
                                 )
-                                Switch(
-                                    checked = floatingTtsState.isEnabled.value,
-                                    onCheckedChange = { floatingTtsState.isEnabled.value = it }
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 30.dp),
+                        )
+                        FilterChip(
+                            selected = floatingTtsState.showOutsideApp.value,
+                            onClick = { floatingTtsState.showOutsideApp.value = !floatingTtsState.showOutsideApp.value },
+                            label = { Text(text = stringResource(R.string.tts_floating_show_outside_app)) },
+                            enabled = floatingTtsState.isEnabled.value,
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Bookmarks,
+                                    null,
+                                    Modifier.size(14.dp)
                                 )
-                            }
-                            HorizontalDivider()
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.tts_floating_show_outside_app),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Switch(
-                                    checked = floatingTtsState.showOutsideApp.value,
-                                    onCheckedChange = { floatingTtsState.showOutsideApp.value = it },
-                                    enabled = floatingTtsState.isEnabled.value
-                                )
-                            }
-                        }
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 30.dp),
+                        )
                     }
                 }
 
