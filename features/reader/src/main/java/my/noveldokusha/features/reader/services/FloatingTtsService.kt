@@ -59,7 +59,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         var paragraphMode by mutableStateOf("tts")
         var ttsHighlightEnabled = mutableStateOf(false)
         var ttsHighlightColor = mutableStateOf("FFFF6D00")
-        var glowEnabled = mutableStateOf(false)
         var menuHidden = mutableStateOf(false)
         var activityWindowToken: IBinder? = null
 
@@ -196,7 +195,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         val savedPanelX = appPreferences.FLOATING_TTS_PANEL_POS_X.value
         val savedPanelY = appPreferences.FLOATING_TTS_PANEL_POS_Y.value
         panelWidth = appPreferences.FLOATING_TTS_PANEL_WIDTH.value
-        glowEnabled.value = appPreferences.FLOATING_TTS_GLOW_ENABLED.value
 
         val bubbleSizePx = (32 * displayDensity).toInt()
         val marginPx = (16 * displayDensity).toInt()
@@ -399,11 +397,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         menuHidden = menuHidden.value,
                         onToggleMenuHidden = {
                             menuHidden.value = !menuHidden.value
-                        },
-                        glowEnabled = glowEnabled.value,
-                        onToggleGlow = {
-                            glowEnabled.value = !glowEnabled.value
-                            appPreferences.FLOATING_TTS_GLOW_ENABLED.value = glowEnabled.value
                         },
                     )
                 }
