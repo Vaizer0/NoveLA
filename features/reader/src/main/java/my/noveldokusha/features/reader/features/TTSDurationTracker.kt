@@ -1,14 +1,17 @@
 package my.noveldokusha.features.reader.features
 
 import android.content.SharedPreferences
+import android.os.Environment
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.io.File
 
 internal class TTSDurationTracker(
     private val preferences: SharedPreferences,
+    private val modelFile: File? = null,
 ) {
 
     @Serializable
@@ -39,9 +42,19 @@ internal class TTSDurationTracker(
 
     companion object {
         private const val PREF_KEY = "TTS_DURATION_MODEL"
+        private const val MODEL_DIR = "NoveLA"
+        private const val MODEL_FILE_NAME = "tts_model.json"
         private const val LEARNING_RATE = 0.15
         private const val MIN_COST = 10.0
         private const val MAX_COST = 800.0
+
+        fun createDefaultExternalFile(): File? {
+            return try {
+                File(Environment.getExternalStorageDirectory(), "$MODEL_DIR/$MODEL_FILE_NAME")
+            } catch (e: Exception) {
+                null
+            }
+        }
 
         private val DEFAULT_COSTS = mapOf(
             "cjk" to 85.0,
@@ -245,6 +258,20 @@ internal class TTSDurationTracker(
     }
 
     private fun loadModel(): ModelData {
+        modelFile?.let { file ->
+            try {
+                if (file.exists()) {
+                    val json = file.readText()
+                    val jsonConfig = Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    }
+                    return jsonConfig.decodeFromString(ModelData.serializer(), json)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "TTSDurationTracker: failed to load model from external file")
+            }
+        }
         return try {
             val json = preferences.getString(PREF_KEY, null) ?: return ModelData()
             val jsonConfig = Json {
@@ -268,7 +295,21 @@ internal class TTSDurationTracker(
             val json = jsonConfig.encodeToString(ModelData.serializer(), model)
             preferences.edit().putString(PREF_KEY, json).apply()
         } catch (e: Exception) {
-            Timber.w(e, "TTSDurationTracker: failed to save model")
+            Timber.w(e, "TTSDurationTracker: failed to save model to SharedPreferences")
+        }
+        modelFile?.let { file ->
+            try {
+                file.parentFile?.mkdirs()
+                val jsonConfig = Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                    prettyPrint = false
+                }
+                val json = jsonConfig.encodeToString(ModelData.serializer(), model)
+                file.writeText(json)
+            } catch (e: Exception) {
+                Timber.w(e, "TTSDurationTracker: failed to save model to external file")
+            }
         }
     }
 }

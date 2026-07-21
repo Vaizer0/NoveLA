@@ -141,7 +141,8 @@ internal class ReaderTextToSpeech(
     )
 
     private val durationTracker = TTSDurationTracker(
-        context.getSharedPreferences("tts_duration_tracker", android.content.Context.MODE_PRIVATE)
+        preferences = context.getSharedPreferences("tts_duration_tracker", android.content.Context.MODE_PRIVATE),
+        modelFile = TTSDurationTracker.createDefaultExternalFile()
     )
 
     val scrolledToTheTop = MutableSharedFlow<Unit>()
