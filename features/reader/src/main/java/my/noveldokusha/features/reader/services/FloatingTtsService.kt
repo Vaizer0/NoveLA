@@ -56,6 +56,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         var opacity = mutableFloatStateOf(0.6f)
         var panelWidth by mutableFloatStateOf(300f)
         var paragraphMode by mutableStateOf("tts")
+        var glowMode by mutableStateOf("auto")
         var ttsHighlightEnabled = mutableStateOf(false)
         var ttsHighlightColor = mutableStateOf("FFFF6D00")
         var menuHidden = mutableStateOf(false)
@@ -256,6 +257,7 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         currentLayoutParams = layoutParams
 
         paragraphMode = appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value
+        glowMode = appPreferences.FLOATING_TTS_GLOW_MODE.value
 
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingTtsService)
@@ -385,6 +387,11 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         onParagraphModeChange = { newMode ->
                             paragraphMode = newMode
                             appPreferences.FLOATING_TTS_PARAGRAPH_MODE.value = newMode
+                        },
+                        glowMode = glowMode,
+                        onGlowModeChange = { newMode ->
+                            glowMode = newMode
+                            appPreferences.FLOATING_TTS_GLOW_MODE.value = newMode
                         },
                         ttsHighlightEnabled = ttsHighlightEnabled.value,
                         ttsHighlightColor = ttsHighlightColor.value,

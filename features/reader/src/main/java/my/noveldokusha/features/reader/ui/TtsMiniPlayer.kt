@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -49,6 +50,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -89,6 +91,8 @@ internal fun TtsMiniPlayer(
     onOpacityChange: ((Float) -> Unit)? = null,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
+    glowMode: String = "auto",
+    onGlowModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
     ttsHighlightColor: String = "FFFF6D00",
     menuHidden: Boolean = false,
@@ -109,6 +113,8 @@ internal fun TtsMiniPlayer(
         onOpacityChange = onOpacityChange,
         paragraphMode = paragraphMode,
         onParagraphModeChange = onParagraphModeChange,
+        glowMode = glowMode,
+        onGlowModeChange = onGlowModeChange,
         ttsHighlightEnabled = ttsHighlightEnabled,
         ttsHighlightColor = ttsHighlightColor,
         menuHidden = menuHidden,
@@ -272,6 +278,8 @@ private fun FloatingTtsMiniPlayer(
     onOpacityChange: ((Float) -> Unit)?,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
+    glowMode: String = "auto",
+    onGlowModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
     ttsHighlightColor: String = "FFFF6D00",
     menuHidden: Boolean = false,
@@ -288,7 +296,11 @@ private fun FloatingTtsMiniPlayer(
     }
     val isBothMode = paragraphMode == "both" && hasInverse
     val hasParagraphText = displayText.isNotBlank() || isBothMode
-    val autoGlow = state.isPlaying.value && hasParagraphText
+    val showGlow = when (glowMode) {
+        "on" -> true
+        "off" -> false
+        else -> state.isPlaying.value && hasParagraphText
+    }
 
     var showOpacitySlider by remember { mutableStateOf(false) }
     val lastTapTime = remember { mutableLongStateOf(0L) }
@@ -415,6 +427,22 @@ private fun FloatingTtsMiniPlayer(
                                     )
                                 }
                             }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Glow",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                SegmentedButtonGroup(
+                                    options = listOf("Auto", "On", "Off"),
+                                    selected = glowMode.replaceFirstChar { it.uppercase() },
+                                    onSelection = { onGlowModeChange?.invoke(it.lowercase()) },
+                                )
+                            }
                             if (onParagraphModeChange != null && state.parallelEnabled.value) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -425,41 +453,27 @@ private fun FloatingTtsMiniPlayer(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = stringResource(R.string.tts_voice),
-                                        color = if (paragraphMode == "tts") MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = if (paragraphMode == "tts") FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier
-                                            .clickable { onParagraphModeChange("tts") }
-                                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                                    )
-                                    Text(
-                                        text = "/",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.tts_both),
-                                        color = if (paragraphMode == "both") MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = if (paragraphMode == "both") FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier
-                                            .clickable { onParagraphModeChange("both") }
-                                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                                    )
-                                    Text(
-                                        text = "/",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.inverse),
-                                        color = if (paragraphMode == "inverse") MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = if (paragraphMode == "inverse") FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier
-                                            .clickable { onParagraphModeChange("inverse") }
-                                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                                    Spacer(Modifier.weight(1f))
+                                    SegmentedButtonGroup(
+                                        options = listOf(
+                                            stringResource(R.string.tts_voice),
+                                            stringResource(R.string.tts_both),
+                                            stringResource(R.string.inverse),
+                                        ),
+                                        selected = when (paragraphMode) {
+                                            "tts" -> stringResource(R.string.tts_voice)
+                                            "both" -> stringResource(R.string.tts_both)
+                                            "inverse" -> stringResource(R.string.inverse)
+                                            else -> stringResource(R.string.tts_voice)
+                                        },
+                                        onSelection = { selected ->
+                                            val newMode = when (selected) {
+                                                stringResource(R.string.tts_both) -> "both"
+                                                stringResource(R.string.inverse) -> "inverse"
+                                                else -> "tts"
+                                            }
+                                            onParagraphModeChange?.invoke(newMode)
+                                        },
                                     )
                                 }
                             }
@@ -480,7 +494,7 @@ private fun FloatingTtsMiniPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (autoGlow) {
+                            if (showGlow) {
                                 Modifier
                                     .border(1.5.dp, glowColor, RoundedCornerShape(8.dp))
                             } else {
@@ -655,6 +669,47 @@ private fun HighlightedText(
             }
         }
     )
+}
+
+@Composable
+private fun SegmentedButtonGroup(
+    options: List<String>,
+    selected: String,
+    onSelection: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.clip(RoundedCornerShape(8.dp)),
+    ) {
+        options.forEachIndexed { index, option ->
+            val isSelected = option == selected
+            Surface(
+                shape = when (index) {
+                    0 -> RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp)
+                    options.lastIndex -> RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)
+                    else -> RoundedCornerShape(0.dp)
+                },
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(
+                    1.dp,
+                    if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier
+                    .clickable { onSelection(option) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = option,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 @Composable
