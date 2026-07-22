@@ -444,6 +444,9 @@ private fun FloatingTtsMiniPlayer(
                                 )
                             }
                             if (onParagraphModeChange != null && state.parallelEnabled.value) {
+                                val voiceLabel = stringResource(R.string.tts_voice)
+                                val bothLabel = stringResource(R.string.tts_both)
+                                val inverseLabel = stringResource(R.string.inverse)
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
@@ -455,21 +458,17 @@ private fun FloatingTtsMiniPlayer(
                                     )
                                     Spacer(Modifier.weight(1f))
                                     SegmentedButtonGroup(
-                                        options = listOf(
-                                            stringResource(R.string.tts_voice),
-                                            stringResource(R.string.tts_both),
-                                            stringResource(R.string.inverse),
-                                        ),
+                                        options = listOf(voiceLabel, bothLabel, inverseLabel),
                                         selected = when (paragraphMode) {
-                                            "tts" -> stringResource(R.string.tts_voice)
-                                            "both" -> stringResource(R.string.tts_both)
-                                            "inverse" -> stringResource(R.string.inverse)
-                                            else -> stringResource(R.string.tts_voice)
+                                            "tts" -> voiceLabel
+                                            "both" -> bothLabel
+                                            "inverse" -> inverseLabel
+                                            else -> voiceLabel
                                         },
                                         onSelection = { selected ->
                                             val newMode = when (selected) {
-                                                stringResource(R.string.tts_both) -> "both"
-                                                stringResource(R.string.inverse) -> "inverse"
+                                                bothLabel -> "both"
+                                                inverseLabel -> "inverse"
                                                 else -> "tts"
                                             }
                                             onParagraphModeChange?.invoke(newMode)
@@ -723,6 +722,9 @@ private fun ThinSlider(
     val trackHeightPx = with(density) { 2.dp.toPx() }
     val thumbRadiusPx = with(density) { 4.dp.toPx() }
 
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+    val activeColor = MaterialTheme.colorScheme.primary
+
     Box(
         modifier = modifier
             .height(20.dp)
@@ -743,9 +745,6 @@ private fun ThinSlider(
 
             val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
             val activeWidth = width * fraction
-
-            val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-            val activeColor = MaterialTheme.colorScheme.primary
 
             drawRoundRect(
                 color = trackColor,
