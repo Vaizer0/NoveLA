@@ -7,13 +7,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -385,95 +386,115 @@ private fun FloatingTtsMiniPlayer(
 
                     if (onOpacityChange != null && showOpacitySlider) {
                         Spacer(modifier = Modifier.height(2.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Text(
-                                    text = stringResource(R.string.tts_floating_opacity),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                ThinSlider(
-                                    value = opacityValue,
-                                    onValueChange = { onOpacityChange(it) },
-                                    valueRange = 0.3f..1f,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            if (onPanelWidthChange != null) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = stringResource(R.string.tts_floating_width),
+                                        text = stringResource(R.string.tts_floating_opacity),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(6.dp))
                                     ThinSlider(
-                                        value = panelWidth,
-                                        onValueChange = { onPanelWidthChange(it) },
-                                        valueRange = minWidth..maxWidth,
+                                        value = opacityValue,
+                                        onValueChange = { onOpacityChange(it) },
+                                        valueRange = 0.3f..1f,
                                         modifier = Modifier.weight(1f),
                                     )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "${(opacityValue * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
                                 }
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Glow",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.weight(1f))
-                                SegmentedButtonGroup(
-                                    options = listOf("Auto", "On", "Off"),
-                                    selected = glowMode.replaceFirstChar { it.uppercase() },
-                                    onSelection = { onGlowModeChange?.invoke(it.lowercase()) },
-                                )
-                            }
-                            if (onParagraphModeChange != null && state.parallelEnabled.value) {
-                                val voiceLabel = stringResource(R.string.tts_voice)
-                                val bothLabel = stringResource(R.string.tts_both)
-                                val inverseLabel = stringResource(R.string.inverse)
+                                if (onPanelWidthChange != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.tts_floating_width),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        ThinSlider(
+                                            value = panelWidth,
+                                            onValueChange = { onPanelWidthChange(it) },
+                                            valueRange = minWidth..maxWidth,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "${(ratio * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    }
+                                }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                                 ) {
                                     Text(
-                                        text = stringResource(R.string.tts_floating_paragraph),
+                                        text = "Glow",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Spacer(Modifier.weight(1f))
                                     SegmentedButtonGroup(
-                                        options = listOf(voiceLabel, bothLabel, inverseLabel),
-                                        selected = when (paragraphMode) {
-                                            "tts" -> voiceLabel
-                                            "both" -> bothLabel
-                                            "inverse" -> inverseLabel
-                                            else -> voiceLabel
-                                        },
-                                        onSelection = { selected ->
-                                            val newMode = when (selected) {
-                                                bothLabel -> "both"
-                                                inverseLabel -> "inverse"
-                                                else -> "tts"
-                                            }
-                                            onParagraphModeChange?.invoke(newMode)
-                                        },
+                                        options = listOf("Auto", "On", "Off"),
+                                        selected = glowMode.replaceFirstChar { it.uppercase() },
+                                        onSelection = { onGlowModeChange?.invoke(it.lowercase()) },
                                     )
+                                }
+                                if (onParagraphModeChange != null && state.parallelEnabled.value) {
+                                    val voiceLabel = stringResource(R.string.tts_voice)
+                                    val bothLabel = stringResource(R.string.tts_both)
+                                    val inverseLabel = stringResource(R.string.inverse)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.tts_floating_paragraph),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        SegmentedButtonGroup(
+                                            options = listOf(voiceLabel, bothLabel, inverseLabel),
+                                            selected = when (paragraphMode) {
+                                                "tts" -> voiceLabel
+                                                "both" -> bothLabel
+                                                "inverse" -> inverseLabel
+                                                else -> voiceLabel
+                                            },
+                                            onSelection = { selected ->
+                                                val newMode = when (selected) {
+                                                    bothLabel -> "both"
+                                                    inverseLabel -> "inverse"
+                                                    else -> "tts"
+                                                }
+                                                onParagraphModeChange?.invoke(newMode)
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -678,26 +699,23 @@ private fun SegmentedButtonGroup(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.clip(RoundedCornerShape(8.dp)),
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+            .horizontalScroll(rememberScrollState())
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEachIndexed { index, option ->
             val isSelected = option == selected
             Surface(
-                shape = when (index) {
-                    0 -> RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp)
-                    options.lastIndex -> RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)
-                    else -> RoundedCornerShape(0.dp)
-                },
+                shape = RoundedCornerShape(6.dp),
                 color = if (isSelected) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(
-                    1.dp,
-                    if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                ),
                 modifier = Modifier
                     .clickable { onSelection(option) }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
                 Text(
                     text = option,
@@ -719,8 +737,8 @@ private fun ThinSlider(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val trackHeightPx = with(density) { 2.dp.toPx() }
-    val thumbRadiusPx = with(density) { 4.dp.toPx() }
+    val trackHeightPx = with(density) { 3.dp.toPx() }
+    val thumbRadiusPx = with(density) { 5.dp.toPx() }
 
     val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
     val activeColor = MaterialTheme.colorScheme.primary
@@ -728,7 +746,6 @@ private fun ThinSlider(
     Box(
         modifier = modifier
             .height(20.dp)
-            .clip(RoundedCornerShape(4.dp))
             .pointerInput(valueRange) {
                 detectDragGestures { change, _ ->
                     change.consume()
@@ -745,16 +762,17 @@ private fun ThinSlider(
 
             val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
             val activeWidth = width * fraction
+            val trackTop = centerY - trackHeightPx / 2
 
             drawRoundRect(
                 color = trackColor,
-                topLeft = Offset.Zero,
+                topLeft = Offset(0f, trackTop),
                 size = Size(width, trackHeightPx),
                 cornerRadius = CornerRadius(trackHeightPx / 2)
             )
             drawRoundRect(
                 color = activeColor,
-                topLeft = Offset.Zero,
+                topLeft = Offset(0f, trackTop),
                 size = Size(activeWidth, trackHeightPx),
                 cornerRadius = CornerRadius(trackHeightPx / 2)
             )
