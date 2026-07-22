@@ -26,7 +26,6 @@ import my.noveldokusha.reader.R
 @Composable
 internal fun FloatingTtsOverlayContent(
     state: TextToSpeechSettingData,
-    showText: Boolean,
     opacity: Float,
     onClose: () -> Unit,
     onToggleExpand: () -> Unit,
@@ -37,8 +36,6 @@ internal fun FloatingTtsOverlayContent(
     onPanelWidthChange: ((Float) -> Unit)? = null,
     opacityValue: Float = 0.95f,
     onOpacityChange: ((Float) -> Unit)? = null,
-    showTextToggle: Boolean = true,
-    onShowTextToggle: (() -> Unit)? = null,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
@@ -51,7 +48,6 @@ internal fun FloatingTtsOverlayContent(
             state = state,
             onClose = onClose,
             onStartHere = { state.playFirstVisibleItem() },
-            showParagraphText = showText,
             opacity = opacity,
             onDrag = onDrag,
             onDragEnd = onDragEnd,
@@ -59,8 +55,6 @@ internal fun FloatingTtsOverlayContent(
             onPanelWidthChange = onPanelWidthChange,
             opacityValue = opacityValue,
             onOpacityChange = onOpacityChange,
-            showTextToggle = showTextToggle,
-            onShowTextToggle = onShowTextToggle,
             paragraphMode = paragraphMode,
             onParagraphModeChange = onParagraphModeChange,
             ttsHighlightEnabled = ttsHighlightEnabled,

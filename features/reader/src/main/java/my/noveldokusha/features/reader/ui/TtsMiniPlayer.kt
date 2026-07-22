@@ -2,15 +2,16 @@ package my.noveldokusha.features.reader.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.clipToBounds
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,17 +30,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
 import androidx.compose.material.icons.filled.CenterFocusWeak
-import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,7 +49,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -61,6 +56,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -84,7 +80,6 @@ internal fun TtsMiniPlayer(
     onStartHere: () -> Unit,
     chapterCurrentNumber: Int = 0,
     chaptersCount: Int = 0,
-    showParagraphText: Boolean = false,
     opacity: Float = 0.95f,
     onDrag: ((Float, Float) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null,
@@ -92,8 +87,6 @@ internal fun TtsMiniPlayer(
     onPanelWidthChange: ((Float) -> Unit)? = null,
     opacityValue: Float = 0.95f,
     onOpacityChange: ((Float) -> Unit)? = null,
-    showTextToggle: Boolean = true,
-    onShowTextToggle: (() -> Unit)? = null,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
@@ -103,7 +96,6 @@ internal fun TtsMiniPlayer(
 ) {
     FloatingTtsMiniPlayer(
         state = state,
-        showParagraphText = showParagraphText,
         opacity = opacity,
         onClose = onClose,
         onDrag = onDrag,
@@ -115,8 +107,6 @@ internal fun TtsMiniPlayer(
         onPanelWidthChange = onPanelWidthChange,
         opacityValue = opacityValue,
         onOpacityChange = onOpacityChange,
-        showTextToggle = showTextToggle,
-        onShowTextToggle = onShowTextToggle,
         paragraphMode = paragraphMode,
         onParagraphModeChange = onParagraphModeChange,
         ttsHighlightEnabled = ttsHighlightEnabled,
@@ -133,14 +123,12 @@ private fun MiniPlayerControls(
     onStartHere: () -> Unit,
     chapterCurrentNumber: Int,
     chaptersCount: Int,
-    animatedProgress: Float,
-    remaining: Int,
+    chapterProgress: Int,
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
     playButtonSize: Dp = 40.dp,
     playIconSize: Dp = 36.dp,
-    progressHeight: Dp = 8.dp,
     extraAction: @Composable () -> Unit = {},
     trailingAction: @Composable () -> Unit = {},
 ) {
@@ -180,44 +168,17 @@ private fun MiniPlayerControls(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-                .height(progressHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-        }
-
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Text(
+                text = "${chapterProgress}%",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
-            ) {
-                Icon(
-                    Icons.Rounded.AccessTime,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = formatDuration(remaining),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            )
         }
 
         IconButton(
@@ -298,7 +259,6 @@ private fun MiniPlayerControls(
 @Composable
 private fun FloatingTtsMiniPlayer(
     state: TextToSpeechSettingData,
-    showParagraphText: Boolean,
     opacity: Float,
     onClose: () -> Unit,
     onDrag: ((Float, Float) -> Unit)?,
@@ -310,8 +270,6 @@ private fun FloatingTtsMiniPlayer(
     onPanelWidthChange: ((Float) -> Unit)?,
     opacityValue: Float,
     onOpacityChange: ((Float) -> Unit)?,
-    showTextToggle: Boolean,
-    onShowTextToggle: (() -> Unit)?,
     paragraphMode: String = "tts",
     onParagraphModeChange: ((String) -> Unit)? = null,
     ttsHighlightEnabled: Boolean = false,
@@ -319,14 +277,7 @@ private fun FloatingTtsMiniPlayer(
     menuHidden: Boolean = false,
     onToggleMenuHidden: (() -> Unit)? = null,
 ) {
-    val total = state.estimatedTotalSeconds.value
-    val remaining = state.estimatedRemainingSeconds.value
-    val progress = if (total > 0) (total - remaining).toFloat() / total else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 300),
-        label = ""
-    )
+    val chapterProgress = state.chapterProgressPercent.value
 
     val ttsParagraph = state.currentParagraphText.value
     val inverseParagraph = state.alternateParagraphText.value
@@ -336,7 +287,7 @@ private fun FloatingTtsMiniPlayer(
         else -> ttsParagraph
     }
     val isBothMode = paragraphMode == "both" && hasInverse
-    val hasParagraphText = showParagraphText && (displayText.isNotBlank() || isBothMode)
+    val hasParagraphText = displayText.isNotBlank() || isBothMode
     val autoGlow = state.isPlaying.value && hasParagraphText
 
     var showOpacitySlider by remember { mutableStateOf(false) }
@@ -355,7 +306,6 @@ private fun FloatingTtsMiniPlayer(
     val iconCircleSize = lerpf(16f, 24f, ratio).dp
     val playButtonSize = lerpf(24f, 34f, ratio).dp
     val playIconSize = lerpf(20f, 30f, ratio).dp
-    val progressHeight = lerpf(3f, 6f, ratio).dp
     val paragraphFontSize = lerpf(9f, 13f, ratio).sp
 
     val currentPanelWidth by rememberUpdatedState(panelWidth)
@@ -395,14 +345,12 @@ private fun FloatingTtsMiniPlayer(
                         onStartHere = onStartHere,
                         chapterCurrentNumber = chapterCurrentNumber,
                         chaptersCount = chaptersCount,
-                        animatedProgress = animatedProgress,
-                        remaining = remaining,
+                        chapterProgress = chapterProgress,
                         buttonSize = buttonSize,
                         iconSize = iconSize,
                         iconCircleSize = iconCircleSize,
                         playButtonSize = playButtonSize,
                         playIconSize = playIconSize,
-                        progressHeight = progressHeight,
                         extraAction = {
                             if (onOpacityChange != null) {
                                 IconButton(
@@ -421,25 +369,7 @@ private fun FloatingTtsMiniPlayer(
                                 }
                             }
                         },
-                        trailingAction = {
-                            if (onShowTextToggle != null) {
-                                IconButton(
-                                    onClick = onShowTextToggle,
-                                    modifier = Modifier.size(buttonSize)
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Rounded.TextSnippet,
-                                        contentDescription = null,
-                                        tint = if (showTextToggle) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier
-                                            .size(iconSize)
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
-                                    )
-                                }
-                            }
-                        },
-                    )
+                        )
 
                     if (onOpacityChange != null && showOpacitySlider) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -459,15 +389,11 @@ private fun FloatingTtsMiniPlayer(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Slider(
+                                ThinSlider(
                                     value = opacityValue,
                                     onValueChange = { onOpacityChange(it) },
                                     valueRange = 0.3f..1f,
                                     modifier = Modifier.weight(1f),
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = MaterialTheme.colorScheme.primary,
-                                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    )
                                 )
                             }
                             if (onPanelWidthChange != null) {
@@ -481,15 +407,11 @@ private fun FloatingTtsMiniPlayer(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Slider(
+                                    ThinSlider(
                                         value = panelWidth,
                                         onValueChange = { onPanelWidthChange(it) },
                                         valueRange = minWidth..maxWidth,
                                         modifier = Modifier.weight(1f),
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = MaterialTheme.colorScheme.primary,
-                                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                                        )
                                     )
                                 }
                             }
@@ -678,18 +600,6 @@ private fun FloatingTtsMiniPlayer(
     }
 }
 
-private fun formatDuration(seconds: Int): String {
-    if (seconds <= 0) return "0:00"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) {
-        "${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}"
-    } else {
-        "${m}:${s.toString().padStart(2, '0')}"
-    }
-}
-
 @Composable
 private fun HighlightedText(
     text: String,
@@ -745,4 +655,60 @@ private fun HighlightedText(
             }
         }
     )
+}
+
+@Composable
+private fun ThinSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val trackHeightPx = with(density) { 2.dp.toPx() }
+    val thumbRadiusPx = with(density) { 4.dp.toPx() }
+
+    Box(
+        modifier = modifier
+            .height(20.dp)
+            .clipToBounds()
+            .pointerInput(valueRange) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    val width = size.width.toFloat()
+                    val fraction = (change.position.x / width).coerceIn(0f, 1f)
+                    val newValue = valueRange.start + fraction * (valueRange.endInclusive - valueRange.start)
+                    onValueChange(newValue)
+                }
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().align(Alignment.Center)) {
+            val width = size.width
+            val centerY = size.height / 2
+
+            val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
+            val activeWidth = width * fraction
+
+            val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+            val activeColor = MaterialTheme.colorScheme.primary
+
+            drawRoundRect(
+                color = trackColor,
+                topLeft = Offset.Zero,
+                size = Size(width, trackHeightPx),
+                cornerRadius = CornerRadius(trackHeightPx / 2)
+            )
+            drawRoundRect(
+                color = activeColor,
+                topLeft = Offset.Zero,
+                size = Size(activeWidth, trackHeightPx),
+                cornerRadius = CornerRadius(trackHeightPx / 2)
+            )
+            drawCircle(
+                color = activeColor,
+                radius = thumbRadiusPx,
+                center = Offset(activeWidth, centerY)
+            )
+        }
+    }
 }

@@ -30,7 +30,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -370,32 +369,25 @@ internal class NarratorMediaControlsNotification @Inject constructor(
         }
 
 
-        // Update chapter progress and remaining time
+        // Update chapter progress
         scope.launch {
-            combine(
-                snapshotFlow { readerSession.speakerStats.value },
-                snapshotFlow { readerSession.readerTextToSpeech.state.estimatedRemainingSeconds.value },
-            ) { stats, remainingSecs -> stats to remainingSecs }
-                .collectLatest { pair ->
-                    val stats = pair.first ?: return@collectLatest
-                    val remainingSecs = pair.second
+            snapshotFlow { readerSession.speakerStats.value }
+                .collectLatest { stats ->
+                    val s = stats ?: return@collectLatest
                     val chapterPos = context.getString(
                         R.string.chapter_x_over_n,
-                        stats.chapterIndex + 1,
-                        stats.chapterCount
+                        s.chapterIndex + 1,
+                        s.chapterCount
                     )
                     val progress = context.getString(
                         R.string.progress_x_percentage,
-                        stats.chapterReadPercentage()
+                        s.chapterReadPercentage()
                     )
-                    val remainingStr = if (remainingSecs > 0) {
-                        "  •  -${formatDuration(remainingSecs)}"
-                    } else ""
                     notificationsCenter.modifyNotification(
                         builder = notificationBuilder,
                         notificationId = notificationId,
                     ) {
-                        text = "$chapterPos  $progress$remainingStr"
+                        text = "$chapterPos  $progress"
                     }
                 }
         }
@@ -468,15 +460,3 @@ internal class NarratorMediaControlsNotification @Inject constructor(
     }
 }
 
-private fun formatDuration(seconds: Int): String {
-    val total = seconds.coerceAtLeast(0)
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-
-    return if (h > 0) {
-        "%d:%02d:%02d".format(h, m, s)
-    } else {
-        "%d:%02d".format(m, s)
-    }
-}

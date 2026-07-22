@@ -52,7 +52,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
         const val ACTION_STOP = "my.noveldokusha.features.reader.services.FloatingTtsService.ACTION_STOP"
 
         var ttsState = mutableStateOf<TextToSpeechSettingData?>(null)
-        var showText = mutableStateOf(false)
         var showOutsideApp = mutableStateOf(true)
         var opacity = mutableFloatStateOf(0.6f)
         var panelWidth by mutableFloatStateOf(300f)
@@ -286,7 +285,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                 ) {
                     FloatingTtsOverlayContent(
                         state = state,
-                        showText = showText.value,
                         opacity = opacity.floatValue,
                         onClose = {
                             menuHidden.value = false
@@ -382,10 +380,6 @@ internal class FloatingTtsService : Service(), LifecycleOwner, SavedStateRegistr
                         onOpacityChange = { newOpacity ->
                             opacity.floatValue = newOpacity
                             appPreferences.FLOATING_TTS_OPACITY.value = newOpacity
-                        },
-                        showTextToggle = showText.value,
-                        onShowTextToggle = {
-                            showText.value = !showText.value
                         },
                         paragraphMode = paragraphMode,
                         onParagraphModeChange = { newMode ->
