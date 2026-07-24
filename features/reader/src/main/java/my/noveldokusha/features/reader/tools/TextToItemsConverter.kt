@@ -9,7 +9,7 @@ import org.jsoup.Jsoup
 import timber.log.Timber
 
 private val IMG_TAG_REGEX = Regex("<img\\b", RegexOption.IGNORE_CASE)
-private val STRIP_HTML_TAGS = Regex("<[^>]*>")
+private val STRIP_HTML_TAGS = Regex("</?(?:a|abbr|acronym|address|article|aside|audio|b|base|bdi|bdo|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|section|select|small|source|span|strong|style|sub|summary|sup|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr)\b[^>]*>")
 private val COLLAPSE_SPACES = Regex("[ ]+")
 private val PARAGRAPH_BREAK = Regex("\\n\\s*\\n")
 
