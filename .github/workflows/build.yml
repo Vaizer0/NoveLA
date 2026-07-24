@@ -1,6 +1,8 @@
 name: Build APK
 
 on:
+  push:
+    branches: [fix/preserve-literal-angle-bracket-text]
   workflow_dispatch:
 
 jobs:
