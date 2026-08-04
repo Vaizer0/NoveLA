@@ -97,6 +97,7 @@ internal fun ReaderScreenBottomBarDialogs(
                                     .fillMaxWidth()
                                     .height(panelHeight),
                                 applyStatusBarPadding = false,
+                                compactHeader = true,
                             )
                         }
                     }

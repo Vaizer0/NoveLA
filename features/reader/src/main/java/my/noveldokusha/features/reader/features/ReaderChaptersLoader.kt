@@ -587,12 +587,13 @@ internal class ReaderChaptersLoader(
                     return@_addChapterInternal false
                 }
 
+                val regexRules = regexRulesProvider()
                 val itemsOriginal = textToItemsConverter(
                     chapterUrl = chapter.url,
                     chapterIndex = chapterIndex,
                     chapterItemPositionDisplacement = chapterItemPosition,
                     text = res.data,
-                    userRegexRules = regexRulesProvider(),
+                    userRegexRules = regexRules,
                 )
                 chapterItemPosition += itemsOriginal.size
 
@@ -793,7 +794,6 @@ internal class ReaderChaptersLoader(
                 // original text. Only real translations are cleaned: fallbacks to
                 // the already-cleaned original (textTranslated == text) are skipped
                 // to avoid applying the same rule twice.
-                val regexRules = regexRulesProvider()
                 val itemsCleaned = items.map { item ->
                     if (item is ReaderItem.Body) {
                         val translated = item.textTranslated

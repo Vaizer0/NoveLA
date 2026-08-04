@@ -44,7 +44,8 @@ fun RegexCleanupSettingsScreen(
     viewModel: RegexCleanupSettingsViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    applyStatusBarPadding: Boolean = true
+    applyStatusBarPadding: Boolean = true,
+    compactHeader: Boolean = false
 ) {
     val state by viewModel.uiState
     val filteredRules = viewModel.filteredRules
@@ -79,22 +80,34 @@ fun RegexCleanupSettingsScreen(
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.Rule,
-                            contentDescription = stringResource(
-                                id = if (viewModel.isGlobal) R.string.regex_cleanup_title
-                                else R.string.regex_cleanup_novel_rules
-                            ),
-                            modifier = Modifier.size(18.dp)
-                        )
+                if (compactHeader) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Rule,
+                                contentDescription = stringResource(
+                                    id = if (viewModel.isGlobal) R.string.regex_cleanup_title
+                                    else R.string.regex_cleanup_novel_rules
+                                ),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
+                } else {
+                    Text(
+                        text = stringResource(
+                            id = if (viewModel.isGlobal) R.string.regex_cleanup_title
+                            else R.string.regex_cleanup_novel_rules
+                        ),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
 
@@ -152,11 +165,14 @@ fun RegexCleanupSettingsScreen(
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
-                    )
+                    ),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = stringResource(id = R.string.regex_cleanup_move_to_global),
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 OutlinedButton(
@@ -164,11 +180,14 @@ fun RegexCleanupSettingsScreen(
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
-                    )
+                    ),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = stringResource(id = R.string.regex_cleanup_remove_novel_rules),
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
