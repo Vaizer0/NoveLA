@@ -157,6 +157,7 @@
     <string name="text_size">Cỡ chữ</string>
     <string name="line_height">Chiều cao dòng</string>
     <string name="paragraph_spacing">Khoảng cách đoạn</string>
+    <string name="letter_spacing">Khoảng cách chữ cái</string>
     <string name="name">Tên</string>
     <string name="save_current_voice">Lưu giọng đọc hiện tại</string>
     <string name="save_current_voice_parameters">Lưu giọng đọc và thông số hiện tại</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Đã thêm vào hàng đợi tải xuống</string>
+    <string name="download_next_100_chapters">Tải 100 chương tiếp theo</string>
     <string name="download_all_chapters">Tải tất cả chương</string>
     <string name="download_progress">Đang tải %1$s: %2$s</string>
     <string name="download_pause">Tạm dừng</string>

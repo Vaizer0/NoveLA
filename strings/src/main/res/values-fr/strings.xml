@@ -157,6 +157,7 @@
     <string name="text_size">Taille du texte</string>
     <string name="line_height">Hauteur de ligne</string>
     <string name="paragraph_spacing">Espacement des paragraphes</string>
+    <string name="letter_spacing">Espacement des lettres</string>
     <string name="name">Nom</string>
     <string name="save_current_voice">Enregistrer la voix actuelle</string>
     <string name="save_current_voice_parameters">Enregistrer la voix et les paramètres actuels</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Ajouté à la file de téléchargement</string>
+    <string name="download_next_100_chapters">Télécharger les 100 prochains chapitres</string>
     <string name="download_all_chapters">Télécharger tous les chapitres</string>
     <string name="download_progress">Téléchargement de %1$s : %2$s</string>
     <string name="download_pause">Pause</string>

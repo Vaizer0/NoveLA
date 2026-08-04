@@ -157,6 +157,7 @@
     <string name="text_size">Ukuran teks</string>
     <string name="line_height">Tinggi baris</string>
     <string name="paragraph_spacing">Spasi paragraf</string>
+    <string name="letter_spacing">Spasi huruf</string>
     <string name="name">Nama</string>
     <string name="save_current_voice">Simpan suara saat ini</string>
     <string name="save_current_voice_parameters">Simpan suara dan parameter saat ini</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Ditambahkan ke antrean unduhan</string>
+    <string name="download_next_100_chapters">Unduh 100 bab berikutnya</string>
     <string name="download_all_chapters">Unduh semua bab</string>
     <string name="download_progress">Mengunduh %1$s: %2$s</string>
     <string name="download_pause">Jeda</string>

@@ -185,6 +185,7 @@
     <string name="text_size">Text size</string>
     <string name="line_height">Line height</string>
     <string name="paragraph_spacing">Paragraph spacing</string>
+    <string name="letter_spacing">Letter spacing</string>
     <string name="name">Name</string>
     <string name="save_current_voice">Save current voice</string>
     <string name="save_current_voice_parameters">Save current voice and parameters</string>
@@ -557,6 +558,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Added to download queue</string>
+    <string name="download_next_100_chapters">Download next 100 chapters</string>
     <string name="download_all_chapters">Download all chapters</string>
     <string name="download_progress">Downloading %1$s: %2$s</string>
     <string name="download_pause">Pause</string>

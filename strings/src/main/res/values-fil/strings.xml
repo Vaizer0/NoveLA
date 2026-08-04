@@ -157,6 +157,7 @@
     <string name="text_size">Laki ng teksto</string>
     <string name="line_height">Taas ng linya</string>
     <string name="paragraph_spacing">Espasyo ng talata</string>
+    <string name="letter_spacing">Espasyo ng titik</string>
     <string name="name">Pangalan</string>
     <string name="save_current_voice">I-save ang kasalukuyang boses</string>
     <string name="save_current_voice_parameters">I-save ang kasalukuyang boses at mga parameter</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Idinagdag sa download queue</string>
+    <string name="download_next_100_chapters">I-download ang susunod na 100 kabanata</string>
     <string name="download_all_chapters">I-download lahat ng kabanata</string>
     <string name="download_progress">Dina-download %1$s: %2$s</string>
     <string name="download_pause">I-pause</string>

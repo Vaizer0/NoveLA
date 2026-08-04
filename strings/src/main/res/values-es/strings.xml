@@ -157,6 +157,7 @@
     <string name="text_size">Tamaño de texto</string>
     <string name="line_height">Altura de línea</string>
     <string name="paragraph_spacing">Espaciado de párrafo</string>
+    <string name="letter_spacing">Espaciado de letras</string>
     <string name="name">Nombre</string>
     <string name="save_current_voice">Guardar voz actual</string>
     <string name="save_current_voice_parameters">Guardar voz y parámetros actuales</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">Añadido a la cola de descarga</string>
+    <string name="download_next_100_chapters">Descargar los siguientes 100 capítulos</string>
     <string name="download_all_chapters">Descargar todos los capítulos</string>
     <string name="download_progress">Descargando %1$s: %2$s</string>
     <string name="download_pause">Pausa</string>

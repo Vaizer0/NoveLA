@@ -157,6 +157,7 @@
     <string name="text_size">Metin boyutu</string>
     <string name="line_height">Satır yüksekliği</string>
     <string name="paragraph_spacing">Paragraf aralığı</string>
+    <string name="letter_spacing">Harf aralığı</string>
     <string name="name">İsim</string>
     <string name="save_current_voice">Geçerli sesi kaydet</string>
     <string name="save_current_voice_parameters">Geçerli sesi ve parametreleri kaydet</string>
@@ -511,6 +512,7 @@
 
     <!-- Download Manager -->
     <string name="download_added_to_queue">İndirme kuyruğuna eklendi</string>
+    <string name="download_next_100_chapters">Sonraki 100 bölümü indir</string>
     <string name="download_all_chapters">Tüm bölümleri indir</string>
     <string name="download_progress">İndiriliyor: %1$s: %2$s</string>
     <string name="download_pause">Duraklat</string>
