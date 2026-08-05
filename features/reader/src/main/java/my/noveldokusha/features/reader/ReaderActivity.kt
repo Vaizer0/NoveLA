@@ -218,14 +218,7 @@ class ReaderActivity : BaseActivity() {
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
         viewBind.listView.adapter = viewAdapter.listView
         readerViewHandlersActions.listView = viewBind.listView
-        viewBind.listView.setOnTouchListener { _, event ->
-            interactionGate.onTouch(
-                actionMasked = event.actionMasked,
-                pointerCount = event.pointerCount,
-                now = SystemClock.elapsedRealtime()
-            )
-            false
-        }
+        viewBind.listView.interactionTouchListener = interactionGate::onTouch
 
         fadeInTextLiveData.distinctUntilChanged().observe(this) {
             if (it) {
@@ -491,7 +484,6 @@ class ReaderActivity : BaseActivity() {
                     visibleItemCount: Int,
                     totalItemCount: Int
                 ) {
-                    interactionGate.onScroll(SystemClock.elapsedRealtime())
                     lastScrollEventTime = SystemClock.elapsedRealtime()
                     updateCurrentReadingPosSavingState(
                         firstVisibleItemIndex = viewAdapter.listView.fromPositionToIndex(
@@ -717,6 +709,12 @@ class ReaderActivity : BaseActivity() {
                 SystemClock.elapsedRealtime() - lastScrollEventTime > 500L
             ) {
                 listIsScrolling = false
+                // Гейт тоже «залипает» на isScrolling=true без финального IDLE —
+                // сбрасываем и его, иначе follow-скролл молча отключается.
+                interactionGate.onScrollStateChanged(
+                    isScrolling = false,
+                    now = SystemClock.elapsedRealtime()
+                )
             } else {
                 return
             }

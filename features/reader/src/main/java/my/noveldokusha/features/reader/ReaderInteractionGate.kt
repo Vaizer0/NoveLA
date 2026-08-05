@@ -6,6 +6,10 @@ import android.view.MotionEvent
  * Tracks whether the user is currently touching or manually scrolling the reader
  * list. TTS follow-scroll must be suppressed while this returns true, otherwise
  * the reader yanks the view back to the spoken paragraph mid-gesture.
+ *
+ * Fed from two sources only: raw touch events (via ReaderInteractionListView's
+ * dispatch-level hook) and user-initiated scroll-state transitions. Programmatic
+ * auto-scrolls never reach the gate, so they cannot re-arm the grace period.
  */
 class ReaderInteractionGate {
 
@@ -27,10 +31,6 @@ class ReaderInteractionGate {
             MotionEvent.ACTION_POINTER_UP ->
                 if (pointerCount <= 1) userIsTouching = false
         }
-        lastInteractionTime = now
-    }
-
-    fun onScroll(now: Long) {
         lastInteractionTime = now
     }
 

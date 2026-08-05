@@ -44,15 +44,6 @@ class ReaderInteractionGateTest {
     }
 
     @Test
-    fun `onScroll refreshes the grace period`() {
-        gate.onScrollStateChanged(isScrolling = true, now = 0L)
-        gate.onScrollStateChanged(isScrolling = false, now = 0L)
-        gate.onScroll(now = 1_000L)
-        assertTrue(gate.isUserInteracting(now = 2_400L))
-        assertFalse(gate.isUserInteracting(now = 2_600L))
-    }
-
-    @Test
     fun `move keeps the gate blocked while touching`() {
         gate.onTouch(MotionEvent.ACTION_DOWN, pointerCount = 1, now = 0L)
         gate.onTouch(MotionEvent.ACTION_MOVE, pointerCount = 1, now = 5_000L)
