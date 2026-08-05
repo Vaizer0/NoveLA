@@ -22,9 +22,9 @@ class ReaderInteractionListView @JvmOverloads constructor(
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         interactionTouchListener?.invoke(
-            actionMasked = ev.actionMasked,
-            pointerCount = ev.pointerCount,
-            now = SystemClock.elapsedRealtime()
+            ev.actionMasked,
+            ev.pointerCount,
+            SystemClock.elapsedRealtime()
         )
         return super.dispatchTouchEvent(ev)
     }
