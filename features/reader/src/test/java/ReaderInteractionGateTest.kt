@@ -34,7 +34,9 @@ class ReaderInteractionGateTest {
     @Test
     fun `scroll state blocks auto-scroll`() {
         gate.onScrollStateChanged(isScrolling = true, now = 0L)
-        assertTrue(gate.isUserInteracting(now = 100L))
+        // After the grace period expires, the scroll state alone must keep the
+        // gate closed (otherwise this assertion would only pass via grace).
+        assertTrue(gate.isUserInteracting(now = 2_000L))
         gate.onScrollStateChanged(isScrolling = false, now = 100L)
         // Grace period still blocks shortly after the scroll ends.
         assertTrue(gate.isUserInteracting(now = 1_500L))
@@ -51,15 +53,31 @@ class ReaderInteractionGateTest {
     }
 
     @Test
+    fun `move keeps the gate blocked while touching`() {
+        gate.onTouch(MotionEvent.ACTION_DOWN, pointerCount = 1, now = 0L)
+        gate.onTouch(MotionEvent.ACTION_MOVE, pointerCount = 1, now = 5_000L)
+        assertTrue(gate.userIsTouching)
+        assertTrue(gate.isUserInteracting(now = 5_000L))
+    }
+
+    @Test
     fun `pointer up while another pointer remains keeps touching`() {
         gate.onTouch(MotionEvent.ACTION_POINTER_DOWN, pointerCount = 2, now = 0L)
         gate.onTouch(MotionEvent.ACTION_POINTER_UP, pointerCount = 2, now = 100L)
-        // One finger is still down, so the gate must keep blocking.
-        assertTrue(gate.isUserInteracting(now = 100L))
+        // One finger is still down, so the gate must keep blocking — check the
+        // touch state directly, since grace would mask a state-machine bug here.
+        assertTrue(gate.userIsTouching)
         gate.onTouch(MotionEvent.ACTION_UP, pointerCount = 1, now = 200L)
         assertFalse(gate.userIsTouching)
         assertTrue(gate.isUserInteracting(now = 200L))
         assertFalse(gate.isUserInteracting(now = 1_700L))
+    }
+
+    @Test
+    fun `pointer up clears touching when it is the last pointer`() {
+        gate.onTouch(MotionEvent.ACTION_POINTER_DOWN, pointerCount = 2, now = 0L)
+        gate.onTouch(MotionEvent.ACTION_POINTER_UP, pointerCount = 1, now = 100L)
+        assertFalse(gate.userIsTouching)
     }
 
     @Test
