@@ -45,7 +45,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "my.novela"
+        applicationId = "my.novela.vaizer0"
         versionCode = 36
         versionName = "1.5.0"
         base.archivesName.set("NoveLA_v$versionName")
