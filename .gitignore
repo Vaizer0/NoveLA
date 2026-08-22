@@ -57,3 +57,7 @@ package-lock.json
 package.json
 repomix.config.json
 /.codegraph
+
+# Local SDK artifacts created by devcontainer setup
+cmdline-tools/
+cmdline-tools.zip

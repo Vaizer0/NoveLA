@@ -116,3 +116,28 @@ Kotlin · Coroutines · Jetpack Compose · Material 3 · Room · Jsoup · OkHttp
 ## License
 
 [GPL-3.0](LICENSE)
+
+---
+
+## CI & Live Testing
+
+This repository includes a GitHub Actions workflow that builds debug APKs and uploads them as artifacts on push/PR to `main`.
+
+- **Workflow file:** `.github/workflows/android-build.yml`
+- **What it does:** runs `./gradlew assembleDebug` and uploads `**/app/build/outputs/**/*.apk` as the artifact `NoveLA-debug-apks`.
+- **Download the APK:** Go to the repository on GitHub → Actions → select a run → Artifacts → download the APK and install on device or emulator.
+
+Optional: browser testing via Appetize.io. To enable automatic upload, add the repository secret `APPETIZE_UPLOAD_TOKEN` with your Appetize API token. The workflow will upload any `*-debug.apk` it builds.
+
+How to push and enable CI (example):
+
+```bash
+# create GitHub repo (if you haven't) and push
+git remote add origin git@github.com:<your-username>/<repo>.git
+git push -u origin main
+```
+
+After pushing, open the repository on GitHub and the Actions tab; the workflow will run on the pushed commits.
+
+If you want a cloud editing/dev environment, consider enabling GitHub Codespaces or adding a `.devcontainer` configuration — I can scaffold that if you want.
+
