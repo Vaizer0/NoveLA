@@ -51,14 +51,16 @@ jobs:
       # Optional: upload built APK to Appetize.io for browser testing.
       # To enable, add repository secret APPETIZE_UPLOAD_TOKEN (Appetize API token).
       - name: Upload to Appetize.io (optional)
-        if: ${{ secrets.APPETIZE_UPLOAD_TOKEN }}
         run: |
           set -e
+          if [ -z "${{ secrets.APPETIZE_UPLOAD_TOKEN }}" ]; then
+            echo "No APPETIZE_UPLOAD_TOKEN set — skipping Appetize upload."
+            exit 0
+          fi
           for apk in $(find . -name "*-debug.apk"); do
             echo "Uploading $apk to Appetize.io..."
             resp=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.APPETIZE_UPLOAD_TOKEN }}" -F "file=@${apk}" https://api.appetize.io/v1/applications)
             echo "Appetize response: $resp"
-            # Try to extract an identifier/token from response; print embed URL if available
             token=$(echo "$resp" | jq -r '.data.identifier // .data.uuid // .uuid // empty') || true
             if [ -n "$token" ]; then
               echo "Possible embed URL: https://appetize.io/embed/$token"
