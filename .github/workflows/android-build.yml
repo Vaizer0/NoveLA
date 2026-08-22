@@ -2,9 +2,9 @@ name: Android CI - Build Debug APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, default ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, default ]
   workflow_dispatch:
 
 jobs:
