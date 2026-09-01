@@ -176,6 +176,7 @@ internal fun ChaptersScreenBody(
                     translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     chapterSize = state.chapterSizes.value[it.chapter.url],
                     audioJob = state.audioJobs[it.chapter.url],
+                    audioFileExists = state.audioFilesExist[it.chapter.url] ?: false,
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
                     highlighted = it.chapter.url == highlightedChapterUrl,

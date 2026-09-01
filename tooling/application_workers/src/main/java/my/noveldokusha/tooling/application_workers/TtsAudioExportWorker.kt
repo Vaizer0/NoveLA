@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -85,6 +87,17 @@ class TtsAudioExportWorker(
                 return Result.failure()
             }
 
+            // Per-novel подпапка внутри постоянной обёртки "NoveLA Audio" в выбранном
+            // корне: <root>/NoveLA Audio/<Novel Title>/. Не смогли создать — ошибка.
+            val treeUri = Uri.parse(request.outputDirectoryUri)
+            val novelFolderUri = resolveNovelFolder(context, request)
+            if (novelFolderUri == null) {
+                Timber.e("TtsAudio: could not create novel folder for $jobId")
+                fail(appPreferences, jobId, notification,
+                    context.getString(StringsR.string.tts_audio_export_folder_error))
+                return Result.failure()
+            }
+
             val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
             try {
@@ -119,16 +132,41 @@ class TtsAudioExportWorker(
             val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, regexRules)
 
             // ── Синтез в temp WAV ───────────────────────────────────────────────
-            TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav)
+            // Прогресс репортируем только при смене процента (≤100 записей), чтобы
+            // не спамить SharedPreferences/WorkManager. Уведомление троттлим ≥1с.
+            var lastProgressReported = -1
+            var lastNotifyMs = 0L
+            TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav) { fraction ->
+                val percent = (fraction * 100).toInt().coerceIn(0, 99)
+                if (percent == lastProgressReported) return@exportAudio
+                lastProgressReported = percent
+                Timber.d("TtsAudio progress $percent%")
+                runCatching { setProgress(workDataOf(KEY_PROGRESS to percent)) }
+                TtsAudioQueue.updateState(appPreferences, jobId) {
+                    it!!.copy(progress = percent)
+                }
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastNotifyMs >= 1_000) {
+                    notification.updateProgress(percent)
+                    lastNotifyMs = now
+                }
+            }
 
             // ── Копирование в SAF-папку и финализация ──────────────────────────
-            val treeUri = Uri.parse(request.outputDirectoryUri)
-            val parentUri = DocumentsContract.buildDocumentUriUsingTree(
-                treeUri,
-                DocumentsContract.getTreeDocumentId(treeUri)
-            )
-            val fileName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}.${request.format}"
+            // fileName снабжается суффиксом источника, чтобы Original и Translated
+            // одной главы не коллизировали в одной папке (иначе SAF добавит "(1)").
+            val sourceSuffix = when (request.source) {
+                TtsAudioSource.ORIGINAL -> context.getString(StringsR.string.tts_audio_file_suffix_original)
+                TtsAudioSource.TRANSLATED -> context.getString(StringsR.string.tts_audio_file_suffix_translated)
+                TtsAudioSource.ASK_EVERY_TIME -> ""
+            }
+            val baseName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
+            val fileName = if (sourceSuffix.isBlank())
+                "$baseName.${request.format}"
+            else
+                "$baseName $sourceSuffix.${request.format}"
             val mime = if (request.format == "wav") MIME_WAV else "application/octet-stream"
+            val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
@@ -141,12 +179,14 @@ class TtsAudioExportWorker(
 
             val displayName = queryDisplayName(createdUri!!) ?: fileName
 
+            notification.updateProgress(100)
             notification.showComplete(displayName, createdUri)
             TtsAudioQueue.updateState(appPreferences, jobId) {
                 it!!.copy(
                     status = TtsAudioJobStatus.SUCCESS,
                     displayName = displayName,
                     documentUri = createdUri.toString(),
+                    progress = 100,
                 )
             }
             tempWav.delete()
@@ -288,12 +328,89 @@ class TtsAudioExportWorker(
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
     // То же ограничение, что у BookExportWorker: SAF режет длинные имена.
-    private fun sanitize(name: String): String =
-        name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { "chapter" }
+    private fun sanitize(name: String, fallback: String = "chapter"): String =
+        name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
+
+    /**
+     * Возвращает document URI папки книги: <root>/NoveLA Audio/<Novel Title>/.
+     * Папка и обёртка создаются при отсутствии; null — если недоступна/не создаётся.
+     * Ищем по имени сгенерированную физически (SAF не даёт «find», только листинг).
+     */
+    private suspend fun resolveNovelFolder(
+        context: Context,
+        request: TtsAudioExportRequest,
+    ): Uri? = withContext(Dispatchers.IO) {
+        runCatching {
+            val treeUri = Uri.parse(request.outputDirectoryUri)
+            val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
+            val wrapperDocId = findOrCreateDirectoryDocId(
+                context = context,
+                treeUri = treeUri,
+                parentDocId = rootDocId,
+                folderName = WRAPPER_FOLDER_NAME,
+            ) ?: return@runCatching null
+
+            val novelFolderName = sanitize(request.novelTitle, fallback = "novel")
+            val novelDocId = findOrCreateDirectoryDocId(
+                context = context,
+                treeUri = treeUri,
+                parentDocId = wrapperDocId,
+                folderName = novelFolderName,
+            ) ?: return@runCatching null
+
+            DocumentsContract.buildDocumentUriUsingTree(treeUri, novelDocId)
+        }.getOrNull()
+    }
+
+    /** Ищет папку [folderName] среди детей [parentDocId] или создаёт её. */
+    private fun findOrCreateDirectoryDocId(
+        context: Context,
+        treeUri: Uri,
+        parentDocId: String,
+        folderName: String,
+    ): String? {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        val existing = context.contentResolver.query(childrenUri, null, null, null, null)
+            ?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val mime = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    )
+                    if (mime != DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    val displayName = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    )
+                    if (displayName.equals(folderName, ignoreCase = true)) {
+                        return@use cursor.getString(
+                            cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                        )
+                    }
+                }
+                null
+            }
+        if (existing != null) return existing
+
+        return runCatching {
+            val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId)
+            val created = DocumentsContract.createDocument(
+                context.contentResolver,
+                parentUri,
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                folderName,
+            ) ?: return null
+            DocumentsContract.getDocumentId(created)
+        }.getOrNull()
+    }
 
     companion object {
         const val TAG = "TtsAudioExport"
         const val MIME_WAV = "audio/wav"
+
+        /** Постоянная папка-обёртка для аудио внутри выбранного корня. */
+        const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
+
+        /** Ключ прогресса (0..100) в WorkManager Data. */
+        const val KEY_PROGRESS = "progress"
 
         const val KEY_JOB_ID = "job_id"
         const val KEY_NOVEL_TITLE = "novel_title"

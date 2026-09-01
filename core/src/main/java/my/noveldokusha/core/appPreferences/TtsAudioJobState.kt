@@ -41,6 +41,8 @@ data class TtsAudioJobState(
     val displayName: String = "",
     /** content:// URI созданного файла на успех (для «открыть/прослушать»). */
     val documentUri: String = "",
+    /** Прогресс 0..100 (персистится воркером для восстановления после перезапуска). */
+    val progress: Int = 0,
 ) {
     val isActive: Boolean
         get() = status == TtsAudioJobStatus.QUEUED ||

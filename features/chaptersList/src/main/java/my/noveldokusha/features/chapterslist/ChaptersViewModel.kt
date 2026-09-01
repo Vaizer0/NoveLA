@@ -2,7 +2,9 @@ package my.noveldokusha.features.chapterslist
 
 import android.content.ContentResolver
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -10,9 +12,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
@@ -34,6 +38,8 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
 import my.noveldokusha.core.appPreferences.resolveTranslationEnabled
@@ -59,6 +65,7 @@ import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
+import my.noveldokusha.tooling.application_workers.TtsAudioExportNotification
 import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import timber.log.Timber
 import javax.inject.Inject
@@ -143,6 +150,7 @@ internal class ChaptersViewModel @Inject constructor(
         chapterSizes = mutableStateOf(emptyMap()),
         downloadTask = mutableStateOf(null),
         audioJobs = mutableStateMapOf(),
+        audioFilesExist = mutableStateMapOf(),
         audioSourcePrompt = mutableStateOf(false),
         audioNeedDirectory = mutableStateOf(false),
     )
@@ -156,6 +164,21 @@ internal class ChaptersViewModel @Inject constructor(
 
     // Ожидающая аудиозагрузка: ждёт выбора источника (ASK_EVERY_TIME) или папки.
     private var pendingAudio: PendingAudio? = null
+
+    // Последний снимок задач аудио (chapterUrl → состояние) для ревалидации
+    // существования файлов при возврате на экран (onResume).
+    @Volatile
+    private var lastAudioJobs: Map<String, TtsAudioJobState> = emptyMap()
+
+    // Последний проверенный снимок SUCCESS-задач: прогресс выполняемых задач
+    // меняется часто, но файлы — нет, поэтому перечитываем только при изменении.
+    @Volatile
+    private var lastCheckedSuccessJobs: Map<String, TtsAudioJobState> = emptyMap()
+
+    // Поколение скана существования: отбрасываем устаревший результат, если
+    // следующий эмит/onResume уже запустил более свежую проверку.
+    @Volatile
+    private var audioCheckGeneration = 0
 
     // Инжектируемая точка вызова воркера: тесты подменяют её лямбдой-шпионом.
     var enqueue: (Context, String, String, ExportMode, String, String, Int, String) -> Unit =
@@ -424,15 +447,29 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
-        // Статусы аудиозагрузок текущей книги (jobId → состояние).
+        // Статусы аудиозагрузок текущей книги. Ключ в UI — chapterUrl: показываем
+        // задачу «релевантного» источника (ORIGINAL по умолчанию при ASK_EVERY_TIME),
+        // Original и Translated остаются отдельными jobId в хранилище.
         viewModelScope.launch {
-            bookUrlFlow.collectLatest { url ->
-                TtsAudioQueue.observeJobs(appPreferences).collectLatest { jobs ->
-                    val relevant = jobs.filterValues { it.novelUrl == url }
+            combine(
+                bookUrlFlow,
+                appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.flow(),
+                appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow(),
+            ) { url, sourcePref, jobs -> Triple(url, sourcePref, jobs) }
+                .collectLatest { (url, sourcePref, jobs) ->
+                    val displaySource = if (sourcePref == TtsAudioSource.ASK_EVERY_TIME)
+                        TtsAudioSource.ORIGINAL else sourcePref
+                    val byChapter = mutableMapOf<String, TtsAudioJobState>()
+                    for ((jobId, job) in jobs) {
+                        if (job.novelUrl != url) continue
+                        val expected = TtsAudioExportRequest.makeJobId(url, job.chapterUrl, displaySource)
+                        if (jobId == expected) byChapter[job.chapterUrl] = job
+                    }
                     state.audioJobs.clear()
-                    state.audioJobs.putAll(relevant)
+                    state.audioJobs.putAll(byChapter)
+                    lastAudioJobs = byChapter
+                    refreshAudioFileExistence(byChapter)
                 }
-            }
         }
 
         // Подписываемся на статус загрузки текущей книги
@@ -987,16 +1024,89 @@ internal class ChaptersViewModel @Inject constructor(
 
     // ─── Аудиозагрузка главы (TTS) ──────────────────────────────────────────
 
-    /** Клик по иконке аудио у главы: если источник = ASK_EVERY_TIME — спросить. */
+    /** Клик по иконке аудио у главы: маршрутизируется по состоянию задачи.
+     *  Готово+файл жив — открываем; активно — игнорируем (не плодим дубли);
+     *  ошибка/нет задачи — обычный запуск (спросить источник или сразу). */
     fun onChapterAudio(chapter: ChapterWithContext) {
-        val sourcePref = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value
-        if (sourcePref == TtsAudioSource.ASK_EVERY_TIME) {
-            pendingAudio = PendingAudio(chapter = chapter, source = null)
-            state.audioSourcePrompt.value = true
-        } else {
-            startAudioDownload(chapter, sourcePref)
+        val url = chapter.chapter.url
+        val job = state.audioJobs[url]
+        when {
+            job?.status == TtsAudioJobStatus.SUCCESS &&
+                (state.audioFilesExist[url] ?: false) -> openAudioFile(job)
+
+            job != null && job.isActive -> Unit
+
+            else -> {
+                val sourcePref = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value
+                if (sourcePref == TtsAudioSource.ASK_EVERY_TIME) {
+                    pendingAudio = PendingAudio(chapter = chapter, source = null)
+                    state.audioSourcePrompt.value = true
+                } else {
+                    startAudioDownload(chapter, sourcePref)
+                }
+            }
         }
     }
+
+    /** Открывает готовый аудиофайл системным плеером (как ACTION_OPEN в уведомлении). */
+    private fun openAudioFile(job: TtsAudioJobState) {
+        val uri = job.documentUri.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), TtsAudioExportNotification.MIME_TYPE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure { Timber.e(it, "TtsAudio: failed to open chapter audio") }
+    }
+
+    /**
+     * Проверяет существование готовых файлов (SUCCESS) на диске и обновляет
+     * [ChaptersScreenState.audioFilesExist]. SUCCESS-снимок задач сравнивается с
+     * последним проверенным — прогресс выполняемых задач не вызывает пере-скан.
+     */
+    private fun refreshAudioFileExistence(
+        jobs: Map<String, TtsAudioJobState>,
+        force: Boolean = false,
+    ) {
+        val successJobs = jobs.filterValues { it.status == TtsAudioJobStatus.SUCCESS }
+        if (!force && successJobs == lastCheckedSuccessJobs) return
+        lastCheckedSuccessJobs = successJobs
+        val generation = ++audioCheckGeneration
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                jobs.mapValues { (_, job) ->
+                    if (job.status == TtsAudioJobStatus.SUCCESS && job.documentUri.isNotBlank()) {
+                        audioFileExists(job.documentUri)
+                    } else {
+                        false
+                    }
+                }
+            }
+            if (generation != audioCheckGeneration) return@launch
+            state.audioFilesExist.clear()
+            state.audioFilesExist.putAll(result)
+        }
+    }
+
+    /** Дубликат сканирования диска для onResume (файл мог быть удалён снаружи). */
+    fun refreshAudioFiles() {
+        val jobs = lastAudioJobs
+        if (jobs.isEmpty()) return
+        refreshAudioFileExistence(jobs, force = true)
+    }
+
+    private fun audioFileExists(documentUri: String): Boolean = runCatching {
+        context.contentResolver.query(
+            Uri.parse(documentUri),
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { it.moveToFirst() } ?: false
+    }.getOrDefault(false)
 
     fun onAudioSourceChosen(source: TtsAudioSource) {
         state.audioSourcePrompt.value = false

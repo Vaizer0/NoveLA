@@ -34,11 +34,14 @@ class TtsAudioExporter(
      * Синтезирует указанные абзацы и возвращает готовый WAV-файл.
      * @param paragraphs уже подготовленные абзацы (см. TtsTextPreparer.paragraphsFromBody).
      * @param destFile временный файл для WAV.
+     * @param onProgress колбэк прогресса: доля (0..1) выполненного текста по числу
+     *   символов кусков (монотонна, вызывается после каждого синтезированного куска).
      */
     suspend fun exportAudio(
         request: TtsAudioExportRequest,
         paragraphs: List<String>,
         destFile: File,
+        onProgress: (Float) -> Unit = {},
     ): File {
         if (paragraphs.isEmpty()) {
             throw TtsExportException("Chapter has no text to synthesize")
@@ -58,22 +61,32 @@ class TtsAudioExporter(
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
 
-            var synthesizedAny = false
-            for ((paraIndex, paragraph) in paragraphs.withIndex()) {
-                val cleaned = TtsTextPreparer.cleanForTts(paragraph)
-                if (TtsTextPreparer.isOnlyDecorators(cleaned)) continue
-
-                val chunks = TtsTextPreparer.chunkIntoUtterances(cleaned, syntheinputLength)
-                for (chunk in chunks) {
-                    synthesizeChunk(
-                        tts = tts,
-                        text = chunk,
-                        throwawaySink = throwawaySink,
-                        writer = writer,
-                        chapterTitle = request.chapterTitle,
-                    )
-                    if (writer.dataBytesWritten() > 0) synthesizedAny = true
+            // Куски собираем заранее (с уже применённой фильтрацией декораторов), чтобы
+            // прогресс был честным: вес куска = число его символов (1% ≈ 1% текста).
+            val chunks = buildList {
+                for (paragraph in paragraphs) {
+                    val cleaned = TtsTextPreparer.cleanForTts(paragraph)
+                    if (TtsTextPreparer.isOnlyDecorators(cleaned)) continue
+                    addAll(TtsTextPreparer.chunkIntoUtterances(cleaned, syntheinputLength))
                 }
+            }
+            val totalChars = chunks.sumOf { it.length }
+
+            var synthesizedAny = false
+            var processedChars = 0
+            for (chunk in chunks) {
+                synthesizeChunk(
+                    tts = tts,
+                    text = chunk,
+                    throwawaySink = throwawaySink,
+                    writer = writer,
+                    chapterTitle = request.chapterTitle,
+                )
+                processedChars += chunk.length
+                if (writer.dataBytesWritten() > 0) synthesizedAny = true
+                onProgress(
+                    if (totalChars > 0) processedChars.toFloat() / totalChars.toFloat() else 1f
+                )
             }
 
             if (!synthesizedAny) {

@@ -49,8 +49,8 @@ class TtsAudioExportNotification(
         }
     }
 
-    fun foregroundNotification(): Notification =
-        notificationsCenter.showNotification(
+    fun foregroundNotification(): Notification {
+        val builder = notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
             channelName = channelName,
             notificationId = notificationId,
@@ -60,7 +60,20 @@ class TtsAudioExportNotification(
             setContentText(context.getString(StringsR.string.tts_audio_export_running_detail))
             setOngoing(true)
             setProgress(0, 0, true)
-        }.build()
+        }
+        this.builder = builder
+        return builder.build()
+    }
+
+    /** Обновляет детерминированный прогресс (0..100) у foreground-уведомления. */
+    fun updateProgress(percent: Int) {
+        if (!hasNotificationPermission()) return
+        val current = builder ?: return
+        notificationsCenter.modifyNotification(current, notificationId) {
+            setProgress(100, percent, false)
+            setContentText(context.getString(StringsR.string.tts_audio_export_running_progress, percent))
+        }
+    }
 
     fun showComplete(displayName: String, uri: Uri?) {
         if (!hasNotificationPermission()) return

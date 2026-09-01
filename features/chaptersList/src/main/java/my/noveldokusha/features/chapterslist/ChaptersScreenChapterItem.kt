@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.coreui.components.AnimatedTransition
@@ -56,6 +59,7 @@ internal fun ChaptersScreenChapterItem(
     translatedTitle: String? = null,
     chapterSize: ChapterSize? = null,
     audioJob: TtsAudioJobState? = null,
+    audioFileExists: Boolean = false,
     selected: Boolean,
     isLocalSource: Boolean,
     highlighted: Boolean = false,
@@ -174,7 +178,11 @@ internal fun ChaptersScreenChapterItem(
                                 }
                             }
                         }
-                        ChapterAudioButton(audioJob = audioJob, onAudio = stableOnAudio)
+                        ChapterAudioButton(
+                            audioJob = audioJob,
+                            audioFileExists = audioFileExists,
+                            onAudio = stableOnAudio
+                        )
                     }
                 },
             )
@@ -183,12 +191,18 @@ internal fun ChaptersScreenChapterItem(
 }
 
 /**
- * Иконка аудиозагрузки главы. Отображает статус текущей задачи (jobId):
- * неактивна — «скачать аудио»; в очереди/выполняется — прогресс-спиннер;
- * SUCCESS — залитая иконка в primary (файл готов); FAILED — иконка в error.
+ * Иконка аудиозагрузки главы. Состояния:
+ * - нет задачи → обычная иконка «скачать аудио» (клик = запуск);
+ * - QUEUED/RUNNING → детерминированный кольцевой прогресс с процентом;
+ * - SUCCESS + файл существует → залитая галочка (клик = открыть файл);
+ * - SUCCESS, но файла нет / FAILED → обычная иконка / повторить (клик = перезапуск).
  */
 @Composable
-private fun ChapterAudioButton(audioJob: TtsAudioJobState?, onAudio: () -> Unit) {
+private fun ChapterAudioButton(
+    audioJob: TtsAudioJobState?,
+    audioFileExists: Boolean,
+    onAudio: () -> Unit
+) {
     val status = audioJob?.status
     val running = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
     val contentDescription = stringResource(
@@ -201,27 +215,46 @@ private fun ChapterAudioButton(audioJob: TtsAudioJobState?, onAudio: () -> Unit)
         }
     )
 
-    if (running) {
-        IconButton(onClick = onAudio) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.tertiary
-            )
+    when {
+        running -> {
+            val percent = (audioJob!!.progress).coerceIn(0, 100)
+            IconButton(onClick = onAudio) {
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        progress = { percent / 100f },
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        text = stringResource(StringsR.string.tts_audio_progress_percent, percent),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1
+                    )
+                }
+            }
         }
-    } else {
-        val tint = when (status) {
-            TtsAudioJobStatus.SUCCESS -> MaterialTheme.colorScheme.primary
-            TtsAudioJobStatus.FAILED -> MaterialTheme.colorScheme.error
-            else -> LocalContentColor.current
+
+        status == TtsAudioJobStatus.SUCCESS && audioFileExists -> {
+            IconButton(onClick = onAudio) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = contentDescription,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
-        IconButton(onClick = onAudio) {
-            Icon(
-                if (status == TtsAudioJobStatus.SUCCESS) Icons.Filled.GraphicEq
-                else Icons.Outlined.GraphicEq,
-                contentDescription = contentDescription,
-                tint = tint
-            )
+
+        else -> {
+            val isError = status == TtsAudioJobStatus.FAILED
+            IconButton(onClick = onAudio) {
+                Icon(
+                    if (isError) Icons.Filled.Refresh else Icons.Outlined.GraphicEq,
+                    contentDescription = contentDescription,
+                    tint = if (isError) MaterialTheme.colorScheme.error else LocalContentColor.current
+                )
+            }
         }
     }
 }

@@ -28,8 +28,12 @@ internal data class ChaptersScreenState(
     val translatedChapterTitles: MutableState<Map<String, String>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
-    // Аудиозагрузка глав (TTS): jobId → статус для иконки у главы.
+    // Аудиозагрузка глав (TTS): chapterUrl → состояние для иконки у главы.
+    // Ключ — chapterUrl, а не jobId: в коллекторе VM резолвится единственный
+    // «релевантный» источник (ORIGINAL по умолчанию при ASK_EVERY_TIME).
     val audioJobs: SnapshotStateMap<String, TtsAudioJobState>,
+    // chapterUrl → существует ли готовый аудиофайл на диске (SUCCESS + SAF-документ жив).
+    val audioFilesExist: SnapshotStateMap<String, Boolean>,
     // Диалог выбора источника текста (ORIGINAL/TRANSLATED) для аудиозагрузки.
     val audioSourcePrompt: MutableState<Boolean>,
     // Нужно выбрать папку аудио (SAF): UI открывает пикер.

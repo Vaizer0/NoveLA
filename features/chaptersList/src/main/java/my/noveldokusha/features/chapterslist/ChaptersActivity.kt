@@ -117,6 +117,13 @@ class ChaptersActivity : BaseActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Файлы аудио могут быть удалены/перемещены вне приложения (SAF-провайдеры
+        // не шлют событий) — при возврате на экран ревалидируем существование.
+        viewModel.refreshAudioFiles()
+    }
+
     private fun onOpenLastActiveChapter() {
         lifecycleScope.launch {
             // Bug1c: без lastRead не открываем главу 1 молча — остаёмся на списке глав.

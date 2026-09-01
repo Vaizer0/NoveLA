@@ -1307,6 +1307,11 @@
     <string name="tts_audio_source_choice">Источник текста аудио</string>
     <string name="tts_audio_status_queued">Аудио в очереди</string>
     <string name="tts_audio_status_running">Создание аудио…</string>
+    <string name="tts_audio_export_running_progress">%1$d%%</string>
+    <string name="tts_audio_progress_percent">%1$d%%</string>
+    <string name="tts_audio_export_folder_error">Не удалось создать папку для этой книги.</string>
+    <string name="tts_audio_file_suffix_original">[Original]</string>
+    <string name="tts_audio_file_suffix_translated">[Translated]</string>
 
     <!-- Настройки: загрузка аудио -->
     <string name="settings_audio_download_section">Загрузка аудио</string>

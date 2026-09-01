@@ -822,6 +822,11 @@
     <string name="tts_audio_source_choice">Audio text source</string>
     <string name="tts_audio_status_queued">Audio queued</string>
     <string name="tts_audio_status_running">Generating audio…</string>
+    <string name="tts_audio_export_running_progress">%1$d%%</string>
+    <string name="tts_audio_progress_percent">%1$d%%</string>
+    <string name="tts_audio_export_folder_error">Could not create the folder for this novel.</string>
+    <string name="tts_audio_file_suffix_original">[Original]</string>
+    <string name="tts_audio_file_suffix_translated">[Translated]</string>
 
     <!-- Settings: Audio downloads -->
     <string name="settings_audio_download_section">Audio downloads</string>
