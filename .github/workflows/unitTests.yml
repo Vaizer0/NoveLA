@@ -1,0 +1,51 @@
+name: Unit Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [default, feat/tts-video-export]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run JVM unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v7
+
+      - name: Set up JDK environment
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.3.0
+
+      - name: Setup APK signing
+        run: |
+          echo -n ${{ secrets.SIGNING_KEY }} | base64 -d > app/storeFile.jks
+          echo storeFile=storeFile.jks          > custom.properties
+          echo storePassword=${{ secrets.KEY_STORE_PASSWORD }} >> custom.properties
+          echo keyAlias=${{ secrets.ALIAS }}    >> custom.properties
+          echo keyPassword=${{ secrets.KEY_PASSWORD }} >> custom.properties
+
+      - name: Remove local Java home from gradle.properties
+        run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
+
+      - name: Run unit tests
+        run: ./gradlew testReleaseUnitTest -PlocalPropertiesFilePath=custom.properties
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/reports/tests/testReleaseUnitTest/
+            **/build/test-results/testReleaseUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
