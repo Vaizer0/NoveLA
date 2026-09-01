@@ -239,14 +239,44 @@ class VideoFrameRendererQaTest {
                     "lineCount=${layout.lineCount} layoutWidth=${layout.width}"
             )
             for (line in 0 until layout.lineCount) {
-                val ls = layout.getLineStart(line)
-                val le = layout.getLineEnd(line)
-                val x0 = layout.getLineLeft(line) + layout.getPrimaryHorizontal(word.displayRange.first)
-                val x1 = layout.getLineLeft(line) + layout.getPrimaryHorizontal(minOf(word.displayRange.last + 1, layout.text.length))
-                System.err.println("QA-DIAG line=$line start=$ls end=$le x0=$x0 x1=$x1")
+                System.err.println(
+                    "QA-DIAG serif line=$line start=${layout.getLineStart(line)} " +
+                        "end=${layout.getLineEnd(line)} left=${layout.getLineLeft(line)}"
+                )
             }
+            System.err.println("QA-DIAG serif primaryHorizontal[]=" + (0..p.displayText.length).joinToString(",") { layout.getPrimaryHorizontal(it).toString() })
+            val serifPaint = TextPaint().apply {
+                isAntiAlias = true
+                textSize = layout.paint.textSize
+                typeface = Typeface.create("serif", Typeface.NORMAL)
+            }
+            System.err.println("QA-DIAG serif measureText='cart'=" + serifPaint.measureText("cart") + " 'The '=" + serifPaint.measureText("The "))
+            val sansLayout = buildLayoutForTest(p.displayText, typeface = Typeface.create("sans-serif", Typeface.NORMAL))
+            System.err.println("QA-DIAG sans lineCount=${sansLayout.lineCount} lineLeft0=${sansLayout.getLineLeft(0)}")
+            System.err.println("QA-DIAG sans primaryHorizontal[]=" + (0..p.displayText.length).joinToString(",") { sansLayout.getPrimaryHorizontal(it).toString() })
+            val sansPaint = TextPaint().apply {
+                isAntiAlias = true
+                textSize = layout.paint.textSize
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+            System.err.println("QA-DIAG sans measureText='cart'=" + sansPaint.measureText("cart") + " 'The '=" + sansPaint.measureText("The "))
+            System.err.println(
+                "QA-DIAG serifRects=" +
+                    my.noveldokusha.reader_visuals.HighlightSpan.wordRects(
+                        layout, word.displayRange.first, word.displayRange.last + 1, 3f,
+                    )
+            )
+            System.err.println(
+                "QA-DIAG sansRects=" +
+                    my.noveldokusha.reader_visuals.HighlightSpan.wordRects(
+                        sansLayout, word.displayRange.first, word.displayRange.last + 1, 3f,
+                    )
+            )
         }
-        assertTrue("подсветка даёт rect'ы", rects.isNotEmpty())
+        val highlightRects = my.noveldokusha.reader_visuals.HighlightSpan.wordRects(
+            layout, word.displayRange.first, word.displayRange.last + 1, 3f,
+        )
+        assertTrue("подсветка даёт rect'ы", highlightRects.isNotEmpty())
         for (r in rects) {
             assertTrue("rect left<right", r.left < r.right)
             assertTrue("rect top<bottom", r.top < r.bottom)
@@ -269,10 +299,11 @@ class VideoFrameRendererQaTest {
         }
     }
 
-    private fun buildLayoutForTest(text: String): StaticLayout {
+    private fun buildLayoutForTest(text: String, typeface: Typeface = Typeface.create("serif", Typeface.NORMAL)): StaticLayout {
         val paint = TextPaint().apply {
             textSize = snapshot().derivedBaseFontPx
             color = 0xFF000000.toInt()
+            this.typeface = typeface
         }
         return StaticLayout.Builder
             .obtain(text, 0, text.length, paint, VideoLayoutSpec.CARD_TEXT_WIDTH)
