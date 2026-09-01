@@ -235,7 +235,7 @@ class VideoFrameRendererQaTest {
             layout, word.displayRange.first, word.displayRange.last + 1, 3f,
         )
         assertTrue("подсветка даёт rect'ы", highlightRects.isNotEmpty())
-        for (r in rects) {
+        for (r in highlightRects) {
             assertTrue("rect left<right", r.left < r.right)
             assertTrue("rect top<bottom", r.top < r.bottom)
             assertTrue("rect внутри ширины текста", r.right <= layout.width + 1f)
@@ -247,7 +247,7 @@ class VideoFrameRendererQaTest {
                 layout.getLineLeft(line) + layout.getPrimaryHorizontal(word.displayRange.first)
             val expectedRight =
                 layout.getLineLeft(line) + layout.getPrimaryHorizontal(word.displayRange.last + 1)
-            val candidate = rects.first { kotlin.math.abs(it.left - expectedLeft) < 2f }
+            val candidate = highlightRects.first { kotlin.math.abs(it.left - expectedLeft) < 2f }
             assertEquals(
                 "right совпадает с глифами",
                 expectedRight,
