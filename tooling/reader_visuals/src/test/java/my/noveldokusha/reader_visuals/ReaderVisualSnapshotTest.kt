@@ -74,7 +74,10 @@ class ReaderVisualSnapshotTest {
 
     @Test
     fun autoTextColor_lightBackground_darkText() {
-        assertEquals(0xFF000000.toInt(), ReaderVisualSnapshot.autoTextColorForLuminance(paper.textColorArgb))
+        assertEquals(
+            0xFF000000.toInt(),
+            ReaderVisualSnapshot.autoTextColorForLuminance(ReaderVisualSnapshot.averageArgb(paper.colors))
+        )
     }
 
     @Test
