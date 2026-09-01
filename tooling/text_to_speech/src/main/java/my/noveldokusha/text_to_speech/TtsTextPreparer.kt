@@ -175,11 +175,54 @@ object TtsTextPreparer {
 
     /** Очищает текст от декоративного мусора по краям строк (для TTS). */
     fun cleanForTts(text: String): String {
-        return text.lines().joinToString("\n") { line ->
+        return cleanForTtsWithMap(text).cleaned
+    }
+
+    /**
+     * Результат очистки [cleanForTtsWithMap]: очищенный текст и карта
+     * соответствия символов.
+     *
+     * @property map[i] = индекс символа cleaned[i] в исходном display-тексте.
+     *   Длина массива == cleaned.length. Если в очищенном тексте символ
+     *   отсутствует (пустая строка), map == [].
+     */
+    data class CleanedWithMap(
+        val cleaned: String,
+        val map: IntArray,
+    )
+
+    /**
+     * Очищает текст декоративного мусора по краям строк ТОЧНО тем же правилом,
+     * что и [cleanForTts], параллельно запоминая, откуда в исходном тексте
+     * взялся каждый сохранившийся символ.
+     *
+     * Используется видеорежимом, чтобы тайминги слов, отданные движком на
+     * очищенный текст, перевести в диапазоны ТОЧНО отображаемого текста.
+     */
+    fun cleanForTtsWithMap(text: String): CleanedWithMap {
+        val cleaned = text.lines().joinToString("\n") { line ->
             line.replace(LEADING_DECORATIVE, "")
                 .replace(TRAILING_DECORATIVE, "")
                 .trim()
         }
+        val map = IntArray(cleaned.length)
+        var cleanedIndex = 0
+        var displayIndex = 0
+        for (origLine in text.lines()) {
+            val cleanedLine = origLine
+                .replace(LEADING_DECORATIVE, "")
+                .replace(TRAILING_DECORATIVE, "")
+                .trim()
+            for (c in cleanedLine) {
+                while (displayIndex < text.length && text[displayIndex] != c) displayIndex++
+                if (displayIndex >= text.length) break
+                map[cleanedIndex] = displayIndex
+                cleanedIndex++
+                displayIndex++
+            }
+            displayIndex++
+        }
+        return CleanedWithMap(cleaned = cleaned, map = map)
     }
 
     /** Длина ведущего декоративного префикса первой строки (для подсветки). */
