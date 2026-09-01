@@ -349,6 +349,13 @@ class VideoFrameRenderer(
                 val rects = HighlightSpan.wordRects(entry.layout, r.first, r.last + 1, HIGHLIGHT_PAD_Y)
                 val hpaint = HighlightSpan.paint(snapshot.ttsHighlightColorArgb)
                 hpaint.alpha = (HIGHLIGHT_ALPHA * slot.alpha).toInt()
+                if (System.getProperty("videoExport.highlightDebug") == "1") {
+                    System.err.println(
+                        "HL i=$index range=$r slotAlpha=${slot.alpha} scale=${slot.scale} " +
+                            "top=${slot.rect.top} accent=0x${snapshot.ttsHighlightColorArgb.toString(16)} " +
+                            "filled=$rects"
+                    )
+                }
                 for (rc in rects) {
                     canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
                 }

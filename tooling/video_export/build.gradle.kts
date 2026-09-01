@@ -35,4 +35,5 @@ tasks.withType<Test>().configureEach {
         "QA_FRAMES_DIR",
         layout.buildDirectory.dir("outputs/qa_frames").get().asFile.absolutePath
     )
+    systemProperty("videoExport.highlightDebug", "1")
 }
