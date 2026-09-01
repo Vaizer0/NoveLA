@@ -46,6 +46,7 @@ internal fun ChaptersScreenBody(
     onChapterClick: (chapter: ChapterWithContext) -> Unit,
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
+    onChapterAudio: (chapter: ChapterWithContext) -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -174,12 +175,14 @@ internal fun ChaptersScreenBody(
                     chapterWithContext = it,
                     translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     chapterSize = state.chapterSizes.value[it.chapter.url],
+                    audioJob = state.audioJobs[it.chapter.url],
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
                     highlighted = it.chapter.url == highlightedChapterUrl,
                     onClick = { onChapterClick(it) },
                     onLongClick = { onChapterLongClick(it) },
-                    onDownload = { onChapterDownload(it) }
+                    onDownload = { onChapterDownload(it) },
+                    onAudio = { onChapterAudio(it) }
                 )
             }
 

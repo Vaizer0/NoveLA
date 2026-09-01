@@ -94,6 +94,14 @@
 			</intent-filter>
 		</receiver>
 
+		<receiver
+			android:name="my.noveldokusha.tooling.application_workers.TtsAudioNotificationReceiver"
+			android:exported="false">
+			<intent-filter>
+				<action android:name="my.noveldokusha.action.CANCEL_TTS_AUDIO" />
+			</intent-filter>
+		</receiver>
+
 	</application>
 
 </manifest>

@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,13 +29,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContentColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -39,6 +47,7 @@ import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.strings.R as StringsR
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalAnimationApi::class)
 @Composable
@@ -46,13 +55,15 @@ internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
     translatedTitle: String? = null,
     chapterSize: ChapterSize? = null,
+    audioJob: TtsAudioJobState? = null,
     selected: Boolean,
     isLocalSource: Boolean,
     highlighted: Boolean = false,
     modifier: Modifier = Modifier,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onAudio: () -> Unit
 ) {
     val chapter = chapterWithContext.chapter
 
@@ -72,6 +83,7 @@ internal fun ChaptersScreenChapterItem(
     val stableOnClick = remember(onClick) { onClick }
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
+    val stableOnAudio = remember(onAudio) { onAudio }
 
     val badge: @Composable (() -> Unit)? = remember(chapterWithContext.lastReadChapter, chapter.read) {
         when {
@@ -146,20 +158,23 @@ internal fun ChaptersScreenChapterItem(
                         }
                     }
                 } else null,
-                trailingContent = if (isLocalSource) null else {
-                    {
-                        AnimatedTransition(
-                            targetState = chapterWithContext.downloaded,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() }
-                        ) { downloaded ->
-                            IconButton(onClick = stableOnDownload) {
-                                Icon(
-                                    if (downloaded) Icons.Filled.CloudDownload
-                                    else Icons.Outlined.CloudDownload,
-                                    null
-                                )
+                trailingContent = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                        if (!isLocalSource) {
+                            AnimatedTransition(
+                                targetState = chapterWithContext.downloaded,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() }
+                            ) { downloaded ->
+                                IconButton(onClick = stableOnDownload) {
+                                    Icon(
+                                        if (downloaded) Icons.Filled.CloudDownload
+                                        else Icons.Outlined.CloudDownload,
+                                        null
+                                    )
+                                }
                             }
                         }
+                        ChapterAudioButton(audioJob = audioJob, onAudio = stableOnAudio)
                     }
                 },
             )
@@ -167,6 +182,49 @@ internal fun ChaptersScreenChapterItem(
     }
 }
 
+/**
+ * Иконка аудиозагрузки главы. Отображает статус текущей задачи (jobId):
+ * неактивна — «скачать аудио»; в очереди/выполняется — прогресс-спиннер;
+ * SUCCESS — залитая иконка в primary (файл готов); FAILED — иконка в error.
+ */
+@Composable
+private fun ChapterAudioButton(audioJob: TtsAudioJobState?, onAudio: () -> Unit) {
+    val status = audioJob?.status
+    val running = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
+    val contentDescription = stringResource(
+        when (status) {
+            TtsAudioJobStatus.QUEUED -> StringsR.string.tts_audio_status_queued
+            TtsAudioJobStatus.RUNNING -> StringsR.string.tts_audio_status_running
+            TtsAudioJobStatus.SUCCESS -> StringsR.string.tts_audio_downloaded
+            TtsAudioJobStatus.FAILED -> StringsR.string.tts_audio_download_failed
+            null -> StringsR.string.tts_audio_chapter_action
+        }
+    )
+
+    if (running) {
+        IconButton(onClick = onAudio) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+    } else {
+        val tint = when (status) {
+            TtsAudioJobStatus.SUCCESS -> MaterialTheme.colorScheme.primary
+            TtsAudioJobStatus.FAILED -> MaterialTheme.colorScheme.error
+            else -> LocalContentColor.current
+        }
+        IconButton(onClick = onAudio) {
+            Icon(
+                if (status == TtsAudioJobStatus.SUCCESS) Icons.Filled.GraphicEq
+                else Icons.Outlined.GraphicEq,
+                contentDescription = contentDescription,
+                tint = tint
+            )
+        }
+    }
+}
 
 @PreviewThemes
 @Composable
@@ -180,7 +238,8 @@ private fun PreviewView(
             isLocalSource = false,
             onLongClick = {},
             onClick = {},
-            onDownload = {}
+            onDownload = {},
+            onAudio = {}
         )
     }
 }

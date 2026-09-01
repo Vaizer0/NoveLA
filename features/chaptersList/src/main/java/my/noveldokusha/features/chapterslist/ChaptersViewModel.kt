@@ -34,6 +34,7 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
 import my.noveldokusha.core.appPreferences.resolveTranslationEnabled
 import my.noveldokusha.core.domain.ChapterPagination
@@ -55,8 +56,10 @@ import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.chapterslist.BuildConfig
 import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
+import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
+import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -139,6 +142,9 @@ internal class ChaptersViewModel @Inject constructor(
         translatedChapterTitles = mutableStateOf(emptyMap()),
         chapterSizes = mutableStateOf(emptyMap()),
         downloadTask = mutableStateOf(null),
+        audioJobs = mutableStateMapOf(),
+        audioSourcePrompt = mutableStateOf(false),
+        audioNeedDirectory = mutableStateOf(false),
     )
 
     // ─── Экспорт книги ───────────────────────────────────────────────────────
@@ -147,6 +153,9 @@ internal class ChaptersViewModel @Inject constructor(
     val exportMessage = mutableStateOf<String?>(null)
 
     private var pendingExport: PendingExport? = null
+
+    // Ожидающая аудиозагрузка: ждёт выбора источника (ASK_EVERY_TIME) или папки.
+    private var pendingAudio: PendingAudio? = null
 
     // Инжектируемая точка вызова воркера: тесты подменяют её лямбдой-шпионом.
     var enqueue: (Context, String, String, ExportMode, String, String, Int, String) -> Unit =
@@ -411,6 +420,17 @@ internal class ChaptersViewModel @Inject constructor(
             bookUrlFlow.collect { url ->
                 chaptersRepository.getChapterSizesFlow(bookUrl = url).collect {
                     state.chapterSizes.value = it
+                }
+            }
+        }
+
+        // Статусы аудиозагрузок текущей книги (jobId → состояние).
+        viewModelScope.launch {
+            bookUrlFlow.collectLatest { url ->
+                TtsAudioQueue.observeJobs(appPreferences).collectLatest { jobs ->
+                    val relevant = jobs.filterValues { it.novelUrl == url }
+                    state.audioJobs.clear()
+                    state.audioJobs.putAll(relevant)
                 }
             }
         }
@@ -965,11 +985,104 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
+    // ─── Аудиозагрузка главы (TTS) ──────────────────────────────────────────
+
+    /** Клик по иконке аудио у главы: если источник = ASK_EVERY_TIME — спросить. */
+    fun onChapterAudio(chapter: ChapterWithContext) {
+        val sourcePref = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value
+        if (sourcePref == TtsAudioSource.ASK_EVERY_TIME) {
+            pendingAudio = PendingAudio(chapter = chapter, source = null)
+            state.audioSourcePrompt.value = true
+        } else {
+            startAudioDownload(chapter, sourcePref)
+        }
+    }
+
+    fun onAudioSourceChosen(source: TtsAudioSource) {
+        state.audioSourcePrompt.value = false
+        val pending = pendingAudio ?: return
+        pendingAudio = null
+        startAudioDownload(pending.chapter, source)
+    }
+
+    fun onAudioSourceDismiss() {
+        state.audioSourcePrompt.value = false
+        pendingAudio = null
+    }
+
+    /**
+     * Запускает аудиозагрузку главы. Проверяет настройки (перевод, голос, папка);
+     * при отсутствии папки переводит поток в ожидание SAF-пикера.
+     */
+    fun startAudioDownload(chapter: ChapterWithContext, source: TtsAudioSource) {
+        if (source == TtsAudioSource.TRANSLATED) {
+            val pair = appPreferences.translationPairForBook(bookUrl)
+            if (!appPreferences.translationEnabledForBook(bookUrl) ||
+                pair.source.isBlank() || pair.target.isBlank()
+            ) {
+                toasty.show(R.string.translation_not_configured)
+                return
+            }
+        }
+        if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()) {
+            toasty.show(StringsR.string.tts_audio_voice_not_set)
+            return
+        }
+        val folderUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+        if (folderUri.isBlank()) {
+            pendingAudio = PendingAudio(chapter = chapter, source = source)
+            state.audioNeedDirectory.value = true
+            return
+        }
+        enqueueAudio(chapter, source, folderUri)
+    }
+
+    /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
+    private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
+        val request = TtsAudioExportRequest(
+            jobId = TtsAudioExportRequest.makeJobId(bookUrl, chapter.chapter.url, source),
+            novelTitle = bookTitle,
+            novelUrl = bookUrl,
+            chapterUrl = chapter.chapter.url,
+            chapterTitle = chapter.chapter.title,
+            chapterIndex = chapter.chapter.position,
+            source = source,
+            enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+            voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
+            speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+            pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+            outputDirectoryUri = folderUri,
+            format = appPreferences.TTS_AUDIO_DOWNLOAD_FORMAT.value.ifBlank { "wav" },
+        )
+        TtsAudioQueue.enqueue(context, appPreferences, request)
+        toasty.show(StringsR.string.tts_audio_download_started)
+    }
+
+    /** Папка выбрана через SAF: запоминаем и запускаем отложенную аудиозагрузку. */
+    fun onAudioDirectorySaved(uri: String) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri
+        val pending = pendingAudio
+        pendingAudio = null
+        state.audioNeedDirectory.value = false
+        if (pending != null) enqueueAudio(pending.chapter, pending.source ?: return)
+    }
+
+    /** Пикер папки аудиозагрузки закрыт без выбора — отменяем ожидание. */
+    fun onAudioFolderCancel() {
+        pendingAudio = null
+        state.audioNeedDirectory.value = false
+    }
+
     fun unselectAll() {
         state.selectedChaptersUrl.clear()
     }
 
     fun selectAll() {
+        state.chapters
+            .toList()
+            .map { it.chapter.url to Unit }
+            .let { state.selectedChaptersUrl.putAll(it) }
+    }
         state.chapters
             .toList()
             .map { it.chapter.url to Unit }
@@ -993,6 +1106,13 @@ private data class PendingExport(
     val sourceLang: String,
     val targetLang: String,
     val availableCount: Int,
+)
+
+/** Аудиозагрузка главы, ожидающая выбора источника/папки. [source] равен null,
+ *  пока пользователь выбирает источник в диалоге (ASK_EVERY_TIME). */
+private data class PendingAudio(
+    val chapter: ChapterWithContext,
+    val source: TtsAudioSource?,
 )
 
 /**

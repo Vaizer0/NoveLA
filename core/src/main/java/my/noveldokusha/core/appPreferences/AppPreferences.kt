@@ -294,6 +294,75 @@ class AppPreferences @Inject constructor(
             )
         }
 
+    // ─── Профиль «Загрузка аудио глав» (TTS_AUDIO_DOWNLOAD_*) ──────────────────
+    // Полностью независим от профиля живой озвучки READER_TEXT_TO_SPEECH_*:
+    // загрузка аудио использует собственный голос/движок/скорость/высоту и никогда
+    // не перезаписывает настройки читалки.
+
+    /** Голос (Voice.name) для загрузки аудио глав. */
+    val TTS_AUDIO_DOWNLOAD_VOICE_ID =
+        object : Preference<String>("TTS_AUDIO_DOWNLOAD_VOICE_ID") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    /** Пакет TTS-движка для загрузки аудио глав. */
+    val TTS_AUDIO_DOWNLOAD_VOICE_ENGINE =
+        object : Preference<String>("TTS_AUDIO_DOWNLOAD_VOICE_ENGINE") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    /** Скорость чтения (0.1..5) для загрузки аудио глав. */
+    val TTS_AUDIO_DOWNLOAD_VOICE_SPEED =
+        object : Preference<Float>("TTS_AUDIO_DOWNLOAD_VOICE_SPEED") {
+            override var value by SharedPreference_Float(name, preferences, 1f)
+        }
+
+    /** Высота голоса (0.1..5) для загрузки аудио глав. */
+    val TTS_AUDIO_DOWNLOAD_VOICE_PITCH =
+        object : Preference<Float>("TTS_AUDIO_DOWNLOAD_VOICE_PITCH") {
+            override var value by SharedPreference_Float(name, preferences, 1f)
+        }
+
+    /** Источник текста для загрузки аудио: ORIGINAL / TRANSLATED / ASK_EVERY_TIME. */
+    val TTS_AUDIO_DOWNLOAD_SOURCE =
+        object : Preference<TtsAudioSource>("TTS_AUDIO_DOWNLOAD_SOURCE") {
+            override var value by SharedPreference_Enum(
+                name,
+                preferences,
+                TtsAudioSource.ASK_EVERY_TIME
+            ) { enumValueOf(it) }
+        }
+
+    /** SAF tree URI корневой папки для аудиофайлов глав. */
+    val TTS_AUDIO_DOWNLOAD_LOCATION_URI =
+        object : Preference<String>("TTS_AUDIO_DOWNLOAD_LOCATION_URI") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+
+    /** Формат аудиофайла ("wav" для V1; в будущем возможен "m4a"). */
+    val TTS_AUDIO_DOWNLOAD_FORMAT =
+        object : Preference<String>("TTS_AUDIO_DOWNLOAD_FORMAT") {
+            override var value by SharedPreference_String(name, preferences, "wav")
+        }
+
+    /** Максимальное число параллельных экспортов аудио (V1: 1). */
+    val TTS_AUDIO_DOWNLOAD_MAX_CONCURRENT =
+        object : Preference<Int>("TTS_AUDIO_DOWNLOAD_MAX_CONCURRENT") {
+            override var value by SharedPreference_Int(name, preferences, 1)
+        }
+
+    /** Записи задач загрузки аудио: jobId → состояние (для UI статуса глав). */
+    val TTS_AUDIO_DOWNLOAD_JOBS =
+        object : Preference<Map<String, TtsAudioJobState>>("TTS_AUDIO_DOWNLOAD_JOBS") {
+            override var value by SharedPreference_Serializable<Map<String, TtsAudioJobState>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { Json.encodeToString(it) },
+                decode = { Json.decodeFromString(it) }
+            )
+        }
+
     val FLOATING_TTS_ENABLED = object : Preference<Boolean>("FLOATING_TTS_ENABLED") {
         override var value by SharedPreference_Boolean(name, preferences, false)
     }

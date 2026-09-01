@@ -17,6 +17,7 @@ dependencies {
     implementation(projects.tooling.localDatabase)
     implementation(projects.tooling.backupCreate)
     implementation(projects.tooling.epubParser)
+    implementation(projects.tooling.textToSpeech)
 
     implementation(libs.timber)
     implementation(libs.androidx.workmanager)

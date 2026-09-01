@@ -6,6 +6,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import my.noveldokusha.core.appPreferences.TernaryState
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.data.DownloadTaskState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Book
@@ -27,6 +28,12 @@ internal data class ChaptersScreenState(
     val translatedChapterTitles: MutableState<Map<String, String>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
+    // Аудиозагрузка глав (TTS): jobId → статус для иконки у главы.
+    val audioJobs: SnapshotStateMap<String, TtsAudioJobState>,
+    // Диалог выбора источника текста (ORIGINAL/TRANSLATED) для аудиозагрузки.
+    val audioSourcePrompt: MutableState<Boolean>,
+    // Нужно выбрать папку аудио (SAF): UI открывает пикер.
+    val audioNeedDirectory: MutableState<Boolean>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }

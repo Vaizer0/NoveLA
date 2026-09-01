@@ -87,6 +87,7 @@ import my.nanihadesuka.compose.InternalLazyColumnScrollbar
 import my.noveldokusha.coreui.theme.isAtTop
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.chapterslist.R
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.scraper.Scraper
@@ -117,6 +118,11 @@ internal fun ChaptersScreen(
     onSelectionModeChapterClick: (chapter: ChapterWithContext) -> Unit,
     onSelectionModeChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
+    onChapterAudio: (chapter: ChapterWithContext) -> Unit,
+    onAudioSourceChosen: (source: TtsAudioSource) -> Unit,
+    onAudioSourceDismiss: () -> Unit,
+    onAudioDirectorySaved: (uri: String) -> Unit,
+    onAudioFolderCancel: () -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onChangeCover: () -> Unit,
@@ -174,6 +180,33 @@ internal fun ChaptersScreen(
                 Timber.w("Не удалось получить persistable permission для $uri: ${e.message}")
             }
             onExportDirectorySaved(uri.toString())
+        }
+    }
+
+    // Folder picker for chapter audio downloads
+    val audioDirectoryPicker = rememberLauncherForActivityResult(
+        contract = OpenDocumentTreeReadPersistent()
+    ) { uri ->
+        if (uri == null) {
+            // Пользователь закрыл пикер без выбора — сбрасываем ожидание папки.
+            onAudioFolderCancel()
+        } else {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (e: SecurityException) {
+                Timber.w("Audio: не удалось получить persistable permission для $uri: ${e.message}")
+            }
+            onAudioDirectorySaved(uri.toString())
+        }
+    }
+
+    // Когда потребовалась папка аудиозагрузки — открываем SAF-пикер автоматически.
+    LaunchedEffect(state.audioNeedDirectory.value) {
+        if (state.audioNeedDirectory.value) {
+            audioDirectoryPicker.launch(null)
         }
     }
 
@@ -349,6 +382,7 @@ internal fun ChaptersScreen(
                 onChapterClick = if (state.isInSelectionMode.value) onSelectionModeChapterClick else onChapterClick,
                 onChapterLongClick = if (state.isInSelectionMode.value) onSelectionModeChapterLongClick else onChapterLongClick,
                 onChapterDownload = onChapterDownload,
+                onChapterAudio = onChapterAudio,
                 onPullRefresh = onPullRefresh,
                 onCoverLongClick = onCoverLongClick,
                 onGlobalSearchClick = onGlobalSearchClick,
@@ -524,6 +558,43 @@ internal fun ChaptersScreen(
                 TextButton(
                     onClick = { showCategoryPicker = false }
                 ) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // Source choice dialog for chapter audio downloads
+    if (state.audioSourcePrompt.value) {
+        AlertDialog(
+            onDismissRequest = onAudioSourceDismiss,
+            title = {
+                Text(text = stringResource(StringsR.string.tts_audio_source_choice))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { onAudioSourceChosen(TtsAudioSource.ORIGINAL) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(StringsR.string.tts_audio_source_original),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onAudioSourceChosen(TtsAudioSource.TRANSLATED) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(StringsR.string.tts_audio_source_translated),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onAudioSourceDismiss) {
                     Text(text = stringResource(android.R.string.cancel))
                 }
             }
