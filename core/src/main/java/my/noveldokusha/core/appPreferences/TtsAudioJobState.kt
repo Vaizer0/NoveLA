@@ -18,6 +18,9 @@ enum class TtsAudioJobStatus {
 
     /** Не удалось выполнить. */
     FAILED,
+
+    /** Пользователь отменил задачу (не ошибка). */
+    CANCELLED,
 }
 
 /**

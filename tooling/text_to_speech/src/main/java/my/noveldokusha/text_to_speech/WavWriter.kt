@@ -60,6 +60,13 @@ class WavWriter(
         if (!headerWritten) {
             throw IllegalStateException("WavWriter.open() must be called before writePcm()")
         }
+        // Стандартный RIFF хранит size как unsigned 32-bit, поэтому >4GB-1 не
+        // помещается. Отлавливаем до записи, чтобы не получить молча битый WAV.
+        if (dataSize + pcm.size > MAX_WAV_DATA_SIZE) {
+            throw AudioTooLargeException(
+                "WAV data exceeds the 4GB RIFF limit (chapter too long for WAV format)"
+            )
+        }
         checkNotNull(outputStream).write(pcm)
         dataSize += pcm.size
     }
@@ -73,6 +80,17 @@ class WavWriter(
         checkNotNull(outputStream).close()
         outputStream = null
         patchHeader()
+    }
+
+    /**
+     * Аварийное закрытие на ошибке/отмене: закрывает поток, если [finish] ещё
+     * не вызывался. Безопасно вызывать повторно. Заголовок не латается.
+     */
+    fun close() {
+        if (outputStream != null) {
+            runCatching { outputStream!!.close() }
+            outputStream = null
+        }
     }
 
     /** Записывает данные без финализации (для отладочных целей). */
@@ -122,7 +140,15 @@ class WavWriter(
             raf.writeInt(Integer.reverseBytes(dataSize.toInt()))
         }
     }
+
+    companion object {
+        /** Максимальный размер data-чанка для стандартного RIFF (uint32). */
+        private const val MAX_WAV_DATA_SIZE: Long = 0xFFFF_FFFFL - 36
+    }
 }
 
 /** Несовпадение формата аудио в ходе синтеза (сеть голосов может менять формат). */
 class AudioFormatMismatchException(message: String) : Exception(message)
+
+/** Выход за лимит размера стандартного RIFF/WAV (> ~4GB). */
+class AudioTooLargeException(message: String) : Exception(message)

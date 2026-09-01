@@ -211,6 +211,7 @@ private fun ChapterAudioButton(
             TtsAudioJobStatus.RUNNING -> StringsR.string.tts_audio_status_running
             TtsAudioJobStatus.SUCCESS -> StringsR.string.tts_audio_downloaded
             TtsAudioJobStatus.FAILED -> StringsR.string.tts_audio_download_failed
+            TtsAudioJobStatus.CANCELLED -> StringsR.string.tts_audio_chapter_action
             null -> StringsR.string.tts_audio_chapter_action
         }
     )
@@ -246,13 +247,23 @@ private fun ChapterAudioButton(
             }
         }
 
-        else -> {
-            val isError = status == TtsAudioJobStatus.FAILED
+        status == TtsAudioJobStatus.FAILED -> {
             IconButton(onClick = onAudio) {
                 Icon(
-                    if (isError) Icons.Filled.Refresh else Icons.Outlined.GraphicEq,
+                    Icons.Filled.Refresh,
                     contentDescription = contentDescription,
-                    tint = if (isError) MaterialTheme.colorScheme.error else LocalContentColor.current
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        // CANCELLED / нет задачи / SUCCESS без файла → «скачать» (повторный запуск).
+        else -> {
+            IconButton(onClick = onAudio) {
+                Icon(
+                    Icons.Outlined.GraphicEq,
+                    contentDescription = stringResource(StringsR.string.tts_audio_chapter_action),
+                    tint = LocalContentColor.current
                 )
             }
         }

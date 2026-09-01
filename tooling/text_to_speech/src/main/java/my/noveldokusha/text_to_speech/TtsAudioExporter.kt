@@ -50,6 +50,7 @@ class TtsAudioExporter(
         val throwawaySink = File(appContext.cacheDir, "tts_export_sink.bin")
         val writer = WavWriter(destFile)
         val tts = createDedicatedTts(request.enginePackage)
+        var finished = false
         try {
             val syntheinputLength = TextToSpeech.getMaxSpeechInputLength()
             val voices = tts.voices ?: emptyList()
@@ -95,27 +96,34 @@ class TtsAudioExporter(
                         "The TTS engine produced an empty result."
                 )
             }
+
+            writer.finish()
+            finished = true
         } finally {
             try {
                 tts.stop()
             } catch (_: Throwable) {
             }
             runCatching { tts.shutdown() }
+            // При ошибке/отмене WavWriter может остаться незакрытым — закрываем,
+            // чтобы не утечь fd. При успехе finish() уже закрыл поток.
+            if (!finished) runCatching { writer.close() }
             runCatching { throwawaySink.delete() }
         }
 
-        writer.finish()
         return destFile
     }
 
     private suspend fun createDedicatedTts(enginePackage: String): TextToSpeech =
         suspendCancellableCoroutine { cont ->
+            // Локальная var захватывается анонимным OnInitListener, избегая
+            // хрупкого class-поля: каждый вызов получает собственный инстанс.
+            lateinit var tts: TextToSpeech
             val listener = object : TextToSpeech.OnInitListener {
                 override fun onInit(status: Int) {
                     if (cont.isCancelled) return
                     if (status == TextToSpeech.SUCCESS) {
-                        val instance = ttsRef
-                        if (instance != null) cont.resume(instance)
+                        if (cont.isActive) cont.resume(tts)
                     } else {
                         cont.resumeWithException(
                             TtsExportException("TTS engine '$enginePackage' init failed: status=$status")
@@ -123,21 +131,16 @@ class TtsAudioExporter(
                     }
                 }
             }
-            val tts = TextToSpeech(
+            tts = TextToSpeech(
                 appContext,
                 listener,
                 enginePackage.ifBlank { null }
             )
-            ttsRef = tts
             cont.invokeOnCancellation {
                 runCatching { tts.stop() }
                 runCatching { tts.shutdown() }
             }
         }
-
-    // Вспомогательное поле для передачи инстанса из колбэка init (Kotlin 2.x строгость
-    // присваивания final локальных переменных из лямбды обходится через var класса).
-    private var ttsRef: TextToSpeech? = null
 
     private suspend fun synthesizeChunk(
         tts: TextToSpeech,
@@ -194,6 +197,9 @@ class TtsAudioExporter(
                 if (audio.isEmpty()) return
                 try {
                     writer.writePcm(audio)
+                } catch (e: AudioTooLargeException) {
+                    Timber.e(e, "ttsExport WAV exceeds 4GB id=$utteranceId")
+                    done.completeExceptionally(TtsExportException(e.message ?: "WAV too large", e))
                 } catch (e: Exception) {
                     Timber.e(e, "ttsExport writing PCM failed id=$utteranceId")
                     done.completeExceptionally(

@@ -31,6 +31,7 @@ import my.noveldokusha.text_to_speech.TtsTextPreparer
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
+import kotlin.io.DEFAULT_BUFFER_SIZE
 
 /**
  * Синтезирует одну главу в аудиофайл (V1: WAV) в выбранную через SAF папку.
@@ -132,25 +133,15 @@ class TtsAudioExportWorker(
             val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, regexRules)
 
             // ── Синтез в temp WAV ───────────────────────────────────────────────
-            // Прогресс репортируем только при смене процента (≤100 записей), чтобы
-            // не спамить SharedPreferences/WorkManager. Уведомление троттлим ≥1с.
-            var lastProgressReported = -1
-            var lastNotifyMs = 0L
+            // Диапазон прогресса: синтез занимает 0..89%, копирование в SAF — 90..99%,
+            // финал — 100%. Синтез взвешен по символам текста. Репортим только при
+            // смене процента (≤100 записей), уведомление троттлим ≥1с.
+            val report = progressReporter(appPreferences, jobId, notification)
             TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav) { fraction ->
-                val percent = (fraction * 100).toInt().coerceIn(0, 99)
-                if (percent == lastProgressReported) return@exportAudio
-                lastProgressReported = percent
-                Timber.d("TtsAudio progress $percent%")
-                runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to percent)) }
-                TtsAudioQueue.updateState(appPreferences, jobId) {
-                    it!!.copy(progress = percent)
-                }
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastNotifyMs >= 1_000) {
-                    notification.updateProgress(percent)
-                    lastNotifyMs = now
-                }
+                report(89 + (fraction * 10).toInt().coerceIn(0, 9))
             }
+
+            val tempWavSize = tempWav.length()
 
             // ── Копирование в SAF-папку и финализация ──────────────────────────
             // fileName снабжается суффиксом источника, чтобы Original и Translated
@@ -174,7 +165,25 @@ class TtsAudioExportWorker(
             withContext(Dispatchers.IO) {
                 val output = context.contentResolver.openOutputStream(createdUri!!)
                     ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-                output.use { os -> tempWav.inputStream().use { it.copyTo(os) } }
+                output.use { os ->
+                    tempWav.inputStream().use { input ->
+                        // Копия больших файлов может быть долгой — ведём её прогрессом
+                        // 90..99 по байтам, чтобы индикатор не «зависал» на 89%.
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var copied = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            os.write(buffer, 0, read)
+                            copied += read
+                            if (tempWavSize > 0) {
+                                report(
+                                    90 + ((copied * 10) / tempWavSize).toInt().coerceIn(0, 9)
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             val displayName = queryDisplayName(createdUri!!) ?: fileName
@@ -192,9 +201,13 @@ class TtsAudioExportWorker(
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
-            // Отмена очереди: убираем временные файлы и активную запись статуса.
+            // Отмена очереди (пользователь): это не ошибка. Убираем временные файлы,
+            // помечаем запись CANCELLED (non-error) и закрываем уведомление.
+            createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
-            TtsAudioQueue.updateState(appPreferences, jobId) { it!!.copy(status = TtsAudioJobStatus.FAILED, message = "Cancelled") }
+            TtsAudioQueue.updateState(appPreferences, jobId) {
+                it!!.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
+            }
             notification.close()
             throw e
         } catch (e: Exception) {
@@ -220,6 +233,34 @@ class TtsAudioExportWorker(
         notification.showError(message)
         TtsAudioQueue.updateState(appPreferences, jobId) {
             it!!.copy(status = TtsAudioJobStatus.FAILED, message = message)
+        }
+    }
+
+    /**
+     * Троттлит публикацию прогресса: персистит в состояние и WorkManager только
+     * при смене процента (≤100 записей), уведомление — не чаще раза в секунду.
+     */
+    private fun progressReporter(
+        appPreferences: AppPreferences,
+        jobId: String,
+        notification: TtsAudioExportNotification,
+    ): (Int) -> Unit {
+        var lastReported = -1
+        var lastNotifyMs = 0L
+        return report@{ percent ->
+            val clamped = percent.coerceIn(0, 100)
+            if (clamped == lastReported) return@report
+            lastReported = clamped
+            Timber.d("TtsAudio progress $clamped%")
+            runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to clamped)) }
+            TtsAudioQueue.updateState(appPreferences, jobId) {
+                it!!.copy(progress = clamped)
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastNotifyMs >= 1_000 || clamped == 100) {
+                notification.updateProgress(clamped)
+                lastNotifyMs = now
+            }
         }
     }
 
@@ -390,16 +431,40 @@ class TtsAudioExportWorker(
             }
         if (existing != null) return existing
 
-        return runCatching {
+        // Пытаемся создать. Если create вернул null или документ уже существует
+        // (гоночный случай — e.g. другой воркер той же очереди), перечитываем
+        // листинг один раз, прежде чем объявлять неудачу.
+        val createdDocId = runCatching {
             val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId)
-            val created = DocumentsContract.createDocument(
+            DocumentsContract.createDocument(
                 context.contentResolver,
                 parentUri,
                 DocumentsContract.Document.MIME_TYPE_DIR,
                 folderName,
-            ) ?: return null
-            DocumentsContract.getDocumentId(created)
+            )?.let { DocumentsContract.getDocumentId(it) }
         }.getOrNull()
+
+        if (createdDocId != null) return createdDocId
+
+        // Ретрай по листингу: папку мог создать параллельный экспорт этого же романа.
+        return context.contentResolver.query(childrenUri, null, null, null, null)
+            ?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val mime = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    )
+                    if (mime != DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    val displayName = cursor.getString(
+                        cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    )
+                    if (displayName.equals(folderName, ignoreCase = true)) {
+                        return@use cursor.getString(
+                            cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                        )
+                    }
+                }
+                null
+            }
     }
 
     companion object {

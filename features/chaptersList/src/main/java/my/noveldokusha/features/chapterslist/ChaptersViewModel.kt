@@ -1149,6 +1149,13 @@ internal class ChaptersViewModel @Inject constructor(
 
     /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
     private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
+        // ASK_EVERY_TIME — не конкретный источник; он никогда не должен попасть в
+        // воркер/имя файла. Защита на случай регрессии: маршрутизируем в диалог.
+        if (source == TtsAudioSource.ASK_EVERY_TIME) {
+            pendingAudio = PendingAudio(chapter = chapter, source = null)
+            state.audioSourcePrompt.value = true
+            return
+        }
         val request = TtsAudioExportRequest(
             jobId = TtsAudioExportRequest.makeJobId(bookUrl, chapter.chapter.url, source),
             novelTitle = bookTitle,
