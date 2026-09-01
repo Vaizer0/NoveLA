@@ -111,9 +111,26 @@ fun backgroundLayer(
         ?: BackgroundLayer.None
 }
 
-/** Парсит ARGB-hex без "#" в Int (null при ошибке). */
-fun parseArgb(hex: String): Int? =
-    runCatching { android.graphics.Color.parseColor("#$hex") }.getOrNull()
+/**
+ * Парсит ARGB-hex (без "#") в Int.
+ *
+ * Поддерживает 6-значный RRGGBB (непрозрачный) и 8-значный AARRGGBB.
+ * Возвращает null при неверной длине/символах. Чистая Kotlin-функция без
+ * зависимостей от Android-фреймворка — детерминированна и покрывается JVM-тестами
+ * (идентична на устройстве в рантайме и в unit-тестах).
+ */
+fun parseArgb(hex: String): Int? {
+    val s = hex.removePrefix("#")
+    if (s.length != 6 && s.length != 8) return null
+    if (s.any { it !in HEX_DIGITS }) return null
+    return when (s.length) {
+        6 -> 0xFF000000.toInt() or (s.toLong(16).toInt())
+        8 -> s.toLong(16).toInt()
+        else -> null
+    }
+}
+
+private const val HEX_DIGITS = "0123456789abcdefABCDEF"
 
 /** Свойство пресета: цвет текста как ARGB Int (fallback при битом значении). */
 val ReaderBackgroundPreset.textColorArgb: Int
