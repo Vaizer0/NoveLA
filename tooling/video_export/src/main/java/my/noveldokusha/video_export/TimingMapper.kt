@@ -26,8 +26,9 @@ object TimingMapper {
         val cleanedStart = (chunkCleanedStart + start).coerceIn(0, map.lastIndex)
         val cleanedEnd = (chunkCleanedStart + end).coerceIn(0, map.lastIndex)
         if (cleanedStart > cleanedEnd) return null
+        val displayLength = map.max() + 1
         val ds = map[cleanedStart]
-        val de = (map[cleanedEnd] + 1).coerceAtMost(map.size)
+        val de = (map[cleanedEnd] + 1).coerceAtMost(displayLength)
         if (ds >= de) return null
         return ds until de
     }
