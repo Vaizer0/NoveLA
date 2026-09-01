@@ -340,6 +340,9 @@ class VideoFrameRenderer(
         canvas.clipRect(slot.clip)
         canvas.save()
         canvas.translate(0f, slot.rect.top)
+        // Локальная область layout (x0..CARD_TEXT_WIDTH) смещается в левый край
+        // контента карточки, после чего центрированно масштабируется от контента.
+        canvas.translate((VideoLayoutSpec.MARGIN_X + VideoLayoutSpec.CARD_PAD_H).toFloat(), 0f)
         canvas.scale(slot.scale, slot.scale, VideoLayoutSpec.CONTENT_CENTER_X, 0f)
 
         layoutCache.paint.alpha = (0xFF * slot.alpha).toInt()
@@ -349,13 +352,6 @@ class VideoFrameRenderer(
                 val rects = HighlightSpan.wordRects(entry.layout, r.first, r.last + 1, HIGHLIGHT_PAD_Y)
                 val hpaint = HighlightSpan.paint(snapshot.ttsHighlightColorArgb)
                 hpaint.alpha = (HIGHLIGHT_ALPHA * slot.alpha).toInt()
-                if (System.getProperty("videoExport.highlightDebug") == "1") {
-                    System.err.println(
-                        "HL i=$index range=$r slotAlpha=${slot.alpha} scale=${slot.scale} " +
-                            "top=${slot.rect.top} accent=0x${snapshot.ttsHighlightColorArgb.toString(16)} " +
-                            "filled=$rects"
-                    )
-                }
                 for (rc in rects) {
                     canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
                 }
