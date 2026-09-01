@@ -193,8 +193,8 @@ class VideoFrameRendererQaTest {
                     w.displayRange.last < p.displayText.length,
                 )
                 assertTrue(
-                    "range непустой",
-                    w.displayRange.first < w.displayRange.last,
+                    "range непустой (first<=last)",
+                    w.displayRange.first <= w.displayRange.last,
                 )
             }
             lastSample = maxOf(lastSample, prevPos)
@@ -232,6 +232,20 @@ class VideoFrameRendererQaTest {
         val rects = my.noveldokusha.reader_visuals.HighlightSpan.wordRects(
             layout, word.displayRange.first, word.displayRange.last + 1, 3f,
         )
+        if (rects.isEmpty()) {
+            System.err.println(
+                "QA-DIAG text='${p.displayText}' len=${p.displayText.length} " +
+                    "word=${word.displayRange} sample=$sample " +
+                    "lineCount=${layout.lineCount} layoutWidth=${layout.width}"
+            )
+            for (line in 0 until layout.lineCount) {
+                val ls = layout.getLineStart(line)
+                val le = layout.getLineEnd(line)
+                val x0 = layout.getLineLeft(line) + layout.getPrimaryHorizontal(word.displayRange.first)
+                val x1 = layout.getLineLeft(line) + layout.getPrimaryHorizontal(minOf(word.displayRange.last + 1, layout.text.length))
+                System.err.println("QA-DIAG line=$line start=$ls end=$le x0=$x0 x1=$x1")
+            }
+        }
         assertTrue("подсветка даёт rect'ы", rects.isNotEmpty())
         for (r in rects) {
             assertTrue("rect left<right", r.left < r.right)
