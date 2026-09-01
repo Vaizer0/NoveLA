@@ -37,7 +37,7 @@ jobs:
         run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
 
       - name: Run unit tests
-        run: ./gradlew testReleaseUnitTest -PlocalPropertiesFilePath=custom.properties
+        run: ./gradlew test -PlocalPropertiesFilePath=custom.properties
 
       - name: Upload test reports
         if: always()
@@ -45,7 +45,7 @@ jobs:
         with:
           name: unit-test-reports
           path: |
-            **/build/reports/tests/testReleaseUnitTest/
-            **/build/test-results/testReleaseUnitTest/
+            **/build/reports/tests/
+            **/build/test-results/
           if-no-files-found: warn
           retention-days: 14
