@@ -280,21 +280,23 @@ private data class VoiceEntry(
 /** Перечисляет голоса выделенным TextToSpeech-инстансом (не трогая AppTtsEngine). */
 private suspend fun probeVoices(context: Context): List<VoiceEntry> {
     var engine: TextToSpeech? = null
-    val ready = suspendCancellableCoroutine<TextToSpeech?> { cont ->
-        val tts = TextToSpeech(context.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS && cont.isActive) {
-                engine = tts
-                cont.resume(tts)
+    suspendCancellableCoroutine<Unit> { cont ->
+        // Инстанс присваивается до init-колбэка (он асинхронный), поэтому
+        // self-reference внутри own-initializer не требуется.
+        engine = TextToSpeech(context.applicationContext) { status ->
+            if (cont.isActive) {
+                cont.resume(Unit)
             }
         }
         cont.invokeOnCancellation {
-            runCatching { tts.stop() }
-            runCatching { tts.shutdown() }
+            runCatching { engine?.stop() }
+            runCatching { engine?.shutdown() }
         }
-    } ?: return emptyList()
-    val enginePackage = engine?.defaultEngine ?: ""
+    }
+    val tts = engine ?: return emptyList()
+    val enginePackage = tts.defaultEngine ?: ""
     val result = runCatching {
-        (ready.voices ?: emptyList()).map { voice ->
+        (tts.voices ?: emptyList()).map { voice ->
             VoiceEntry(
                 enginePackage = enginePackage,
                 id = voice.name,
@@ -302,6 +304,6 @@ private suspend fun probeVoices(context: Context): List<VoiceEntry> {
             )
         }
     }.getOrDefault(emptyList())
-    runCatching { ready.shutdown() }
+    runCatching { tts.shutdown() }
     return result
 }

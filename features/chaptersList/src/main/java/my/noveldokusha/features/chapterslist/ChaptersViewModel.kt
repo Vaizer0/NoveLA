@@ -1064,7 +1064,13 @@ internal class ChaptersViewModel @Inject constructor(
         val pending = pendingAudio
         pendingAudio = null
         state.audioNeedDirectory.value = false
-        if (pending != null) enqueueAudio(pending.chapter, pending.source ?: return)
+        if (pending != null) {
+            enqueueAudio(
+                pending.chapter,
+                pending.source ?: return,
+                appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+            )
+        }
     }
 
     /** Пикер папки аудиозагрузки закрыт без выбора — отменяем ожидание. */
@@ -1078,11 +1084,6 @@ internal class ChaptersViewModel @Inject constructor(
     }
 
     fun selectAll() {
-        state.chapters
-            .toList()
-            .map { it.chapter.url to Unit }
-            .let { state.selectedChaptersUrl.putAll(it) }
-    }
         state.chapters
             .toList()
             .map { it.chapter.url to Unit }
