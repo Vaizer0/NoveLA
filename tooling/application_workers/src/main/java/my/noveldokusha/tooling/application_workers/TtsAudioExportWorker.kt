@@ -141,7 +141,7 @@ class TtsAudioExportWorker(
                 if (percent == lastProgressReported) return@exportAudio
                 lastProgressReported = percent
                 Timber.d("TtsAudio progress $percent%")
-                runCatching { setProgress(workDataOf(KEY_PROGRESS to percent)) }
+                runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to percent)) }
                 TtsAudioQueue.updateState(appPreferences, jobId) {
                     it!!.copy(progress = percent)
                 }
