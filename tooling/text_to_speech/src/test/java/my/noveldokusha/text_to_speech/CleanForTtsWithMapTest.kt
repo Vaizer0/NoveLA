@@ -85,13 +85,19 @@ class CleanForTtsWithMapTest {
     }
 
     @Test
-    fun `word spanning a line break keeps valid mapping`() {
-        // cleanForTts сохраняет перевод строки; карта корректна через \n.
+    fun `multi-line text maps chars across the newline correctly`() {
+        // cleanForTts сохраняет перевод строки; карта перескакивает через \n
+        // (у карты нет записи для самого разделителя — только для символов).
         val src = "line one\ncontinued"
         val (cleaned, map) = TtsTextPreparer.cleanForTtsWithMap(src)
         assertEquals("line one\ncontinued", cleaned)
-        // '\n' в display-тексте на той же позиции, что в cleaned.
-        assertEquals(cleaned.indexOf('\n'), map[cleaned.indexOf('\n')])
+        val nl = cleaned.indexOf('\n')
+        // Перевод строки в display-тексте стоит на той же позиции, что в cleaned.
+        assertEquals(nl, src.indexOf('\n'))
+        // Первый символ второй строки ('c') стоит сразу после '\n' в display.
+        assertEquals(nl + 1, map[nl + 1])
+        // Последний символ второй строки отображается корректно.
+        assertEquals(cleaned.lastIndex, map[cleaned.lastIndex])
     }
 
     @Test
