@@ -32,7 +32,8 @@ class ParagraphLayoutCache(
 
     private val entries = mutableMapOf<Int, ParagraphLayout>()
 
-    private val paint: TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+    /** Доступен рендеру для постановки альфа-слота перед рисованием. */
+    internal val paint: TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         this.typeface = typeface
         textSize = snapshot.derivedBaseFontPx
         color = textColorArgb

@@ -11,6 +11,7 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
+import android.text.TextPaint
 import android.text.TextUtils
 import androidx.annotation.ColorInt
 import my.noveldokusha.reader_visuals.BackgroundLayer
@@ -78,7 +79,11 @@ class VideoFrameRenderer(
     )
 
     companion object {
-        const val HEADER_ALPHA = 0.5f
+        private const val HEADER_ALPHA = 0.5f
+        private const val DEFAULT_BACKGROUND_COLOR = 0xFF15181D.toInt()
+        private const val HIGHLIGHT_PAD_Y = 3f
+        private const val HIGHLIGHT_RADIUS = 6f
+        private const val HIGHLIGHT_ALPHA = 0x80
 
         /**
          * Разрешает цвета карточки из реальной темы приложения: заливка —
@@ -287,7 +292,7 @@ class VideoFrameRenderer(
         }
         if (title.isBlank()) return
 
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = headerTextColor
             textSize = VideoLayoutSpec.HEADER_FONT_PX
         }
@@ -354,12 +359,5 @@ class VideoFrameRenderer(
         canvas.restore()
         canvas.restore()
         layoutCache.resetAlpha()
-    }
-
-    private companion object {
-        const val DEFAULT_BACKGROUND_COLOR = 0xFF15181D.toInt()
-        const val HIGHLIGHT_PAD_Y = 3f
-        const val HIGHLIGHT_RADIUS = 6f
-        const val HIGHLIGHT_ALPHA = 0x80
     }
 }
