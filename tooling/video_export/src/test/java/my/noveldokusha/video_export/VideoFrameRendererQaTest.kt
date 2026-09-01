@@ -405,5 +405,19 @@ class VideoFrameRendererQaTest {
         val bitmap = renderFrameToBitmap(renderer, sample)
         assertFrameNotEmpty(bitmap)
         savePng(bitmap, "$prefix.png")
+
+        val p = timeline.paragraphs.first()
+        val word = timeline.wordAtSample(sample, p)
+        val cache = ParagraphLayoutCache(
+            snapshot = snapshot(),
+            typeface = Typeface.create("serif", Typeface.NORMAL),
+            textColorArgb = VideoFrameRenderer.resolveTextColor(snapshot()),
+        )
+        val entry = cache.layoutFor(0, p.displayText)
+        val rects = word?.let { my.noveldokusha.reader_visuals.HighlightSpan.wordRects(entry.layout, it.displayRange.first, it.displayRange.last + 1, 3f) }
+        System.err.println(
+            "QA-INFO $prefix sample=$sample word=${word?.displayRange} " +
+                "plan.hl=${plan.current?.highlightWordRange} cacheRects=${rects?.map { "[${it.left.toInt()},${it.right.toInt()}]" } ?: "null"}"
+        )
     }
 }
