@@ -97,7 +97,7 @@ class TtsAudioExportWorker(
                 Timber.w(e, "TtsAudio: setForeground failed, continuing as background worker")
             }
 
-            TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING) }
+            TtsAudioQueue.updateState(appPreferences, jobId) { it!!.copy(status = TtsAudioJobStatus.RUNNING) }
 
             // ── Текст главы (оригинал или закэшированный перевод) ──────────────
             val chapterText = withContext(Dispatchers.IO) {
@@ -143,10 +143,10 @@ class TtsAudioExportWorker(
 
             notification.showComplete(displayName, createdUri)
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it?.copy(
+                it!!.copy(
                     status = TtsAudioJobStatus.SUCCESS,
                     displayName = displayName,
-                    documentUri = createdUri?.toString() ?: "",
+                    documentUri = createdUri.toString(),
                 )
             }
             tempWav.delete()
@@ -154,7 +154,7 @@ class TtsAudioExportWorker(
         } catch (e: CancellationException) {
             // Отмена очереди: убираем временные файлы и активную запись статуса.
             tempWav.delete()
-            TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.FAILED, message = "Cancelled") }
+            TtsAudioQueue.updateState(appPreferences, jobId) { it!!.copy(status = TtsAudioJobStatus.FAILED, message = "Cancelled") }
             notification.close()
             throw e
         } catch (e: Exception) {
@@ -165,7 +165,7 @@ class TtsAudioExportWorker(
             val message = context.getString(StringsR.string.tts_audio_export_failure_detail, e.message ?: "")
             notification.showError(message)
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it?.copy(status = TtsAudioJobStatus.FAILED, message = e.message ?: "")
+                it!!.copy(status = TtsAudioJobStatus.FAILED, message = e.message ?: "")
             }
             return Result.failure()
         }
@@ -179,7 +179,7 @@ class TtsAudioExportWorker(
     ) {
         notification.showError(message)
         TtsAudioQueue.updateState(appPreferences, jobId) {
-            it?.copy(status = TtsAudioJobStatus.FAILED, message = message) ?: it
+            it!!.copy(status = TtsAudioJobStatus.FAILED, message = message)
         }
     }
 
