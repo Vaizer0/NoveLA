@@ -196,6 +196,11 @@ object TtsTextPreparer {
      * что и [cleanForTts], параллельно запоминая, откуда в исходном тексте
      * взялся каждый сохранившийся символ.
      *
+     * Инвариант: map.length == cleaned.length и map[i] — это индекс символа
+     * cleaned[i] в исходном display-тексте. Символы-разделители `\n` тоже
+     * получают запись (identity на соответствующую позицию), т.к. границы
+     * кусков (от delimiterAwareTextSplitter) могут совпадать с переводом строки.
+     *
      * Используется видеорежимом, чтобы тайминги слов, отданные движком на
      * очищенный текст, перевести в диапазоны ТОЧНО отображаемого текста.
      */
@@ -220,7 +225,13 @@ object TtsTextPreparer {
                 cleanedIndex++
                 displayIndex++
             }
-            displayIndex++
+            // Если после строки идёт перевод строки — дать ему identity-запись
+            // в карте, чтобы cleanedIndex продолжал совпадать с позицией в cleaned.
+            if (cleanedIndex < cleaned.length && cleaned[cleanedIndex] == '\n') {
+                map[cleanedIndex] = displayIndex
+                cleanedIndex++
+                displayIndex++
+            }
         }
         return CleanedWithMap(cleaned = cleaned, map = map)
     }
