@@ -128,12 +128,16 @@ data class ReaderVisualSnapshot(
             if (colors.isEmpty()) return 0xFFFFFFFF.toInt()
             var r = 0L; var g = 0L; var b = 0L
             for (c in colors) {
-                r += (c shr 16) and 0xFF
-                g += (c shr 8) and 0xFF
-                b += c and 0xFF
+                r += ((c shr 16) and 0xFF).toLong()
+                g += ((c shr 8) and 0xFF).toLong()
+                b += (c and 0xFF).toLong()
             }
             val n = colors.size
-            return (0xFF000000l or (((r / n) and 0xFF) shl 16) or (((g / n) and 0xFF) shl 8) or ((b / n) and 0xFF)).toInt()
+            val a = 0xFFL shl 24
+            val rr = (((r / n) and 0xFF) shl 16).toLong()
+            val gg = (((g / n) and 0xFF) shl 8).toLong()
+            val bb = ((b / n) and 0xFF).toLong()
+            return (a or rr or gg or bb).toInt()
         }
     }
 }
