@@ -1295,6 +1295,7 @@
     <string name="tts_audio_export_file_error">Не удалось создать аудиофайл.</string>
     <string name="tts_audio_export_no_download">Глава не скачана. Сначала загрузите её текст.</string>
     <string name="tts_audio_export_no_translation">Закэшированный перевод этой главы не найден.</string>
+    <string name="tts_audio_export_unsupported_format">Неподдерживаемый формат аудио (%1$s). V1 поддерживает только WAV.</string>
     <string name="tts_audio_source_original">Оригинал</string>
     <string name="tts_audio_source_translated">Перевод</string>
     <string name="tts_audio_source_ask_every_time">Спрашивать каждый раз</string>

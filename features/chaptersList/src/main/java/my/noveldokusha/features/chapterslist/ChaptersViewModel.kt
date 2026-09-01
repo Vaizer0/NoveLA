@@ -63,6 +63,7 @@ import my.noveldokusha.chapterslist.BuildConfig
 import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.text_to_speech.TtsAudioFormat
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
 import my.noveldokusha.tooling.application_workers.TtsAudioExportNotification
@@ -1168,7 +1169,9 @@ internal class ChaptersViewModel @Inject constructor(
             speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
             pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
             outputDirectoryUri = folderUri,
-            format = appPreferences.TTS_AUDIO_DOWNLOAD_FORMAT.value.ifBlank { "wav" },
+            // V1 поддерживает ТОЛЬКО WAV: пережиток выбора (например "m4a") намеренно
+            // сбрасывается — иначе файл с расширением .m4a содержал бы WAV-данные.
+            format = TtsAudioFormat.WAV,
         )
         TtsAudioQueue.enqueue(context, appPreferences, request)
         toasty.show(StringsR.string.tts_audio_download_started)

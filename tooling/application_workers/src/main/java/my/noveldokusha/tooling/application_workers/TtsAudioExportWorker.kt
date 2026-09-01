@@ -25,6 +25,7 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.text_to_speech.TtsAudioFormat
 import my.noveldokusha.text_to_speech.TtsAudioExporter
 import my.noveldokusha.text_to_speech.TtsExportException
 import my.noveldokusha.text_to_speech.TtsTextPreparer
@@ -71,6 +72,16 @@ class TtsAudioExportWorker(
         val notificationsCenter = entryPoint.notificationsCenter()
 
         val notification = TtsAudioExportNotification(request.chapterTitle, context, notificationsCenter)
+
+        // V1 умеет генерировать только WAV/PCM: любой другой формат (например
+        // "m4a") отклоняется явно ДО синтеза — никогда не создаём файл с чужим
+        // расширением (.m4a), содержащий WAV-данные. M4A остаётся опцией V2.
+        if (request.format != TtsAudioFormat.WAV) {
+            Timber.e("TtsAudio: unsupported format '${request.format}' for job $jobId (V1 supports WAV only)")
+            fail(appPreferences, jobId, notification,
+                context.getString(StringsR.string.tts_audio_export_unsupported_format, request.format))
+            return Result.failure()
+        }
 
         // Временные файлы для WAV — в cacheDir, не трогают user-данные.
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
@@ -156,7 +167,7 @@ class TtsAudioExportWorker(
                 "$baseName.${request.format}"
             else
                 "$baseName $sourceSuffix.${request.format}"
-            val mime = if (request.format == "wav") MIME_WAV else "application/octet-stream"
+            val mime = if (request.format == TtsAudioFormat.WAV) MIME_WAV else "application/octet-stream"
             val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)
@@ -318,7 +329,7 @@ class TtsAudioExportWorker(
         val speed = inputData.getFloat(KEY_SPEED, 1f)
         val pitch = inputData.getFloat(KEY_PITCH, 1f)
         val outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null
-        val format = inputData.getString(KEY_FORMAT) ?: "wav"
+        val format = inputData.getString(KEY_FORMAT) ?: TtsAudioFormat.WAV
         return TtsAudioExportRequest(
             jobId = jobId,
             novelTitle = novelTitle,

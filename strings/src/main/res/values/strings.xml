@@ -810,6 +810,7 @@
     <string name="tts_audio_export_file_error">Could not create the audio file.</string>
     <string name="tts_audio_export_no_download">This chapter is not downloaded. Download it first.</string>
     <string name="tts_audio_export_no_translation">No cached translation found for this chapter.</string>
+    <string name="tts_audio_export_unsupported_format">Unsupported audio format (%1$s). V1 only supports WAV.</string>
     <string name="tts_audio_source_original">Original</string>
     <string name="tts_audio_source_translated">Translation</string>
     <string name="tts_audio_source_ask_every_time">Ask every time</string>

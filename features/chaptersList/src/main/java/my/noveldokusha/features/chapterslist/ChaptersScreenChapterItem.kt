@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
@@ -251,22 +252,31 @@ private fun ChapterAudioButton(
 
     when {
         running -> {
-            // Кольцо прогресса вокруг иконки ИСТОЧНИКА: по глифу сразу видно,
-            // Original или Translated синтезируется, по кольцу — прогресс.
+            // Кольцо прогресса с процентами внутри; глиф источника — маленьким
+            // бейджем в углу (как галочка успеха / стрелка повтора), чтобы
+            // источник оставался различим и во время синтеза.
             val percent = (audioJob!!.progress).coerceIn(0, 100)
             val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
             IconButton(onClick = onAudio) {
-                Box(contentAlignment = Alignment.Center) {
+                Box {
                     CircularProgressIndicator(
                         modifier = Modifier.size(28.dp),
                         progress = { percent / 100f },
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.tertiary
                     )
+                    Text(
+                        text = "$percent",
+                        modifier = Modifier.align(Alignment.Center),
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
                     Icon(
                         sourceFilledIcon(source),
                         contentDescription = "$contentDescription ($progressDesc)",
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
                         tint = MaterialTheme.colorScheme.tertiary
                     )
                 }
