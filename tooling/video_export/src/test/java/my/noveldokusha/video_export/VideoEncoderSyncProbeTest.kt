@@ -35,7 +35,7 @@ class EncodeTimingTest {
         assertEquals(300, EncodeTiming.frameCount(44100 * 10, 44100))
         assertEquals(301, EncodeTiming.frameCount(44100 * 10 + 1, 44100))
         assertEquals(1, EncodeTiming.frameCount(0, 44100))
-        assertEquals(1, EncodeTiming.frameCount(44100 / 2, 44100))
+        assertEquals(15, EncodeTiming.frameCount(44100 / 2, 44100))
     }
 
     @Test
@@ -127,13 +127,24 @@ class WavPcmSourceTest {
 
 class SyncProbeLagTest {
 
-    private fun tone(samples: Int, rate: Int, freq: Double, amp: Float = 0.5f): FloatArray =
-        FloatArray(samples) { i -> (sin(2.0 * Math.PI * freq * i / rate) * amp).toFloat() }
+    /** Чирп с крутым пиком автокорреляции (аналог речи), а не стационарный тон. */
+    private fun chirp(samples: Int, rate: Int, f0: Double, f1: Double, amp: Float = 0.5f): FloatArray {
+        val out = FloatArray(samples)
+        var phase = 0.0
+        for (i in 0 until samples) {
+            out[i] = (sin(phase) * amp).toFloat()
+            val f = f0 + (f1 - f0) * i / samples
+            phase += 2.0 * Math.PI * f / rate
+        }
+        return out
+    }
+
+    private fun burst(rate: Int): FloatArray = chirp(rate, rate, 300.0, 1500.0)
 
     @Test
     fun `zero lag with identical pcm`() {
         val rate = 8000
-        val src = tone(rate, rate, 440.0)
+        val src = burst(rate)
         val lag = SyncProbe.findLag(src, src.copyOf(), rate, maxLagMs = 200, windowMs = 120)
         assertEquals(0L, lag.lagSamples)
         assertTrue(lag.correlation > 0.99)
@@ -142,10 +153,9 @@ class SyncProbeLagTest {
     @Test
     fun `detects known positive lag`() {
         val rate = 8000
-        val src = FloatArray(rate) + tone(rate, rate, 440.0)
-        // decoded = 100ms leading silence + src -> lag = 800 samples.
-        val silence = FloatArray(800)
-        val decoded = silence + src
+        // 1s тишины затем 1s речь; decode ведёт на 100ms -> lag = 800 samples.
+        val src = FloatArray(rate) + burst(rate)
+        val decoded = FloatArray(800) + src
         val lag = SyncProbe.findLag(src, decoded, rate, maxLagMs = 200, windowMs = 120)
         assertEquals(800L, lag.lagSamples)
         assertTrue(lag.correlation > 0.99)
@@ -154,20 +164,20 @@ class SyncProbeLagTest {
     @Test
     fun `detects lag under noise`() {
         val rate = 8000
-        val src = tone(rate, rate, 330.0, 0.6f)
-        val silence = FloatArray(480) // 60ms lag
-        val decoded = silence + src
+        val src = burst(rate)
+        val decoded = FloatArray(480) + src // 60ms lag
         for (i in decoded.indices) {
             decoded[i] += ((Math.random() - 0.5) * 0.08).toFloat()
         }
         val lag = SyncProbe.findLag(src, decoded, rate, maxLagMs = 200, windowMs = 120)
         assertEquals(480L, lag.lagSamples)
+        assertTrue(lag.correlation > 0.9)
     }
 
     @Test
     fun `clamps to max lag`() {
         val rate = 8000
-        val src = tone(rate, rate, 440.0)
+        val src = burst(rate)
         val decoded = FloatArray(1600) + src // 200ms lag, but search capped at 100ms
         val lag = SyncProbe.findLag(src, decoded, rate, maxLagMs = 100, windowMs = 120)
         assertTrue(lag.lagSamples in 0..800)

@@ -34,12 +34,13 @@ object EncodeTiming {
 
     /**
      * Число кадров 30fps, полностью покрывающих аудио (включая хвост-остаток),
-     * но минимум один кадр.
+     * но минимум один кадр. Точная целочисленная арифметика: никаких плавающих
+     * ошибок (ровно 300 кадров на 10с, а не ceil(300.000003)).
      */
     fun frameCount(totalSamples: Long, sampleRate: Int): Int {
-        val totalUs = durationUs(totalSamples, sampleRate)
-        val frameUs = 1_000_000L / VideoLayoutSpec.FPS
-        return ((totalUs + frameUs - 1) / frameUs).toInt().coerceAtLeast(1)
+        if (totalSamples <= 0) return 1
+        val frames = (totalSamples * VideoLayoutSpec.FPS + sampleRate - 1) / sampleRate
+        return frames.toInt().coerceIn(1, Int.MAX_VALUE)
     }
 
     /** Семпл аудио на начало кадра [frameIndex] (не выходит за [totalSamples]). */
