@@ -38,7 +38,7 @@ class CleanForTtsWithMapTest {
         assertEquals(0, map[0])
         // 'S' (первый символ второй строки) стоит после "First line\n" + 3 декоратора
         val expected = firstLineLen + 1 + 3
-        assertEquals(expected, map[firstLineLen])
+        assertEquals(expected, map[firstLineLen + 1])
     }
 
     @Test
