@@ -27,6 +27,10 @@ internal data class ChaptersScreenState(
     val status: MutableState<String>,
     val lastUpdateDate: MutableState<String>,
     val translatedChapterTitles: MutableState<Map<String, String>>,
+    // chapterUrl → есть ли закэшированный перевод ТЕЛА главы для активной пары.
+    // Управляет доступностью кнопки «Translated» аудиозагрузки: она активна только
+    // когда воркеру реально есть что синтезировать (исходник тот же, что у воркера).
+    val translatedAudioAvailable: MutableState<Map<String, Boolean>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
     // Аудиозагрузка глав (TTS): AudioJobKey → состояние для иконки у главы.

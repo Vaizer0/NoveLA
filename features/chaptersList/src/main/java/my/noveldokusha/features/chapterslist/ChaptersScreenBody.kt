@@ -195,7 +195,9 @@ internal fun ChaptersScreenBody(
                     onLongClick = { onChapterLongClick(it) },
                     onDownload = { onChapterDownload(it) },
                     onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
-                    onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) }
+                    onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
+                    translatedAudioAvailable =
+                        state.translatedAudioAvailable.value[it.chapter.url] ?: false
                 )
             }
 

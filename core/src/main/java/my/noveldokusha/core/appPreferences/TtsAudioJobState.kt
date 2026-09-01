@@ -53,6 +53,13 @@ data class TtsAudioJobState(
     val documentUri: String = "",
     /** Прогресс 0..100 (персистится воркером для восстановления после перезапуска). */
     val progress: Int = 0,
+    /**
+     * WorkRequest UUID (WorkManager), выполняющий эту задачу. Позволяет на старте
+     * сверять персистентное состояние с реальным состоянием WorkManager и чинить
+     * «застрявшие» записи (QUEUED/RUNNING) после kill/force-stop процесса, когда
+     * воркер не успел донести свой финальный статус.
+     */
+    val workRequestId: String = "",
 ) {
     val isActive: Boolean
         get() = status == TtsAudioJobStatus.QUEUED ||

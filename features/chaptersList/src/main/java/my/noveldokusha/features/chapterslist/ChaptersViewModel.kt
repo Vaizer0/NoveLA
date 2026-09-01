@@ -42,7 +42,6 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
-import my.noveldokusha.core.appPreferences.resolveTranslationEnabled
 import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.core.isLocalUri
@@ -53,6 +52,7 @@ import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
+import my.noveldokusha.feature.local_database.DAOs.ChapterTitleTranslation
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.DAOs.ReadingHistoryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -147,6 +147,7 @@ internal class ChaptersViewModel @Inject constructor(
         status = mutableStateOf(""),
         lastUpdateDate = mutableStateOf(""),
         translatedChapterTitles = mutableStateOf(emptyMap()),
+        translatedAudioAvailable = mutableStateOf(emptyMap()),
         chapterSizes = mutableStateOf(emptyMap()),
         downloadTask = mutableStateOf(null),
         audioJobs = mutableStateMapOf(),
@@ -458,8 +459,14 @@ internal class ChaptersViewModel @Inject constructor(
                 appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow(),
             ) { url, jobs -> url to jobs }
                 .collectLatest { (url, jobs) ->
+                    // Сверяем «застрявшие» активные записи с реальным состоянием
+                    // WorkManager (после kill/force-stop воркер мог не донести статус).
+                    // Дёшево и безопасно вызывать при каждом значимом снимке: reconcile
+                    // трогает только записи, чей WorkRequest не выполняется.
+                    TtsAudioQueue.reconcile(context, appPreferences)
+                    val effective = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value
                     val byChapter = mutableMapOf<AudioJobKey, TtsAudioJobState>()
-                    for (job in jobs.values) {
+                    for (job in effective.values) {
                         if (job.novelUrl != url) continue
                         byChapter[AudioJobKey(job.chapterUrl, job.source)] = job
                     }
@@ -477,33 +484,47 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
-        // Подписываемся на переведённые названия глав из БД
+        // Подписываемся на переведённые названия глав из БД и доступность
+        // перевода тела главы (для кнопки аудиозагрузки «Translated»).
         viewModelScope.launch {
             combine(
                 combine(
                     bookUrlFlow,
                     appPreferences.TRANSLATION_BOOK_ENABLED_MAP.flow(),
-                ) { url, bookEnabled -> url to bookEnabled },
+                    // Источник глобальной пары включён в триггер: изменение сбрасывает
+                    // пересчёт; там же отслеживается и включение/пара (см. ниже).
+                    appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.flow(),
+                ) { url, bookEnabled, _ -> url to bookEnabled },
                 appPreferences.TRANSLATION_BOOK_LANG_PAIR.flow(),
                 appPreferences.GLOBAL_TRANSLATION_ENABLED.flow(),
                 appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.flow(),
                 appPreferences.TRANSLATION_GLOBAL_MODE.flow()
-            ) { (url, bookEnabled), bookPairs, globalEnabled, globalTarget, globalMode ->
-                val enabled = resolveTranslationEnabled(globalMode, globalEnabled, bookEnabled, url)
-                val target = if (globalMode) globalTarget else bookPairs[url]?.target ?: ""
-                enabled to target
+            ) { (url, _), _, _, _, _ ->
+                val enabled = appPreferences.translationEnabledForBook(url)
+                val pair = appPreferences.translationPairForBook(url)
+                Triple(enabled, pair.source, pair.target)
             }
-                .flatMapLatest { (enabled, targetLang) ->
-                    if (enabled) {
-                        chapterTranslationDao.getTranslatedTitlesFlow(bookUrlFlow.value, targetLang)
+                .flatMapLatest { (enabled, source, target) ->
+                    if (enabled && source.isNotBlank() && target.isNotBlank()) {
+                        combine(
+                            chapterTranslationDao.getTranslatedTitlesFlow(bookUrlFlow.value, target),
+                            chapterTranslationDao.getTranslatedAudioAvailabilityFlow(
+                                bookUrlFlow.value,
+                                source,
+                                target,
+                            ),
+                        ) { titles, available ->
+                            titles to available
+                        }
                     } else {
-                        flowOf(emptyList())
+                        flowOf(emptyList<ChapterTitleTranslation>() to emptyList<String>())
                     }
                 }
-                .collectLatest { list ->
-                    state.translatedChapterTitles.value = list.associate {
+                .collectLatest { (titles, available) ->
+                    state.translatedChapterTitles.value = titles.associate {
                         it.chapterUrl to it.translatedText
                     }
+                    state.translatedAudioAvailable.value = available.associateWith { true }
                 }
         }
     }
@@ -1036,6 +1057,10 @@ internal class ChaptersViewModel @Inject constructor(
                 (state.audioFilesExist[key] ?: false) -> openAudioFile(job)
 
             job != null && job.isActive -> Unit
+
+            source == TtsAudioSource.TRANSLATED &&
+                !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false) ->
+                toasty.show(R.string.translation_not_configured)
 
             else -> startAudioDownload(chapter, source)
         }

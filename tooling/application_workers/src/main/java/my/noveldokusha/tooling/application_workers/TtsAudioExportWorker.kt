@@ -311,6 +311,8 @@ class TtsAudioExportWorker(
         val source = runCatching {
             TtsAudioSource.valueOf(sourceName)
         }.getOrNull() ?: return null
+        // ASK_EVERY_TIME — только «дефолтная» настройка; в воркере это не источник.
+        if (source == TtsAudioSource.ASK_EVERY_TIME) return null
         val enginePackage = inputData.getString(KEY_ENGINE_PACKAGE) ?: ""
         val voiceId = inputData.getString(KEY_VOICE_ID) ?: ""
         val speed = inputData.getFloat(KEY_SPEED, 1f)
