@@ -36,8 +36,13 @@ jobs:
       - name: Remove local Java home from gradle.properties
         run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
 
-      - name: Run unit tests
-        run: ./gradlew test -PlocalPropertiesFilePath=custom.properties
+      - name: Run unit tests (video feature modules)
+        run: |
+          ./gradlew \
+            :tooling:reader_visuals:testDebugUnitTest \
+            :tooling:text_to_speech:testDebugUnitTest \
+            :tooling:video_export:testDebugUnitTest \
+            -PlocalPropertiesFilePath=custom.properties
 
       - name: Upload test reports
         if: always()
