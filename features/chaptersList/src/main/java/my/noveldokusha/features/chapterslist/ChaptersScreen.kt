@@ -118,9 +118,7 @@ internal fun ChaptersScreen(
     onSelectionModeChapterClick: (chapter: ChapterWithContext) -> Unit,
     onSelectionModeChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
-    onChapterAudio: (chapter: ChapterWithContext) -> Unit,
-    onAudioSourceChosen: (source: TtsAudioSource) -> Unit,
-    onAudioSourceDismiss: () -> Unit,
+    onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
     onAudioDirectorySaved: (uri: String) -> Unit,
     onAudioFolderCancel: () -> Unit,
     onPullRefresh: () -> Unit,
@@ -558,43 +556,6 @@ internal fun ChaptersScreen(
                 TextButton(
                     onClick = { showCategoryPicker = false }
                 ) {
-                    Text(text = stringResource(android.R.string.cancel))
-                }
-            }
-        )
-    }
-
-    // Source choice dialog for chapter audio downloads
-    if (state.audioSourcePrompt.value) {
-        AlertDialog(
-            onDismissRequest = onAudioSourceDismiss,
-            title = {
-                Text(text = stringResource(StringsR.string.tts_audio_source_choice))
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { onAudioSourceChosen(TtsAudioSource.ORIGINAL) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(StringsR.string.tts_audio_source_original),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = { onAudioSourceChosen(TtsAudioSource.TRANSLATED) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(StringsR.string.tts_audio_source_translated),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onAudioSourceDismiss) {
                     Text(text = stringResource(android.R.string.cancel))
                 }
             }

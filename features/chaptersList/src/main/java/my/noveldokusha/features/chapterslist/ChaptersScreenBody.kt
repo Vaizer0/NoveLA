@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.components.ErrorView
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
@@ -46,7 +47,7 @@ internal fun ChaptersScreenBody(
     onChapterClick: (chapter: ChapterWithContext) -> Unit,
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
-    onChapterAudio: (chapter: ChapterWithContext) -> Unit,
+    onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -175,15 +176,26 @@ internal fun ChaptersScreenBody(
                     chapterWithContext = it,
                     translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     chapterSize = state.chapterSizes.value[it.chapter.url],
-                    audioJob = state.audioJobs[it.chapter.url],
-                    audioFileExists = state.audioFilesExist[it.chapter.url] ?: false,
+                    audioOriginalJob = state.audioJobs[
+                        AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
+                    ],
+                    audioOriginalFileExists = state.audioFilesExist[
+                        AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
+                    ] ?: false,
+                    audioTranslatedJob = state.audioJobs[
+                        AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
+                    ],
+                    audioTranslatedFileExists = state.audioFilesExist[
+                        AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
+                    ] ?: false,
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
                     highlighted = it.chapter.url == highlightedChapterUrl,
                     onClick = { onChapterClick(it) },
                     onLongClick = { onChapterLongClick(it) },
                     onDownload = { onChapterDownload(it) },
-                    onAudio = { onChapterAudio(it) }
+                    onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
+                    onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) }
                 )
             }
 

@@ -7,6 +7,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.data.DownloadTaskState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Book
@@ -28,14 +29,12 @@ internal data class ChaptersScreenState(
     val translatedChapterTitles: MutableState<Map<String, String>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
-    // Аудиозагрузка глав (TTS): chapterUrl → состояние для иконки у главы.
-    // Ключ — chapterUrl, а не jobId: в коллекторе VM резолвится единственный
-    // «релевантный» источник (ORIGINAL по умолчанию при ASK_EVERY_TIME).
-    val audioJobs: SnapshotStateMap<String, TtsAudioJobState>,
-    // chapterUrl → существует ли готовый аудиофайл на диске (SUCCESS + SAF-документ жив).
-    val audioFilesExist: SnapshotStateMap<String, Boolean>,
-    // Диалог выбора источника текста (ORIGINAL/TRANSLATED) для аудиозагрузки.
-    val audioSourcePrompt: MutableState<Boolean>,
+    // Аудиозагрузка глав (TTS): AudioJobKey → состояние для иконки у главы.
+    // Ключ составной (chapterUrl + source): Original и Translated одной главы —
+    // независимые задачи, ни одна не перетирает другую.
+    val audioJobs: SnapshotStateMap<AudioJobKey, TtsAudioJobState>,
+    // AudioJobKey → существует ли готовый аудиофайл на диске (SUCCESS + SAF-документ жив).
+    val audioFilesExist: SnapshotStateMap<AudioJobKey, Boolean>,
     // Нужно выбрать папку аудио (SAF): UI открывает пикер.
     val audioNeedDirectory: MutableState<Boolean>,
 ) {
@@ -70,6 +69,16 @@ data class LangPair(
     val sourceLang: String,
     val targetLang: String,
     val translatedChapters: Int,
+)
+
+/**
+ * Детерминированный ключ задачи аудиозагрузки главы в UI-состоянии: глава +
+ * источник. Original и Translated одной главы — РАЗНЫЕ ключи (независимые
+ * задачи), поэтому прогресс/завершение одного источника не маскирует другой.
+ */
+internal data class AudioJobKey(
+    val chapterUrl: String,
+    val source: TtsAudioSource,
 )
 
 /** Состояние диалога экспорта книги в EPUB. */

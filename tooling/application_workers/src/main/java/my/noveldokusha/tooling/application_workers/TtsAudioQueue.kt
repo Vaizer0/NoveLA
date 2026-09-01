@@ -35,6 +35,7 @@ object TtsAudioQueue {
                 chapterUrl = request.chapterUrl,
                 novelUrl = request.novelUrl,
                 chapterTitle = request.chapterTitle,
+                source = request.source,
                 status = TtsAudioJobStatus.QUEUED,
             )
         }

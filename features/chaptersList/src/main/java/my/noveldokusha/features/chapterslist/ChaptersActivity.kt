@@ -77,8 +77,6 @@ class ChaptersActivity : BaseActivity() {
                     onSelectionModeChapterLongClick = viewModel::onSelectionModeChapterLongClick,
                     onChapterDownload = viewModel::onChapterDownload,
                     onChapterAudio = viewModel::onChapterAudio,
-                    onAudioSourceChosen = viewModel::onAudioSourceChosen,
-                    onAudioSourceDismiss = viewModel::onAudioSourceDismiss,
                     onAudioDirectorySaved = viewModel::onAudioDirectorySaved,
                     onAudioFolderCancel = viewModel::onAudioFolderCancel,
                     onPullRefresh = viewModel::onPullRefresh,

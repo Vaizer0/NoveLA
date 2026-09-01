@@ -151,7 +151,6 @@ internal class ChaptersViewModel @Inject constructor(
         downloadTask = mutableStateOf(null),
         audioJobs = mutableStateMapOf(),
         audioFilesExist = mutableStateMapOf(),
-        audioSourcePrompt = mutableStateOf(false),
         audioNeedDirectory = mutableStateOf(false),
     )
 
@@ -162,18 +161,18 @@ internal class ChaptersViewModel @Inject constructor(
 
     private var pendingExport: PendingExport? = null
 
-    // Ожидающая аудиозагрузка: ждёт выбора источника (ASK_EVERY_TIME) или папки.
+    // Ожидающая аудиозагрузка: ждёт выбора папки через SAF-пикер.
     private var pendingAudio: PendingAudio? = null
 
-    // Последний снимок задач аудио (chapterUrl → состояние) для ревалидации
+    // Последний снимок задач аудио (AudioJobKey → состояние) для ревалидации
     // существования файлов при возврате на экран (onResume).
     @Volatile
-    private var lastAudioJobs: Map<String, TtsAudioJobState> = emptyMap()
+    private var lastAudioJobs: Map<AudioJobKey, TtsAudioJobState> = emptyMap()
 
     // Последний проверенный снимок SUCCESS-задач: прогресс выполняемых задач
     // меняется часто, но файлы — нет, поэтому перечитываем только при изменении.
     @Volatile
-    private var lastCheckedSuccessJobs: Map<String, TtsAudioJobState> = emptyMap()
+    private var lastCheckedSuccessJobs: Map<AudioJobKey, TtsAudioJobState> = emptyMap()
 
     // Поколение скана существования: отбрасываем устаревший результат, если
     // следующий эмит/onResume уже запустил более свежую проверку.
@@ -447,23 +446,22 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
-        // Статусы аудиозагрузок текущей книги. Ключ в UI — chapterUrl: показываем
-        // задачу «релевантного» источника (ORIGINAL по умолчанию при ASK_EVERY_TIME),
-        // Original и Translated остаются отдельными jobId в хранилище.
+        // Статусы аудиозагрузок текущей книги. Ключ в UI — (chapterUrl, source):
+        // каждая задача несёт свой СВОЙ источник (TtsAudioJobState.source), поэтому
+        // Original и Translated одной главы наблюдаются независимо и прогресс
+        // показывается ИМЕННО того экспорта, который пользователь запустил.
+        // Глобальная настройка TTS_AUDIO_DOWNLOAD_SOURCE здесь НЕ участвует — она
+        // остаётся только «дефолтом» и не маскирует уже запущенные задачи.
         viewModelScope.launch {
             combine(
                 bookUrlFlow,
-                appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.flow(),
                 appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow(),
-            ) { url, sourcePref, jobs -> Triple(url, sourcePref, jobs) }
-                .collectLatest { (url, sourcePref, jobs) ->
-                    val displaySource = if (sourcePref == TtsAudioSource.ASK_EVERY_TIME)
-                        TtsAudioSource.ORIGINAL else sourcePref
-                    val byChapter = mutableMapOf<String, TtsAudioJobState>()
-                    for ((jobId, job) in jobs) {
+            ) { url, jobs -> url to jobs }
+                .collectLatest { (url, jobs) ->
+                    val byChapter = mutableMapOf<AudioJobKey, TtsAudioJobState>()
+                    for (job in jobs.values) {
                         if (job.novelUrl != url) continue
-                        val expected = TtsAudioExportRequest.makeJobId(url, job.chapterUrl, displaySource)
-                        if (jobId == expected) byChapter[job.chapterUrl] = job
+                        byChapter[AudioJobKey(job.chapterUrl, job.source)] = job
                     }
                     state.audioJobs.clear()
                     state.audioJobs.putAll(byChapter)
@@ -1024,27 +1022,22 @@ internal class ChaptersViewModel @Inject constructor(
 
     // ─── Аудиозагрузка главы (TTS) ──────────────────────────────────────────
 
-    /** Клик по иконке аудио у главы: маршрутизируется по состоянию задачи.
-     *  Готово+файл жив — открываем; активно — игнорируем (не плодим дубли);
-     *  ошибка/нет задачи — обычный запуск (спросить источник или сразу). */
-    fun onChapterAudio(chapter: ChapterWithContext) {
-        val url = chapter.chapter.url
-        val job = state.audioJobs[url]
+    /**
+     * Клик по иконке аудио конкретного источника у главы. Готово+файл жив —
+     * открываем; активно — игнорируем (не плодим дубли); иначе — запускаем
+     * экспорт ИМЕННО этого источника. Источник выбран кнопкой, а не глобальной
+     * настройкой: Original и Translated одной главы живут независимо.
+     */
+    fun onChapterAudio(chapter: ChapterWithContext, source: TtsAudioSource) {
+        val key = AudioJobKey(chapter.chapter.url, source)
+        val job = state.audioJobs[key]
         when {
             job?.status == TtsAudioJobStatus.SUCCESS &&
-                (state.audioFilesExist[url] ?: false) -> openAudioFile(job)
+                (state.audioFilesExist[key] ?: false) -> openAudioFile(job)
 
             job != null && job.isActive -> Unit
 
-            else -> {
-                val sourcePref = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value
-                if (sourcePref == TtsAudioSource.ASK_EVERY_TIME) {
-                    pendingAudio = PendingAudio(chapter = chapter, source = null)
-                    state.audioSourcePrompt.value = true
-                } else {
-                    startAudioDownload(chapter, sourcePref)
-                }
-            }
+            else -> startAudioDownload(chapter, source)
         }
     }
 
@@ -1067,7 +1060,7 @@ internal class ChaptersViewModel @Inject constructor(
      * последним проверенным — прогресс выполняемых задач не вызывает пере-скан.
      */
     private fun refreshAudioFileExistence(
-        jobs: Map<String, TtsAudioJobState>,
+        jobs: Map<AudioJobKey, TtsAudioJobState>,
         force: Boolean = false,
     ) {
         val successJobs = jobs.filterValues { it.status == TtsAudioJobStatus.SUCCESS }
@@ -1108,18 +1101,6 @@ internal class ChaptersViewModel @Inject constructor(
         )?.use { it.moveToFirst() } ?: false
     }.getOrDefault(false)
 
-    fun onAudioSourceChosen(source: TtsAudioSource) {
-        state.audioSourcePrompt.value = false
-        val pending = pendingAudio ?: return
-        pendingAudio = null
-        startAudioDownload(pending.chapter, source)
-    }
-
-    fun onAudioSourceDismiss() {
-        state.audioSourcePrompt.value = false
-        pendingAudio = null
-    }
-
     /**
      * Запускает аудиозагрузку главы. Проверяет настройки (перевод, голос, папка);
      * при отсутствии папки переводит поток в ожидание SAF-пикера.
@@ -1149,13 +1130,6 @@ internal class ChaptersViewModel @Inject constructor(
 
     /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
     private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
-        // ASK_EVERY_TIME — не конкретный источник; он никогда не должен попасть в
-        // воркер/имя файла. Защита на случай регрессии: маршрутизируем в диалог.
-        if (source == TtsAudioSource.ASK_EVERY_TIME) {
-            pendingAudio = PendingAudio(chapter = chapter, source = null)
-            state.audioSourcePrompt.value = true
-            return
-        }
         val request = TtsAudioExportRequest(
             jobId = TtsAudioExportRequest.makeJobId(bookUrl, chapter.chapter.url, source),
             novelTitle = bookTitle,
@@ -1184,7 +1158,7 @@ internal class ChaptersViewModel @Inject constructor(
         if (pending != null) {
             enqueueAudio(
                 pending.chapter,
-                pending.source ?: return,
+                pending.source,
                 appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
             )
         }
@@ -1226,11 +1200,11 @@ private data class PendingExport(
     val availableCount: Int,
 )
 
-/** Аудиозагрузка главы, ожидающая выбора источника/папки. [source] равен null,
- *  пока пользователь выбирает источник в диалоге (ASK_EVERY_TIME). */
+/** Аудиозагрузка главы, ожидающая выбора папки (SAF-пикер). Источник уже
+ *  выбран кнопкой (ORIGINAL/TRANSLATED) и сохраняется до возврата пикера. */
 private data class PendingAudio(
     val chapter: ChapterWithContext,
-    val source: TtsAudioSource?,
+    val source: TtsAudioSource,
 )
 
 /**

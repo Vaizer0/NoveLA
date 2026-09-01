@@ -37,6 +37,13 @@ data class TtsAudioJobState(
     val chapterUrl: String,
     val novelUrl: String,
     val chapterTitle: String = "",
+    /**
+     * Источник текста ЭТОЙ задачи (ORIGINAL/TRANSLATED). Не глобальная настройка
+     * TTS_AUDIO_DOWNLOAD_SOURCE: задаётся при постановке в очередь и сохраняется
+     * сквозь life-cycle задачи, чтобы UI показывал прогресс именно того экспорта,
+     * который реально выполняется, а не «дефолтного» источника по настройке.
+     */
+    val source: TtsAudioSource = TtsAudioSource.ORIGINAL,
     val status: TtsAudioJobStatus,
     /** Причину ошибки (локальная строка) для UI/уведомления. */
     val message: String = "",

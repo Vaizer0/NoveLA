@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -58,8 +59,10 @@ internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
     translatedTitle: String? = null,
     chapterSize: ChapterSize? = null,
-    audioJob: TtsAudioJobState? = null,
-    audioFileExists: Boolean = false,
+    audioOriginalJob: TtsAudioJobState? = null,
+    audioOriginalFileExists: Boolean = false,
+    audioTranslatedJob: TtsAudioJobState? = null,
+    audioTranslatedFileExists: Boolean = false,
     selected: Boolean,
     isLocalSource: Boolean,
     highlighted: Boolean = false,
@@ -67,7 +70,8 @@ internal fun ChaptersScreenChapterItem(
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     onDownload: () -> Unit,
-    onAudio: () -> Unit
+    onAudioOriginal: () -> Unit,
+    onAudioTranslated: () -> Unit
 ) {
     val chapter = chapterWithContext.chapter
 
@@ -87,7 +91,8 @@ internal fun ChaptersScreenChapterItem(
     val stableOnClick = remember(onClick) { onClick }
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
-    val stableOnAudio = remember(onAudio) { onAudio }
+    val stableOnAudioOriginal = remember(onAudioOriginal) { onAudioOriginal }
+    val stableOnAudioTranslated = remember(onAudioTranslated) { onAudioTranslated }
 
     val badge: @Composable (() -> Unit)? = remember(chapterWithContext.lastReadChapter, chapter.read) {
         when {
@@ -179,9 +184,16 @@ internal fun ChaptersScreenChapterItem(
                             }
                         }
                         ChapterAudioButton(
-                            audioJob = audioJob,
-                            audioFileExists = audioFileExists,
-                            onAudio = stableOnAudio
+                            source = TtsAudioSource.ORIGINAL,
+                            audioJob = audioOriginalJob,
+                            audioFileExists = audioOriginalFileExists,
+                            onAudio = stableOnAudioOriginal
+                        )
+                        ChapterAudioButton(
+                            source = TtsAudioSource.TRANSLATED,
+                            audioJob = audioTranslatedJob,
+                            audioFileExists = audioTranslatedFileExists,
+                            onAudio = stableOnAudioTranslated
                         )
                     }
                 },
@@ -191,14 +203,17 @@ internal fun ChaptersScreenChapterItem(
 }
 
 /**
- * Иконка аудиозагрузки главы. Состояния:
- * - нет задачи → обычная иконка «скачать аудио» (клик = запуск);
+ * Иконка аудиозагрузки главы для одного [source] (Original или Translated).
+ * Одна глава имеет ДВЕ такие иконки — по источнику, состояния не пересекаются.
+ * Состояния:
+ * - нет задачи → обычная иконка «скачать аудио» (клик = запуск этого источника);
  * - QUEUED/RUNNING → детерминированный кольцевой прогресс с процентом;
  * - SUCCESS + файл существует → залитая галочка (клик = открыть файл);
  * - SUCCESS, но файла нет / FAILED → обычная иконка / повторить (клик = перезапуск).
  */
 @Composable
 private fun ChapterAudioButton(
+    source: TtsAudioSource,
     audioJob: TtsAudioJobState?,
     audioFileExists: Boolean,
     onAudio: () -> Unit
@@ -214,7 +229,16 @@ private fun ChapterAudioButton(
             TtsAudioJobStatus.CANCELLED -> StringsR.string.tts_audio_chapter_action
             null -> StringsR.string.tts_audio_chapter_action
         }
-    )
+    ).let { statusDesc ->
+        val sourceLabel = stringResource(
+            when (source) {
+                TtsAudioSource.ORIGINAL -> StringsR.string.tts_audio_source_original
+                TtsAudioSource.TRANSLATED -> StringsR.string.tts_audio_source_translated
+                TtsAudioSource.ASK_EVERY_TIME -> StringsR.string.tts_audio_chapter_action
+            }
+        )
+        if (sourceLabel.isNotBlank()) "$sourceLabel: $statusDesc" else statusDesc
+    }
 
     when {
         running -> {
@@ -262,7 +286,7 @@ private fun ChapterAudioButton(
             IconButton(onClick = onAudio) {
                 Icon(
                     Icons.Outlined.GraphicEq,
-                    contentDescription = stringResource(StringsR.string.tts_audio_chapter_action),
+                    contentDescription = contentDescription,
                     tint = LocalContentColor.current
                 )
             }
@@ -283,7 +307,8 @@ private fun PreviewView(
             onLongClick = {},
             onClick = {},
             onDownload = {},
-            onAudio = {}
+            onAudioOriginal = {},
+            onAudioTranslated = {}
         )
     }
 }

@@ -819,7 +819,6 @@
     <string name="tts_audio_chapter_action">Download audio</string>
     <string name="tts_audio_download_started">Audio download queued</string>
     <string name="tts_audio_voice_not_set">Choose a voice for audio downloads in Settings first</string>
-    <string name="tts_audio_source_choice">Audio text source</string>
     <string name="tts_audio_status_queued">Audio queued</string>
     <string name="tts_audio_status_running">Generating audio…</string>
     <string name="tts_audio_export_running_progress">%1$d%%</string>

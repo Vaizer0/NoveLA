@@ -1304,7 +1304,6 @@
     <string name="tts_audio_chapter_action">Скачать аудио</string>
     <string name="tts_audio_download_started">Аудиозагрузка поставлена в очередь</string>
     <string name="tts_audio_voice_not_set">Сначала выберите голос для загрузки аудио в настройках</string>
-    <string name="tts_audio_source_choice">Источник текста аудио</string>
     <string name="tts_audio_status_queued">Аудио в очереди</string>
     <string name="tts_audio_status_running">Создание аудио…</string>
     <string name="tts_audio_export_running_progress">%1$d%%</string>
