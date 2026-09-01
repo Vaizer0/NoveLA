@@ -54,3 +54,13 @@ jobs:
             **/build/test-results/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload video QA frames (PNG)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-qa-frames
+          path: |
+            tooling/video_export/build/outputs/qa_frames/
+          if-no-files-found: warn
+          retention-days: 14

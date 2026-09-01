@@ -4,6 +4,12 @@ plugins {
 
 android {
     namespace = "my.noveldokusha.video_export"
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -20,4 +26,13 @@ dependencies {
     implementation(libs.timber)
 
     testImplementation(libs.test.junit)
+    testImplementation(libs.robolectric)
+}
+
+tasks.withType<Test>().configureEach {
+    // Robolectric-рендер QA-кадров пишет PNG сюда (артефакт CI).
+    environment(
+        "QA_FRAMES_DIR",
+        layout.buildDirectory.dir("outputs/qa_frames").get().asFile.absolutePath
+    )
 }
