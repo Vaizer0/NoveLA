@@ -112,6 +112,8 @@ import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
 import my.noveldokusha.features.reader.services.FloatingTtsService
 import my.noveldokusha.features.reader.tools.BackgroundImageLoader
+import my.noveldokusha.reader_visuals.BackgroundLayer
+import my.noveldokusha.reader_visuals.backgroundLayer
 import my.noveldokusha.text_translator.domain.TranslationModelState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -188,7 +190,7 @@ internal fun ReaderScreen(
                 Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             )
             is BackgroundLayer.Preset -> Spacer(
-                Modifier.fillMaxSize().background(Brush.verticalGradient(layer.preset.colors))
+                Modifier.fillMaxSize().background(Brush.verticalGradient(layer.preset.colors.map { Color(it) }))
             )
             is BackgroundLayer.Image -> AsyncImage(
                 model = layer.file,
