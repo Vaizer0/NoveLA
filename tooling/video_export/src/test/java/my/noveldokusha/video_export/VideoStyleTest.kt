@@ -294,7 +294,10 @@ class VideoStyleTest {
         ).resolve(reader)
         val cfg = VideoLayoutConfig.from(s)
         assertTrue(cfg.cardTextWidth() >= 0f)
-        assertTrue(cfg.textX0() <= cfg.columnRight())
+        assertTrue("textX0 в сортированных границах колонны",
+            cfg.textX0() >= minOf(cfg.columnLeft(), cfg.columnRight()))
+        assertTrue("textX0 в сортированных границах колонны",
+            cfg.textX0() <= maxOf(cfg.columnLeft(), cfg.columnRight()))
         assertFalse("цвет текста не обязан быть null", s.textColorArgb == 0)
     }
 }

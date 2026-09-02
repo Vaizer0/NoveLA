@@ -116,9 +116,13 @@ class VideoLayoutConfig private constructor(
         val x0 = columnLeft() + cardPadH + (padded - cardTextWidth()) / 2f
         val left = columnLeft()
         val right = columnRight()
+        // Сортированные границы: деградантная (инвертированная) колонна не должна
+        // выкидывать X за пределы отрезка [min, max].
+        val lo = minOf(left, right)
+        val hi = maxOf(left, right)
         return when {
-            x0 < left -> left
-            x0 > right -> right
+            x0 < lo -> lo
+            x0 > hi -> hi
             else -> x0
         }
     }
