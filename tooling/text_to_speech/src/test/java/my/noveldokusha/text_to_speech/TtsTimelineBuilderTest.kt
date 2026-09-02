@@ -138,8 +138,9 @@ class TtsTimelineBuilderTest {
         // Второй range начинается со старта второго куска (1000ms, т.к. первый кусок 1000ms).
         assertEquals(1000, p.ranges[1].startMs)
         assertEquals("Second", p.ranges[1].text)
-        assertEquals(7, p.ranges[1].startChar) // "First part. " = 12 chars
-        assertEquals(13, p.ranges[1].endChar)
+        // "First part. " = 12 chars → "Second" начинается с char 12.
+        assertEquals(12, p.ranges[1].startChar)
+        assertEquals(18, p.ranges[1].endChar)
         // Непрерывность во времени между кусками.
         assertTrue(p.ranges[1].startMs >= p.ranges[0].endMs)
         assertEquals(2000, p.endMs)
@@ -251,7 +252,7 @@ class TtsTimelineBuilderTest {
                             audioBytes = 48000 * 2,
                             ranges = listOf(
                                 Triple(0, 7, 0),    // "Hello, " включает запятую+пробел
-                                Triple(8, 13, 0),   // "world!"
+                                Triple(7, 13, 0),   // "world!"
                             ),
                         )
                     )
@@ -276,8 +277,8 @@ class TtsTimelineBuilderTest {
                             sampleRate = 48000,
                             audioBytes = 48000 * 2,
                             ranges = listOf(
-                                Triple(0, 11, 0),   // "Здравствуй"
-                                Triple(12, 15, 0),  // "мир"
+                                Triple(0, 10, 0),   // "Здравствуй" (10 кириллических букв)
+                                Triple(11, 14, 0),  // "мир"
                             ),
                         )
                     )
@@ -452,13 +453,12 @@ class TtsTimelineBuilderTest {
         assertTrue(json.contains("\"frameStart\""))
     }
 
-    // Ошибка: пустая глава без абзацев.
+    // Ошибка: пустая глава без единого абзаца.
     @Test
     fun `empty chapter fails`() {
         val b = TtsTimelineBuilder()
         b.beginChapter("N", "C", 0, "ORIGINAL")
-        b.beginParagraph()
-        b.endParagraph()
+        // Не вызываем beginParagraph — глава без текста.
         try {
             b.build("a.wav", 48000, 1, 100)
             fail("expected IllegalStateException")
