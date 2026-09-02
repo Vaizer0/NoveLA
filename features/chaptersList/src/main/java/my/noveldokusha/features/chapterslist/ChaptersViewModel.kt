@@ -2,7 +2,9 @@ package my.noveldokusha.features.chapterslist
 
 import android.content.ContentResolver
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -10,9 +12,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
@@ -34,8 +38,13 @@ import my.noveldokusha.core.AppCoroutineScope
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobStatus
+import my.noveldokusha.core.appPreferences.VideoExportJobState
+import my.noveldokusha.core.appPreferences.makeVideoJobId
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
-import my.noveldokusha.core.appPreferences.resolveTranslationEnabled
 import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isContentUri
 import my.noveldokusha.core.isLocalUri
@@ -46,6 +55,7 @@ import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.DAOs.ChapterBodyDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterDao
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao
+import my.noveldokusha.feature.local_database.DAOs.ChapterTitleTranslation
 import my.noveldokusha.feature.local_database.DAOs.LibraryDao
 import my.noveldokusha.feature.local_database.DAOs.ReadingHistoryDao
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -55,8 +65,18 @@ import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.chapterslist.BuildConfig
 import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
+import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.text_to_speech.TtsAudioFormat
+import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
+import my.noveldokusha.tooling.application_workers.TtsAudioExportNotification
+import my.noveldokusha.tooling.application_workers.TtsAudioQueue
+import my.noveldokusha.tooling.application_workers.VideoExportQueue
+import my.noveldokusha.tooling.application_workers.VideoExportWorkRequest
+import my.noveldokusha.reader_visuals.BackgroundType
+import my.noveldokusha.reader_visuals.ReaderBackgroundPresets
+import my.noveldokusha.reader_visuals.ReaderVisualSnapshot
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -137,8 +157,14 @@ internal class ChaptersViewModel @Inject constructor(
         status = mutableStateOf(""),
         lastUpdateDate = mutableStateOf(""),
         translatedChapterTitles = mutableStateOf(emptyMap()),
+        translatedAudioAvailable = mutableStateOf(emptyMap()),
         chapterSizes = mutableStateOf(emptyMap()),
         downloadTask = mutableStateOf(null),
+        audioJobs = mutableStateMapOf(),
+        audioFilesExist = mutableStateMapOf(),
+        audioNeedDirectory = mutableStateOf(false),
+        videoJobs = mutableStateMapOf(),
+        videoNeedDirectory = mutableStateOf(false),
     )
 
     // ─── Экспорт книги ───────────────────────────────────────────────────────
@@ -147,6 +173,27 @@ internal class ChaptersViewModel @Inject constructor(
     val exportMessage = mutableStateOf<String?>(null)
 
     private var pendingExport: PendingExport? = null
+
+    // Ожидающая аудиозагрузка: ждёт выбора папки через SAF-пикер.
+    private var pendingAudio: PendingAudio? = null
+
+    // Ожидающий видео-экспорт: ждёт выбора папки через SAF-пикер.
+    private var pendingVideo: PendingVideo? = null
+
+    // Последний снимок задач аудио (AudioJobKey → состояние) для ревалидации
+    // существования файлов при возврате на экран (onResume).
+    @Volatile
+    private var lastAudioJobs: Map<AudioJobKey, TtsAudioJobState> = emptyMap()
+
+    // Последний проверенный снимок SUCCESS-задач: прогресс выполняемых задач
+    // меняется часто, но файлы — нет, поэтому перечитываем только при изменении.
+    @Volatile
+    private var lastCheckedSuccessJobs: Map<AudioJobKey, TtsAudioJobState> = emptyMap()
+
+    // Поколение скана существования: отбрасываем устаревший результат, если
+    // следующий эмит/onResume уже запустил более свежую проверку.
+    @Volatile
+    private var audioCheckGeneration = 0
 
     // Инжектируемая точка вызова воркера: тесты подменяют её лямбдой-шпионом.
     var enqueue: (Context, String, String, ExportMode, String, String, Int, String) -> Unit =
@@ -415,6 +462,55 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
+        // Статусы аудиозагрузок текущей книги. Ключ в UI — (chapterUrl, source):
+        // каждая задача несёт свой СВОЙ источник (TtsAudioJobState.source), поэтому
+        // Original и Translated одной главы наблюдаются независимо и прогресс
+        // показывается ИМЕННО того экспорта, который пользователь запустил.
+        // Глобальная настройка TTS_AUDIO_DOWNLOAD_SOURCE здесь НЕ участвует — она
+        // остаётся только «дефолтом» и не маскирует уже запущенные задачи.
+        viewModelScope.launch {
+            combine(
+                bookUrlFlow,
+                appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow(),
+            ) { url, jobs -> url to jobs }
+                .collectLatest { (url, jobs) ->
+                    // Сверяем «застрявшие» активные записи с реальным состоянием
+                    // WorkManager (после kill/force-stop воркер мог не донести статус).
+                    // Дёшево и безопасно вызывать при каждом значимом снимке: reconcile
+                    // трогает только записи, чей WorkRequest не выполняется.
+                    TtsAudioQueue.reconcile(context, appPreferences)
+                    val effective = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value
+                    val byChapter = mutableMapOf<AudioJobKey, TtsAudioJobState>()
+                    for (job in effective.values) {
+                        if (job.novelUrl != url) continue
+                        byChapter[AudioJobKey(job.chapterUrl, job.source)] = job
+                    }
+                    state.audioJobs.clear()
+                    state.audioJobs.putAll(byChapter)
+                    lastAudioJobs = byChapter
+                    refreshAudioFileExistence(byChapter)
+                }
+        }
+
+        // Статусы видео-экспорта текущей книги: chapterUrl → состояние (одна задача на главу).
+        viewModelScope.launch {
+            combine(
+                bookUrlFlow,
+                appPreferences.VIDEO_EXPORT_JOBS.flow(),
+            ) { url, jobs -> url to jobs }
+                .collectLatest { (url, jobs) ->
+                    VideoExportQueue.reconcile(context, appPreferences)
+                    val effective = appPreferences.VIDEO_EXPORT_JOBS.value
+                    val byChapter = mutableMapOf<String, my.noveldokusha.core.appPreferences.VideoExportJobState>()
+                    for (job in effective.values) {
+                        if (job.novelUrl != url) continue
+                        byChapter[job.chapterUrl] = job
+                    }
+                    state.videoJobs.clear()
+                    state.videoJobs.putAll(byChapter)
+                }
+        }
+
         // Подписываемся на статус загрузки текущей книги
         viewModelScope.launch {
             downloadManager.tasks.collect { tasks ->
@@ -422,33 +518,47 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
-        // Подписываемся на переведённые названия глав из БД
+        // Подписываемся на переведённые названия глав из БД и доступность
+        // перевода тела главы (для кнопки аудиозагрузки «Translated»).
         viewModelScope.launch {
             combine(
                 combine(
                     bookUrlFlow,
                     appPreferences.TRANSLATION_BOOK_ENABLED_MAP.flow(),
-                ) { url, bookEnabled -> url to bookEnabled },
+                    // Источник глобальной пары включён в триггер: изменение сбрасывает
+                    // пересчёт; там же отслеживается и включение/пара (см. ниже).
+                    appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.flow(),
+                ) { url, bookEnabled, _ -> url to bookEnabled },
                 appPreferences.TRANSLATION_BOOK_LANG_PAIR.flow(),
                 appPreferences.GLOBAL_TRANSLATION_ENABLED.flow(),
                 appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.flow(),
                 appPreferences.TRANSLATION_GLOBAL_MODE.flow()
-            ) { (url, bookEnabled), bookPairs, globalEnabled, globalTarget, globalMode ->
-                val enabled = resolveTranslationEnabled(globalMode, globalEnabled, bookEnabled, url)
-                val target = if (globalMode) globalTarget else bookPairs[url]?.target ?: ""
-                enabled to target
+            ) { (url, _), _, _, _, _ ->
+                val enabled = appPreferences.translationEnabledForBook(url)
+                val pair = appPreferences.translationPairForBook(url)
+                Triple(enabled, pair.source, pair.target)
             }
-                .flatMapLatest { (enabled, targetLang) ->
-                    if (enabled) {
-                        chapterTranslationDao.getTranslatedTitlesFlow(bookUrlFlow.value, targetLang)
+                .flatMapLatest { (enabled, source, target) ->
+                    if (enabled && source.isNotBlank() && target.isNotBlank()) {
+                        combine(
+                            chapterTranslationDao.getTranslatedTitlesFlow(bookUrlFlow.value, target),
+                            chapterTranslationDao.getTranslatedAudioAvailabilityFlow(
+                                bookUrlFlow.value,
+                                source,
+                                target,
+                            ),
+                        ) { titles, available ->
+                            titles to available
+                        }
                     } else {
-                        flowOf(emptyList())
+                        flowOf(emptyList<ChapterTitleTranslation>() to emptyList<String>())
                     }
                 }
-                .collectLatest { list ->
-                    state.translatedChapterTitles.value = list.associate {
+                .collectLatest { (titles, available) ->
+                    state.translatedChapterTitles.value = titles.associate {
                         it.chapterUrl to it.translatedText
                     }
+                    state.translatedAudioAvailable.value = available.associateWith { true }
                 }
         }
     }
@@ -965,6 +1075,306 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
+    // ─── Аудиозагрузка главы (TTS) ──────────────────────────────────────────
+
+    /**
+     * Клик по иконке аудио конкретного источника у главы. Готово+файл жив —
+     * открываем; активно — игнорируем (не плодим дубли); иначе — запускаем
+     * экспорт ИМЕННО этого источника. Источник выбран кнопкой, а не глобальной
+     * настройкой: Original и Translated одной главы живут независимо.
+     */
+    fun onChapterAudio(chapter: ChapterWithContext, source: TtsAudioSource) {
+        val key = AudioJobKey(chapter.chapter.url, source)
+        val job = state.audioJobs[key]
+        when {
+            job?.status == TtsAudioJobStatus.SUCCESS &&
+                (state.audioFilesExist[key] ?: false) -> openAudioFile(job)
+
+            job != null && job.isActive -> Unit
+
+            source == TtsAudioSource.TRANSLATED &&
+                !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false) ->
+                toasty.show(R.string.translation_not_configured)
+
+            else -> startAudioDownload(chapter, source)
+        }
+    }
+
+    /** Открывает готовый аудиофайл системным плеером (как ACTION_OPEN в уведомлении). */
+    private fun openAudioFile(job: TtsAudioJobState) {
+        val uri = job.documentUri.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), TtsAudioExportNotification.MIME_TYPE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure { Timber.e(it, "TtsAudio: failed to open chapter audio") }
+    }
+
+    /**
+     * Проверяет существование готовых файлов (SUCCESS) на диске и обновляет
+     * [ChaptersScreenState.audioFilesExist]. SUCCESS-снимок задач сравнивается с
+     * последним проверенным — прогресс выполняемых задач не вызывает пере-скан.
+     */
+    private fun refreshAudioFileExistence(
+        jobs: Map<AudioJobKey, TtsAudioJobState>,
+        force: Boolean = false,
+    ) {
+        val successJobs = jobs.filterValues { it.status == TtsAudioJobStatus.SUCCESS }
+        if (!force && successJobs == lastCheckedSuccessJobs) return
+        lastCheckedSuccessJobs = successJobs
+        val generation = ++audioCheckGeneration
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                jobs.mapValues { (_, job) ->
+                    if (job.status == TtsAudioJobStatus.SUCCESS && job.documentUri.isNotBlank()) {
+                        audioFileExists(job.documentUri)
+                    } else {
+                        false
+                    }
+                }
+            }
+            if (generation != audioCheckGeneration) return@launch
+            state.audioFilesExist.clear()
+            state.audioFilesExist.putAll(result)
+        }
+    }
+
+    /** Дубликат сканирования диска для onResume (файл мог быть удалён снаружи). */
+    fun refreshAudioFiles() {
+        val jobs = lastAudioJobs
+        if (jobs.isEmpty()) return
+        refreshAudioFileExistence(jobs, force = true)
+    }
+
+    private fun audioFileExists(documentUri: String): Boolean = runCatching {
+        context.contentResolver.query(
+            Uri.parse(documentUri),
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { it.moveToFirst() } ?: false
+    }.getOrDefault(false)
+
+    /**
+     * Запускает аудиозагрузку главы. Проверяет настройки (перевод, голос, папка);
+     * при отсутствии папки переводит поток в ожидание SAF-пикера.
+     */
+    fun startAudioDownload(chapter: ChapterWithContext, source: TtsAudioSource) {
+        if (source == TtsAudioSource.TRANSLATED) {
+            val pair = appPreferences.translationPairForBook(bookUrl)
+            if (!appPreferences.translationEnabledForBook(bookUrl) ||
+                pair.source.isBlank() || pair.target.isBlank()
+            ) {
+                toasty.show(R.string.translation_not_configured)
+                return
+            }
+        }
+        if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()) {
+            toasty.show(StringsR.string.tts_audio_voice_not_set)
+            return
+        }
+        val folderUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+        if (folderUri.isBlank()) {
+            pendingAudio = PendingAudio(chapter = chapter, source = source)
+            state.audioNeedDirectory.value = true
+            return
+        }
+        enqueueAudio(chapter, source, folderUri)
+    }
+
+    /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
+    private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
+        val request = TtsAudioExportRequest(
+            jobId = TtsAudioExportRequest.makeJobId(bookUrl, chapter.chapter.url, source),
+            novelTitle = bookTitle,
+            novelUrl = bookUrl,
+            chapterUrl = chapter.chapter.url,
+            chapterTitle = chapter.chapter.title,
+            chapterIndex = chapter.chapter.position,
+            source = source,
+            enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+            voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
+            speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+            pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+            outputDirectoryUri = folderUri,
+            // V1 поддерживает ТОЛЬКО WAV: пережиток выбора (например "m4a") намеренно
+            // сбрасывается — иначе файл с расширением .m4a содержал бы WAV-данные.
+            format = TtsAudioFormat.WAV,
+        )
+        TtsAudioQueue.enqueue(context, appPreferences, request)
+        toasty.show(StringsR.string.tts_audio_download_started)
+    }
+
+    /** Папка выбрана через SAF: запоминаем и запускаем отложенную аудиозагрузку. */
+    fun onAudioDirectorySaved(uri: String) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri
+        val pending = pendingAudio
+        pendingAudio = null
+        state.audioNeedDirectory.value = false
+        if (pending != null) {
+            enqueueAudio(
+                pending.chapter,
+                pending.source,
+                appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+            )
+        }
+    }
+
+    /** Пикер папки аудиозагрузки закрыт без выбора — отменяем ожидание. */
+    fun onAudioFolderCancel() {
+        pendingAudio = null
+        state.audioNeedDirectory.value = false
+    }
+
+    // ─── Видео-экспорт главы (MP4) ──────────────────────────────────────────
+
+    fun onChapterVideo(chapter: ChapterWithContext) {
+        val job = state.videoJobs[chapter.chapter.url]
+        when {
+            job?.status == VideoExportJobStatus.SUCCESS &&
+                job.documentUri.isNotBlank() -> openVideoFile(job)
+
+            job != null && job.isActive -> Unit
+
+            else -> startVideoExport(chapter)
+        }
+    }
+
+    private fun openVideoFile(job: VideoExportJobState) {
+        val uri = job.documentUri.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), "video/mp4")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure { Timber.e(it, "VideoExport: failed to open chapter video") }
+    }
+
+    fun startVideoExport(chapter: ChapterWithContext) {
+        if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()) {
+            toasty.show(StringsR.string.tts_audio_voice_not_set)
+            return
+        }
+        val folderUri = appPreferences.VIDEO_DIRECTORY_URI.value
+        if (folderUri.isBlank()) {
+            pendingVideo = PendingVideo(chapter = chapter)
+            state.videoNeedDirectory.value = true
+            return
+        }
+        enqueueVideoExport(chapter, folderUri)
+    }
+
+    private fun enqueueVideoExport(chapter: ChapterWithContext, folderUri: String) {
+        // Снимок внешнего вида читалки замораживается на момент enqueue.
+        val backgroundValue = appPreferences.READER_BACKGROUND_IMAGE.value
+        val bgColorHex = appPreferences.READER_TEXT_COLOR.value
+        val ttsHighlightHex = appPreferences.TTS_HIGHLIGHT_COLOR.value
+
+        val backgroundType: BackgroundType
+        val presetId: String
+        val backgroundFileName: String
+        when {
+            backgroundValue.isEmpty() -> {
+                backgroundType = BackgroundType.NONE
+                presetId = ""
+                backgroundFileName = ""
+            }
+            backgroundValue.startsWith("background_file:") -> {
+                backgroundType = BackgroundType.IMAGE
+                presetId = ""
+                backgroundFileName = backgroundValue.removePrefix("background_file:")
+            }
+            else -> {
+                backgroundType = BackgroundType.PRESET
+                presetId = backgroundValue
+                backgroundFileName = ""
+            }
+        }
+
+        val textColorArgb = runCatching {
+            if (bgColorHex.isNotBlank()) android.graphics.Color.parseColor("#$bgColorHex")
+            else null
+        }.getOrNull()
+
+        val highlightArgb = runCatching {
+            if (ttsHighlightHex.isNotBlank()) android.graphics.Color.parseColor("#$ttsHighlightHex")
+            else 0xFFFF6D00.toInt()
+        }.getOrDefault(0xFFFF6D00.toInt())
+
+        val presetColors = if (backgroundType == BackgroundType.PRESET) {
+            ReaderBackgroundPresets.firstOrNull { it.id == presetId }?.colors.orEmpty()
+        } else emptyList()
+
+        val snapshot = ReaderVisualSnapshot(
+            fontFamily = appPreferences.READER_FONT_FAMILY.value.ifBlank { "serif" },
+            fontSizeSp = appPreferences.READER_FONT_SIZE.value,
+            lineHeight = appPreferences.READER_LINE_HEIGHT.value,
+            letterSpacing = appPreferences.READER_LETTER_SPACING.value,
+            paragraphSpacing = appPreferences.READER_PARAGRAPH_SPACING.value,
+            textColorArgb = textColorArgb,
+            backgroundType = backgroundType,
+            presetId = presetId,
+            presetColorsArgb = presetColors,
+            backgroundFileName = backgroundFileName,
+            ttsHighlightColorArgb = highlightArgb,
+            derivedBaseFontPx = ReaderVisualSnapshot.computeBaseFontPx(appPreferences.READER_FONT_SIZE.value),
+        )
+
+        // Тело главы читается из БД асинхронно, затем ставится в очередь.
+        viewModelScope.launch {
+            val body = chapterBodyDao.get(chapter.chapter.url)?.body?.takeIf { it.isNotBlank() }
+            if (body == null) {
+                toasty.show(StringsR.string.tts_audio_export_no_download)
+                return@launch
+            }
+            val regexRules = appPreferences.effectiveRegexRules(bookUrl)
+            val paragraphs = TtsTextPreparer.paragraphsFromBody(body, regexRules)
+
+            val jobId = makeVideoJobId(bookUrl, chapter.chapter.url)
+            val request = VideoExportWorkRequest(
+                jobId = jobId,
+                novelTitle = bookTitle,
+                novelUrl = bookUrl,
+                chapterUrl = chapter.chapter.url,
+                chapterTitle = chapter.chapter.title,
+                sourceId = VIDEO_SOURCE_ID,
+                paragraphsJson = org.json.JSONArray(paragraphs).toString(),
+                snapshotJson = snapshot.toJson(),
+                enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+                voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
+                speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+                pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+                outputDirectoryUri = folderUri,
+            )
+            VideoExportQueue.enqueue(context, appPreferences, request)
+            toasty.show(StringsR.string.tts_video_export_started)
+        }
+    }
+
+    /** Папка выбрана через SAF: запоминаем и запускаем отложенный видео-экспорт. */
+    fun onVideoDirectorySaved(uri: String) {
+        appPreferences.VIDEO_DIRECTORY_URI.value = uri
+        val pending = pendingVideo
+        pendingVideo = null
+        state.videoNeedDirectory.value = false
+        if (pending != null) {
+            enqueueVideoExport(pending.chapter, appPreferences.VIDEO_DIRECTORY_URI.value)
+        }
+    }
+
+    /** Пикер папки видео-экспорта закрыт без выбора — отменяем ожидание. */
+    fun onVideoFolderCancel() {
+        pendingVideo = null
+        state.videoNeedDirectory.value = false
+    }
+
     fun unselectAll() {
         state.selectedChaptersUrl.clear()
     }
@@ -994,6 +1404,21 @@ private data class PendingExport(
     val targetLang: String,
     val availableCount: Int,
 )
+
+/** Аудиозагрузка главы, ожидающая выбора папки (SAF-пикер). Источник уже
+ *  выбран кнопкой (ORIGINAL/TRANSLATED) и сохраняется до возврата пикера. */
+private data class PendingAudio(
+    val chapter: ChapterWithContext,
+    val source: TtsAudioSource,
+)
+
+/** Видео-экспорт главы, ожидающий выбора папки (SAF-пикер). */
+private data class PendingVideo(
+    val chapter: ChapterWithContext,
+)
+
+/** Источник видео-экспорта: видео всегда строится из тела оригинала. */
+private const val VIDEO_SOURCE_ID = "original"
 
 /**
  * Число глав, доступных для экспорта: скачанные тела для оригинала,

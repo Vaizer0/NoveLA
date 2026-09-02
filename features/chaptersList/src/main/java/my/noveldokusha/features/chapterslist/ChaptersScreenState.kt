@@ -6,6 +6,9 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import my.noveldokusha.core.appPreferences.TernaryState
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobState
 import my.noveldokusha.data.DownloadTaskState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Book
@@ -25,8 +28,24 @@ internal data class ChaptersScreenState(
     val status: MutableState<String>,
     val lastUpdateDate: MutableState<String>,
     val translatedChapterTitles: MutableState<Map<String, String>>,
+    // chapterUrl → есть ли закэшированный перевод ТЕЛА главы для активной пары.
+    // Управляет доступностью кнопки «Translated» аудиозагрузки: она активна только
+    // когда воркеру реально есть что синтезировать (исходник тот же, что у воркера).
+    val translatedAudioAvailable: MutableState<Map<String, Boolean>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
+    // Аудиозагрузка глав (TTS): AudioJobKey → состояние для иконки у главы.
+    // Ключ составной (chapterUrl + source): Original и Translated одной главы —
+    // независимые задачи, ни одна не перетирает другую.
+    val audioJobs: SnapshotStateMap<AudioJobKey, TtsAudioJobState>,
+    // AudioJobKey → существует ли готовый аудиофайл на диске (SUCCESS + SAF-документ жив).
+    val audioFilesExist: SnapshotStateMap<AudioJobKey, Boolean>,
+    // Нужно выбрать папку аудио (SAF): UI открывает пикер.
+    val audioNeedDirectory: MutableState<Boolean>,
+    // Видео-экспорт глав: chapterUrl → состояние для иконки у главы (одна задача на главу).
+    val videoJobs: SnapshotStateMap<String, VideoExportJobState>,
+    // Нужно выбрать папку видео (SAF): UI открывает пикер.
+    val videoNeedDirectory: MutableState<Boolean>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }
@@ -59,6 +78,16 @@ data class LangPair(
     val sourceLang: String,
     val targetLang: String,
     val translatedChapters: Int,
+)
+
+/**
+ * Детерминированный ключ задачи аудиозагрузки главы в UI-состоянии: глава +
+ * источник. Original и Translated одной главы — РАЗНЫЕ ключи (независимые
+ * задачи), поэтому прогресс/завершение одного источника не маскирует другой.
+ */
+internal data class AudioJobKey(
+    val chapterUrl: String,
+    val source: TtsAudioSource,
 )
 
 /** Состояние диалога экспорта книги в EPUB. */

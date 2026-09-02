@@ -57,7 +57,10 @@ import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsNovelPromptsDialog
 import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
+import my.noveldokusha.settings.sections.SettingsVideoAppearance
+import my.noveldokusha.video_export.VideoStyleSettings
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
+import my.noveldokusha.settings.sections.SettingsTtsAudioDownload
 
 @Composable
 internal fun SettingsScreenBody(
@@ -101,6 +104,14 @@ internal fun SettingsScreenBody(
     onAutoBackupIncludeImagesChange: (Boolean) -> Unit,
     onAutoBackupIncludeSettingsChange: (Boolean) -> Unit,
     onAutoBackupIncludePluginsChange: (Boolean) -> Unit,
+    // Audio downloads (TTS)
+    onAudioVoiceChange: (enginePackage: String, voiceId: String) -> Unit,
+    onAudioVoiceSpeedChange: (Float) -> Unit,
+    onAudioVoicePitchChange: (Float) -> Unit,
+    onAudioSourceChange: (my.noveldokusha.core.appPreferences.TtsAudioSource) -> Unit,
+    onAudioSelectDirectory: () -> Unit,
+    onVideoStyleChange: (VideoStyleSettings) -> Unit,
+    onVideoSelectDirectory: () -> Unit,
 ) {
     // Refresh size displays every time the user navigates to this screen
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -214,6 +225,29 @@ internal fun SettingsScreenBody(
             )
         SettingsRegexCleanup(
             onNavigateToRegexCleanup = onNavigateToRegexCleanup
+        )
+        HorizontalDivider()
+        SettingsTtsAudioDownload(
+            voiceId = state.audioVoiceId.value,
+            voiceEngine = state.audioVoiceEngine.value,
+            speed = state.audioVoiceSpeed.value,
+            pitch = state.audioVoicePitch.value,
+            source = state.audioSource.value,
+            speedRange = 0.1f..5f,
+            pitchRange = 0.1f..5f,
+            onVoiceChange = onAudioVoiceChange,
+            onSpeedChange = onAudioVoiceSpeedChange,
+            onPitchChange = onAudioVoicePitchChange,
+            onSourceChange = onAudioSourceChange,
+            onSelectDirectory = onAudioSelectDirectory,
+            directoryDisplayName = state.audioDirectoryDisplayName.value,
+        )
+        HorizontalDivider()
+        SettingsVideoAppearance(
+            style = state.videoStyle.value,
+            onStyleChange = onVideoStyleChange,
+            directoryDisplayName = state.videoDirectoryDisplayName.value,
+            onSelectDirectory = onVideoSelectDirectory,
         )
         HorizontalDivider()
         LibraryAutoUpdate(state = state.libraryAutoUpdate)
@@ -353,6 +387,16 @@ private fun Preview() {
                     autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
                     translationNovelPrompts = remember { derivedStateOf { emptyMap<String, NovelPromptData>() } },
                     cleanConfirmationType = remember { mutableStateOf(null) },
+                    audioVoiceId = remember { derivedStateOf { "" } },
+                    audioVoiceEngine = remember { derivedStateOf { "" } },
+                    audioVoiceSpeed = remember { derivedStateOf { 1f } },
+                    audioVoicePitch = remember { derivedStateOf { 1f } },
+                    audioSource = remember { derivedStateOf { my.noveldokusha.core.appPreferences.TtsAudioSource.ASK_EVERY_TIME } },
+                    audioDirectoryUri = remember { derivedStateOf { "" } },
+                    audioDirectoryDisplayName = remember { mutableStateOf("") },
+                    videoStyle = remember { mutableStateOf(VideoStyleSettings()) },
+                    videoDirectoryUri = remember { derivedStateOf { "" } },
+                    videoDirectoryDisplayName = remember { mutableStateOf("") },
                 ),
                 onRefreshSizes = { },
                 onRequestCleanDatabase = { },
@@ -391,6 +435,13 @@ private fun Preview() {
                     onAutoBackupIncludeSettingsChange = { },
                     onAutoBackupIncludePluginsChange = { },
                     onDeleteNovelPrompt = { },
+                    onAudioVoiceChange = { _, _ -> },
+                    onAudioVoiceSpeedChange = { _ -> },
+                    onAudioVoicePitchChange = { _ -> },
+                    onAudioSourceChange = { _ -> },
+                    onAudioSelectDirectory = { },
+                    onVideoStyleChange = { },
+                    onVideoSelectDirectory = { },
             )
         }
     }

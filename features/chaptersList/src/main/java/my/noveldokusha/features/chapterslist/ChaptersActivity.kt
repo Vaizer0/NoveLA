@@ -76,6 +76,12 @@ class ChaptersActivity : BaseActivity() {
                     onSelectionModeChapterClick = viewModel::onSelectionModeChapterClick,
                     onSelectionModeChapterLongClick = viewModel::onSelectionModeChapterLongClick,
                     onChapterDownload = viewModel::onChapterDownload,
+                    onChapterAudio = viewModel::onChapterAudio,
+                    onChapterVideo = viewModel::onChapterVideo,
+                    onAudioDirectorySaved = viewModel::onAudioDirectorySaved,
+                    onAudioFolderCancel = viewModel::onAudioFolderCancel,
+                    onVideoDirectorySaved = viewModel::onVideoDirectorySaved,
+                    onVideoFolderCancel = viewModel::onVideoFolderCancel,
                     onPullRefresh = viewModel::onPullRefresh,
                     onCoverLongClick = { searchBookInDatabase(input = viewModel.bookTitle) },
                     onChangeCover = onDoAskForImage { viewModel.saveImageAsCover(it) },
@@ -110,6 +116,13 @@ class ChaptersActivity : BaseActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Файлы аудио могут быть удалены/перемещены вне приложения (SAF-провайдеры
+        // не шлют событий) — при возврате на экран ревалидируем существование.
+        viewModel.refreshAudioFiles()
     }
 
     private fun onOpenLastActiveChapter() {

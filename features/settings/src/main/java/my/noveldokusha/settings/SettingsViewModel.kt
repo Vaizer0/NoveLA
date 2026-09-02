@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.AppCoroutineScope
@@ -24,6 +25,7 @@ import my.noveldokusha.core.isCoverValid
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
+import my.noveldokusha.video_export.VideoStyleSettings
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.File
@@ -51,6 +53,17 @@ internal class SettingsViewModel @Inject constructor(
     var isCleaningChapterCache = mutableStateOf(false)
 
     private val cloudflareBypassEnabled by appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope)
+
+    /** Текущие настройки внешнего вида видео; изменение сохраняет весь JSON. */
+    private val videoStyleState = mutableStateOf(
+        VideoStyleSettings.fromJson(appPreferences.VIDEO_STYLE_SETTINGS_JSON.value)
+            ?: VideoStyleSettings()
+    )
+
+    fun onVideoStyleChange(newStyle: VideoStyleSettings) {
+        videoStyleState.value = newStyle
+        appPreferences.VIDEO_STYLE_SETTINGS_JSON.value = newStyle.toJson().toString()
+    }
 
     private val appThemePref = appPreferences.APP_THEME.state(viewModelScope)
     private val darkModePref = appPreferences.THEME_DARK_MODE.state(viewModelScope)
@@ -118,6 +131,20 @@ internal class SettingsViewModel @Inject constructor(
         chapterCacheSize = mutableStateOf("…"),
         isCleaningChapterCache = isCleaningChapterCache,
         cleanConfirmationType = mutableStateOf(null),
+        audioVoiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.state(viewModelScope),
+        audioVoiceEngine = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.state(viewModelScope),
+        audioVoiceSpeed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.state(viewModelScope),
+        audioVoicePitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.state(viewModelScope),
+        audioSource = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.state(viewModelScope),
+        audioDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.state(viewModelScope),
+        audioDirectoryDisplayName = mutableStateOf(
+            resolveDirectoryName(appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value)
+        ),
+        videoStyle = videoStyleState,
+        videoDirectoryUri = appPreferences.VIDEO_DIRECTORY_URI.state(viewModelScope),
+        videoDirectoryDisplayName = mutableStateOf(
+            resolveDirectoryName(appPreferences.VIDEO_DIRECTORY_URI.value)
+        ),
     )
 
     init {
@@ -536,6 +563,35 @@ internal class SettingsViewModel @Inject constructor(
     fun onAutoBackupDirectoryUriChange(uri: String) {
         appPreferences.BACKUP_AUTO_DIRECTORY_URI.value = uri
         updateDirectoryName(uri)
+    }
+
+    // ── Audio downloads (TTS) ────────────────────────────────────────────────
+
+    fun onAudioVoiceChange(enginePackage: String, voiceId: String) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value = enginePackage
+        appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value = voiceId
+    }
+
+    fun onAudioVoiceSpeedChange(speed: Float) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value = speed.coerceIn(0.1f, 5f)
+    }
+
+    fun onAudioVoicePitchChange(pitch: Float) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value = pitch.coerceIn(0.1f, 5f)
+    }
+
+    fun onAudioSourceChange(source: TtsAudioSource) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value = source
+    }
+
+    fun onAudioDirectoryUriChange(uri: String) {
+        appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri
+        (state.audioDirectoryDisplayName as? MutableState<String>)?.value = resolveDirectoryName(uri)
+    }
+
+    fun onVideoDirectoryUriChange(uri: String) {
+        appPreferences.VIDEO_DIRECTORY_URI.value = uri
+        (state.videoDirectoryDisplayName as? MutableState<String>)?.value = resolveDirectoryName(uri)
     }
 
     fun onAutoBackupMaxCountChange(count: Int) {

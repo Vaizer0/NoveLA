@@ -13,25 +13,46 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
+import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobState
+import my.noveldokusha.core.appPreferences.VideoExportJobStatus
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -39,6 +60,7 @@ import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.chapterslist.R
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.strings.R as StringsR
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalAnimationApi::class)
 @Composable
@@ -46,13 +68,22 @@ internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
     translatedTitle: String? = null,
     chapterSize: ChapterSize? = null,
+    audioOriginalJob: TtsAudioJobState? = null,
+    audioOriginalFileExists: Boolean = false,
+    audioTranslatedJob: TtsAudioJobState? = null,
+    audioTranslatedFileExists: Boolean = false,
     selected: Boolean,
     isLocalSource: Boolean,
     highlighted: Boolean = false,
     modifier: Modifier = Modifier,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onAudioOriginal: () -> Unit,
+    onAudioTranslated: () -> Unit,
+    translatedAudioAvailable: Boolean = true,
+    videoExportJob: VideoExportJobState? = null,
+    onVideoExport: () -> Unit = {},
 ) {
     val chapter = chapterWithContext.chapter
 
@@ -72,6 +103,8 @@ internal fun ChaptersScreenChapterItem(
     val stableOnClick = remember(onClick) { onClick }
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
+    val stableOnAudioOriginal = remember(onAudioOriginal) { onAudioOriginal }
+    val stableOnAudioTranslated = remember(onAudioTranslated) { onAudioTranslated }
 
     val badge: @Composable (() -> Unit)? = remember(chapterWithContext.lastReadChapter, chapter.read) {
         when {
@@ -146,20 +179,39 @@ internal fun ChaptersScreenChapterItem(
                         }
                     }
                 } else null,
-                trailingContent = if (isLocalSource) null else {
-                    {
-                        AnimatedTransition(
-                            targetState = chapterWithContext.downloaded,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() }
-                        ) { downloaded ->
-                            IconButton(onClick = stableOnDownload) {
-                                Icon(
-                                    if (downloaded) Icons.Filled.CloudDownload
-                                    else Icons.Outlined.CloudDownload,
-                                    null
-                                )
+                trailingContent = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                        if (!isLocalSource) {
+                            AnimatedTransition(
+                                targetState = chapterWithContext.downloaded,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() }
+                            ) { downloaded ->
+                                IconButton(onClick = stableOnDownload) {
+                                    Icon(
+                                        if (downloaded) Icons.Filled.CloudDownload
+                                        else Icons.Outlined.CloudDownload,
+                                        null
+                                    )
+                                }
                             }
                         }
+                        ChapterAudioButton(
+                            source = TtsAudioSource.ORIGINAL,
+                            audioJob = audioOriginalJob,
+                            audioFileExists = audioOriginalFileExists,
+                            onAudio = stableOnAudioOriginal
+                        )
+                        ChapterAudioButton(
+                            source = TtsAudioSource.TRANSLATED,
+                            audioJob = audioTranslatedJob,
+                            audioFileExists = audioTranslatedFileExists,
+                            enabled = translatedAudioAvailable || audioTranslatedJob != null,
+                            onAudio = stableOnAudioTranslated
+                        )
+                        ChapterVideoButton(
+                            videoJob = videoExportJob,
+                            onVideo = remember(onVideoExport) { onVideoExport }
+                        )
                     }
                 },
             )
@@ -167,6 +219,254 @@ internal fun ChaptersScreenChapterItem(
     }
 }
 
+/**
+ * Иконка аудиозагрузки главы для одного [source] (Original или Translated).
+ * Одна глава имеет ДВЕ такие иконки — по источнику, состояния не пересекаются.
+ * Глиф различает источник: AudioFile = Original, Translate = Translated — во ВСЕХ
+ * состояниях. Состояния:
+ * - нет задачи → КОНТУРНЫЙ глиф источника «скачать аудио» (клик = запуск источника);
+ * - QUEUED/RUNNING → кольцо прогресса вокруг ЗАЛИТОГО глифа источника (процент в CD);
+ * - SUCCESS + файл существует → ЗАЛИТЫЙ глиф источника + галочка (клик = открыть файл);
+ * - FAILED → ЗАЛИТЫЙ глиф источника в цвете ошибки + стрелка повтора (клик = перезапуск).
+ */
+@Composable
+private fun ChapterAudioButton(
+    source: TtsAudioSource,
+    audioJob: TtsAudioJobState?,
+    audioFileExists: Boolean,
+    enabled: Boolean = true,
+    onAudio: () -> Unit
+) {
+    val status = audioJob?.status
+    val running = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
+    val clickable = enabled || audioJob != null
+    val contentDescription = stringResource(
+        when (status) {
+            TtsAudioJobStatus.QUEUED -> StringsR.string.tts_audio_status_queued
+            TtsAudioJobStatus.RUNNING -> StringsR.string.tts_audio_status_running
+            TtsAudioJobStatus.SUCCESS -> StringsR.string.tts_audio_downloaded
+            TtsAudioJobStatus.FAILED -> StringsR.string.tts_audio_download_failed
+            TtsAudioJobStatus.CANCELLED -> StringsR.string.tts_audio_chapter_action
+            null -> StringsR.string.tts_audio_chapter_action
+        }
+    ).let { statusDesc ->
+        val sourceLabel = stringResource(
+            when (source) {
+                TtsAudioSource.ORIGINAL -> StringsR.string.tts_audio_source_original
+                TtsAudioSource.TRANSLATED -> StringsR.string.tts_audio_source_translated
+                TtsAudioSource.ASK_EVERY_TIME -> StringsR.string.tts_audio_chapter_action
+            }
+        )
+        if (sourceLabel.isNotBlank()) "$sourceLabel: $statusDesc" else statusDesc
+    }
+
+    when {
+        running -> {
+            // Кольцо прогресса с процентами внутри; глиф источника — маленьким
+            // бейджем в углу (как галочка успеха / стрелка повтора), чтобы
+            // источник оставался различим и во время синтеза.
+            val percent = (audioJob!!.progress).coerceIn(0, 100)
+            val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
+            IconButton(onClick = onAudio) {
+                Box {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        progress = { percent / 100f },
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        text = "$percent",
+                        modifier = Modifier.align(Alignment.Center),
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Icon(
+                        sourceFilledIcon(source),
+                        contentDescription = "$contentDescription ($progressDesc)",
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        }
+
+        status == TtsAudioJobStatus.SUCCESS && audioFileExists -> {
+            // Залитый глиф источника + галочка: «этот источник готов».
+            IconButton(onClick = onAudio) {
+                Box {
+                    Icon(
+                        sourceFilledIcon(source),
+                        contentDescription = contentDescription,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        status == TtsAudioJobStatus.FAILED -> {
+            // Глиф источника в цвете ошибки + стрелка повтор: «этот источник упал».
+            IconButton(onClick = onAudio) {
+                Box {
+                    Icon(
+                        sourceFilledIcon(source),
+                        contentDescription = contentDescription,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        // CANCELLED / нет задачи / SUCCESS без файла → «скачать» (повторный запуск).
+        else -> {
+            // Контурный глиф источника: «скачать аудио этого источника».
+            // Перевод недоступен (нет кеша перевода тела) и активной задачи нет —
+            // кнопка неактивна: синтезировать нечего (воркер честно упал бы в FAILED).
+            IconButton(
+                onClick = {
+                    if (clickable) onAudio()
+                },
+                enabled = clickable
+            ) {
+                Icon(
+                    sourceIdleIcon(source),
+                    contentDescription = contentDescription,
+                    tint = if (clickable) LocalContentColor.current
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Иконка видео-экспорта главы (MP4).
+ * Состояния:
+ * - нет задачи → контурный Videocam (клик = запуск экспорта);
+ * - QUEUED/RUNNING → кольцо прогресса с процентами;
+ * - SUCCESS → залитый Videocam + галочка (клик = открыть);
+ * - FAILED → залитый Videocam + стрелка повтора (клик = повтор).
+ */
+@Composable
+private fun ChapterVideoButton(
+    videoJob: VideoExportJobState?,
+    onVideo: () -> Unit
+) {
+    val status = videoJob?.status
+    val running = status == VideoExportJobStatus.QUEUED || status == VideoExportJobStatus.RUNNING
+
+    when {
+        running -> {
+            val percent = (videoJob!!.progress).coerceIn(0, 100)
+            val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
+            IconButton(onClick = onVideo) {
+                Box {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        progress = { percent / 100f },
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        text = "$percent",
+                        modifier = Modifier.align(Alignment.Center),
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = "$progressDesc",
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        }
+
+        status == VideoExportJobStatus.SUCCESS && videoJob!!.documentUri.isNotBlank() -> {
+            IconButton(onClick = onVideo) {
+                Box {
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        status == VideoExportJobStatus.FAILED -> {
+            IconButton(onClick = onVideo) {
+                Box {
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        else -> {
+            IconButton(onClick = onVideo) {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    contentDescription = stringResource(StringsR.string.tts_video_chapter_action),
+                )
+            }
+        }
+    }
+}
+
+/** Глиф источника для состояния «скачать» (без задачи / на повтор). */
+private fun sourceIdleIcon(source: TtsAudioSource): ImageVector = when (source) {
+    TtsAudioSource.ORIGINAL -> Icons.Outlined.AudioFile
+    TtsAudioSource.TRANSLATED -> Icons.Outlined.Translate
+    TtsAudioSource.ASK_EVERY_TIME -> Icons.Outlined.GraphicEq
+}
+
+/** Залитый глиф источника для состояний прогресса/готово/ошибка. */
+private fun sourceFilledIcon(source: TtsAudioSource): ImageVector = when (source) {
+    TtsAudioSource.ORIGINAL -> Icons.Filled.AudioFile
+    TtsAudioSource.TRANSLATED -> Icons.Filled.Translate
+    TtsAudioSource.ASK_EVERY_TIME -> Icons.Filled.GraphicEq
+}
 
 @PreviewThemes
 @Composable
@@ -180,7 +480,9 @@ private fun PreviewView(
             isLocalSource = false,
             onLongClick = {},
             onClick = {},
-            onDownload = {}
+            onDownload = {},
+            onAudioOriginal = {},
+            onAudioTranslated = {}
         )
     }
 }

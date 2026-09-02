@@ -9,6 +9,8 @@ import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.core.appPreferences.NovelPromptData
+import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.video_export.VideoStyleSettings
 
 enum class CleanConfirmationType { DATABASE, IMAGES_FOLDER, CHAPTER_CACHE }
 
@@ -59,6 +61,19 @@ data class SettingsScreenState(
     val chapterCacheSize: MutableState<String>,
     val isCleaningChapterCache: State<Boolean>,
     val cleanConfirmationType: MutableState<CleanConfirmationType?>,
+    // Audio downloads (TTS)
+    val audioVoiceId: State<String>,
+    val audioVoiceEngine: State<String>,
+    val audioVoiceSpeed: State<Float>,
+    val audioVoicePitch: State<Float>,
+    val audioSource: State<TtsAudioSource>,
+    val audioDirectoryUri: State<String>,
+    val audioDirectoryDisplayName: MutableState<String>,
+    // Video appearance (Video Studio export)
+    val videoStyle: MutableState<VideoStyleSettings>,
+    // Video export folder (SAF)
+    val videoDirectoryUri: State<String>,
+    val videoDirectoryDisplayName: MutableState<String>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

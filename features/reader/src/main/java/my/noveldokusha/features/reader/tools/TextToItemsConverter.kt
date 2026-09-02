@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.models.RegexRule
 import my.noveldokusha.core.utils.STRIP_HTML_TAGS
+import my.noveldokusha.core.utils.applyUserRegexRules
 import my.noveldokusha.features.reader.domain.ImgEntry
 import my.noveldokusha.features.reader.domain.ReaderItem
 import org.jsoup.Jsoup
@@ -265,16 +266,3 @@ private fun countUnbalancedBrackets(str: String, open: Set<Char>, close: Set<Cha
 }
 
 private fun countQuotes(str: String, quotes: Set<Char>): Int = str.count { it in quotes }
-
-internal fun applyUserRegexRules(text: String, rules: List<RegexRule>): String {
-    var result = text
-    rules.filter { it.isEnabled }.forEach { rule ->
-        try {
-            val regex = Regex(rule.pattern)
-            result = result.replace(regex, rule.replacement)
-        } catch (e: Exception) {
-            println("Failed to apply user regex rule: ${e.message}, pattern: ${rule.pattern}")
-        }
-    }
-    return result
-}

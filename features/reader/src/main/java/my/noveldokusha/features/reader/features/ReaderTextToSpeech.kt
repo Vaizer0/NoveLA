@@ -32,6 +32,7 @@ import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.text_to_speech.AppTtsEngine
 import my.noveldokusha.text_to_speech.TextToSpeechManager
+import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -113,11 +114,6 @@ internal class ReaderTextToSpeech(
         @Volatile
         var userPaused: Boolean = false
     }
-
-    private val DECORATIVE_CHARS = """\-=*_~+#·•°─-┿"""
-    private val SEPARATOR_ONLY = Regex("""^\s*[$DECORATIVE_CHARS]{3,}\s*$""")
-    private val LEADING_DECORATIVE = Regex("""^[$DECORATIVE_CHARS]{3,}\s*""")
-    private val TRAILING_DECORATIVE = Regex("""\s*[$DECORATIVE_CHARS]{3,}$""")
 
     private val halfBuffer = 5
     private val _originalVoiceId = mutableStateOf(getPreferredVoiceIdForOriginal())
@@ -973,20 +969,11 @@ internal class ReaderTextToSpeech(
         return result
     }
 
-    private fun isOnlyDecorators(text: String): Boolean {
-        if (text.isBlank()) return true
-        return text.lines().all { line ->
-            line.isBlank() || SEPARATOR_ONLY.matches(line)
-        }
-    }
+    private fun isOnlyDecorators(text: String): Boolean =
+        TtsTextPreparer.isOnlyDecorators(text)
 
-    private fun cleanTextForTts(text: String): String {
-        return text.lines().joinToString("\n") { line ->
-            line.replace(LEADING_DECORATIVE, "")
-                .replace(TRAILING_DECORATIVE, "")
-                .trim()
-        }
-    }
+    private fun cleanTextForTts(text: String): String =
+        TtsTextPreparer.cleanForTts(text)
 
     private fun ttsText(item: ReaderItem.Text): String {
         return when {
@@ -1006,9 +993,7 @@ internal class ReaderTextToSpeech(
 
                 Timber.d("TTS-JUMP speakItem: (${item.chapterIndex},${item.chapterItemPosition}) chars=${cleanText.length}")
 
-                val leadingOffset = displayText.lines().firstOrNull()?.let { line ->
-                    LEADING_DECORATIVE.find(line)?.value?.length
-                } ?: 0
+                val leadingOffset = TtsTextPreparer.leadingDecoratorLength(displayText)
 
                 manager.speak(
                     text = cleanText,

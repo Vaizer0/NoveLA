@@ -1280,5 +1280,51 @@
     <string name="book_export_cancel">Отмена</string>
     <string name="book_export_no_chapters">Нет глав для экспорта</string>
     <string name="book_export_failed">Ошибка экспорта</string>
+
+    <!-- Аудио-загрузка глав (TTS) -->
+    <string name="tts_audio_export_channel_name">Загрузка аудио</string>
+    <string name="tts_audio_export_running">Создание аудио: %1$s</string>
+    <string name="tts_audio_export_running_detail">Синтез речи…</string>
+    <string name="tts_audio_export_complete">Аудио готово: %1$s</string>
+    <string name="tts_audio_export_failed">Ошибка аудио: %1$s</string>
+    <string name="tts_audio_export_failure_detail">Не удалось создать аудио: %1$s</string>
+    <string name="tts_audio_export_cancel">Отмена</string>
+    <string name="tts_audio_export_open">Открыть</string>
+    <string name="tts_audio_export_delete">Удалить</string>
+    <string name="tts_audio_export_dir_error">Не удалось получить доступ к выбранной папке. Выберите её заново.</string>
+    <string name="tts_audio_export_file_error">Не удалось создать аудиофайл.</string>
+    <string name="tts_audio_export_no_download">Глава не скачана. Сначала загрузите её текст.</string>
+    <string name="tts_audio_export_no_translation">Закэшированный перевод этой главы не найден.</string>
+    <string name="tts_audio_export_unsupported_format">Неподдерживаемый формат аудио (%1$s). V1 поддерживает только WAV.</string>
+    <string name="tts_audio_source_original">Оригинал</string>
+    <string name="tts_audio_source_translated">Перевод</string>
+    <string name="tts_audio_source_ask_every_time">Спрашивать каждый раз</string>
+    <string name="tts_audio_download_folder_is_not_within_library">Укажите папку аудио</string>
+    <string name="tts_audio_downloaded">Аудио сохранено</string>
+    <string name="tts_audio_download_failed">Ошибка аудио</string>
+    <string name="tts_audio_chapter_action">Скачать аудио</string>
+    <string name="tts_audio_download_started">Аудиозагрузка поставлена в очередь</string>
+    <string name="tts_audio_voice_not_set">Сначала выберите голос для загрузки аудио в настройках</string>
+    <string name="tts_audio_status_queued">Аудио в очереди</string>
+    <string name="tts_audio_status_running">Создание аудио…</string>
+    <string name="tts_audio_export_running_progress">%1$d%%</string>
+    <string name="tts_audio_progress_percent">%1$d%%</string>
+    <string name="tts_audio_export_folder_error">Не удалось создать папку для этой книги.</string>
+    <string name="tts_audio_file_suffix_original">[Original]</string>
+    <string name="tts_audio_file_suffix_translated">[Translated]</string>
+
+    <!-- Настройки: загрузка аудио -->
+    <string name="settings_audio_download_section">Загрузка аудио</string>
+    <string name="settings_audio_download_summary">Голос и папка для аудиофайлов глав (не влияет на озвучку при чтении)</string>
+    <string name="settings_audio_download_folder">Папка аудио</string>
+    <string name="settings_audio_download_folder_summary">Хранится через Storage Access Framework</string>
+    <string name="settings_audio_download_source">Источник текста</string>
+    <string name="settings_audio_download_voice">Голос</string>
+    <string name="settings_audio_download_speed">Скорость</string>
+    <string name="settings_audio_download_pitch">Высота</string>
+    <string name="settings_audio_download_queue">Очередь аудио</string>
+    <string name="settings_audio_download_queue_empty">Нет ожидающих задач</string>
+    <string name="settings_audio_download_cancel_all">Отменить все</string>
+    <string name="settings_audio_download_speed_range">%.1f–%.1f</string>
 </resources>
 

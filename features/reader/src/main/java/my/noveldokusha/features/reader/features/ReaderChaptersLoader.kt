@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.Response
 import my.noveldokusha.core.isValidChapterContent
+import my.noveldokusha.core.utils.applyUserRegexRules
 import my.noveldokusha.features.reader.ReaderRepository
 import my.noveldokusha.features.reader.domain.ChapterLoaded
 import my.noveldokusha.features.reader.domain.ChapterState
@@ -24,7 +25,6 @@ import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.ReaderState
 import my.noveldokusha.features.reader.domain.ReadingChapterPosStats
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
-import my.noveldokusha.features.reader.tools.applyUserRegexRules
 import my.noveldokusha.features.reader.tools.textToItemsConverter
 import my.noveldokusha.features.reader.ui.ReaderViewHandlersActions
 import my.noveldokusha.feature.local_database.DAOs.ChapterTranslationDao

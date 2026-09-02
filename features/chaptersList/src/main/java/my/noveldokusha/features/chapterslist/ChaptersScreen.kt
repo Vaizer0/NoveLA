@@ -87,6 +87,7 @@ import my.nanihadesuka.compose.InternalLazyColumnScrollbar
 import my.noveldokusha.coreui.theme.isAtTop
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.chapterslist.R
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.isLocalUri
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.scraper.Scraper
@@ -117,6 +118,12 @@ internal fun ChaptersScreen(
     onSelectionModeChapterClick: (chapter: ChapterWithContext) -> Unit,
     onSelectionModeChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
+    onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
+    onChapterVideo: (chapter: ChapterWithContext) -> Unit,
+    onAudioDirectorySaved: (uri: String) -> Unit,
+    onAudioFolderCancel: () -> Unit,
+    onVideoDirectorySaved: (uri: String) -> Unit,
+    onVideoFolderCancel: () -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onChangeCover: () -> Unit,
@@ -174,6 +181,60 @@ internal fun ChaptersScreen(
                 Timber.w("Не удалось получить persistable permission для $uri: ${e.message}")
             }
             onExportDirectorySaved(uri.toString())
+        }
+    }
+
+    // Folder picker for chapter audio downloads
+    val audioDirectoryPicker = rememberLauncherForActivityResult(
+        contract = OpenDocumentTreeReadPersistent()
+    ) { uri ->
+        if (uri == null) {
+            // Пользователь закрыл пикер без выбора — сбрасываем ожидание папки.
+            onAudioFolderCancel()
+        } else {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (e: SecurityException) {
+                Timber.w("Audio: не удалось получить persistable permission для $uri: ${e.message}")
+            }
+            onAudioDirectorySaved(uri.toString())
+        }
+    }
+
+    // Когда потребовалась папка аудиозагрузки — открываем SAF-пикер автоматически.
+    LaunchedEffect(state.audioNeedDirectory.value) {
+        if (state.audioNeedDirectory.value) {
+            audioDirectoryPicker.launch(null)
+        }
+    }
+
+    // Folder picker for chapter video exports (MP4)
+    val videoDirectoryPicker = rememberLauncherForActivityResult(
+        contract = OpenDocumentTreeReadPersistent()
+    ) { uri ->
+        if (uri == null) {
+            // Пользователь закрыл пикер без выбора — сбрасываем ожидание папки.
+            onVideoFolderCancel()
+        } else {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (e: SecurityException) {
+                Timber.w("Video: не удалось получить persistable permission для $uri: ${e.message}")
+            }
+            onVideoDirectorySaved(uri.toString())
+        }
+    }
+
+    // Когда потребовалась папка видео-экспорта — открываем SAF-пикер автоматически.
+    LaunchedEffect(state.videoNeedDirectory.value) {
+        if (state.videoNeedDirectory.value) {
+            videoDirectoryPicker.launch(null)
         }
     }
 
@@ -349,6 +410,8 @@ internal fun ChaptersScreen(
                 onChapterClick = if (state.isInSelectionMode.value) onSelectionModeChapterClick else onChapterClick,
                 onChapterLongClick = if (state.isInSelectionMode.value) onSelectionModeChapterLongClick else onChapterLongClick,
                 onChapterDownload = onChapterDownload,
+                onChapterAudio = onChapterAudio,
+                onChapterVideo = onChapterVideo,
                 onPullRefresh = onPullRefresh,
                 onCoverLongClick = onCoverLongClick,
                 onGlobalSearchClick = onGlobalSearchClick,

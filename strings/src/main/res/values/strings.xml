@@ -796,4 +796,67 @@
     <string name="book_export_no_chapters">No chapters to export</string>
     <string name="book_export_failed">Export failed</string>
 
+    <!-- Audio download (TTS) -->
+    <string name="tts_audio_export_channel_name">Audio download</string>
+    <string name="tts_audio_export_running">Generating audio: %1$s</string>
+    <string name="tts_audio_export_running_detail">Text-to-speech…</string>
+    <string name="tts_audio_export_complete">Audio ready: %1$s</string>
+    <string name="tts_audio_export_failed">Audio failed: %1$s</string>
+    <string name="tts_audio_export_failure_detail">Audio generation failed: %1$s</string>
+    <string name="tts_audio_export_cancel">Cancel</string>
+    <string name="tts_audio_export_open">Open</string>
+    <string name="tts_audio_export_delete">Delete</string>
+    <string name="tts_audio_export_dir_error">Could not access the selected folder. Please pick it again.</string>
+    <string name="tts_audio_export_file_error">Could not create the audio file.</string>
+    <string name="tts_audio_export_no_download">This chapter is not downloaded. Download it first.</string>
+    <string name="tts_audio_export_no_translation">No cached translation found for this chapter.</string>
+    <string name="tts_audio_export_unsupported_format">Unsupported audio format (%1$s). V1 only supports WAV.</string>
+    <string name="tts_audio_source_original">Original</string>
+    <string name="tts_audio_source_translated">Translation</string>
+    <string name="tts_audio_source_ask_every_time">Ask every time</string>
+    <string name="tts_audio_download_folder_is_not_within_library">Set the audio folder</string>
+    <string name="tts_audio_downloaded">Audio saved</string>
+    <string name="tts_audio_download_failed">Audio error</string>
+    <string name="tts_audio_chapter_action">Download audio</string>
+    <string name="tts_audio_download_started">Audio download queued</string>
+    <string name="tts_audio_voice_not_set">Choose a voice for audio downloads in Settings first</string>
+    <string name="tts_audio_status_queued">Audio queued</string>
+    <string name="tts_audio_status_running">Generating audio…</string>
+    <string name="tts_audio_export_running_progress">%1$d%%</string>
+    <string name="tts_audio_progress_percent">%1$d%%</string>
+    <string name="tts_audio_export_folder_error">Could not create the folder for this novel.</string>
+    <string name="tts_audio_file_suffix_original">[Original]</string>
+    <string name="tts_audio_file_suffix_translated">[Translated]</string>
+
+    <!-- Settings: Audio downloads -->
+    <string name="settings_audio_download_section">Audio downloads</string>
+    <string name="settings_audio_download_summary">Text-to-speech voice and destination for chapter audio files (does not affect reading aloud)</string>
+    <string name="settings_audio_download_folder">Audio folder</string>
+    <string name="settings_audio_download_folder_summary">Stored via Storage Access Framework</string>
+    <string name="settings_audio_download_source">Text source</string>
+    <string name="settings_audio_download_voice">Voice</string>
+    <string name="settings_audio_download_speed">Speed</string>
+    <string name="settings_audio_download_pitch">Pitch</string>
+    <string name="settings_audio_download_queue">Audio queue</string>
+    <string name="settings_audio_download_queue_empty">No pending audio</string>
+    <string name="settings_audio_download_cancel_all">Cancel all</string>
+    <string name="settings_audio_download_speed_range">%.1f–%.1f</string>
+
+<!-- Settings: Video export -->
+    <string name="tts_video_export_channel_name">Video export</string>
+    <string name="tts_video_export_running">Exporting video: %1$s</string>
+    <string name="tts_video_export_running_detail">Synthesising audio + rendering frames…</string>
+    <string name="tts_video_export_complete">Video ready: %1$s</string>
+    <string name="tts_video_export_failed">Video export failed: %1$s</string>
+    <string name="tts_video_export_failure_detail">Video export failed: %1$s</string>
+    <string name="tts_video_export_cancel">Cancel</string>
+    <string name="tts_video_export_open">Open</string>
+    <string name="tts_video_export_delete">Delete</string>
+    <string name="tts_video_export_dir_error">Could not access the selected video folder. Please pick it again.</string>
+    <string name="tts_video_export_file_error">Could not create the video file.</string>
+    <string name="tts_video_export_folder_error">Could not create the novel folder.</string>
+    <string name="tts_video_export_started">Video export queued</string>
+    <string name="tts_video_export_running_progress">%1$d%%</string>
+    <string name="tts_video_chapter_action">Export video</string>
+
 </resources>

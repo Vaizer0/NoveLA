@@ -34,6 +34,27 @@ interface ChapterTranslationDao {
         targetLang: String
     ): ChapterTranslation?
 
+    /**
+     * Главы книги [bookUrl], у которых есть НЕПУСТОЙ перевод тела для пары
+     * (sourceLang, targetLang), в виде Flow. Используется UI загрузки аудио, чтобы
+     * показывать кнопку «Translated» доступной только при закэшированном переводе
+     * (ровно то же условие, что и у воркера — см. TtsAudioExportWorker).
+     */
+    @Query("""
+        SELECT ChapterTranslation.chapterUrl
+        FROM ChapterTranslation
+        INNER JOIN Chapter ON Chapter.url = ChapterTranslation.chapterUrl
+        WHERE Chapter.bookUrl = :bookUrl
+        AND ChapterTranslation.sourceLang = :sourceLang
+        AND ChapterTranslation.targetLang = :targetLang
+        AND ChapterTranslation.translatedParagraphs != ''
+    """)
+    fun getTranslatedAudioAvailabilityFlow(
+        bookUrl: String,
+        sourceLang: String,
+        targetLang: String
+    ): Flow<List<String>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReplace(translation: ChapterTranslation)
 

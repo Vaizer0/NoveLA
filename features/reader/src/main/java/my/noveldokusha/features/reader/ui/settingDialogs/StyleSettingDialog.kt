@@ -87,10 +87,9 @@ import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.features.reader.tools.BackgroundImageLoader
 import my.noveldokusha.features.reader.tools.FontsLoader
-import my.noveldokusha.features.reader.ui.ReaderBackgroundPreset
-import my.noveldokusha.features.reader.ui.ReaderBackgroundPresets
 import my.noveldokusha.features.reader.ui.ReaderScreenState
 import my.noveldokusha.reader.R
+import my.noveldokusha.reader_visuals.ReaderBackgroundPresets
 
 @Composable
 internal fun StyleSettingDialog(
@@ -546,12 +545,13 @@ internal fun StyleSettingDialog(
                     else -> {
                         val preset = ReaderBackgroundPresets.firstOrNull { it.id == value }
                         if (preset != null) {
-                            val presetName = stringResource(preset.nameRes)
+                            val nameRes = presetNameRes(preset.id)
+                            val presetName = if (nameRes != null) stringResource(nameRes) else preset.id
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
                                     .clip(CircleShape)
-                                    .background(Brush.verticalGradient(preset.colors))
+                                    .background(Brush.verticalGradient(preset.colors.map { Color(it) }))
                                     .then(borderModifier)
                                     .semantics { contentDescription = presetName }
                                     .clickable {
@@ -803,3 +803,22 @@ private val FONT_MIME_TYPES = arrayOf(
 
 private fun safeParseColor(hex: String): Int =
     runCatching { android.graphics.Color.parseColor("#$hex") }.getOrElse { 0xFF333333.toInt() }
+
+/** Резолвит строковый ресурс имени пресета фона по id (строки живут в features/reader). */
+private fun presetNameRes(id: String): Int? = when (id) {
+    "paper" -> R.string.reader_background_preset_paper
+    "cream" -> R.string.reader_background_preset_cream
+    "linen" -> R.string.reader_background_preset_linen
+    "mist" -> R.string.reader_background_preset_mist
+    "sage" -> R.string.reader_background_preset_sage
+    "twilight" -> R.string.reader_background_preset_twilight
+    "dusk" -> R.string.reader_background_preset_dusk
+    "cocoa" -> R.string.reader_background_preset_cocoa
+    "night" -> R.string.reader_background_preset_night
+    "ocean" -> R.string.reader_background_preset_ocean
+    "arctic" -> R.string.reader_background_preset_arctic
+    "forest" -> R.string.reader_background_preset_forest
+    "rose" -> R.string.reader_background_preset_rose
+    "midnight" -> R.string.reader_background_preset_midnight
+    else -> null
+}
