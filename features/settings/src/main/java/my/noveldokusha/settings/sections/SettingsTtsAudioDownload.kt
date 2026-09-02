@@ -54,9 +54,7 @@ internal fun SettingsTtsAudioDownload(
     onSelectDirectory: () -> Unit,
     directoryDisplayName: String,
 ) {
-    var openSourceDialog by remember { mutableStateOf(false) }
     var openVoiceDialog by remember { mutableStateOf(false) }
-
     Column {
         Text(
             text = stringResource(StringsR.string.settings_audio_download_section),
@@ -65,18 +63,12 @@ internal fun SettingsTtsAudioDownload(
             color = colorAccent()
         )
         HorizontalDivider()
-
         SlimListItem(
             headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_voice)) },
-            supportingContent = {
-                Text(text = voiceId.ifBlank { stringResource(StringsR.string.tts_audio_voice_not_set) }, maxLines = 1)
-            },
-            leadingContent = {
-                Icon(Icons.Outlined.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
+            supportingContent = { Text(text = voiceId.ifBlank { stringResource(StringsR.string.tts_audio_voice_not_set) }, maxLines = 1) },
+            leadingContent = { Icon(Icons.Outlined.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
             modifier = Modifier.clickable { openVoiceDialog = true }
         )
-
         var localSpeed by remember { mutableStateOf(speed) }
         LaunchedEffect(speed) { localSpeed = speed }
         PillSlider(
@@ -88,7 +80,6 @@ internal fun SettingsTtsAudioDownload(
             valueText = "%.2f".format(localSpeed),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
-
         var localPitch by remember { mutableStateOf(pitch) }
         LaunchedEffect(pitch) { localPitch = pitch }
         PillSlider(
@@ -100,21 +91,13 @@ internal fun SettingsTtsAudioDownload(
             valueText = "%.2f".format(localPitch),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
-
         SlimListItem(
             headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_folder)) },
-            supportingContent = {
-                Text(text = directoryDisplayName.ifBlank {
-                    stringResource(StringsR.string.tts_audio_download_folder_is_not_within_library)
-                })
-            },
-            leadingContent = {
-                Icon(Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
+            supportingContent = { Text(text = directoryDisplayName.ifBlank { stringResource(StringsR.string.tts_audio_download_folder_is_not_within_library) }) },
+            leadingContent = { Icon(Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
             modifier = Modifier.clickable { onSelectDirectory() }
         )
     }
-
     if (openVoiceDialog) {
         VoicePickerDialog(
             initialVoiceId = voiceId,
@@ -137,55 +120,32 @@ private fun VoicePickerDialog(
 ) {
     val context = LocalContext.current
     var voices by remember { mutableStateOf<List<VoiceEntry>>(emptyList()) }
-    var selectedKey by remember(initialVoiceId, initialEnginePackage) {
-        mutableStateOf(voiceKey(initialEnginePackage, initialVoiceId))
-    }
-
-    LaunchedEffect(Unit) {
-        voices = withContext(Dispatchers.Default) { probeVoices(context) }
-    }
-
+    var selectedKey by remember(initialVoiceId, initialEnginePackage) { mutableStateOf(voiceKey(initialEnginePackage, initialVoiceId)) }
+    LaunchedEffect(Unit) { voices = withContext(Dispatchers.Default) { probeVoices(context) } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = stringResource(StringsR.string.settings_audio_download_voice)) },
         text = {
-            Column(
-                modifier = Modifier
-                    .padding(bottom = 8.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
+            Column(modifier = Modifier.padding(bottom = 8.dp).verticalScroll(rememberScrollState())) {
                 if (voices.isEmpty()) {
-                    Text(
-                        text = stringResource(StringsR.string.settings_audio_download_queue_empty),
-                        modifier = Modifier.padding(8.dp)
-                    )
+                    Text(text = stringResource(StringsR.string.settings_audio_download_queue_empty), modifier = Modifier.padding(8.dp))
                 } else {
                     voices.sortedWith(compareBy<VoiceEntry>({ it.engineLabel }, { it.language }, { it.id })).forEach { voice ->
                         val isSelected = voiceKey(voice.enginePackage, voice.id) == selectedKey
                         SlimListItem(
                             headlineContent = { Text(text = voice.id, maxLines = 1) },
-                            supportingContent = {
-                                Text(text = "${voice.engineLabel} · ${voice.language}", maxLines = 1)
-                            },
-                            trailingContent = {
-                                if (isSelected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedKey = voiceKey(voice.enginePackage, voice.id)
-                                    onPick(voice.enginePackage, voice.id)
-                                }
+                            supportingContent = { Text(text = "${voice.engineLabel} · ${voice.language}", maxLines = 1) },
+                            trailingContent = { if (isSelected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedKey = voiceKey(voice.enginePackage, voice.id)
+                                onPick(voice.enginePackage, voice.id)
+                            }
                         )
                     }
                 }
             }
         },
-        confirmButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text(text = stringResource(android.R.string.cancel))
-            }
-        }
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(text = stringResource(android.R.string.cancel)) } }
     )
 }
 
@@ -198,28 +158,33 @@ private data class VoiceEntry(
 
 private fun voiceKey(enginePackage: String, voiceId: String): String = "$enginePackage\u0000$voiceId"
 
-private suspend fun createTts(context: Context, enginePackage: String): TextToSpeech? =
+private suspend fun createTts(context: Context, enginePackage: String?): TextToSpeech? =
     suspendCancellableCoroutine { cont ->
         var instance: TextToSpeech? = null
-        instance = TextToSpeech(
-            context.applicationContext,
-            { status ->
-                if (!cont.isActive) return@TextToSpeech
+        try {
+            val callback = TextToSpeech.OnInitListener { status ->
+                if (!cont.isActive) return@OnInitListener
                 if (status == TextToSpeech.SUCCESS) cont.resume(instance) else cont.resume(null)
-            },
-            enginePackage,
-        )
-        cont.invokeOnCancellation {
-            runCatching { instance?.stop() }
+            }
+            instance = if (enginePackage.isNullOrBlank()) {
+                TextToSpeech(context.applicationContext, callback)
+            } else {
+                TextToSpeech(context.applicationContext, callback, enginePackage)
+            }
+            cont.invokeOnCancellation {
+                runCatching { instance?.stop() }
+                runCatching { instance?.shutdown() }
+            }
+        } catch (e: Throwable) {
             runCatching { instance?.shutdown() }
+            if (cont.isActive) cont.resume(null)
         }
     }
 
 private suspend fun probeVoices(context: Context): List<VoiceEntry> {
-    val discovery = createTts(context, "") ?: return emptyList()
+    val discovery = createTts(context, null) ?: return emptyList()
     val engines = discovery.engines.toList()
     runCatching { discovery.shutdown() }
-
     return engines.flatMap { info ->
         val tts = createTts(context, info.name) ?: return@flatMap emptyList()
         try {
