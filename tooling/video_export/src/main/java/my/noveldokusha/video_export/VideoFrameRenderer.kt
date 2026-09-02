@@ -242,6 +242,15 @@ class VideoFrameRenderer(
         val i = ps.indexOf(timeline.paragraphAtSample(sample))
         val cardWindow = layoutConfig.cardWindow()
 
+        // Top of the line containing the currently spoken word (in layout-space px).
+        fun activeLineTopInLayout(layout: StaticLayout, sample: Long, p: ParagraphTiming): Float {
+            val word = timeline.wordAtSample(sample, p) ?: return 0f
+            if (word.displayRange.isEmpty()) return 0f
+            val offset = word.displayRange.first.coerceIn(0, p.displayText.length)
+            val line = layout.getLineForOffset(offset)
+            return layout.getLineTop(line).toFloat()
+        }
+
         // Marquee reveal for paragraphs taller than the card: instead of a
         // single screenful that silently clips the rest, the text scrolls in
         // lockstep with the currently SPOKEN LINE so the reading region stays
@@ -262,20 +271,11 @@ class VideoFrameRenderer(
             // (with a small lead so the next line peeks in), clamped so the
             // scroll can never exceed overflow (the last line ends at bottom).
             val leadLineHeight =
-                if (layout.lineCount > 0) layout.getLineTop(0) + (layout.getLineBottom(0) - layout.getLineTop(0))
+                if (layout.lineCount > 0) layout.getLineBottom(0) - layout.getLineTop(0)
                 else 0f
             val lead = leadLineHeight * scale
             val desired = (currentLineY - lead).coerceAtLeast(0f)
             return desired.coerceAtMost(overflow)
-        }
-
-        // Top of the line containing the currently spoken word (in layout-space px).
-        fun activeLineTopInLayout(layout: StaticLayout, sample: Long, p: ParagraphTiming): Float {
-            val word = timeline.wordAtSample(sample, p) ?: return 0f
-            if (word.displayRange.isEmpty()) return 0f
-            val offset = word.displayRange.first.coerceIn(0, p.displayText.length)
-            val line = layout.getLineForOffset(offset)
-            return layout.getLineTop(line).toFloat()
         }
 
         fun currentOnly(): FramePlan {
