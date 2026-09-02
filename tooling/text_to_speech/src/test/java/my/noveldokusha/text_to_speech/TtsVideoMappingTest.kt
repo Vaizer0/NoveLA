@@ -11,7 +11,12 @@ class TtsVideoMappingTest {
         val replaced = TtsVideoTextMapper.replaceRange(source, 5, 7, " ")
         val trimmed = TtsVideoTextMapper.normalizeWhitespace(replaced)
         assertEquals("alpha beta", trimmed.text)
-        assertNotNull(trimmed.sourceForOutput(6, 10))
+        val beta = trimmed.sourceForOutput(6, 10)
+        assertNotNull(beta)
+        assertEquals(6, beta!!.outputStart)
+        assertEquals(10, beta.outputEnd)
+        assertEquals(7, beta.sourceStart)
+        assertEquals(11, beta.sourceEnd)
     }
 
     @Test fun trimKeepsOutputAndSourceRangesConsistent() {
