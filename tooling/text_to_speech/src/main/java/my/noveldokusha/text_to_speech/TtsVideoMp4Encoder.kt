@@ -49,6 +49,7 @@ class TtsVideoMp4Encoder {
         var videoInputEos = false
         var audioInputEos = false
         var frameIndex = 0L
+        var encodedVideoSampleIndex = 0L
         val pending = ArrayList<PendingSample>()
 
         try {
@@ -100,12 +101,13 @@ class TtsVideoMp4Encoder {
                     }
                 }
 
-                val vResult = drain(video, true, muxer, videoTrack, muxerStarted, pending)
+                val vResult = drain(video, true, muxer, videoTrack, muxerStarted, pending, visual.fps, encodedVideoSampleIndex)
                 videoTrack = vResult.track
                 videoOutputEos = videoOutputEos || vResult.eos
                 muxerStarted = vResult.started
+                encodedVideoSampleIndex = vResult.nextSampleIndex
 
-                val aResult = drain(audio, false, muxer, audioTrack, muxerStarted, pending)
+                val aResult = drain(audio, false, muxer, audioTrack, muxerStarted, pending, visual.fps, encodedVideoSampleIndex)
                 audioTrack = aResult.track
                 audioOutputEos = audioOutputEos || aResult.eos
                 muxerStarted = aResult.started
@@ -137,7 +139,7 @@ class TtsVideoMp4Encoder {
     }
 
     private data class PendingSample(val video: Boolean, val bytes: ByteBuffer, val info: MediaCodec.BufferInfo)
-    private data class DrainResult(val track: Int, val eos: Boolean, val started: Boolean)
+    private data class DrainResult(val track: Int, val eos: Boolean, val started: Boolean, val nextSampleIndex: Long)
 
     private fun drain(
         codec: MediaCodec,
@@ -146,14 +148,17 @@ class TtsVideoMp4Encoder {
         currentTrack: Int,
         started: Boolean,
         pending: MutableList<PendingSample>,
+        fps: Int,
+        videoSampleIndex: Long,
     ): DrainResult {
         var track = currentTrack
         var activeStarted = started
         var eos = false
+        var nextVideoSampleIndex = videoSampleIndex
         while (true) {
             val info = MediaCodec.BufferInfo()
             when (val index = codec.dequeueOutputBuffer(info, 0)) {
-                MediaCodec.INFO_TRY_AGAIN_LATER -> return DrainResult(track, eos, activeStarted)
+                MediaCodec.INFO_TRY_AGAIN_LATER -> return DrainResult(track, eos, activeStarted, nextVideoSampleIndex)
                 MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     if (track < 0) track = muxer.addTrack(codec.outputFormat)
                 }
@@ -166,13 +171,19 @@ class TtsVideoMp4Encoder {
                         dup.position(info.offset.coerceAtLeast(0))
                         dup.limit((info.offset + info.size).coerceAtMost(dup.capacity()))
                         copy.put(dup).flip()
-                        val ci = MediaCodec.BufferInfo().also { it.set(0, info.size, info.presentationTimeUs, info.flags) }
+                        val ptsUs = if (isVideo) {
+                            nextVideoSampleIndex * 1_000_000L / fps
+                        } else {
+                            info.presentationTimeUs
+                        }
+                        val ci = MediaCodec.BufferInfo().also { it.set(0, info.size, ptsUs, info.flags) }
                         val sample = PendingSample(isVideo, copy, ci)
                         if (activeStarted) muxer.writeSampleData(track, sample.bytes, sample.info) else pending += sample
+                        if (isVideo) nextVideoSampleIndex++
                     }
                     eos = (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
                     codec.releaseOutputBuffer(index, false)
-                    if (eos) return DrainResult(track, true, activeStarted)
+                    if (eos) return DrainResult(track, true, activeStarted, nextVideoSampleIndex)
                 }
             }
         }
