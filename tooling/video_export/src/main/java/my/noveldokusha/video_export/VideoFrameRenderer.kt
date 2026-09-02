@@ -59,16 +59,39 @@ class VideoFrameRenderer(
         }
     }
 
-    /** Геометрия одного слота конвейера на конкретном кадре. */
+    /**
+     * Geometry of one conveyor slot on a given frame.
+     *
+     * [window] is a strict clip: a paragraph is never drawn outside its own
+     * corridor window (the prev/current/next windows are pairwise disjoint).
+     * [rect] is the final rectangle where the text stands (top already
+     * includes any scroll offset).
+     */
     data class SlotFrame(
-        val paragraphIndex: Int?,
+        val paragraphIndex: Int,
         val rect: RectF,
-        val clip: RectF,
+        val window: RectF,
         val scale: Float,
         val alpha: Float,
-        /** Диапазон отображаемого текста текущего слова (только current). */
+        /** Window scroll inside the card for paragraphs taller than the card, px. */
+        val scrollOffset: Float = 0f,
+        /** Text range of the currently spoken word (current only). */
         val highlightWordRange: IntRange? = null,
-    )
+    ) {
+        /**
+         * Transformed glyph bounds in canvas coordinates (after the scale
+         * around the text-area center). Depends on the local origin
+         * = (textX0 + layoutWidth/2, rect.top).
+         */
+        fun contentBounds(layoutWidth: Float, layoutHeight: Float, textX0: Float): RectF {
+            val cx = textX0 + layoutWidth / 2f
+            val left = cx + (0f - layoutWidth / 2f) * scale
+            val width = layoutWidth * scale
+            val top = rect.top
+            val height = layoutHeight * scale
+            return RectF(left, top, left + width, top + height)
+        }
+    }
 
     /** Детерминированное состояние кадра: что и где рисовать. */
     data class FramePlan(
@@ -178,6 +201,11 @@ class VideoFrameRenderer(
     private fun autofit(index: Int): Float =
         layoutCache.layoutFor(index, timeline.paragraphs[index].displayText).autofitScale
 
+    /** Layout height for a paragraph (px, deterministic) — for QA transform-bounds checks. */
+    fun layoutContentHeightFor(paragraphIndex: Int): Float =
+        layoutCache.layoutFor(paragraphIndex, timeline.paragraphs[paragraphIndex].displayText)
+            .layout.height.toFloat()
+
     /** Слово-подсветка текущего абзаца в момент [sample]. */
     private fun highlightRange(index: Int, sample: Long): IntRange? {
         val p = timeline.paragraphs.getOrNull(index) ?: return null
@@ -212,18 +240,36 @@ class VideoFrameRenderer(
         if (ps.isEmpty()) return FramePlan()
 
         val i = ps.indexOf(timeline.paragraphAtSample(sample))
-        val cardContentRect = layoutConfig.cardContentRect()
+        val cardWindow = layoutConfig.cardWindow()
 
-        fun currentOnly(): FramePlan = FramePlan(
-            current = SlotFrame(
-                paragraphIndex = i,
-                rect = cardContentRect,
-                clip = cardContentRect,
-                scale = autofit(i),
-                alpha = 1f,
-                highlightWordRange = highlightRange(i, sample),
-            ),
-        )
+        fun scrollOffsetFor(index: Int, scale: Float): Float {
+            val p = ps[index]
+            val layout = layoutCache.layoutFor(index, p.displayText).layout
+            val fitted = layout.height.toFloat() * scale
+            val overflow = fitted - cardWindow.height()
+            if (overflow <= 0f) return 0f
+            val span = maxOf(1L, p.endSample - p.startSample)
+            val progress = ((sample - p.startSample).toFloat() / span).coerceIn(0f, 1f)
+            return overflow * progress
+        }
+
+        fun currentOnly(): FramePlan {
+            val curScroll = scrollOffsetFor(i, autofit(i))
+            return FramePlan(
+                current = SlotFrame(
+                    paragraphIndex = i,
+                    rect = RectF(
+                        layoutConfig.textX0(), cardWindow.top - curScroll,
+                        layoutConfig.textX0() + cardWindow.width(), cardWindow.bottom - curScroll,
+                    ),
+                    window = cardWindow,
+                    scale = autofit(i),
+                    alpha = 1f,
+                    scrollOffset = curScroll,
+                    highlightWordRange = highlightRange(i, sample),
+                ),
+            )
+        }
 
         if (videoStyle.presentation == ParagraphPresentation.CURRENT_ONLY) return currentOnly()
         if (videoStyle.presentation == ParagraphPresentation.DYNAMIC_CONTEXT && autofit(i) < 1f) {
@@ -238,66 +284,114 @@ class VideoFrameRenderer(
         }
         val t = VideoLayoutSpec.smoothstep(rawT)
 
-        val prevRect = layoutConfig.prevSlotRect()
-        val cardRect = layoutConfig.cardRect()
-        val nextRect = layoutConfig.nextSlotRect()
-        val preRoll = layoutConfig.nextPreRollRect()
+        val prevWindow = layoutConfig.prevWindow()
+        val nextWindow = layoutConfig.nextWindow()
+        val colL = layoutConfig.columnLeft()
+        val colR = layoutConfig.columnRight()
 
-        fun steady(): FramePlan = FramePlan(
-            prev = prevIndex(i)?.let {
-                SlotFrame(it, prevRect, prevRect, layoutConfig.previewScale, layoutConfig.previewAlpha)
-            },
-            current = SlotFrame(
-                paragraphIndex = i,
-                rect = cardContentRect,
-                clip = cardContentRect,
-                scale = autofit(i),
-                alpha = 1f,
-                highlightWordRange = highlightRange(i, sample),
-            ),
-            next = nextIndex(i)?.let {
-                SlotFrame(it, nextRect, nextRect, layoutConfig.previewScale, layoutConfig.previewAlpha)
-            },
-        )
+        fun slotRect(top: Float, scale: Float, index: Int): RectF {
+            val h = layoutCache.layoutFor(index, ps[index].displayText).layout.height.toFloat() * scale
+            return RectF(colL, top, colR, top + h)
+        }
 
-        // Первый абзац не «всплывает» с места next — конвейер работает между
-        // существующими абзацами, начиная со второго.
+        fun steady(): FramePlan {
+            val curScroll = scrollOffsetFor(i, autofit(i))
+            return FramePlan(
+                prev = prevIndex(i)?.let { idx ->
+                    SlotFrame(
+                        paragraphIndex = idx,
+                        rect = slotRect(layoutConfig.prevTop(), layoutConfig.previewScale, idx),
+                        window = prevWindow,
+                        scale = layoutConfig.previewScale,
+                        alpha = layoutConfig.previewAlpha,
+                    )
+                },
+                current = SlotFrame(
+                    paragraphIndex = i,
+                    rect = RectF(
+                        layoutConfig.textX0(), cardWindow.top - curScroll,
+                        layoutConfig.textX0() + cardWindow.width(), cardWindow.bottom - curScroll,
+                    ),
+                    window = cardWindow,
+                    scale = autofit(i),
+                    alpha = 1f,
+                    scrollOffset = curScroll,
+                    highlightWordRange = highlightRange(i, sample),
+                ),
+                next = nextIndex(i)?.let { idx ->
+                    SlotFrame(
+                        paragraphIndex = idx,
+                        rect = slotRect(layoutConfig.nextTop(), layoutConfig.previewScale, idx),
+                        window = nextWindow,
+                        scale = layoutConfig.previewScale,
+                        alpha = layoutConfig.previewAlpha,
+                    )
+                },
+            )
+        }
+
+        // The first paragraph does not "float" in — the conveyor only crosses
+        // paragraphs starting from the second one.
         if (i == 0 || rawT <= 0f) return steady()
+
+        // Conveyor: every layer moves LINEARLY on rawT (equal speeds), but is
+        // visible only inside ITS OWN corridor window. The prev/current/next
+        // windows never overlap, so at any instant glyphs of different layers
+        // cannot land on top of each other. The departing layer leaves upward
+        // past the prev window; the incoming current climbs from the next
+        // window through the card.
+        val prevTop = layoutConfig.prevTop()
+        val curFrom = layoutConfig.nextTop()
+        val curTo = cardWindow.top
+        val nextFrom = layoutConfig.nextPreRollTop()
+
+        val fadingTop = prevTop - 160f * rawT
+        val prevTopNow = curTo - (curTo - prevTop) * rawT
+        val curTopNow = curFrom - (curFrom - curTo) * rawT
+        val nextTopNow = nextFrom - (nextFrom - layoutConfig.nextTop()) * rawT
+
+        val prevScaleNow = VideoLayoutSpec.lerp(autofit(prevIndex(i)!!), layoutConfig.previewScale, t)
+        val curScaleNow = VideoLayoutSpec.lerp(layoutConfig.previewScale, autofit(i), t)
+        val curScroll = scrollOffsetFor(i, curScaleNow)
 
         return FramePlan(
             fadingOut = if (i >= 2) {
                 SlotFrame(
                     paragraphIndex = i - 2,
-                    rect = prevRect,
-                    clip = prevRect,
+                    rect = slotRect(fadingTop, layoutConfig.previewScale, i - 2),
+                    window = prevWindow,
                     scale = layoutConfig.previewScale,
                     alpha = layoutConfig.previewAlpha * (1f - t),
                 )
             } else {
                 null
             },
-            prev = prevIndex(i)?.let {
+            prev = prevIndex(i)?.let { idx ->
                 SlotFrame(
-                    paragraphIndex = it,
-                    rect = VideoLayoutSpec.lerpRect(cardContentRect, prevRect, t),
-                    clip = layoutConfig.band(prevRect, cardContentRect),
-                    scale = VideoLayoutSpec.lerp(autofit(it), layoutConfig.previewScale, t),
+                    paragraphIndex = idx,
+                    rect = slotRect(prevTopNow, prevScaleNow, idx),
+                    window = prevWindow,
+                    scale = prevScaleNow,
                     alpha = VideoLayoutSpec.lerp(1f, layoutConfig.previewAlpha, t),
                 )
             },
             current = SlotFrame(
                 paragraphIndex = i,
-                rect = VideoLayoutSpec.lerpRect(nextRect, cardContentRect, t),
-                clip = layoutConfig.band(cardRect, nextRect),
-                scale = VideoLayoutSpec.lerp(layoutConfig.previewScale, autofit(i), t),
+                rect = RectF(
+                    layoutConfig.textX0(), curTopNow - curScroll,
+                    layoutConfig.textX0() + cardWindow.width(), curTopNow - curScroll + cardWindow.height(),
+                ),
+                window = cardWindow,
+                scale = curScaleNow,
                 alpha = VideoLayoutSpec.lerp(layoutConfig.previewAlpha, 1f, t),
+                scrollOffset = curScroll,
                 highlightWordRange = highlightRange(i, sample),
             ),
-            next = nextIndex(i)?.let {
+            next = nextIndex(i)?.let { idx ->
                 SlotFrame(
-                    paragraphIndex = it,
-                    rect = VideoLayoutSpec.lerpRect(preRoll, nextRect, t),
-                    clip = layoutConfig.band(nextRect, preRoll),
+                    paragraphIndex = idx,
+                    rect = slotRect(nextTopNow, layoutConfig.previewScale, idx),
+                    window = nextWindow,
                     scale = layoutConfig.previewScale,
                     alpha = VideoLayoutSpec.lerp(0f, layoutConfig.previewAlpha, t),
                 )
@@ -515,14 +609,12 @@ class VideoFrameRenderer(
     }
 
     private fun drawCardSlot(canvas: Canvas, slot: SlotFrame) {
-        val i = slot.paragraphIndex ?: return
         drawCard(canvas)
-        drawSlotContent(canvas, slot, i)
+        drawSlotContent(canvas, slot, slot.paragraphIndex)
     }
 
     private fun drawSlot(canvas: Canvas, slot: SlotFrame) {
-        val i = slot.paragraphIndex ?: return
-        drawSlotContent(canvas, slot, i)
+        drawSlotContent(canvas, slot, slot.paragraphIndex)
     }
 
     private fun drawCard(canvas: Canvas) {
@@ -544,14 +636,18 @@ class VideoFrameRenderer(
 
     private fun drawSlotContent(canvas: Canvas, slot: SlotFrame, index: Int) {
         val entry = layoutCache.layoutFor(index, timeline.paragraphs[index].displayText)
+        val layoutW = entry.layout.width.toFloat()
         canvas.save()
-        canvas.clipRect(slot.clip)
+        // Strict corridor-window clip BEFORE any transformation: no glyph can
+        // leave its own slot/card region.
+        canvas.clipRect(slot.window)
         canvas.save()
-        canvas.translate(0f, slot.rect.top)
-        // Локальная область layout (x0..cardTextWidth) смещается в левый край
-        // контента карточки, после чего центрированно масштабируется от контента.
-        canvas.translate(layoutConfig.textX0(), 0f)
-        canvas.scale(slot.scale, slot.scale, layoutConfig.contentCenterX, 0f)
+        // Local origin: the text-area center is the scale pivot. The scroll
+        // offset is part of the vertical position, so highlight and text move
+        // together.
+        canvas.translate(layoutConfig.textX0() + layoutW / 2f, slot.rect.top)
+        canvas.scale(slot.scale, slot.scale)
+        canvas.translate(-layoutW / 2f, 0f)
 
         layoutCache.paint.alpha = (0xFF * slot.alpha).toInt()
 

@@ -124,8 +124,8 @@ object VideoLayoutSpec {
 
     /** Горизонтальные границы содержимого слотов в координатах канваса. */
     fun slotContentLeftPx(scale: Float): Float =
-        CONTENT_CENTER_X + (MARGIN_X + CARD_PAD_H - CONTENT_CENTER_X) * scale
+        (MARGIN_X + CARD_PAD_H) + CARD_TEXT_WIDTH * (1f - scale) / 2f
 
     fun slotContentRightPx(scale: Float): Float =
-        CONTENT_CENTER_X + (MARGIN_X + CARD_PAD_H + CARD_TEXT_WIDTH - CONTENT_CENTER_X) * scale
+        slotContentLeftPx(scale) + CARD_TEXT_WIDTH * scale
 }

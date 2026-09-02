@@ -3,6 +3,7 @@ package my.noveldokusha.video_export
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -167,8 +168,8 @@ class VideoFrameRendererQaTest {
         for (s in slots) {
             assertTrue("left < right", s.rect.left <= s.rect.right)
             assertTrue("top < bottom", s.rect.top <= s.rect.bottom)
-            assertTrue("clip left < right", s.clip.left <= s.clip.right)
-            assertTrue("clip top < bottom", s.clip.top <= s.clip.bottom)
+            assertTrue("window left < right", s.window.left <= s.window.right)
+            assertTrue("window top < bottom", s.window.top <= s.window.bottom)
             assertTrue("alpha in 0..1", s.alpha in 0f..1f)
             assertTrue("scale in 0.5..1.1", s.scale in 0.5f..1.1f)
             // содержимое не выходит за колонку x ∈ [256,1664]
@@ -185,6 +186,48 @@ class VideoFrameRendererQaTest {
         assertFalse("next не пересекает карточку", next.intersect(card))
         assertTrue("prev над карточкой", prev.bottom <= card.top)
         assertTrue("next под карточкой", next.top >= card.bottom)
+    }
+
+    /**
+     * Glyph invariants of the conveyor (they see exactly what the renderer
+     * draws):
+     *  - visible (bounds ∩ window) content of each slot stays inside the
+     *    horizontal column bounds;
+     *  - corridor windows of different slots are pairwise disjoint;
+     *  - visible glyphs of different slots are pairwise disjoint (no stacked
+     *    text during transitions);
+     *  - context (prev/next/fadingOut) never touches the card.
+     */
+    private fun assertGlyphIsolation(renderer: VideoFrameRenderer, plan: VideoFrameRenderer.FramePlan) {
+        val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(snapshot()))
+        val textX0 = cfg.textX0()
+        val layoutW = cfg.cardTextWidth()
+        val cardRect = cfg.cardRect()
+        val current = plan.current
+        assertNotNull("current present", current)
+        val slots = listOfNotNull(plan.prev, current, plan.next, plan.fadingOut)
+        val visible = mutableListOf<Pair<VideoFrameRenderer.SlotFrame, RectF>>()
+        for (s in slots) {
+            val bounds = s.contentBounds(layoutW, renderer.layoutContentHeightFor(s.paragraphIndex), textX0)
+            val v = RectF(bounds)
+            if (!v.intersect(s.window)) continue
+            visible.add(s to v)
+            assertTrue("visible left in column (${v.left})", v.left >= cfg.columnLeft() - 1f)
+            assertTrue("visible right in column (${v.right})", v.right <= cfg.columnRight() + 1f)
+            assertTrue("visible top<=bottom", v.top <= v.bottom)
+            if (s.paragraphIndex != current.paragraphIndex) {
+                assertFalse("context window (${s.paragraphIndex}) does not touch card", s.window.intersect(cardRect))
+                assertFalse("context glyphs (${s.paragraphIndex}) do not touch card", v.intersect(cardRect))
+            }
+        }
+        for (i in visible.indices) for (j in i + 1 until visible.size) {
+            val (sa, a) = visible[i]
+            val (sb, b) = visible[j]
+            assertFalse(
+                "glyphs ${sa.paragraphIndex} and ${sb.paragraphIndex} do not intersect",
+                a.intersect(b),
+            )
+        }
     }
 
     private fun assertWordTimings(timeline: VideoExportTimeline, sample: Long) {
@@ -360,8 +403,10 @@ class VideoFrameRendererQaTest {
         val (tr, trTimeline) = renderer(transitionChapter)
         for ((label, frac) in listOf("000" to 0f, "025" to 0.25f, "050" to 0.5f, "075" to 0.75f, "100" to 1f)) {
             val sample = trTimeline.paragraphs[1].startSample + (VideoLayoutSpec.TRANSITION_US * frac).toLong()
+            val plan = tr.framePlan(sample)
+            assertGeometry(plan)
+            assertGlyphIsolation(tr, plan)
             val bitmap = renderFrameToBitmap(tr, sample)
-            assertGeometry(tr.framePlan(sample))
             assertFrameNotEmpty(bitmap)
             savePng(bitmap, "10_transition_$label.png")
         }
@@ -471,6 +516,7 @@ class VideoFrameRendererQaTest {
         val contentPlan = renderer.framePlan(firstStart + 200_000L)
         assertFalse("после титула конвейер", contentPlan.chapterIntro)
         assertGeometry(contentPlan)
+        assertGlyphIsolation(renderer, contentPlan)
         val contentBitmap = renderFrameToBitmap(renderer, firstStart + 200_000L)
         assertFrameNotEmpty(contentBitmap)
         savePng(contentBitmap, "15_chapter_content_after_intro.png")
@@ -492,6 +538,7 @@ class VideoFrameRendererQaTest {
         assertNull("current-only: нет prev", coPlan.prev)
         assertNull("current-only: нет next", coPlan.next)
         assertGeometry(coPlan)
+        assertGlyphIsolation(co, coPlan)
         val coBitmap = renderFrameToBitmap(co, coSample)
         assertFrameNotEmpty(coBitmap)
         savePng(coBitmap, "16_current_only.png")
@@ -507,6 +554,7 @@ class VideoFrameRendererQaTest {
         assertNotNull("dynamic-короткий: next есть", dsPlan.next)
         assertNotNull("dynamic-короткий: current есть", dsPlan.current)
         assertGeometry(dsPlan)
+        assertGlyphIsolation(ds, dsPlan)
         val dsBitmap = renderFrameToBitmap(ds, dsSample)
         assertFrameNotEmpty(dsBitmap)
         savePng(dsBitmap, "17_dynamic_context_short.png")
@@ -526,6 +574,7 @@ class VideoFrameRendererQaTest {
             dlScale in VideoLayoutSpec.FONT_MIN_AUTOFIT..1f,
         )
         assertTrue("dynamic-длинный: scale < 1 (сжатие)", dlScale < 1f)
+        assertGlyphIsolation(dl, dlPlan)
         val dlBitmap = renderFrameToBitmap(dl, dlSample)
         assertFrameNotEmpty(dlBitmap)
         savePng(dlBitmap, "18_dynamic_context_long.png")
@@ -549,6 +598,29 @@ class VideoFrameRendererQaTest {
         assertTrue("big font: glyphs внутри канваса", left < right)
         assertTrue("big font: не у краёв (left=$left)", left >= cfg.columnLeft())
         assertTrue("big font: не у краёв (right=$right)", right <= cfg.columnRight())
+        assertGlyphIsolation(bf, bfPlan)
+        // Window strategy: a paragraph taller than the card is NOT silently
+        // clipped — the text scrolls deterministically and is fully revealed
+        // by the end of the paragraph.
+        val bfW = cfg.cardTextWidth()
+        val bfH = bf.layoutContentHeightFor(0)
+        val bfX0 = cfg.textX0()
+        val bfStartPlan = bf.framePlan(bfTimeline.paragraphs.first().startSample + 5_000L)
+        val bfEndPlan = bf.framePlan(bfTimeline.paragraphs.first().endSample - 20_000L)
+        assertTrue(
+            "big font: scroll grows towards paragraph end",
+            bfEndPlan.current!!.scrollOffset > bfStartPlan.current!!.scrollOffset,
+        )
+        val endBounds = bfEndPlan.current!!.contentBounds(bfW, bfH, bfX0)
+        assertTrue(
+            "big font: all content revealed by the end (bottom=${endBounds.bottom})",
+            endBounds.bottom >= bfEndPlan.current!!.window.bottom - 2f,
+        )
+        val startBounds = bfStartPlan.current!!.contentBounds(bfW, bfH, bfX0)
+        assertTrue(
+            "big font: first line visible at start (top=${startBounds.top})",
+            startBounds.top <= bfStartPlan.current!!.window.top + 2f,
+        )
         val bfBitmap = renderFrameToBitmap(bf, bfSample)
         assertFrameNotEmpty(bfBitmap)
         savePng(bfBitmap, "19_big_font.png")
@@ -577,6 +649,7 @@ class VideoFrameRendererQaTest {
             "арт не заезжает на текст",
             lCfg.leftArtworkRect()!!.right <= lPlan.current!!.rect.left + 1f,
         )
+        assertGlyphIsolation(lr, lPlan)
         val lBmp = renderFrameToBitmap(lr, lSample)
         assertFrameNotEmpty(lBmp)
         savePng(lBmp, "20_left_artwork.png")
@@ -645,6 +718,7 @@ class VideoFrameRendererQaTest {
         val sample = midSample(timeline.paragraphs.first())
         val plan = renderer.framePlan(sample)
         assertGeometry(plan)
+        assertGlyphIsolation(renderer, plan)
         assertWordTimings(timeline, sample)
         assertHighlightAlignment(renderer, timeline, sample)
         val bitmap = renderFrameToBitmap(renderer, sample)

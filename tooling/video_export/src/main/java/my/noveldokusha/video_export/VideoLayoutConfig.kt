@@ -163,24 +163,41 @@ class VideoLayoutConfig private constructor(
         maxOf(top.bottom, bottom.bottom),
     )
 
-    /** Стартовая (за нижний край) позиция всплывающего next в переходе. */
-    fun nextPreRollRect(): RectF = RectF(
-        columnLeft(), nextTop() + (nextBottom() - nextTop()),
-        columnRight(), nextBottom() + (nextBottom() - nextTop()),
-    )
+    // ── Conveyor corridor windows (strict clips) ──────────────────────────
+    // Each conveyor "layer" owns a pairwise-disjoint window. A paragraph is
+    // drawn ONLY inside its own window: the transition can never push glyphs
+    // into a neighbour's window, the card, or another slot.
 
-    /** Автоподбор масштаба: вписать, но не меньше [fontMinAutofit]. */
+    /** prev corridor (above the card, up to the card's top edge). */
+    fun prevWindow(): RectF = RectF(columnLeft(), prevTop(), columnRight(), cardTop())
+
+    /** current window = the card's inner text area. */
+    fun cardWindow(): RectF = cardContentRect()
+
+    /** next corridor (below the card). */
+    fun nextWindow(): RectF = RectF(columnLeft(), nextTop(), columnRight(), nextBottom())
+
+    /** Top of the card's text area (padding accounted for). */
+    fun cardContentTop(): Float = cardTop() + cardPadTop
+
+    /** Bottom of the card's text area. */
+    fun cardContentBottom(): Float = cardCapBottom() - cardPadBottom
+
+    /** Launch top for the incoming current paragraph (below the next window). */
+    fun nextPreRollTop(): Float = nextTop() + (nextBottom() - nextTop())
+
+    /** Auto-fit scale: fit into the card, but never smaller than [fontMinAutofit]. */
     fun autofitScale(layoutHeightPx: Float): Float = when {
         layoutHeightPx <= cardTextMaxHeight() -> 1f
         else -> maxOf(fontMinAutofit, cardTextMaxHeight() / layoutHeightPx)
     }
 
-    /** Горизонтальные границы содержимого слотов (для QA-инвариантов). */
+    /** Horizontal bounds of slot content in canvas coordinates. */
     fun slotContentLeftPx(scale: Float): Float =
-        contentCenterX + (textX0() - contentCenterX) * scale
+        textX0() + cardTextWidth() * (1f - scale) / 2f
 
     fun slotContentRightPx(scale: Float): Float =
-        contentCenterX + (textX0() + cardTextWidth() - contentCenterX) * scale
+        slotContentLeftPx(scale) + cardTextWidth() * scale
 
     companion object {
         fun from(style: VideoStyleSnapshot): VideoLayoutConfig = VideoLayoutConfig(style)
