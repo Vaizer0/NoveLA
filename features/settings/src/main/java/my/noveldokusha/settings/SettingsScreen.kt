@@ -31,27 +31,24 @@ fun SettingsScreen(
     val viewModel: SettingsViewModel = viewModel()
     viewModel.onRestartApp = onRestartApp
 
-    // Auto backup directory picker
     val directoryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
         onResult = { uri: Uri? ->
             if (uri != null) {
-                // Take persistable permission so we can access it later
                 val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, flags)
                 viewModel.onAutoBackupDirectoryUriChange(uri.toString())
             }
         }
     )
 
-    // Audio downloads destination folder picker
     val audioDirectoryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
         onResult = { uri: Uri? ->
             if (uri != null) {
                 val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, flags)
                 viewModel.onAudioDirectoryUriChange(uri.toString())
             }
@@ -64,70 +61,67 @@ fun SettingsScreen(
     androidx.compose.runtime.key(appTheme, isDark) {
         Scaffold(
             topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                title = {
-                    Text(
-                        text = stringResource(id = R.string.title_settings),
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            )
-        },
-        content = { innerPadding ->
-            SettingsScreenBody(
-                state = viewModel.state,
-                onRefreshSizes = viewModel::refreshSizes,
-                onAppThemeSelected = viewModel::onAppThemeChange,
-                onDarkModeSelected = viewModel::onDarkModeChange,
-                onRequestCleanDatabase = viewModel::requestCleanDatabase,
-                onRequestCleanImageFolder = viewModel::requestCleanImageFolder,
-                onRequestCleanChapterCache = viewModel::requestCleanChapterCache,
-                onConfirmClean = viewModel::confirmCleanAction,
-                onDismissClean = viewModel::dismissCleanAction,
-                onMassAddDelayChange = viewModel::onMassAddDelayChange,
-                onDownloadDelayChange = viewModel::onDownloadDelayChange,
-                onBackupData = onBackupCreate(),
-                onRestoreData = onBackupRestore(),
-                onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
-                onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
-                onGeminiModelChange = viewModel::onGeminiModelChange,
-                onTranslationProviderChange = viewModel::onTranslationProviderChange,
-                onTranslationGlobalModeChange = viewModel::onTranslationGlobalModeChange,
-                onGooglePaApiKeysChange = viewModel::onGooglePaApiKeysChange,
-                onOpenAiBaseUrlChange = viewModel::onOpenAiBaseUrlChange,
-                onOpenAiApiKeysChange = viewModel::onOpenAiApiKeysChange,
-                onOpenAiModelChange = viewModel::onOpenAiModelChange,
-                onActiveSystemPromptChange = viewModel::onActiveSystemPromptChange,
-                onPromptUseEnglishLocaleChange = viewModel::onPromptUseEnglishLocaleChange,
-                onSavePreset = viewModel::onSavePromptPreset,
-                onDeletePreset = viewModel::onDeletePromptPreset,
-                onLlmBatchSizeChange = viewModel::onLlmBatchSizeChange,
-                onLlmMaxOutputTokensChange = viewModel::onLlmMaxOutputTokensChange,
-                onLanguageChange = viewModel::onLanguageChange,
-                onNavigateToRegexCleanup = {
-                    context.startActivity(navigationRoutes.regexRules(context, null))
-                },
-                onAutoBackupSelectDirectory = {
-                    directoryPicker.launch(null)
-                },
-                onAutoBackupMaxCountChange = viewModel::onAutoBackupMaxCountChange,
-                onAutoBackupIntervalMinutesChange = viewModel::onAutoBackupIntervalMinutesChange,
-                onAutoBackupEnabledChange = viewModel::onAutoBackupEnabledChange,
-                onAutoBackupIncludeImagesChange = viewModel::onAutoBackupIncludeImagesChange,
-                onAutoBackupIncludeSettingsChange = viewModel::onAutoBackupIncludeSettingsChange,
-                onAutoBackupIncludePluginsChange = viewModel::onAutoBackupIncludePluginsChange,
-                onDeleteNovelPrompt = viewModel::onDeleteNovelPrompt,
-                onAudioVoiceChange = viewModel::onAudioVoiceChange,
-                onAudioVoiceSpeedChange = viewModel::onAudioVoiceSpeedChange,
-                onAudioVoicePitchChange = viewModel::onAudioVoicePitchChange,
-                onAudioSourceChange = viewModel::onAudioSourceChange,
-                onAudioSelectDirectory = { audioDirectoryPicker.launch(null) },
-                modifier = Modifier.padding(innerPadding),
-            )
-        }
-    )
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    title = {
+                        Text(
+                            text = stringResource(id = R.string.title_settings),
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                )
+            },
+            content = { innerPadding ->
+                SettingsScreenBody(
+                    state = viewModel.state,
+                    onRefreshSizes = viewModel::refreshSizes,
+                    onAppThemeSelected = viewModel::onAppThemeChange,
+                    onDarkModeSelected = viewModel::onDarkModeChange,
+                    onRequestCleanDatabase = viewModel::requestCleanDatabase,
+                    onRequestCleanImageFolder = viewModel::requestCleanImageFolder,
+                    onRequestCleanChapterCache = viewModel::requestCleanChapterCache,
+                    onConfirmClean = viewModel::confirmCleanAction,
+                    onDismissClean = viewModel::dismissCleanAction,
+                    onMassAddDelayChange = viewModel::onMassAddDelayChange,
+                    onDownloadDelayChange = viewModel::onDownloadDelayChange,
+                    onBackupData = onBackupCreate(),
+                    onRestoreData = onBackupRestore(),
+                    onCheckForUpdatesManual = viewModel::onCheckForUpdatesManual,
+                    onGeminiApiKeyChange = viewModel::onGeminiApiKeyChange,
+                    onGeminiModelChange = viewModel::onGeminiModelChange,
+                    onTranslationProviderChange = viewModel::onTranslationProviderChange,
+                    onTranslationGlobalModeChange = viewModel::onTranslationGlobalModeChange,
+                    onGooglePaApiKeysChange = viewModel::onGooglePaApiKeysChange,
+                    onOpenAiBaseUrlChange = viewModel::onOpenAiBaseUrlChange,
+                    onOpenAiApiKeysChange = viewModel::onOpenAiApiKeysChange,
+                    onOpenAiModelChange = viewModel::onOpenAiModelChange,
+                    onActiveSystemPromptChange = viewModel::onActiveSystemPromptChange,
+                    onPromptUseEnglishLocaleChange = viewModel::onPromptUseEnglishLocaleChange,
+                    onSavePreset = viewModel::onSavePromptPreset,
+                    onDeletePreset = viewModel::onDeletePromptPreset,
+                    onLlmBatchSizeChange = viewModel::onLlmBatchSizeChange,
+                    onLlmMaxOutputTokensChange = viewModel::onLlmMaxOutputTokensChange,
+                    onLanguageChange = viewModel::onLanguageChange,
+                    onNavigateToRegexCleanup = {
+                        context.startActivity(navigationRoutes.regexRules(context, null))
+                    },
+                    onAutoBackupSelectDirectory = { directoryPicker.launch(null) },
+                    onAutoBackupMaxCountChange = viewModel::onAutoBackupMaxCountChange,
+                    onAutoBackupIntervalMinutesChange = viewModel::onAutoBackupIntervalMinutesChange,
+                    onAutoBackupEnabledChange = viewModel::onAutoBackupEnabledChange,
+                    onAutoBackupIncludeImagesChange = viewModel::onAutoBackupIncludeImagesChange,
+                    onAutoBackupIncludeSettingsChange = viewModel::onAutoBackupIncludeSettingsChange,
+                    onAutoBackupIncludePluginsChange = viewModel::onAutoBackupIncludePluginsChange,
+                    onDeleteNovelPrompt = viewModel::onDeleteNovelPrompt,
+                    onAudioVoiceChange = viewModel::onAudioVoiceChange,
+                    onAudioVoiceSpeedChange = viewModel::onAudioVoiceSpeedChange,
+                    onAudioVoicePitchChange = viewModel::onAudioVoicePitchChange,
+                    onAudioSelectDirectory = { audioDirectoryPicker.launch(null) },
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
+        )
     }
 }
