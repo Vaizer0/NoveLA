@@ -35,8 +35,6 @@ object TtsVideoTextMapper {
         val shift = replacement.length - (end - start)
         val out = buildList {
             input.provenance.forEach { p ->
-                // Preserve the unaffected prefix/suffix of a provenance span instead of
-                // dropping the entire span when the replacement only intersects part of it.
                 if (p.outputStart < start) {
                     val prefixEnd = minOf(p.outputEnd, start)
                     if (prefixEnd > p.outputStart) {
@@ -109,6 +107,18 @@ object TtsVideoTextMapper {
         while (start < end && input.text[start].isWhitespace()) start++
         while (end > start && input.text[end - 1].isWhitespace()) end--
         if (start == 0 && end == input.text.length) return input
+        val text = input.text.substring(start, end)
+        val mapping = input.provenance.mapNotNull { p ->
+            val s = maxOf(p.outputStart, start)
+            val e = minOf(p.outputEnd, end)
+            if (e <= s) null else TextProvenance(s - start, e - start, p.sourceStart, p.sourceEnd)
+        }
+        return MappedText(text, mapping)
+    }
+
+    /** Maps an exact contiguous substring of [input] while retaining its original provenance. */
+    fun substring(input: MappedText, start: Int, end: Int): MappedText {
+        require(start in 0..input.text.length && end in start..input.text.length)
         val text = input.text.substring(start, end)
         val mapping = input.provenance.mapNotNull { p ->
             val s = maxOf(p.outputStart, start)
