@@ -154,7 +154,10 @@ class TtsTimelineCollector(
                             properFormatSeen = true
                         }
                     },
-                    onChunkAdvanced = { writtenBytes -> absoluteSample = writtenBytes },
+                    onChunkAdvanced = { writtenBytes ->
+                        val ch = writer.channelCount().coerceAtLeast(1)
+                        absoluteSample = writtenBytes / (ch * 2L)
+                    },
                 )
                 // Конец вступления = начало первого абзаца (absoluteSample уже
                 // продвинут завершившимся последним куском титула в onChunkAdvanced).
@@ -175,7 +178,8 @@ class TtsTimelineCollector(
 
             writer.finish()
             finished = true
-            val totalSamples = writer.dataBytesWritten() / (channelCount * 2L)
+            val totalSamples =
+                writer.dataBytesWritten() / (writer.channelCount().coerceAtLeast(1) * 2L)
 
             // Закрыть верхние границы абзацев (начало следующего активного абзаца,
             // либо конец всего аудио) — по возрастанию startSample.
@@ -265,7 +269,8 @@ class TtsTimelineCollector(
      * Синтезирует один кусок.
      * [onFormat] сообщает формат при первом onBeginSynthesis (rate/channels).
      * [onChunkAdvanced] вызывается после завершения куска с накопленными записанными
-     * байтами — чтобы ведущий поддерживал absoluteSample для следующего куска.
+     * байтами — ведущий преобразует их в сэмплы (/(channels*2)) и ведёт absoluteSample
+     * в сэмплах, единых с totalSamples и word-таймингами.
      */
     private suspend fun synthesizeChunk(
         tts: TextToSpeech,
