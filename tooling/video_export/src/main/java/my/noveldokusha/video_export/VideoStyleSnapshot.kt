@@ -79,6 +79,15 @@ data class VideoStyleSnapshot(
     val rightArtwork: VideoArtwork?,
     // Presentation
     val presentation: ParagraphPresentation,
+    // Slide-show (Phase G)
+    /** Конфиг показов слайдов; отключён по умолчанию (как Phase F). */
+    val slideshowConfig: SlideshowConfig,
+    /** Упорядоченные активные слайды (идентичность для детерминированного seed). */
+    val slideshowItems: List<ArtworkItem>,
+    /** Идентичность главы (для детерминированного seed слайдшоу). */
+    val chapterIdentity: String,
+    /** Идентичность источника/главы-источника. */
+    val sourceId: String,
 ) {
 
     fun toJson(): String = JSONObject().apply {
@@ -112,6 +121,10 @@ data class VideoStyleSnapshot(
         put(KEY_LEFT_ARTWORK, leftArtwork?.toJson() ?: JSONObject.NULL)
         put(KEY_RIGHT_ARTWORK, rightArtwork?.toJson() ?: JSONObject.NULL)
         put(KEY_PRESENTATION, presentation.name)
+        put(KEY_SLIDESHOW_CONFIG, slideshowConfig.toJson())
+        put(KEY_SLIDESHOW_ITEMS, slideshowItems.toJsonArray())
+        put(KEY_CHAPTER_IDENTITY, chapterIdentity)
+        put(KEY_SOURCE_ID, sourceId)
     }.toString()
 
     companion object {
@@ -147,6 +160,10 @@ data class VideoStyleSnapshot(
         private const val KEY_LEFT_ARTWORK = "leftArtwork"
         private const val KEY_RIGHT_ARTWORK = "rightArtwork"
         private const val KEY_PRESENTATION = "presentation"
+        private const val KEY_SLIDESHOW_CONFIG = "slideshowConfig"
+        private const val KEY_SLIDESHOW_ITEMS = "slideshowItems"
+        private const val KEY_CHAPTER_IDENTITY = "chapterIdentity"
+        private const val KEY_SOURCE_ID = "sourceId"
 
         val DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
         val DEFAULT_CARD_FILL_ARGB = 0x332A59B6.toInt()
@@ -192,6 +209,12 @@ data class VideoStyleSnapshot(
             val rightArtwork = if (obj.isNull(KEY_RIGHT_ARTWORK)) null else {
                 VideoArtwork.fromJson(obj.getJSONObject(KEY_RIGHT_ARTWORK))
             }
+            val slideshowConfig = SlideshowConfig.fromJson(
+                obj.optJSONObject(KEY_SLIDESHOW_CONFIG),
+            )
+            val slideshowItems = fromArtworkJsonArray(
+                obj.optJSONArray(KEY_SLIDESHOW_ITEMS),
+            )
             return VideoStyleSnapshot(
                 schemaVersion = obj.optInt(KEY_SCHEMA, SCHEMA_VERSION),
                 fontFamily = obj.optString(KEY_FONT_FAMILY, "serif"),
@@ -223,6 +246,10 @@ data class VideoStyleSnapshot(
                 leftArtwork = leftArtwork,
                 rightArtwork = rightArtwork,
                 presentation = presentation,
+                slideshowConfig = slideshowConfig,
+                slideshowItems = slideshowItems,
+                chapterIdentity = obj.optString(KEY_CHAPTER_IDENTITY, ""),
+                sourceId = obj.optString(KEY_SOURCE_ID, ""),
             )
         }
     }

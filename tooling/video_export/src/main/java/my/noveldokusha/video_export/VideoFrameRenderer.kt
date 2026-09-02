@@ -183,6 +183,17 @@ class VideoFrameRenderer(
     private val layoutCache = ParagraphLayoutCache(effectiveTypeface, videoStyle.textColorArgb, layoutConfig)
     private val backgroundLayer: BackgroundLayer = snapshot.backgroundLayer(backgroundFileResolver)
 
+    /** Slide-show scheduler (детерминированный по общей длительности аудио). */
+    private val slideshow: SlideshowScheduler? =
+        if (videoStyle.slideshowConfig.enabled && videoStyle.slideshowItems.isNotEmpty()) {
+            val totalUs = timeline.totalSamples * 1_000_000L / timeline.sampleRate
+            SlideshowScheduler(
+                config = videoStyle.slideshowConfig,
+                items = videoStyle.slideshowItems,
+                totalAudioMs = totalUs / 1_000L,
+            ).takeIf { !it.isEmpty }
+        } else null
+
     /** Шрифт, реально используемый в рендере (учитывает bold/italic из стиля). */
     private fun resolveVideoTypeface(base: Typeface, style: VideoStyleSnapshot): Typeface {
         val flag = when {
@@ -427,6 +438,7 @@ class VideoFrameRenderer(
     /** Рисует кадр [sample] на [canvas] (должен быть 1920×1080). */
     fun renderFrame(canvas: Canvas, sample: Long) {
         drawBackground(canvas)
+        drawSlideshow(canvas, sample)
         drawSideArtwork(canvas)
         val plan = framePlan(sample)
         if (plan.chapterIntro) {
@@ -438,6 +450,86 @@ class VideoFrameRenderer(
         plan.prev?.let { drawSlot(canvas, it) }
         plan.next?.let { drawSlot(canvas, it) }
         plan.current?.let { drawCardSlot(canvas, it) }
+    }
+
+    // ── Slide-show (Phase G) ──────────────────────────────────────────────
+
+    private fun slideBitmap(fileName: String, item: ArtworkItem): Bitmap? =
+        artworkBitmaps.getOrPut(fileName) { artworkImageDecoder(fileName) }
+
+    /** Рисует активный слайд (+ переход по слайдшоу-таймлайну). */
+    private fun drawSlideshow(canvas: Canvas, sample: Long) {
+        val s = slideshow ?: return
+        val timeMs = sample / 1000L
+        val frame = s.frameAt(timeMs)
+        if (frame.itemIndex < 0) return
+        val item = videoStyle.slideshowItems.getOrNull(frame.itemIndex) ?: return
+        val bitmap = slideBitmap(item.fileName, item) ?: return
+
+        val win = slideshowBounds(item)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        paint.alpha = (0xFF * item.opacity.coerceIn(0f, 1f)).toInt()
+
+        canvas.save()
+        drawSlideBitmap(canvas, bitmap, win, item, paint)
+        canvas.restore()
+
+        // Crossfade: предыдущий слайд растворяется под новым (draw под ним).
+        if (frame.transitioning && frame.fromIndex >= 0 && frame.fromIndex != frame.itemIndex) {
+            val fromItem = videoStyle.slideshowItems.getOrNull(frame.fromIndex) ?: return
+            val fromBmp = slideBitmap(fromItem.fileName, fromItem) ?: return
+            val fadeIn = frame.progress.coerceIn(0f, 1f)
+            val fromPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+            fromPaint.alpha = ((0xFF * fromItem.opacity.coerceIn(0f, 1f)) * (1f - fadeIn)).toInt()
+            drawSlideBitmap(canvas, fromBmp, slideshowBounds(fromItem), fromItem, fromPaint)
+        }
+    }
+
+    private fun slideshowBounds(item: ArtworkItem): RectF {
+        val w = layoutConfig.width.toFloat()
+        val h = layoutConfig.height.toFloat()
+        val slideW = w * item.size.coerceIn(0.1f, 1.2f)
+        val slideH = slideW * 9f / 16f
+        val bottom = h * item.position.coerceIn(0.2f, 1f)
+        val top = (bottom - slideH).coerceAtLeast(0f)
+        val x0 = (w - slideW) / 2f
+        return RectF(x0, top, x0 + slideW, bottom)
+    }
+
+    private fun drawSlideBitmap(canvas: Canvas, bitmap: Bitmap, rect: RectF, item: ArtworkItem, paint: Paint) {
+        val rect2 = RectF(rect)
+        val scale = when (item.cropMode) {
+            ArtworkFitMode.COVER -> maxOf(rect2.width() / bitmap.width, rect2.height() / bitmap.height)
+            ArtworkFitMode.CONTAIN -> minOf(rect2.width() / bitmap.width, rect2.height() / bitmap.height)
+        }
+        val drawW = bitmap.width * scale
+        val drawH = bitmap.height * scale
+        val dx = rect2.centerX() - drawW / 2f
+        val dy = rect2.centerY() - drawH / 2f
+        val dest = RectF(dx, dy, dx + drawW, dy + drawH)
+        val radius = item.cornerRadius.coerceAtLeast(0f)
+        val path = Path().apply {
+            addRoundRect(rect2, radius, radius, Path.Direction.CW)
+        }
+        val clip = canvas.save()
+        canvas.clipPath(path)
+        canvas.drawBitmap(bitmap, null, dest, paint)
+        canvas.restoreToCount(clip)
+        if (item.borderWidth > 0f) {
+            val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = item.borderColorArgb
+                style = Paint.Style.STROKE
+                strokeWidth = item.borderWidth
+            }
+            canvas.drawRoundRect(rect2, radius, radius, border)
+        }
+        if (item.shadow) {
+            val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x26000000.toInt()
+            }
+            val shadowRect = RectF(rect2.left + 8f, rect2.top + 14f, rect2.right + 8f, rect2.bottom + 14f)
+            canvas.drawRoundRect(shadowRect, radius, radius, shadow)
+        }
     }
 
     // ── Side artwork ─────────────────────────────────────────────────────

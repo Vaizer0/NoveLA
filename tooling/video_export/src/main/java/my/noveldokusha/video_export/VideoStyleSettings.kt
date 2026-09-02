@@ -64,6 +64,15 @@ data class VideoStyleSettings(
     val rightArtwork: VideoArtworkSettings? = null,
     // ── Paragraph presentation ─────────────────────────────────────────────
     val presentation: ParagraphPresentation = ParagraphPresentation.CURRENT_WITH_CONTEXT,
+    // ── Slide-show (Phase G) ───────────────────────────────────────────────
+    /** Конфиг показа слайдов (null — отключено, как Phase F). */
+    val slideshowConfig: SlideshowConfig? = null,
+    /** Активные слайды (порядок = порядок показа). */
+    val slideshowItems: List<ArtworkItem> = emptyList(),
+    /** Идентичность главы (для детерминированного seed). */
+    val chapterIdentity: String = "",
+    /** Идентичность источника. */
+    val sourceId: String = "",
 ) {
     /**
      * Резолвит ПОЛНЫЙ эффективный стиль видео из читалки + собственных
@@ -111,6 +120,15 @@ data class VideoStyleSettings(
             leftArtwork = leftArtwork?.let { resolveArtwork(it) },
             rightArtwork = rightArtwork?.let { resolveArtwork(it) },
             presentation = presentation,
+            slideshowConfig = slideshowConfig
+                ?: SlideshowConfig.disabled().copy(
+                    randomSeed = SlideshowScheduler.stableHash(
+                        chapterIdentity, sourceId, "", slideshowItems.joinToString { it.fileName },
+                    ),
+                ),
+            slideshowItems = slideshowItems.filter { it.enabled && it.fileName.isNotBlank() },
+            chapterIdentity = chapterIdentity,
+            sourceId = sourceId,
         )
     }
 

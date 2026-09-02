@@ -724,4 +724,66 @@ class VideoFrameRendererQaTest {
         assertFrameNotEmpty(bitmap)
         savePng(bitmap, "$prefix.png")
     }
+
+    // ── Phase G: слайдшоу ──────────────────────────────────────────────────
+
+    @Test
+    fun slideshowQa() {
+        val slideItems = listOf(
+            ArtworkItem("s1", "slide-a.png", true, 0.9f, 0.42f, 0.9f, ArtworkFitMode.COVER, 16f, 2f, 0x60FFFFFF.toInt(), true),
+            ArtworkItem("s2", "slide-b.png", true, 0.9f, 0.42f, 0.9f, ArtworkFitMode.COVER, 16f, 2f, 0x60FFFFFF.toInt(), true),
+        )
+        val slideshowCfg = SlideshowConfig(
+            enabled = true,
+            timingMode = SlideshowTimingMode.FIXED_INTERVAL,
+            fixedIntervalMs = 8_000L,
+            percentageSections = 0.5f,
+            randomMinMs = 4_000L,
+            randomMaxMs = 8_000L,
+            randomSeed = 7L,
+            transitionType = SlideshowTransition.FADE,
+            transitionDurationMs = 700L,
+        )
+        val style = VideoStyleSnapshot.defaultFor(snapshot()).copy(
+            slideshowConfig = slideshowCfg,
+            slideshowItems = slideItems,
+            chapterIdentity = "ch12",
+            sourceId = "book1",
+        )
+        val decoder: (String) -> Bitmap? = { name -> if (name == "slide-a.png" || name == "slide-b.png") syntheticArtworkWith("slide") else null }
+        val snap = snapshot()
+        // Несколько абзацев, чтобы общая длительность заметно превысила интервал.
+        val timeline = buildTimeline(listOf(normal, longPara, dialogue))
+        val renderer = VideoFrameRenderer(
+            snapshot = snap,
+            timeline = timeline,
+            typeface = Typeface.create("serif", Typeface.NORMAL),
+            novelTitle = "The Cartographer's Apprentice",
+            chapterTitle = "Chapter 12",
+            artworkImageDecoder = decoder,
+            videoStyle = style,
+        )
+        val totalMs = timeline.totalSamples * 1_000_000L / timeline.sampleRate / 1_000L
+        assertTrue("total duration positive", totalMs > 0)
+        val sch = SlideshowScheduler(slideshowCfg, slideItems, totalMs)
+        assertFalse("slideshow not empty", sch.isEmpty)
+        // early frame -> slide 0, late frame -> last slide
+        assertEquals(0, sch.frameAt(totalMs / 10L).itemIndex)
+        assertTrue("last slide at end", sch.frameAt(totalMs - 1L).itemIndex == slideItems.lastIndex)
+
+        // render with a slide at an early sample
+        val sample = midSample(timeline.paragraphs.first())
+        val bitmap = renderFrameToBitmap(renderer, sample)
+        assertFrameNotEmpty(bitmap)
+        savePng(bitmap, "23_slideshow_fade.png")
+    }
+
+    private fun syntheticArtworkWith(tag: String): Bitmap {
+        val bitmap = Bitmap.createBitmap(960, 540, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bitmap)
+        c.drawColor(0xFF2ECC71.toInt())
+        val stripe = Paint().apply { color = if (tag == "slide") 0xFFF1C40F.toInt() else 0xFFECF0F1.toInt() }
+        c.drawRect(0f, 0f, 60f, 540f, stripe)
+        return bitmap
+    }
 }
