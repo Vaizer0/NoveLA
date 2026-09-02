@@ -8,25 +8,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: video-visual-qa-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   visual-qa:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.3.0
-
       - name: Remove local Java home from gradle.properties
         run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
-
       - name: Run renderer visual QA on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -40,7 +40,6 @@ jobs:
             ./gradlew :app:connectedDebugAndroidTest \
               -Pandroid.testInstrumentationRunnerArguments.class=my.noveldokusha.TtsVideoVisualQaTest \
               --no-daemon --stacktrace
-
       - name: Collect PNG frames
         if: always()
         run: |
@@ -52,7 +51,6 @@ jobs:
               adb exec-out run-as my.novela.vaizer0.debug cat "$remote" > "visual-qa/$name"
             done
           ls -lah visual-qa
-
       - name: Upload rendered PNG frames
         if: always()
         uses: actions/upload-artifact@v7
