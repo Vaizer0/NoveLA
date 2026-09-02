@@ -594,17 +594,18 @@ class VideoFrameRendererQaTest {
         assertTrue("big font: не у краёв (left=$left)", left >= cfg.columnLeft())
         assertTrue("big font: не у краёв (right=$right)", right <= cfg.columnRight())
         assertGlyphIsolation(bf, bfPlan)
-        // Window strategy: the auto-size card grows to fit a paragraph (up to
-        // the max card content height) and autofits it — so a paragraph that
-        // fits after autofit is FULLY visible with no scroll needed.
+        // Window strategy: the auto-size card grows up to the max content height
+        // and autofits; a paragraph still too tall after the floor autofits in a
+        // bounded card and SCROLLS in lockstep with the spoken line instead of
+        // being silently clipped.
         val bfW = cfg.cardTextWidth()
         val bfH = bf.layoutContentHeightFor(0)
         val bfX0 = cfg.textX0()
         val bfStartPlan = bf.framePlan(bfTimeline.paragraphs.first().startSample + 5_000L)
         val bfEndPlan = bf.framePlan(bfTimeline.paragraphs.first().endSample - 20_000L)
         assertTrue(
-            "big font: autofitted content fully visible, no scroll",
-            bfStartPlan.current!!.scrollOffset == 0f && bfEndPlan.current!!.scrollOffset == 0f,
+            "big font: scroll grows towards end",
+            bfEndPlan.current!!.scrollOffset > bfStartPlan.current!!.scrollOffset,
         )
         val bfStartBounds = bfStartPlan.current!!.contentBounds(bfW, bfH, bfX0)
         val bfEndBounds = bfEndPlan.current!!.contentBounds(bfW, bfH, bfX0)
@@ -614,7 +615,7 @@ class VideoFrameRendererQaTest {
         )
         assertTrue(
             "big font: all content revealed by the end (bottom=${bfEndBounds.bottom})",
-            bfEndBounds.bottom <= bfEndPlan.current!!.window.bottom + 2f,
+            bfEndBounds.bottom >= bfEndPlan.current!!.window.bottom - 2f,
         )
         val bfBitmap = renderFrameToBitmap(bf, bfSample)
         assertFrameNotEmpty(bfBitmap)
