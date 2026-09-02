@@ -1,6 +1,7 @@
 package my.noveldokusha.text_to_speech
 
 import android.content.Context
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TtsVideoJobState
 import my.noveldokusha.core.appPreferences.TtsVideoJobStatus
@@ -8,10 +9,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class TtsVideoPreferences(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    /** Uses the audio root only as a migration/default fallback. Once changed here, the video root is independent. */
     var outputDirectoryUri: String
-        get() = prefs.getString(KEY_OUTPUT_URI, "") ?: ""
+        get() = prefs.getString(KEY_OUTPUT_URI, "").orEmpty().ifBlank {
+            runCatching { AppPreferences(appContext).TTS_AUDIO_DOWNLOAD_LOCATION_URI.value }.getOrDefault("")
+        }
         set(value) = prefs.edit().putString(KEY_OUTPUT_URI, value).apply()
 
     fun visualSettings(): TtsVideoVisualSettings = TtsVideoVisualSettings(
@@ -21,29 +26,36 @@ class TtsVideoPreferences(context: Context) {
         fontSizePx = prefs.getFloat("fontSizePx", 54f), minFontSizePx = prefs.getFloat("minFontSizePx", 30f),
         lineSpacingMultiplier = prefs.getFloat("lineSpacingMultiplier", 1.15f), paragraphSpacingPx = prefs.getFloat("paragraphSpacingPx", 28f),
         letterSpacingEm = prefs.getFloat("letterSpacingEm", 0f), textColor = prefs.getInt("textColor", android.graphics.Color.WHITE),
+        bold = prefs.getBoolean("bold", false), italic = prefs.getBoolean("italic", false),
+        horizontalAlignment = enum("horizontalAlignment", VideoTextAlignment.CENTER),
+        verticalPositionFraction = prefs.getFloat("verticalPositionFraction", .50f),
+        horizontalMarginFraction = prefs.getFloat("horizontalMarginFraction", .09f),
+        verticalMarginFraction = prefs.getFloat("verticalMarginFraction", .07f),
         cardEnabled = prefs.getBoolean("cardEnabled", true), cardColor = prefs.getInt("cardColor", android.graphics.Color.DKGRAY),
         cardAlpha = prefs.getFloat("cardAlpha", .82f), cardCornerRadiusPx = prefs.getFloat("cardCornerRadiusPx", 28f), cardPaddingPx = prefs.getFloat("cardPaddingPx", 30f),
         cardStrokeWidthPx = prefs.getFloat("cardStrokeWidthPx", 1.5f), cardStrokeColor = prefs.getInt("cardStrokeColor", android.graphics.Color.argb(80,255,255,255)),
-        highlightColor = prefs.getInt("highlightColor", android.graphics.Color.YELLOW), highlightAlpha = prefs.getFloat("highlightAlpha", .92f),
+        highlightColor = prefs.getInt("highlightColor", 0xFFFFD24B.toInt()), highlightAlpha = prefs.getFloat("highlightAlpha", .92f),
         highlightCornerRadiusPx = prefs.getFloat("highlightCornerRadiusPx", 8f), highlightPaddingPx = prefs.getFloat("highlightPaddingPx", 4f),
         safeMarginPx = prefs.getFloat("safeMarginPx", 80f), maxTextWidthFraction = prefs.getFloat("maxTextWidthFraction", .82f),
         backgroundMode = enum("backgroundMode", BackgroundMode.SOLID), backgroundColor = prefs.getInt("backgroundColor", android.graphics.Color.rgb(18,18,22)),
-        backgroundUri = prefs.getString("backgroundUri", "") ?: "", artworkMode = enum("artworkMode", ArtworkMode.NONE),
+        backgroundUri = prefs.getString("backgroundUri", "").orEmpty(), artworkMode = enum("artworkMode", ArtworkMode.NONE),
         artworkUris = stringList("artworkUris"), artworkWidthPx = prefs.getFloat("artworkWidthPx", 260f), artworkOpacity = prefs.getFloat("artworkOpacity", .95f),
         artworkCornerRadiusPx = prefs.getFloat("artworkCornerRadiusPx", 24f), artworkBorderWidthPx = prefs.getFloat("artworkBorderWidthPx", 0f),
         artworkBorderColor = prefs.getInt("artworkBorderColor", android.graphics.Color.TRANSPARENT), artworkOverlay = prefs.getBoolean("artworkOverlay", false),
         slideshowEnabled = prefs.getBoolean("slideshowEnabled", false), slideshowIntervalMode = enum("slideshowIntervalMode", SlideshowIntervalMode.PERCENT_OF_TOTAL_DURATION),
-        slideshowIntervalMs = prefs.getLong("slideshowIntervalMs", 8000L), slideshowTransition = enum("slideshowTransition", SlideshowTransition.CROSSFADE),
-        slideshowSeed = prefs.getLong("slideshowSeed", 0L),
+        slideshowIntervalMs = prefs.getLong("slideshowIntervalMs", 8000L), randomIntervalMinMs = prefs.getLong("randomIntervalMinMs", 4000L),
+        randomIntervalMaxMs = prefs.getLong("randomIntervalMaxMs", 12000L), slideshowTransition = enum("slideshowTransition", SlideshowTransition.CROSSFADE),
+        transitionDurationMs = prefs.getLong("transitionDurationMs", 700L), slideshowSeed = prefs.getLong("slideshowSeed", 0L),
     )
 
     fun putVisual(settings: TtsVideoVisualSettings) {
         prefs.edit()
-            .putString("paragraphMode", settings.paragraphMode.name)
-            .putString("longParagraphMode", settings.longParagraphMode.name)
+            .putString("paragraphMode", settings.paragraphMode.name).putString("longParagraphMode", settings.longParagraphMode.name)
             .putFloat("fontSizePx", settings.fontSizePx).putFloat("minFontSizePx", settings.minFontSizePx)
             .putFloat("lineSpacingMultiplier", settings.lineSpacingMultiplier).putFloat("paragraphSpacingPx", settings.paragraphSpacingPx)
             .putFloat("letterSpacingEm", settings.letterSpacingEm).putInt("textColor", settings.textColor)
+            .putBoolean("bold", settings.bold).putBoolean("italic", settings.italic).putString("horizontalAlignment", settings.horizontalAlignment.name)
+            .putFloat("verticalPositionFraction", settings.verticalPositionFraction).putFloat("horizontalMarginFraction", settings.horizontalMarginFraction).putFloat("verticalMarginFraction", settings.verticalMarginFraction)
             .putBoolean("cardEnabled", settings.cardEnabled).putInt("cardColor", settings.cardColor).putFloat("cardAlpha", settings.cardAlpha)
             .putFloat("cardCornerRadiusPx", settings.cardCornerRadiusPx).putFloat("cardPaddingPx", settings.cardPaddingPx)
             .putFloat("cardStrokeWidthPx", settings.cardStrokeWidthPx).putInt("cardStrokeColor", settings.cardStrokeColor)
@@ -55,7 +67,8 @@ class TtsVideoPreferences(context: Context) {
             .putFloat("artworkWidthPx", settings.artworkWidthPx).putFloat("artworkOpacity", settings.artworkOpacity).putFloat("artworkCornerRadiusPx", settings.artworkCornerRadiusPx)
             .putFloat("artworkBorderWidthPx", settings.artworkBorderWidthPx).putInt("artworkBorderColor", settings.artworkBorderColor).putBoolean("artworkOverlay", settings.artworkOverlay)
             .putBoolean("slideshowEnabled", settings.slideshowEnabled).putString("slideshowIntervalMode", settings.slideshowIntervalMode.name)
-            .putLong("slideshowIntervalMs", settings.slideshowIntervalMs).putString("slideshowTransition", settings.slideshowTransition.name).putLong("slideshowSeed", settings.slideshowSeed)
+            .putLong("slideshowIntervalMs", settings.slideshowIntervalMs).putLong("randomIntervalMinMs", settings.randomIntervalMinMs).putLong("randomIntervalMaxMs", settings.randomIntervalMaxMs)
+            .putString("slideshowTransition", settings.slideshowTransition.name).putLong("transitionDurationMs", settings.transitionDurationMs).putLong("slideshowSeed", settings.slideshowSeed)
             .apply()
     }
 
