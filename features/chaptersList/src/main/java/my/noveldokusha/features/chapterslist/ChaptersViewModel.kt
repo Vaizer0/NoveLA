@@ -1327,32 +1327,35 @@ internal class ChaptersViewModel @Inject constructor(
             derivedBaseFontPx = ReaderVisualSnapshot.computeBaseFontPx(appPreferences.READER_FONT_SIZE.value),
         )
 
-        val body = chapterBodyDao.get(chapter.chapter.url)?.body?.takeIf { it.isNotBlank() }
-        if (body == null) {
-            toasty.show(StringsR.string.tts_audio_export_no_download)
-            return
-        }
-        val regexRules = appPreferences.effectiveRegexRules(bookUrl)
-        val paragraphs = TtsTextPreparer.paragraphsFromBody(body, regexRules)
+        // Тело главы читается из БД асинхронно, затем ставится в очередь.
+        viewModelScope.launch {
+            val body = chapterBodyDao.get(chapter.chapter.url)?.body?.takeIf { it.isNotBlank() }
+            if (body == null) {
+                toasty.show(StringsR.string.tts_audio_export_no_download)
+                return@launch
+            }
+            val regexRules = appPreferences.effectiveRegexRules(bookUrl)
+            val paragraphs = TtsTextPreparer.paragraphsFromBody(body, regexRules)
 
-        val jobId = makeVideoJobId(bookUrl, chapter.chapter.url)
-        val request = VideoExportWorkRequest(
-            jobId = jobId,
-            novelTitle = bookTitle,
-            novelUrl = bookUrl,
-            chapterUrl = chapter.chapter.url,
-            chapterTitle = chapter.chapter.title,
-            sourceId = source?.url ?: "",
-            paragraphsJson = org.json.JSONArray(paragraphs).toString(),
-            snapshotJson = snapshot.toJson(),
-            enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
-            voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
-            speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
-            pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
-            outputDirectoryUri = folderUri,
-        )
-        VideoExportQueue.enqueue(context, appPreferences, request)
-        toasty.show(StringsR.string.tts_video_export_started)
+            val jobId = makeVideoJobId(bookUrl, chapter.chapter.url)
+            val request = VideoExportWorkRequest(
+                jobId = jobId,
+                novelTitle = bookTitle,
+                novelUrl = bookUrl,
+                chapterUrl = chapter.chapter.url,
+                chapterTitle = chapter.chapter.title,
+                sourceId = VIDEO_SOURCE_ID,
+                paragraphsJson = org.json.JSONArray(paragraphs).toString(),
+                snapshotJson = snapshot.toJson(),
+                enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+                voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
+                speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+                pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+                outputDirectoryUri = folderUri,
+            )
+            VideoExportQueue.enqueue(context, appPreferences, request)
+            toasty.show(StringsR.string.tts_video_export_started)
+        }
     }
 
     /** Папка выбрана через SAF: запоминаем и запускаем отложенный видео-экспорт. */
@@ -1413,6 +1416,9 @@ private data class PendingAudio(
 private data class PendingVideo(
     val chapter: ChapterWithContext,
 )
+
+/** Источник видео-экспорта: видео всегда строится из тела оригинала. */
+private const val VIDEO_SOURCE_ID = "original"
 
 /**
  * Число глав, доступных для экспорта: скачанные тела для оригинала,
