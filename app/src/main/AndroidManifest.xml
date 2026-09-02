@@ -102,6 +102,14 @@
 			</intent-filter>
 		</receiver>
 
+		<receiver
+			android:name="my.noveldokusha.tooling.application_workers.VideoExportNotificationReceiver"
+			android:exported="false">
+			<intent-filter>
+				<action android:name="my.noveldokusha.action.CANCEL_VIDEO_EXPORT" />
+			</intent-filter>
+		</receiver>
+
 	</application>
 
 </manifest>

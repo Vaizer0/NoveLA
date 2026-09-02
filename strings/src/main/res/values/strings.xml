@@ -842,4 +842,21 @@
     <string name="settings_audio_download_cancel_all">Cancel all</string>
     <string name="settings_audio_download_speed_range">%.1f–%.1f</string>
 
+<!-- Settings: Video export -->
+    <string name="tts_video_export_channel_name">Video export</string>
+    <string name="tts_video_export_running">Exporting video: %1$s</string>
+    <string name="tts_video_export_running_detail">Synthesising audio + rendering frames…</string>
+    <string name="tts_video_export_complete">Video ready: %1$s</string>
+    <string name="tts_video_export_failed">Video export failed: %1$s</string>
+    <string name="tts_video_export_failure_detail">Video export failed: %1$s</string>
+    <string name="tts_video_export_cancel">Cancel</string>
+    <string name="tts_video_export_open">Open</string>
+    <string name="tts_video_export_delete">Delete</string>
+    <string name="tts_video_export_dir_error">Could not access the selected video folder. Please pick it again.</string>
+    <string name="tts_video_export_file_error">Could not create the video file.</string>
+    <string name="tts_video_export_folder_error">Could not create the novel folder.</string>
+    <string name="tts_video_export_started">Video export queued</string>
+    <string name="tts_video_export_running_progress">%1$d%%</string>
+    <string name="tts_video_chapter_action">Export video</string>
+
 </resources>

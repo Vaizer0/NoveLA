@@ -8,6 +8,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import my.noveldokusha.core.appPreferences.TernaryState
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobState
 import my.noveldokusha.data.DownloadTaskState
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.feature.local_database.tables.Book
@@ -41,6 +42,10 @@ internal data class ChaptersScreenState(
     val audioFilesExist: SnapshotStateMap<AudioJobKey, Boolean>,
     // Нужно выбрать папку аудио (SAF): UI открывает пикер.
     val audioNeedDirectory: MutableState<Boolean>,
+    // Видео-экспорт глав: chapterUrl → состояние для иконки у главы (одна задача на главу).
+    val videoJobs: SnapshotStateMap<String, VideoExportJobState>,
+    // Нужно выбрать папку видео (SAF): UI открывает пикер.
+    val videoNeedDirectory: MutableState<Boolean>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }

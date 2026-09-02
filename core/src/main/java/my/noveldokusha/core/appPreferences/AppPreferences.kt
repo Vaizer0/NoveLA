@@ -363,6 +363,18 @@ class AppPreferences @Inject constructor(
             )
         }
 
+    /** Записи задач видео-экспорта глав: jobId → состояние (для UI статуса глав). */
+    val VIDEO_EXPORT_JOBS =
+        object : Preference<Map<String, VideoExportJobState>>("VIDEO_EXPORT_JOBS") {
+            override var value by SharedPreference_Serializable<Map<String, VideoExportJobState>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { Json.encodeToString(it) },
+                decode = { Json.decodeFromString(it) }
+            )
+        }
+
     val FLOATING_TTS_ENABLED = object : Preference<Boolean>("FLOATING_TTS_ENABLED") {
         override var value by SharedPreference_Boolean(name, preferences, false)
     }

@@ -41,6 +41,9 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobStatus
+import my.noveldokusha.core.appPreferences.VideoExportJobState
+import my.noveldokusha.core.appPreferences.makeVideoJobId
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
 import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isContentUri
@@ -64,10 +67,16 @@ import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsAudioFormat
+import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
 import my.noveldokusha.tooling.application_workers.TtsAudioExportNotification
 import my.noveldokusha.tooling.application_workers.TtsAudioQueue
+import my.noveldokusha.tooling.application_workers.VideoExportQueue
+import my.noveldokusha.tooling.application_workers.VideoExportWorkRequest
+import my.noveldokusha.reader_visuals.BackgroundType
+import my.noveldokusha.reader_visuals.ReaderBackgroundPresets
+import my.noveldokusha.reader_visuals.ReaderVisualSnapshot
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -154,6 +163,8 @@ internal class ChaptersViewModel @Inject constructor(
         audioJobs = mutableStateMapOf(),
         audioFilesExist = mutableStateMapOf(),
         audioNeedDirectory = mutableStateOf(false),
+        videoJobs = mutableStateMapOf(),
+        videoNeedDirectory = mutableStateOf(false),
     )
 
     // ─── Экспорт книги ───────────────────────────────────────────────────────
@@ -165,6 +176,9 @@ internal class ChaptersViewModel @Inject constructor(
 
     // Ожидающая аудиозагрузка: ждёт выбора папки через SAF-пикер.
     private var pendingAudio: PendingAudio? = null
+
+    // Ожидающий видео-экспорт: ждёт выбора папки через SAF-пикер.
+    private var pendingVideo: PendingVideo? = null
 
     // Последний снимок задач аудио (AudioJobKey → состояние) для ревалидации
     // существования файлов при возврате на экран (onResume).
@@ -475,6 +489,25 @@ internal class ChaptersViewModel @Inject constructor(
                     state.audioJobs.putAll(byChapter)
                     lastAudioJobs = byChapter
                     refreshAudioFileExistence(byChapter)
+                }
+        }
+
+        // Статусы видео-экспорта текущей книги: chapterUrl → состояние (одна задача на главу).
+        viewModelScope.launch {
+            combine(
+                bookUrlFlow,
+                appPreferences.VIDEO_EXPORT_JOBS.flow(),
+            ) { url, jobs -> url to jobs }
+                .collectLatest { (url, jobs) ->
+                    VideoExportQueue.reconcile(context, appPreferences)
+                    val effective = appPreferences.VIDEO_EXPORT_JOBS.value
+                    val byChapter = mutableMapOf<String, my.noveldokusha.core.appPreferences.VideoExportJobState>()
+                    for (job in effective.values) {
+                        if (job.novelUrl != url) continue
+                        byChapter[job.chapterUrl] = job
+                    }
+                    state.videoJobs.clear()
+                    state.videoJobs.putAll(byChapter)
                 }
         }
 
@@ -1198,6 +1231,147 @@ internal class ChaptersViewModel @Inject constructor(
         state.audioNeedDirectory.value = false
     }
 
+    // ─── Видео-экспорт главы (MP4) ──────────────────────────────────────────
+
+    fun onChapterVideo(chapter: ChapterWithContext) {
+        val job = state.videoJobs[chapter.chapter.url]
+        when {
+            job?.status == VideoExportJobStatus.SUCCESS &&
+                job.documentUri.isNotBlank() -> openVideoFile(job)
+
+            job != null && job.isActive -> Unit
+
+            else -> startVideoExport(chapter)
+        }
+    }
+
+    private fun openVideoFile(job: VideoExportJobState) {
+        val uri = job.documentUri.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), "video/mp4")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure { Timber.e(it, "VideoExport: failed to open chapter video") }
+    }
+
+    fun startVideoExport(chapter: ChapterWithContext) {
+        if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()) {
+            toasty.show(StringsR.string.tts_audio_voice_not_set)
+            return
+        }
+        val folderUri = appPreferences.VIDEO_DIRECTORY_URI.value
+        if (folderUri.isBlank()) {
+            pendingVideo = PendingVideo(chapter = chapter)
+            state.videoNeedDirectory.value = true
+            return
+        }
+        enqueueVideoExport(chapter, folderUri)
+    }
+
+    private fun enqueueVideoExport(chapter: ChapterWithContext, folderUri: String) {
+        // Снимок внешнего вида читалки замораживается на момент enqueue.
+        val backgroundValue = appPreferences.READER_BACKGROUND_IMAGE.value
+        val bgColorHex = appPreferences.READER_TEXT_COLOR.value
+        val ttsHighlightHex = appPreferences.TTS_HIGHLIGHT_COLOR.value
+
+        val backgroundType: BackgroundType
+        val presetId: String
+        val backgroundFileName: String
+        when {
+            backgroundValue.isEmpty() -> {
+                backgroundType = BackgroundType.NONE
+                presetId = ""
+                backgroundFileName = ""
+            }
+            backgroundValue.startsWith("background_file:") -> {
+                backgroundType = BackgroundType.IMAGE
+                presetId = ""
+                backgroundFileName = backgroundValue.removePrefix("background_file:")
+            }
+            else -> {
+                backgroundType = BackgroundType.PRESET
+                presetId = backgroundValue
+                backgroundFileName = ""
+            }
+        }
+
+        val textColorArgb = runCatching {
+            if (bgColorHex.isNotBlank()) android.graphics.Color.parseColor("#$bgColorHex")
+            else null
+        }.getOrNull()
+
+        val highlightArgb = runCatching {
+            if (ttsHighlightHex.isNotBlank()) android.graphics.Color.parseColor("#$ttsHighlightHex")
+            else 0xFFFF6D00.toInt()
+        }.getOrDefault(0xFFFF6D00.toInt())
+
+        val presetColors = if (backgroundType == BackgroundType.PRESET) {
+            ReaderBackgroundPresets.firstOrNull { it.id == presetId }?.colors.orEmpty()
+        } else emptyList()
+
+        val snapshot = ReaderVisualSnapshot(
+            fontFamily = appPreferences.READER_FONT_FAMILY.value.ifBlank { "serif" },
+            fontSizeSp = appPreferences.READER_FONT_SIZE.value,
+            lineHeight = appPreferences.READER_LINE_HEIGHT.value,
+            letterSpacing = appPreferences.READER_LETTER_SPACING.value,
+            paragraphSpacing = appPreferences.READER_PARAGRAPH_SPACING.value,
+            textColorArgb = textColorArgb,
+            backgroundType = backgroundType,
+            presetId = presetId,
+            presetColorsArgb = presetColors,
+            backgroundFileName = backgroundFileName,
+            ttsHighlightColorArgb = highlightArgb,
+            derivedBaseFontPx = ReaderVisualSnapshot.computeBaseFontPx(appPreferences.READER_FONT_SIZE.value),
+        )
+
+        val body = chapterBodyDao.get(chapter.chapter.url)?.body?.takeIf { it.isNotBlank() }
+        if (body == null) {
+            toasty.show(StringsR.string.tts_audio_export_no_download)
+            return
+        }
+        val regexRules = appPreferences.effectiveRegexRules(bookUrl)
+        val paragraphs = TtsTextPreparer.paragraphsFromBody(body, regexRules)
+
+        val jobId = makeVideoJobId(bookUrl, chapter.chapter.url)
+        val request = VideoExportWorkRequest(
+            jobId = jobId,
+            novelTitle = bookTitle,
+            novelUrl = bookUrl,
+            chapterUrl = chapter.chapter.url,
+            chapterTitle = chapter.chapter.title,
+            sourceId = source?.url ?: "",
+            paragraphsJson = org.json.JSONArray(paragraphs).toString(),
+            snapshotJson = snapshot.toJson(),
+            enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+            voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
+            speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+            pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+            outputDirectoryUri = folderUri,
+        )
+        VideoExportQueue.enqueue(context, appPreferences, request)
+        toasty.show(StringsR.string.tts_video_export_started)
+    }
+
+    /** Папка выбрана через SAF: запоминаем и запускаем отложенный видео-экспорт. */
+    fun onVideoDirectorySaved(uri: String) {
+        appPreferences.VIDEO_DIRECTORY_URI.value = uri
+        val pending = pendingVideo
+        pendingVideo = null
+        state.videoNeedDirectory.value = false
+        if (pending != null) {
+            enqueueVideoExport(pending.chapter, appPreferences.VIDEO_DIRECTORY_URI.value)
+        }
+    }
+
+    /** Пикер папки видео-экспорта закрыт без выбора — отменяем ожидание. */
+    fun onVideoFolderCancel() {
+        pendingVideo = null
+        state.videoNeedDirectory.value = false
+    }
+
     fun unselectAll() {
         state.selectedChaptersUrl.clear()
     }
@@ -1233,6 +1407,11 @@ private data class PendingExport(
 private data class PendingAudio(
     val chapter: ChapterWithContext,
     val source: TtsAudioSource,
+)
+
+/** Видео-экспорт главы, ожидающий выбора папки (SAF-пикер). */
+private data class PendingVideo(
+    val chapter: ChapterWithContext,
 )
 
 /**

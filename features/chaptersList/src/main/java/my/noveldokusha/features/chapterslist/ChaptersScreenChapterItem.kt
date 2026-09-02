@@ -22,10 +22,12 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.VideoExportJobState
+import my.noveldokusha.core.appPreferences.VideoExportJobStatus
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.InternalTheme
@@ -78,6 +82,8 @@ internal fun ChaptersScreenChapterItem(
     onAudioOriginal: () -> Unit,
     onAudioTranslated: () -> Unit,
     translatedAudioAvailable: Boolean = true,
+    videoExportJob: VideoExportJobState? = null,
+    onVideoExport: () -> Unit = {},
 ) {
     val chapter = chapterWithContext.chapter
 
@@ -201,6 +207,10 @@ internal fun ChaptersScreenChapterItem(
                             audioFileExists = audioTranslatedFileExists,
                             enabled = translatedAudioAvailable || audioTranslatedJob != null,
                             onAudio = stableOnAudioTranslated
+                        )
+                        ChapterVideoButton(
+                            videoJob = videoExportJob,
+                            onVideo = remember(onVideoExport) { onVideoExport }
                         )
                     }
                 },
@@ -341,6 +351,103 @@ private fun ChapterAudioButton(
                     contentDescription = contentDescription,
                     tint = if (clickable) LocalContentColor.current
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Иконка видео-экспорта главы (MP4).
+ * Состояния:
+ * - нет задачи → контурный Videocam (клик = запуск экспорта);
+ * - QUEUED/RUNNING → кольцо прогресса с процентами;
+ * - SUCCESS → залитый Videocam + галочка (клик = открыть);
+ * - FAILED → залитый Videocam + стрелка повтора (клик = повтор).
+ */
+@Composable
+private fun ChapterVideoButton(
+    videoJob: VideoExportJobState?,
+    onVideo: () -> Unit
+) {
+    val status = videoJob?.status
+    val running = status == VideoExportJobStatus.QUEUED || status == VideoExportJobStatus.RUNNING
+
+    when {
+        running -> {
+            val percent = (videoJob!!.progress).coerceIn(0, 100)
+            val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
+            IconButton(onClick = onVideo) {
+                Box {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        progress = { percent / 100f },
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        text = "$percent",
+                        modifier = Modifier.align(Alignment.Center),
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = "$progressDesc",
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        }
+
+        status == VideoExportJobStatus.SUCCESS && videoJob!!.documentUri.isNotBlank() -> {
+            IconButton(onClick = onVideo) {
+                Box {
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        status == VideoExportJobStatus.FAILED -> {
+            IconButton(onClick = onVideo) {
+                Box {
+                    Icon(
+                        Icons.Filled.Videocam,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        else -> {
+            IconButton(onClick = onVideo) {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    contentDescription = stringResource(StringsR.string.tts_video_chapter_action),
                 )
             }
         }

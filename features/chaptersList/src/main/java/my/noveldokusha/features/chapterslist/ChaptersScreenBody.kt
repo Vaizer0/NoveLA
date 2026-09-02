@@ -48,6 +48,7 @@ internal fun ChaptersScreenBody(
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
     onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
+    onChapterVideo: (chapter: ChapterWithContext) -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -197,7 +198,9 @@ internal fun ChaptersScreenBody(
                     onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
                     onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
                     translatedAudioAvailable =
-                        state.translatedAudioAvailable.value[it.chapter.url] ?: false
+                        state.translatedAudioAvailable.value[it.chapter.url] ?: false,
+                    videoExportJob = state.videoJobs[it.chapter.url],
+                    onVideoExport = { onChapterVideo(it) }
                 )
             }
 

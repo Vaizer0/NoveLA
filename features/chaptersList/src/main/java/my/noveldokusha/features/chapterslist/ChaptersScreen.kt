@@ -119,8 +119,11 @@ internal fun ChaptersScreen(
     onSelectionModeChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
     onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
+    onChapterVideo: (chapter: ChapterWithContext) -> Unit,
     onAudioDirectorySaved: (uri: String) -> Unit,
     onAudioFolderCancel: () -> Unit,
+    onVideoDirectorySaved: (uri: String) -> Unit,
+    onVideoFolderCancel: () -> Unit,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onChangeCover: () -> Unit,
@@ -205,6 +208,33 @@ internal fun ChaptersScreen(
     LaunchedEffect(state.audioNeedDirectory.value) {
         if (state.audioNeedDirectory.value) {
             audioDirectoryPicker.launch(null)
+        }
+    }
+
+    // Folder picker for chapter video exports (MP4)
+    val videoDirectoryPicker = rememberLauncherForActivityResult(
+        contract = OpenDocumentTreeReadPersistent()
+    ) { uri ->
+        if (uri == null) {
+            // Пользователь закрыл пикер без выбора — сбрасываем ожидание папки.
+            onVideoFolderCancel()
+        } else {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (e: SecurityException) {
+                Timber.w("Video: не удалось получить persistable permission для $uri: ${e.message}")
+            }
+            onVideoDirectorySaved(uri.toString())
+        }
+    }
+
+    // Когда потребовалась папка видео-экспорта — открываем SAF-пикер автоматически.
+    LaunchedEffect(state.videoNeedDirectory.value) {
+        if (state.videoNeedDirectory.value) {
+            videoDirectoryPicker.launch(null)
         }
     }
 
@@ -381,6 +411,7 @@ internal fun ChaptersScreen(
                 onChapterLongClick = if (state.isInSelectionMode.value) onSelectionModeChapterLongClick else onChapterLongClick,
                 onChapterDownload = onChapterDownload,
                 onChapterAudio = onChapterAudio,
+                onChapterVideo = onChapterVideo,
                 onPullRefresh = onPullRefresh,
                 onCoverLongClick = onCoverLongClick,
                 onGlobalSearchClick = onGlobalSearchClick,
