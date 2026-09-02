@@ -129,7 +129,7 @@ object VideoExportQueue {
     }
 }
 
-/** Flat request passed to [VideoExportQueue.enqueue]. Not [TtsVideoExportRequest]. */
+/** Flat request passed to [VideoExportQueue.enqueue]. */
 data class VideoExportWorkRequest(
     val jobId: String,
     val novelTitle: String,

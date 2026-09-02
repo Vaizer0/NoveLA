@@ -11,7 +11,7 @@ import org.json.JSONObject
  * ТОЛЬКО его потребляет и никогда не читает текущие настройки читалки.
  *
  * Сериализуется в JSON (org.json, как [ReaderVisualSnapshot]) и передаётся в
- * [TtsVideoExportRequest]; структура версионируется полем [schemaVersion].
+ * воркер через WorkManager input; структура версионируется полем [schemaVersion].
  *
  * Отдельный от [ReaderVisualSnapshot] слепок: видео — самостоятельная
  * визуальная система, а не «набор лишних полей читалки». Значения резолвятся
