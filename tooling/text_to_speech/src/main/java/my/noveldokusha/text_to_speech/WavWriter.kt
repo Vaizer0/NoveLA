@@ -23,6 +23,7 @@ class WavWriter(private val tempFile: File) {
             }
             return
         }
+        require(sampleRateInHz > 0 && channelCount > 0) { "Invalid PCM format: $sampleRateInHz/$channelCount" }
         sampleRate = sampleRateInHz
         channels = channelCount
         outputStream = FileOutputStream(tempFile).also { it.write(placeholderHeader()) }
@@ -31,6 +32,7 @@ class WavWriter(private val tempFile: File) {
 
     fun writePcm(pcm: ByteArray) {
         check(headerWritten) { "WavWriter.open() must be called before writePcm()" }
+        if (pcm.isEmpty()) return
         if (dataSize + pcm.size > MAX_WAV_DATA_SIZE) throw AudioTooLargeException("WAV data exceeds the 4GB RIFF limit")
         checkNotNull(outputStream).write(pcm)
         dataSize += pcm.size
@@ -38,6 +40,7 @@ class WavWriter(private val tempFile: File) {
 
     fun finish() {
         check(headerWritten) { "WavWriter.finish() called before any audio was written" }
+        check(dataSize > 0L) { "TTS synthesis produced zero PCM audio" }
         checkNotNull(outputStream).flush()
         checkNotNull(outputStream).close()
         outputStream = null
