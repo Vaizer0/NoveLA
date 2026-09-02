@@ -16,6 +16,7 @@ dependencies {
     implementation(libs.material)
 
     testImplementation(libs.test.junit)
+    testImplementation("org.json:json:20260814")
 
     implementation(libs.timber)
 }
