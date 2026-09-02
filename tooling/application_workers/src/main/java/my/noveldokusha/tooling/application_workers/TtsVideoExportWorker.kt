@@ -19,7 +19,9 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TtsVideoJobState
 import my.noveldokusha.core.appPreferences.TtsVideoJobStatus
@@ -39,20 +41,22 @@ import java.io.File
 
 class TtsVideoExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     @EntryPoint @InstallIn(SingletonComponent::class)
-    interface EntryPointAccess { fun appDatabase(): AppDatabase }
+    interface EntryPointAccess { fun appDatabase(): AppDatabase; fun appPreferences(): AppPreferences }
 
     override suspend fun doWork(): Result {
         val request = inputData.getString(KEY_REQUEST_JSON)?.toTtsVideoRequest() ?: return Result.failure()
         val prefs = TtsVideoPreferences(applicationContext)
         update(prefs, request, TtsVideoJobStatus.RUNNING, 1)
         val entry = EntryPointAccessors.fromApplication(applicationContext, EntryPointAccess::class.java)
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         try {
             try {
                 setForeground(
                     ForegroundInfo(
                         NOTIFICATION_ID,
                         notification(request.chapterTitle, 1),
-                        if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
+                        if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                        else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                     )
                 )
             } catch (e: CancellationException) {
@@ -61,7 +65,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
                 throw TtsExportException("Unable to promote video export to foreground: ${e.message ?: "unknown error"}")
             }
 
-            val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), request) }
+            val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), entry.appPreferences(), request) }
                 ?: return fail(prefs, request, if (request.source == TtsAudioSource.TRANSLATED) "Cached translation is missing" else "Chapter text is not downloaded")
             if (request.source == TtsAudioSource.TRANSLATED && textBlocks.isEmpty()) return fail(prefs, request, "Cached translation is empty")
 
@@ -74,17 +78,21 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
                 artworkBitmaps = request.visual.artworkUris.mapNotNull(renderer::loadBitmap),
             )
             val synthesis = TtsVideoAudioSynthesizer(applicationContext).synthesize(request, textBlocks, wav) { f ->
+                enforceRuntimeBudget(startedAt)
                 val p = (f * 45f).toInt().coerceIn(1, 45)
                 update(prefs, request, TtsVideoJobStatus.RUNNING, p)
                 setProgressAsync(Data.Builder().putInt("progress", p).build())
             }
+            enforceRuntimeBudget(startedAt)
             val timeline = TtsVideoTimelineBuilder.build(synthesis.chunks, synthesis.sampleRate)
             update(prefs, request, TtsVideoJobStatus.RUNNING, 50)
             TtsVideoMp4Encoder().encode(wav, mp4, timeline, request.visual, renderer, snapshot) { f ->
+                enforceRuntimeBudget(startedAt)
                 val p = (50 + f * 45f).toInt().coerceIn(50, 95)
                 update(prefs, request, TtsVideoJobStatus.RUNNING, p)
                 setProgressAsync(Data.Builder().putInt("progress", p).build())
             }
+            enforceRuntimeBudget(startedAt)
             val outUri = withContext(Dispatchers.IO) {
                 publish(applicationContext, Uri.parse(request.outputDirectoryUri), request, mp4)
             } ?: return fail(prefs, request, "Unable to create video file")
@@ -100,16 +108,24 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         }
     }
 
-    private suspend fun loadText(db: AppDatabase, request: TtsVideoRequest): List<String>? = if (request.source == TtsAudioSource.ORIGINAL) {
-        db.chapterBodyDao().get(request.chapterUrl)?.body?.let { TtsTextPreparer.paragraphsFromBody(it) }
+    private fun enforceRuntimeBudget(startedAt: Long) {
+        // Android 15 limits mediaProcessing foreground services to 6h/24h. Stop this
+        // worker before the platform timeout so persisted job state remains recoverable.
+        if (android.os.SystemClock.elapsedRealtime() - startedAt >= MAX_RUNTIME_MS) {
+            throw TtsExportException("Video export exceeded its runtime budget; retry to continue")
+        }
+    }
+
+    private suspend fun loadText(db: AppDatabase, appPreferences: AppPreferences, request: TtsVideoRequest): List<String>? = if (request.source == TtsAudioSource.ORIGINAL) {
+        db.chapterBodyDao().get(request.chapterUrl)?.body?.let { TtsTextPreparer.paragraphsFromBody(it, appPreferences.effectiveRegexRules(request.novelUrl)) }
     } else {
         val row = db.chapterTranslationDao().getTranslations(request.chapterUrl, request.translationSourceLang, request.translationTargetLang) ?: return null
         if (row.translatedParagraphs.isBlank()) return emptyList()
         try {
             val a = JSONArray(row.translatedParagraphs)
-            (0 until a.length()).map { index ->
-                if (!a.isNull(index)) a.getString(index) else ""
-            }.filter(String::isNotBlank)
+            (0 until a.length()).map { index -> if (!a.isNull(index)) a.getString(index) else "" }
+                .map { TtsTextPreparer.paragraphsFromBody(it, appPreferences.effectiveRegexRules(request.novelUrl)).joinToString(" ") }
+                .filter(String::isNotBlank)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -123,8 +139,8 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         val suffix = if (request.source == TtsAudioSource.TRANSLATED) "Translated" else "Original"
         val name = "Chapter ${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)} [$suffix].mp4"
         val resolver = context.contentResolver
-        // Existing MP4 is intentionally replaced in place; the deterministic job identity
-        // and filename make re-export overwrite predictable rather than producing "(1)" copies.
+        // Existing MP4 is intentionally replaced in place; deterministic job identity
+        // and filename make re-export overwrite predictable rather than "(1)" copies.
         val existing = findDocument(context, novelChild, name)
         val target = existing ?: DocumentsContract.createDocument(resolver, novelChild, "video/mp4", name) ?: return null
         try {
@@ -138,13 +154,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
 
     private fun findDocument(context: Context, parent: Uri, name: String): Uri? {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(parent, DocumentsContract.getTreeDocumentId(parent))
-        context.contentResolver.query(
-            children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),
-            null,
-            null,
-            null,
-        ).use { c ->
+        context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null).use { c ->
             if (c != null) while (c.moveToNext()) {
                 if (c.getString(1) == name && c.getString(2) == "video/mp4") return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
             }
@@ -154,13 +164,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
 
     private fun findOrCreateDirectory(context: Context, parent: Uri, name: String): Uri? {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(parent, DocumentsContract.getTreeDocumentId(parent))
-        context.contentResolver.query(
-            children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),
-            null,
-            null,
-            null,
-        ).use { c ->
+        context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null).use { c ->
             if (c != null) while (c.moveToNext()) {
                 if (c.getString(1) == name && c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
             }
@@ -183,8 +187,8 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
     }
 
     private fun notification(title: String, progress: Int): Notification {
-        val m = applicationContext.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26) m.createNotificationChannel(NotificationChannel(CHANNEL, "TTS Video", NotificationManager.IMPORTANCE_LOW))
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(CHANNEL, "TTS Video", NotificationManager.IMPORTANCE_LOW))
         return NotificationCompat.Builder(applicationContext, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle("Creating video")
@@ -198,5 +202,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         const val KEY_REQUEST_JSON = "tts_video_request_json"
         private const val CHANNEL = "tts_video_export"
         private const val NOTIFICATION_ID = 49017
+        // Keep below Android 15's six-hour media-processing FGS timeout.
+        private const val MAX_RUNTIME_MS = 5L * 60L * 60L * 1000L + 45L * 60L * 1000L
     }
 }
