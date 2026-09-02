@@ -24,6 +24,7 @@ import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TtsVideoJobState
 import my.noveldokusha.core.appPreferences.TtsVideoJobStatus
 import my.noveldokusha.feature.local_database.AppDatabase
+import my.noveldokusha.text_to_speech.TtsExportException
 import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.text_to_speech.TtsVideoAudioSynthesizer
 import my.noveldokusha.text_to_speech.TtsVideoCompositionRenderer
@@ -46,13 +47,20 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         update(prefs, request, TtsVideoJobStatus.RUNNING, 1)
         val entry = EntryPointAccessors.fromApplication(applicationContext, EntryPointAccess::class.java)
         try {
-            setForeground(
-                ForegroundInfo(
-                    NOTIFICATION_ID,
-                    notification(request.chapterTitle, 1),
-                    if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
+            try {
+                setForeground(
+                    ForegroundInfo(
+                        NOTIFICATION_ID,
+                        notification(request.chapterTitle, 1),
+                        if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
+                    )
                 )
-            )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                throw TtsExportException("Unable to promote video export to foreground: ${e.message ?: "unknown error"}")
+            }
+
             val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), request) }
                 ?: return fail(prefs, request, if (request.source == TtsAudioSource.TRANSLATED) "Cached translation is missing" else "Chapter text is not downloaded")
             if (request.source == TtsAudioSource.TRANSLATED && textBlocks.isEmpty()) return fail(prefs, request, "Cached translation is empty")
@@ -96,10 +104,17 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         db.chapterBodyDao().get(request.chapterUrl)?.body?.let { TtsTextPreparer.paragraphsFromBody(it) }
     } else {
         val row = db.chapterTranslationDao().getTranslations(request.chapterUrl, request.translationSourceLang, request.translationTargetLang) ?: return null
-        runCatching {
+        if (row.translatedParagraphs.isBlank()) return emptyList()
+        try {
             val a = JSONArray(row.translatedParagraphs)
-            (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) }
-        }.getOrNull()
+            (0 until a.length()).map { index ->
+                if (!a.isNull(index)) a.getString(index) else ""
+            }.filter(String::isNotBlank)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw TtsExportException("Cached translation JSON is malformed: ${e.message ?: "invalid JSON"}", e)
+        }
     }
 
     private fun publish(context: Context, root: Uri, request: TtsVideoRequest, file: File): Uri? {
@@ -108,6 +123,8 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         val suffix = if (request.source == TtsAudioSource.TRANSLATED) "Translated" else "Original"
         val name = "Chapter ${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)} [$suffix].mp4"
         val resolver = context.contentResolver
+        // Existing MP4 is intentionally replaced in place; the deterministic job identity
+        // and filename make re-export overwrite predictable rather than producing "(1)" copies.
         val existing = findDocument(context, novelChild, name)
         val target = existing ?: DocumentsContract.createDocument(resolver, novelChild, "video/mp4", name) ?: return null
         try {
@@ -168,7 +185,13 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
     private fun notification(title: String, progress: Int): Notification {
         val m = applicationContext.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) m.createNotificationChannel(NotificationChannel(CHANNEL, "TTS Video", NotificationManager.IMPORTANCE_LOW))
-        return NotificationCompat.Builder(applicationContext, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Creating video").setContentText(title).setProgress(100, progress, false).setOngoing(true).build()
+        return NotificationCompat.Builder(applicationContext, CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle("Creating video")
+            .setContentText(title)
+            .setProgress(100, progress, false)
+            .setOngoing(true)
+            .build()
     }
 
     companion object {
