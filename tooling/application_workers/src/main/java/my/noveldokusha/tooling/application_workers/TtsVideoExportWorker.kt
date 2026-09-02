@@ -31,6 +31,7 @@ import my.noveldokusha.text_to_speech.TtsVideoMp4Encoder
 import my.noveldokusha.text_to_speech.TtsVideoPreferences
 import my.noveldokusha.text_to_speech.TtsVideoRequest
 import my.noveldokusha.text_to_speech.TtsVideoTimelineBuilder
+import my.noveldokusha.text_to_speech.serialize
 import my.noveldokusha.text_to_speech.toTtsVideoRequest
 import org.json.JSONArray
 import java.io.File
@@ -94,11 +95,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
     private suspend fun loadText(db: AppDatabase, request: TtsVideoRequest): List<String>? = if (request.source == TtsAudioSource.ORIGINAL) {
         db.chapterBodyDao().get(request.chapterUrl)?.body?.let { TtsTextPreparer.paragraphsFromBody(it) }
     } else {
-        val row = db.chapterTranslationDao().getTranslations(
-            request.chapterUrl,
-            request.translationSourceLang,
-            request.translationTargetLang,
-        ) ?: return null
+        val row = db.chapterTranslationDao().getTranslations(request.chapterUrl, request.translationSourceLang, request.translationTargetLang) ?: return null
         runCatching {
             val a = JSONArray(row.translatedParagraphs)
             (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) }
@@ -114,9 +111,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         val existing = findDocument(context, novelChild, name)
         val target = existing ?: DocumentsContract.createDocument(resolver, novelChild, "video/mp4", name) ?: return null
         try {
-            resolver.openOutputStream(target, "wt")?.use { out ->
-                file.inputStream().use { input -> input.copyTo(out) }
-            } ?: return null
+            resolver.openOutputStream(target, "wt")?.use { out -> file.inputStream().use { input -> input.copyTo(out) } } ?: return null
             return target
         } catch (_: Throwable) {
             if (existing == null) runCatching { DocumentsContract.deleteDocument(resolver, target) }
@@ -134,9 +129,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
             null,
         ).use { c ->
             if (c != null) while (c.moveToNext()) {
-                if (c.getString(1) == name && c.getString(2) == "video/mp4") {
-                    return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
-                }
+                if (c.getString(1) == name && c.getString(2) == "video/mp4") return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
             }
         }
         return null
@@ -152,37 +145,18 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
             null,
         ).use { c ->
             if (c != null) while (c.moveToNext()) {
-                if (c.getString(1) == name && c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
-                }
+                if (c.getString(1) == name && c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) return DocumentsContract.buildDocumentUriUsingTree(parent, c.getString(0))
             }
         }
         return DocumentsContract.createDocument(context.contentResolver, parent, DocumentsContract.Document.MIME_TYPE_DIR, name)
     }
 
-    private fun sanitize(s: String) = s
-        .replace(Regex("[\\/:*?\"<>|]"), "_")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .take(180)
+    private fun sanitize(s: String) = s.replace(Regex("[\\/:*?\"<>|]"), "_").replace(Regex("\\s+"), " ").trim().take(180)
 
-    private fun update(
-        p: TtsVideoPreferences,
-        r: TtsVideoRequest,
-        status: TtsVideoJobStatus,
-        progress: Int,
-        output: String = "",
-        message: String = "",
-    ) {
+    private fun update(p: TtsVideoPreferences, r: TtsVideoRequest, status: TtsVideoJobStatus, progress: Int, output: String = "", message: String = "") {
         val jobs = p.jobs().toMutableMap()
         val old = jobs[r.jobId] ?: TtsVideoJobState(r.chapterUrl, r.novelUrl, r.chapterTitle, r.source, status)
-        jobs[r.jobId] = old.copy(
-            status = status,
-            progress = progress,
-            requestJson = r.serialize(),
-            outputUri = output.ifBlank { old.outputUri },
-            message = message,
-        )
+        jobs[r.jobId] = old.copy(status = status, progress = progress, requestJson = r.serialize(), outputUri = output.ifBlank { old.outputUri }, message = message)
         p.saveJobs(jobs)
     }
 
@@ -194,13 +168,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
     private fun notification(title: String, progress: Int): Notification {
         val m = applicationContext.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) m.createNotificationChannel(NotificationChannel(CHANNEL, "TTS Video", NotificationManager.IMPORTANCE_LOW))
-        return NotificationCompat.Builder(applicationContext, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("Creating video")
-            .setContentText(title)
-            .setProgress(100, progress, false)
-            .setOngoing(true)
-            .build()
+        return NotificationCompat.Builder(applicationContext, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Creating video").setContentText(title).setProgress(100, progress, false).setOngoing(true).build()
     }
 
     companion object {
