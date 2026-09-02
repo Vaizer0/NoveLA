@@ -28,11 +28,48 @@ data class ParagraphTiming(
     val wordTimings: List<WordTiming>,
 )
 
+/**
+ * Вступительная озвучка названия главы (то же, что озвучивает живая читалка
+ * при переходе на главу). Пока произносится заголовок — видео показывает
+ * крупный титул и подсвечивает слова в такт звуку; затем конвейер абзацев.
+ */
+data class TitleTiming(
+    /** Текст титула, который рисуется и озвучивается (координаты слов). */
+    val displayText: String,
+    /** Первый семпл титула (обычно 0). */
+    val startSample: Long,
+    /** Семпл сразу после последнего слова титула (= начало первого абзаца). */
+    val endSample: Long,
+    /** Тайминги слов титула, отсортированные по samplePosition. */
+    val wordTimings: List<WordTiming>,
+) {
+    /** Слово титула, звучащее в момент [sample]. */
+    fun wordAtSample(sample: Long): WordTiming? {
+        if (wordTimings.isEmpty()) return null
+        var lo = 0
+        var hi = wordTimings.lastIndex
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            val w = wordTimings[mid]
+            if (sample < w.samplePosition) {
+                hi = mid - 1
+            } else {
+                lo = mid + 1
+            }
+        }
+        val found = wordTimings.getOrNull(hi)
+        if (found != null && sample >= found.samplePosition) return found
+        return wordTimings.firstOrNull()
+    }
+}
+
 data class VideoExportTimeline(
     val sampleRate: Int,
     val channelCount: Int,
     val totalSamples: Long,
     val paragraphs: List<ParagraphTiming>,
+    /** Озвученное название главы в начале; null — вступление отключено. */
+    val title: TitleTiming? = null,
 ) {
 
     /** Абзац, активный в момент [sample]. null до первого и после последнего. */

@@ -71,6 +71,8 @@ class VideoFrameRenderer(
 
     /** Детерминированное состояние кадра: что и где рисовать. */
     data class FramePlan(
+        /** true — идёт озвучка названия главы: рисуется только титул. */
+        val chapterIntro: Boolean = false,
         /** Старый prev (i-2), растворяющийся в переходе. */
         val fadingOut: SlotFrame? = null,
         val prev: SlotFrame? = null,
@@ -84,6 +86,11 @@ class VideoFrameRenderer(
         private const val HIGHLIGHT_PAD_Y = 3f
         private const val HIGHLIGHT_RADIUS = 6f
         private const val HIGHLIGHT_ALPHA = 0x80
+
+        /** Крупный шрифт титула во вступлении (после озвучки — обычная шапка). */
+        const val TITLE_INTRO_FONT_PX = 64f
+        const val TITLE_INTRO_MAX_LINES = 2
+        const val TITLE_INTRO_CAPTION_FONT_PX = 30f
 
         /**
          * Разрешает цвета карточки из реальной темы приложения: заливка —
@@ -127,6 +134,25 @@ class VideoFrameRenderer(
         }
 
         private const val DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
+
+        /**
+         * Layout крупного титула во вступлении (общий с QA-тестом). Тот же
+         * builder используется и при подсветке слов — rect'ы глифов точные.
+         */
+        fun buildTitleIntroLayout(text: String, typeface: Typeface, textColorArgb: Int): StaticLayout {
+            val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.typeface = typeface
+                color = textColorArgb
+                textSize = TITLE_INTRO_FONT_PX
+            }
+            return StaticLayout.Builder
+                .obtain(text, 0, text.length, paint, VideoLayoutSpec.CARD_TEXT_WIDTH.toInt())
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setIncludePad(false)
+                .setMaxLines(TITLE_INTRO_MAX_LINES)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .build()
+        }
     }
 
     private val layoutCache = ParagraphLayoutCache(snapshot, typeface, resolvedTextColorArgb)
@@ -157,6 +183,11 @@ class VideoFrameRenderer(
      * в prev, следующий поднимается в current, новый следующий всплывает снизу.
      */
     fun framePlan(sample: Long): FramePlan {
+        val intro = timeline.title
+        if (intro != null && sample < intro.endSample) {
+            // Идёт озвучка названия главы — титульный кадр.
+            return FramePlan(chapterIntro = true)
+        }
         val ps = timeline.paragraphs
         if (ps.isEmpty()) return FramePlan()
 
@@ -240,12 +271,76 @@ class VideoFrameRenderer(
     /** Рисует кадр [sample] на [canvas] (должен быть 1920×1080). */
     fun renderFrame(canvas: Canvas, sample: Long) {
         drawBackground(canvas)
-        drawHeader(canvas)
         val plan = framePlan(sample)
+        if (plan.chapterIntro) {
+            drawChapterIntro(canvas, sample)
+            return
+        }
+        drawHeader(canvas)
         plan.fadingOut?.let { drawSlot(canvas, it) }
         plan.prev?.let { drawSlot(canvas, it) }
         plan.next?.let { drawSlot(canvas, it) }
         plan.current?.let { drawCardSlot(canvas, it) }
+    }
+
+    /**
+     * Вступление: пока озвучивается название главы ([TitleTiming]) — крупный
+     * титул по центру карточки с подсветкой текущего слова; после — обычная
+     * приглушённая шапка и конвейер абзацев.
+     */
+    private fun drawChapterIntro(canvas: Canvas, sample: Long) {
+        val title = timeline.title ?: return
+        val layout = introLayout(title.displayText)
+
+        canvas.save()
+        canvas.translate((VideoLayoutSpec.MARGIN_X + VideoLayoutSpec.CARD_PAD_H).toFloat(), 0f)
+        var yCursor = introTop(layout.height.toFloat())
+        if (novelTitle.isNotBlank()) {
+            drawIntroCaption(canvas, yCursor)
+            yCursor += TITLE_INTRO_CAPTION_FONT_PX + 16f
+        }
+
+        canvas.save()
+        canvas.translate(0f, yCursor)
+        val range = title.wordAtSample(sample)?.displayRange
+        if (range != null && !range.isEmpty()) {
+            val rects = HighlightSpan.wordRects(layout, range.first, range.last + 1, HIGHLIGHT_PAD_Y)
+            val hpaint = HighlightSpan.paint(snapshot.ttsHighlightColorArgb)
+            hpaint.alpha = HIGHLIGHT_ALPHA
+            for (rc in rects) {
+                canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
+            }
+        }
+        layout.draw(canvas)
+        canvas.restore()
+
+        canvas.restore()
+    }
+
+    /** Верх титульного блока: блок центрируется по вертикали карточки. */
+    private fun introTop(titleHeight: Float): Float {
+        val area = VideoLayoutSpec.cardRect()
+        val block = titleHeight + (if (novelTitle.isNotBlank()) TITLE_INTRO_CAPTION_FONT_PX + 16f else 0f)
+        return (area.top + (area.height() - block) / 2f).coerceAtLeast(area.top)
+    }
+
+    private fun drawIntroCaption(canvas: Canvas, top: Float) {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = (headerTextColor and 0x00FFFFFF) or ((0xFF * HEADER_ALPHA).toInt() shl 24)
+            textSize = TITLE_INTRO_CAPTION_FONT_PX
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(novelTitle, VideoLayoutSpec.CARD_TEXT_WIDTH / 2f, top + TITLE_INTRO_CAPTION_FONT_PX, paint)
+    }
+
+    /** Layout титула (кэшируется — титул не меняется в течение кадра/экспорта). */
+    private var introLayoutCache: StaticLayout? = null
+
+    private fun introLayout(text: String): StaticLayout {
+        introLayoutCache?.let { return it }
+        val layout = buildTitleIntroLayout(text, typeface, headerTextColor)
+        introLayoutCache = layout
+        return layout
     }
 
     private fun drawBackground(canvas: Canvas) {

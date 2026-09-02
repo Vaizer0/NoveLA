@@ -34,6 +34,9 @@ class TtsTimelineCollector(
      * Синтезирует [displayParagraphs] и возвращает Pair<tempWav, timeline>.
      *
      * @param displayParagraphs абзацы ТОЧНО так, как они будут рендериться.
+     * @param titleText необязательное название главы: если задано, сначала
+     *   озвучивается оно (как титул живой читалки), и видео показывает титул
+     *   с подсветкой слов до начала абзацев.
      */
     suspend fun collectTimeline(
         displayParagraphs: List<String>,
@@ -42,6 +45,7 @@ class TtsTimelineCollector(
         speed: Float,
         pitch: Float,
         destFile: File,
+        titleText: String = "",
         onProgress: (Float) -> Unit = {},
     ): Pair<File, VideoExportTimeline> {
         if (displayParagraphs.isEmpty()) {
@@ -56,6 +60,9 @@ class TtsTimelineCollector(
         val paragraphStartSample = LongArray(displayParagraphs.size) { -1L }
         val paragraphEndSample = LongArray(displayParagraphs.size) { -1L }
 
+        val titleWordTimings = mutableListOf<WordTiming>()
+        var titleStartSample = 0L
+
         var sampleRate = 0
         var channelCount = 0
         var properFormatSeen = false
@@ -69,9 +76,30 @@ class TtsTimelineCollector(
             tts.setSpeechRate(speed)
             tts.setPitch(pitch)
 
-            // План синтеза: для каждого абзаца — карта char-офсетов и куски. Текст
-            // каждого куска запоминаем явно, чтобы не строить по индексам повторно.
+            // План синтеза: титул (paraIndex = -1), затем для каждого абзаца — карта
+            // char-офсетов и куски. Текст каждого куска запоминаем явно, чтобы не
+            // строить по индексам повторно.
             val chunkPlans = buildList {
+                if (titleText.isNotBlank()) {
+                    val cleanedWithMap = TtsTextPreparer.cleanForTtsWithMap(titleText)
+                    val cleaned = cleanedWithMap.cleaned
+                    if (!TtsTextPreparer.isOnlyDecorators(cleaned)) {
+                        val chunks = TtsTextPreparer.chunkIntoUtterances(cleaned, syntheInputLength)
+                        var offset = 0
+                        for (chunk in chunks) {
+                            add(
+                                ChunkPlan(
+                                    paraIndex = -1,
+                                    map = cleanedWithMap.map,
+                                    text = chunk,
+                                    cleanedStart = offset,
+                                    cleanedEnd = offset + chunk.length,
+                                )
+                            )
+                            offset += chunk.length
+                        }
+                    }
+                }
                 for ((paraIndex, display) in displayParagraphs.withIndex()) {
                     val cleanedWithMap = TtsTextPreparer.cleanForTtsWithMap(display)
                     val cleaned = cleanedWithMap.cleaned
@@ -95,13 +123,18 @@ class TtsTimelineCollector(
             val totalChars = chunkPlans.sumOf { it.text.length }
             var absoluteSample = 0L
             var synthesizedAny = false
-            var currentPara = -1
+            var currentPara = -2
+            var titleEndSample = -1L
             var processedChars = 0
 
             for (plan in chunkPlans) {
                 if (plan.paraIndex != currentPara) {
                     currentPara = plan.paraIndex
-                    paragraphStartSample[currentPara] = absoluteSample
+                    if (currentPara >= 0) {
+                        paragraphStartSample[currentPara] = absoluteSample
+                    } else {
+                        titleStartSample = absoluteSample
+                    }
                 }
                 // Прогресс-вес куска — его необработанная длина на общий объём.
                 val afterChars = processedChars + plan.text.length
@@ -112,7 +145,8 @@ class TtsTimelineCollector(
                     writer = writer,
                     chapterTitle = "video export",
                     plan = plan,
-                    wordTimings = wordTimingsByParagraph[plan.paraIndex],
+                    wordTimings = if (plan.paraIndex < 0) titleWordTimings
+                    else wordTimingsByParagraph[plan.paraIndex],
                     onFormat = { rate, ch ->
                         if (!properFormatSeen) {
                             sampleRate = rate
@@ -122,6 +156,9 @@ class TtsTimelineCollector(
                     },
                     onChunkAdvanced = { writtenBytes -> absoluteSample = writtenBytes },
                 )
+                // Конец вступления = начало первого абзаца (absoluteSample уже
+                // продвинут завершившимся последним куском титула в onChunkAdvanced).
+                if (plan.paraIndex < 0) titleEndSample = absoluteSample
                 synthesizedAny = if (writer.dataBytesWritten() > 0) true else synthesizedAny
                 processedChars = afterChars
                 onProgress(
@@ -165,11 +202,22 @@ class TtsTimelineCollector(
                 )
             }
 
+            val title = if (titleWordTimings.isNotEmpty()) {
+                TitleTiming(
+                    displayText = titleText,
+                    startSample = titleStartSample,
+                    endSample = titleEndSample.coerceAtLeast(paragraphStartSample[0]),
+                    wordTimings = titleWordTimings.sortedBy { it.samplePosition },
+                )
+            } else {
+                null
+            }
             val timeline = VideoExportTimeline(
                 sampleRate = sampleRate,
                 channelCount = channelCount,
                 totalSamples = totalSamples,
                 paragraphs = paragraphs,
+                title = title,
             )
             return destFile to timeline
         } finally {

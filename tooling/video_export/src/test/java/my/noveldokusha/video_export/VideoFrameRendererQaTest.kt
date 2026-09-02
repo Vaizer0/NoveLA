@@ -395,6 +395,83 @@ class VideoFrameRendererQaTest {
         assertWordTimings(timeline, midSample(timeline.paragraphs[2]))
     }
 
+    @Test
+    fun chapterIntroQa() {
+        val snap = snapshot()
+        val typeface = Typeface.create("serif", Typeface.NORMAL)
+        val textColor = VideoFrameRenderer.resolveTextColor(snap)
+
+        val titleText = "The Mud Road Awakens"
+        val words = wordRanges(titleText).mapIndexed { k, r ->
+            WordTiming(displayRange = r, samplePosition = k * 250_000L)
+        }
+        val titleEnd = words.last().samplePosition + 120_000L
+        val firstStart = titleEnd + 50_000L
+
+        val first = ParagraphTiming(
+            displayText = veryShort,
+            cleanedText = veryShort,
+            startSample = firstStart,
+            endSample = firstStart + 900_000L,
+            wordTimings = listOf(WordTiming(0 until veryShort.length, firstStart + 100_000L)),
+        )
+        val tl = VideoExportTimeline(
+            sampleRate = sampleRate,
+            channelCount = 1,
+            totalSamples = first.endSample,
+            paragraphs = listOf(first),
+            title = TitleTiming(
+                displayText = titleText,
+                startSample = 0L,
+                endSample = titleEnd,
+                wordTimings = words,
+            ),
+        )
+        val renderer = VideoFrameRenderer(
+            snapshot = snap,
+            timeline = tl,
+            typeface = typeface,
+            resolvedTextColorArgb = textColor,
+            cardFillArgb = VideoFrameRenderer.CardColors.blueprint().fillArgb,
+            cardStrokeArgb = VideoFrameRenderer.CardColors.blueprint().strokeArgb,
+            novelTitle = "The Cartographer's Apprentice",
+            chapterTitle = titleText,
+        )
+
+        // Во время озвучки титула — только титульный кадр, никакой карточки.
+        assertTrue("титульный кадр на 0", renderer.framePlan(0L).chapterIntro)
+        assertTrue(
+            "титульный кадр на середине слова",
+            renderer.framePlan(words[1].samplePosition + 10_000L).chapterIntro,
+        )
+
+        // Подсветка слова титула выровнена по глифам его layout-а.
+        val layout = VideoFrameRenderer.buildTitleIntroLayout(titleText, typeface, textColor)
+        for (w in words) {
+            val rects = my.noveldokusha.reader_visuals.HighlightSpan.wordRects(
+                layout, w.displayRange.first, w.displayRange.last + 1, 3f,
+            )
+            assertTrue("титульная подсветка даёт rect'ы", rects.isNotEmpty())
+            for (r in rects) {
+                assertTrue("титул left<right", r.left < r.right)
+                assertTrue("титул top<bottom", r.top < r.bottom)
+                assertTrue("титул внутри ширины", r.right <= layout.width + 1f)
+            }
+        }
+
+        val introBitmap = renderFrameToBitmap(renderer, words[1].samplePosition + 10_000L)
+        assertFrameNotEmpty(introBitmap)
+        savePng(introBitmap, "14_chapter_intro.png")
+
+        // После титула — обычный конвейер абзацев.
+        val contentPlan = renderer.framePlan(firstStart + 200_000L)
+        assertFalse("после титула конвейер", contentPlan.chapterIntro)
+        assertGeometry(contentPlan)
+        val contentBitmap = renderFrameToBitmap(renderer, firstStart + 200_000L)
+        assertFrameNotEmpty(contentBitmap)
+        savePng(contentBitmap, "15_chapter_content_after_intro.png")
+    }
+
     private fun scenario(prefix: String, paragraphs: List<String>) {
         val (renderer, timeline) = renderer(paragraphs)
         val sample = midSample(timeline.paragraphs.first())
