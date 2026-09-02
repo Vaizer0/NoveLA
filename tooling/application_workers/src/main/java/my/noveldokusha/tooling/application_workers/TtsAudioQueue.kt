@@ -152,22 +152,25 @@ object TtsAudioQueue {
         }
     }
 
-    /** Атомарное обновление состояния [jobId]. */
+    /**
+     * Атомарное обновление состояния [jobId].
+     *
+     * [transform] получает текущую запись (null, если её уже нет — например, после
+     * [cancelAll], удаляющей активные записи) и возвращает новое значение. Возврат
+     * null означает «ничего не писать»: запись уже убрана извне, воркер не должен
+     * ни воскрешать её, ни падать на `it!!` в cancel-пути после отмены очереди.
+     */
     fun updateState(
         appPreferences: AppPreferences,
         jobId: String,
-        transform: (TtsAudioJobState?) -> TtsAudioJobState,
+        transform: (TtsAudioJobState?) -> TtsAudioJobState?,
     ) {
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            val updated = transform(current[jobId])
-            if (updated.isActive) {
-                current[jobId] = updated
-            } else {
-                // Завершённые записи (SUCCESS/FAILED) сохраняем: UI по ним показывает
-                // «файл уже создан»/«ошибка» для соответствующих глав.
-                current[jobId] = updated
-            }
+            val updated = transform(current[jobId]) ?: return@synchronized
+            // Завершённые записи (SUCCESS/FAILED/CANCELLED) сохраняем: UI по ним
+            // показывает «файл уже создан»/«ошибка»/«отменено» для соответствующих глав.
+            current[jobId] = updated
             appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
     }

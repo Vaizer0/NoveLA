@@ -19,8 +19,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Уведомление загрузки аудио главы (WAV).
  *
- * Жизненный цикл: showRunning (foreground) → showComplete / showError → close.
- * Каждый экземпляр изолирован (свой notificationId); requestCode = notificationId.
+ * Жизненный цикл: foregroundNotification (foreground) → updateProgress →
+ * showComplete / showError → close. Каждый экземпляр изолирован (свой
+ * notificationId); requestCode = notificationId. Foreground-уведомление несёт
+ * кнопку Cancel (отмена всей очереди) сразу — как и у BookExport.
  */
 class TtsAudioExportNotification(
     private val chapterTitle: String,
@@ -33,22 +35,7 @@ class TtsAudioExportNotification(
 
     private val channelName = context.getString(StringsR.string.tts_audio_export_channel_name)
 
-    fun showRunning() {
-        if (!hasNotificationPermission()) return
-        builder = notificationsCenter.showNotification(
-            channelId = CHANNEL_ID,
-            channelName = channelName,
-            notificationId = notificationId,
-            importance = NotificationManager.IMPORTANCE_LOW,
-        ) {
-            setContentTitle(context.getString(StringsR.string.tts_audio_export_running, chapterTitle))
-            setContentText(context.getString(StringsR.string.tts_audio_export_running_detail))
-            setOngoing(true)
-            setProgress(0, 0, true)
-            addCancelAction()
-        }
-    }
-
+    /** Foreground-уведомление воркера: показывается сразу с кнопкой Cancel. */
     fun foregroundNotification(): Notification {
         val builder = notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
@@ -60,6 +47,7 @@ class TtsAudioExportNotification(
             setContentText(context.getString(StringsR.string.tts_audio_export_running_detail))
             setOngoing(true)
             setProgress(0, 0, true)
+            addCancelAction()
         }
         this.builder = builder
         return builder.build()

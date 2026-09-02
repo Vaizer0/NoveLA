@@ -122,7 +122,7 @@ class TtsAudioExportWorker(
                 Timber.w(e, "TtsAudio: setForeground failed, continuing as background worker")
             }
 
-            TtsAudioQueue.updateState(appPreferences, jobId) { it!!.copy(status = TtsAudioJobStatus.RUNNING) }
+            TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING) }
 
             // ── Текст главы (оригинал или закэшированный перевод) ──────────────
             val chapterText = withContext(Dispatchers.IO) {
@@ -202,7 +202,7 @@ class TtsAudioExportWorker(
             notification.updateProgress(100)
             notification.showComplete(displayName, createdUri)
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it!!.copy(
+                it?.copy(
                     status = TtsAudioJobStatus.SUCCESS,
                     displayName = displayName,
                     documentUri = createdUri.toString(),
@@ -217,7 +217,7 @@ class TtsAudioExportWorker(
             createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it!!.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
+                it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
             }
             notification.close()
             throw e
@@ -229,7 +229,7 @@ class TtsAudioExportWorker(
             val message = context.getString(StringsR.string.tts_audio_export_failure_detail, e.message ?: "")
             notification.showError(message)
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it!!.copy(status = TtsAudioJobStatus.FAILED, message = e.message ?: "")
+                it?.copy(status = TtsAudioJobStatus.FAILED, message = e.message ?: "")
             }
             return Result.failure()
         }
@@ -243,7 +243,7 @@ class TtsAudioExportWorker(
     ) {
         notification.showError(message)
         TtsAudioQueue.updateState(appPreferences, jobId) {
-            it!!.copy(status = TtsAudioJobStatus.FAILED, message = message)
+            it?.copy(status = TtsAudioJobStatus.FAILED, message = message)
         }
     }
 
@@ -265,7 +265,7 @@ class TtsAudioExportWorker(
             Timber.d("TtsAudio progress $clamped%")
             runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to clamped)) }
             TtsAudioQueue.updateState(appPreferences, jobId) {
-                it!!.copy(progress = clamped)
+                it?.copy(progress = clamped)
             }
             val now = SystemClock.elapsedRealtime()
             if (now - lastNotifyMs >= 1_000 || clamped == 100) {
