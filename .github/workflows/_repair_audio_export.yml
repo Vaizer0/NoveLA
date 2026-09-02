@@ -1,0 +1,65 @@
+name: Temporary branch repair
+
+on:
+  push:
+    branches:
+      - feat/youtube-tts-video-generation-system
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply targeted audio-export hardening
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportWorker.kt')
+          s = p.read_text()
+          old = '''            } catch (e: Exception) {\n                Timber.w(e, "TtsAudio: setForeground failed, continuing as background worker")\n            }\n'''
+          new = '''            } catch (e: Exception) {\n                throw TtsExportException("Unable to promote audio export to foreground: ${e.message ?: "unknown error"}")\n            }\n'''
+          if old not in s:
+              raise SystemExit('foreground block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''            if (!isDirectoryAccessible(context, request.outputDirectoryUri)) {\n                Timber.e("TtsAudio: directory NOT accessible, clearing TTS_AUDIO_DOWNLOAD_LOCATION_URI")\n                appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = ""\n                fail(appPreferences, jobId, notification,\n                    context.getString(StringsR.string.tts_audio_export_dir_error))\n                return Result.failure()\n            }\n'''
+          new = '''            if (!isDirectoryAccessible(context, request.outputDirectoryUri)) {\n                Timber.e("TtsAudio: directory NOT accessible, clearing TTS_AUDIO_DOWNLOAD_LOCATION_URI")\n                appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = ""\n                fail(appPreferences, jobId, notification,\n                    context.getString(StringsR.string.tts_audio_export_dir_error))\n                return Result.failure()\n            }\n'''
+          if old not in s:
+              raise SystemExit('directory block not found')
+
+          old = '''            val parentUri = novelFolderUri\n            createdUri = withContext(Dispatchers.IO) {\n                DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)\n            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))\n'''
+          new = '''            val parentUri = novelFolderUri\n            var createdNewDocument = false\n            createdUri = withContext(Dispatchers.IO) {\n                findDocument(context, parentUri, fileName, mime)\n                    ?: DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)?.also { createdNewDocument = true }\n            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))\n'''
+          if old not in s:
+              raise SystemExit('create block not found')
+          s = s.replace(old, new, 1)
+
+          s = s.replace('''            createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }\n            tempWav.delete()\n''', '''            if (createdNewDocument) {\n                createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }\n            }\n            tempWav.delete()\n''', 2)
+
+          marker = '''    private fun queryDisplayName(uri: Uri): String? = runCatching {\n'''
+          helper = '''    private fun findDocument(context: Context, parent: Uri, name: String, mimeType: String): Uri? {\n        val children = DocumentsContract.buildChildDocumentsUriUsingTree(parent, DocumentsContract.getTreeDocumentId(parent))\n        return context.contentResolver.query(\n            children,\n            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),\n            null, null, null\n        )?.use { cursor ->\n            while (cursor.moveToNext()) {\n                if (cursor.getString(1) == name && cursor.getString(2) == mimeType) {\n                    return@use DocumentsContract.buildDocumentUriUsingTree(parent, cursor.getString(0))\n                }\n            }\n            null\n        }\n    }\n\n'''
+          if marker not in s:
+              raise SystemExit('query marker not found')
+          s = s.replace(marker, helper + marker, 1)
+
+          old = '''    private fun isDirectoryAccessible(context: Context, directoryUri: String): Boolean {\n        return try {\n            val treeUri = Uri.parse(directoryUri)\n            val docUri = DocumentsContract.buildDocumentUriUsingTree(\n                treeUri,\n                DocumentsContract.getTreeDocumentId(treeUri)\n            )\n            context.contentResolver.query(\n                docUri,\n                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),\n                null,\n                null,\n                null\n            )?.use { true } ?: false\n        } catch (e: Exception) {\n            Timber.e(e, "TtsAudio: isDirectoryAccessible FAILED")\n            false\n        }\n    }\n'''
+          new = '''    private fun isDirectoryAccessible(context: Context, directoryUri: String): Boolean {\n        if (directoryUri.isBlank()) return false\n        return try {\n            val treeUri = Uri.parse(directoryUri)\n            if (!DocumentsContract.isTreeUri(treeUri)) return false\n            val permission = context.contentResolver.persistedUriPermissions.firstOrNull { it.uri == treeUri }\n            if (permission?.isReadPermission != true || permission.isWritePermission != true) return false\n            val docUri = DocumentsContract.buildDocumentUriUsingTree(\n                treeUri,\n                DocumentsContract.getTreeDocumentId(treeUri)\n            )\n            context.contentResolver.query(\n                docUri,\n                arrayOf(DocumentsContract.Document.COLUMN_MIME_TYPE),\n                null, null, null\n            )?.use { cursor ->\n                cursor.moveToFirst() && cursor.getString(0) == DocumentsContract.Document.MIME_TYPE_DIR\n            } ?: false\n        } catch (e: Exception) {\n            Timber.e(e, "TtsAudio: isDirectoryAccessible FAILED")\n            false\n        }\n    }\n'''
+          if old not in s:
+              raise SystemExit('access helper not found')
+          s = s.replace(old, new, 1)
+
+          s = s.replace(''' * and по завершении перезаписывает тот же файл при повторной\n * генерации (детерминированный jobId).\n''', ''' * и при повторной генерации переиспользует существующий SAF-файл с тем же именем\n * (детерминированный jobId), не создавая суффиксный дубль.\n''', 1)
+          p.write_text(s)
+          print('patched audio worker')
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportWorker.kt
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: harden audio foreground and SAF export [skip ci]'
+          git push
