@@ -14,7 +14,10 @@ concurrency:
 
 jobs:
   visual-qa:
-    runs-on: ubuntu-latest
+    # The hosted Ubuntu VM used by the previous run had no usable KVM and the
+    # x86_64 emulator remained offline for the entire boot timeout. macOS provides
+    # native hypervisor acceleration for this instrumentation-only visual check.
+    runs-on: macos-13
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -36,6 +39,7 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim
           disable-animations: true
+          emulator-boot-timeout: 600
           script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=my.noveldokusha.TtsVideoVisualQaTest --no-daemon --stacktrace
       - name: Collect PNG frames
         if: always()
@@ -48,7 +52,9 @@ jobs:
               adb exec-out run-as my.novela.vaizer0.debug cat "$remote" > "visual-qa/$name"
             done
           fi
-          ls -lah visual-qa
+          count=$(find visual-qa -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
+          echo "Collected PNG frames: $count"
+          test "$count" -eq 6
       - name: Upload rendered PNG frames
         if: always()
         uses: actions/upload-artifact@v7
