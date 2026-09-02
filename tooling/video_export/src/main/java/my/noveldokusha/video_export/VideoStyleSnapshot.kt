@@ -74,6 +74,9 @@ data class VideoStyleSnapshot(
     val cardPaddingBottom: Float,
     val cardCornerRadius: Float,
     val cardStrokeWidth: Float,
+    // Side artwork (лёгкие ссылки на изображения + настройки)
+    val leftArtwork: VideoArtwork?,
+    val rightArtwork: VideoArtwork?,
     // Presentation
     val presentation: ParagraphPresentation,
 ) {
@@ -106,6 +109,8 @@ data class VideoStyleSnapshot(
         put(KEY_CARD_PAD_BOTTOM, cardPaddingBottom.toDouble())
         put(KEY_CARD_RADIUS, cardCornerRadius.toDouble())
         put(KEY_CARD_STROKE_WIDTH, cardStrokeWidth.toDouble())
+        put(KEY_LEFT_ARTWORK, leftArtwork?.toJson() ?: JSONObject.NULL)
+        put(KEY_RIGHT_ARTWORK, rightArtwork?.toJson() ?: JSONObject.NULL)
         put(KEY_PRESENTATION, presentation.name)
     }.toString()
 
@@ -139,6 +144,8 @@ data class VideoStyleSnapshot(
         private const val KEY_CARD_PAD_BOTTOM = "cardPaddingBottom"
         private const val KEY_CARD_RADIUS = "cardCornerRadius"
         private const val KEY_CARD_STROKE_WIDTH = "cardStrokeWidth"
+        private const val KEY_LEFT_ARTWORK = "leftArtwork"
+        private const val KEY_RIGHT_ARTWORK = "rightArtwork"
         private const val KEY_PRESENTATION = "presentation"
 
         val DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
@@ -179,6 +186,12 @@ data class VideoStyleSnapshot(
             val textAlignment = runCatching {
                 TextAlignment.valueOf(obj.getString(KEY_TEXT_ALIGNMENT))
             }.getOrDefault(TextAlignment.START)
+            val leftArtwork = if (obj.isNull(KEY_LEFT_ARTWORK)) null else {
+                VideoArtwork.fromJson(obj.getJSONObject(KEY_LEFT_ARTWORK))
+            }
+            val rightArtwork = if (obj.isNull(KEY_RIGHT_ARTWORK)) null else {
+                VideoArtwork.fromJson(obj.getJSONObject(KEY_RIGHT_ARTWORK))
+            }
             return VideoStyleSnapshot(
                 schemaVersion = obj.optInt(KEY_SCHEMA, SCHEMA_VERSION),
                 fontFamily = obj.optString(KEY_FONT_FAMILY, "serif"),
@@ -207,6 +220,8 @@ data class VideoStyleSnapshot(
                 cardPaddingBottom = optFloat(KEY_CARD_PAD_BOTTOM, 48f),
                 cardCornerRadius = optFloat(KEY_CARD_RADIUS, 20f),
                 cardStrokeWidth = optFloat(KEY_CARD_STROKE_WIDTH, 2f),
+                leftArtwork = leftArtwork,
+                rightArtwork = rightArtwork,
                 presentation = presentation,
             )
         }

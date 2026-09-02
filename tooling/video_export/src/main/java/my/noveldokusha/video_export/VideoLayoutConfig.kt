@@ -60,9 +60,45 @@ class VideoLayoutConfig private constructor(
 
     // ── Колонка и текстовая область ────────────────────────────────────────
 
-    fun columnLeft(): Float = marginX
+    val leftArtwork: VideoArtwork? = style.leftArtwork
+    val rightArtwork: VideoArtwork? = style.rightArtwork
 
-    fun columnRight(): Float = width - marginX
+    /** Занятая артом ширина с левого края (не более половины канваса). */
+    fun leftArtworkX(): Float {
+        val a = leftArtwork ?: return 0f
+        return minOf(a.widthFraction * width, width * 0.5f)
+    }
+
+    /** Занятая артом ширина с правого края (не более половины канваса). */
+    fun rightArtworkX(): Float {
+        val a = rightArtwork ?: return 0f
+        return minOf(a.widthFraction * width, width * 0.5f)
+    }
+
+    fun leftArtworkRect(): RectF? {
+        val a = leftArtwork ?: return null
+        val w = leftArtworkX()
+        return RectF(0f, 0f, w, height.toFloat())
+    }
+
+    fun rightArtworkRect(): RectF? {
+        val a = rightArtwork ?: return null
+        val w = rightArtworkX()
+        return RectF(width - w, 0f, width.toFloat(), height.toFloat())
+    }
+
+    /** Безопасная от арта левая граница текста (максимум из арта и margin). */
+    fun safeTextLeft(): Float = maxOf(marginX, leftArtworkX() + VideoArtwork.GAP_PX)
+
+    /** Безопасная от арта правая граница текста. */
+    fun safeTextRight(): Float = minOf(
+        width - marginX,
+        width.toFloat() - rightArtworkX() - VideoArtwork.GAP_PX,
+    )
+
+    fun columnLeft(): Float = safeTextLeft()
+
+    fun columnRight(): Float = safeTextRight()
 
     fun columnWidth(): Float = (columnRight() - columnLeft()).coerceAtLeast(0f)
 
@@ -70,8 +106,8 @@ class VideoLayoutConfig private constructor(
     fun cardTextWidth(): Float {
         val byPadding = columnWidth() - cardPadH * 2f
         val max = style.maxTextWidth
-        if (max == null || max <= 0f) return byPadding.coerceAtLeast(0f)
-        return minOf(byPadding, max).coerceAtLeast(0f)
+        if (max == null || max <= 0f) return byPadding.coerceAtLeast(1f)
+        return minOf(byPadding, max).coerceAtLeast(1f)
     }
 
     /** X левого края текстовой области гипотезы (центрируется в колонке). */

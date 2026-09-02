@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -41,6 +42,7 @@ class VideoFrameRenderer(
     private val chapterTitle: String = "",
     private val backgroundImageDecoder: (File) -> Bitmap? = { null },
     private val backgroundFileResolver: (String) -> File? = { null },
+    private val artworkImageDecoder: (String) -> Bitmap? = { null },
     private val videoStyle: VideoStyleSnapshot = VideoStyleSnapshot.defaultFor(snapshot),
 ) {
 
@@ -306,6 +308,7 @@ class VideoFrameRenderer(
     /** Рисует кадр [sample] на [canvas] (должен быть 1920×1080). */
     fun renderFrame(canvas: Canvas, sample: Long) {
         drawBackground(canvas)
+        drawSideArtwork(canvas)
         val plan = framePlan(sample)
         if (plan.chapterIntro) {
             drawChapterIntro(canvas, sample)
@@ -316,6 +319,68 @@ class VideoFrameRenderer(
         plan.prev?.let { drawSlot(canvas, it) }
         plan.next?.let { drawSlot(canvas, it) }
         plan.current?.let { drawCardSlot(canvas, it) }
+    }
+
+    // ── Side artwork ─────────────────────────────────────────────────────
+
+    private val artworkBitmaps = HashMap<String, Bitmap?>()
+
+    private fun artworkBitmap(fileName: String): Bitmap? =
+        artworkBitmaps.getOrPut(fileName) { artworkImageDecoder(fileName) }
+
+    private fun drawSideArtwork(canvas: Canvas) {
+        layoutConfig.leftArtwork?.let { drawArtwork(canvas, it, layoutConfig.leftArtworkX(), false) }
+        layoutConfig.rightArtwork?.let { drawArtwork(canvas, it, layoutConfig.rightArtworkX(), true) }
+    }
+
+    private fun drawArtwork(canvas: Canvas, art: VideoArtwork, artW: Float, isRight: Boolean) {
+        if (artW <= 0f) return
+        val bitmap = artworkBitmap(art.fileName) ?: return
+        val maxDrawH = art.heightCapFraction * layoutConfig.height.toFloat()
+        val scale = when (art.fitMode) {
+            ArtworkFitMode.COVER -> maxOf(artW / bitmap.width, maxDrawH / bitmap.height)
+            ArtworkFitMode.CONTAIN -> minOf(artW / bitmap.width, maxDrawH / bitmap.height)
+        }
+        val drawW = bitmap.width * scale
+        val drawH = bitmap.height * scale
+        val bandH = layoutConfig.height.toFloat()
+        val nominal = if (isRight) {
+            RectF(layoutConfig.width.toFloat() - artW, 0f, layoutConfig.width.toFloat(), bandH)
+        } else {
+            RectF(0f, 0f, artW, bandH)
+        }
+        // Центрируем битмап внутри зоны арта; всё, что выходит за зону, клипается.
+        val centX = (nominal.left + nominal.right) / 2f
+        val x0 = centX - drawW / 2f
+        val vFrac = when (art.verticalAlignment) {
+            ArtworkVerticalAlignment.TOP -> 0f
+            ArtworkVerticalAlignment.CENTER -> 0.5f
+            ArtworkVerticalAlignment.BOTTOM -> 1f
+        }
+        val y0 = (bandH - drawH) * vFrac
+        val rect = RectF(x0, y0, x0 + drawW, y0 + drawH)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply {
+            alpha = (0xFF * art.opacity.coerceIn(0f, 1f)).toInt()
+        }
+        val radius = art.cornerRadius
+        canvas.save()
+        canvas.clipRect(nominal)
+        if (radius > 0f) {
+            val path = Path().apply {
+                addRoundRect(nominal, radius, radius, Path.Direction.CW)
+            }
+            canvas.clipPath(path)
+        }
+        canvas.drawBitmap(bitmap, null, rect, paint)
+        canvas.restore()
+        if (art.borderWidth > 0f) {
+            val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = art.borderColorArgb
+                style = Paint.Style.STROKE
+                strokeWidth = art.borderWidth
+            }
+            canvas.drawRoundRect(nominal, radius, radius, border)
+        }
     }
 
     /**

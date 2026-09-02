@@ -63,6 +63,8 @@ class VideoStyleTest {
         assertEquals("currentCardAlpha", 1f, s.currentCardAlpha, 1e-4f)
         assertEquals("contextParagraphOpacity", VideoLayoutSpec.PREVIEW_ALPHA, s.contextParagraphOpacity, 1e-4f)
         assertEquals("дефолтный режим", ParagraphPresentation.CURRENT_WITH_CONTEXT, s.presentation)
+        assertNull("арт по умолчанию выключен (left)", s.leftArtwork)
+        assertNull("арт по умолчанию выключен (right)", s.rightArtwork)
 
         val cfg = VideoLayoutConfig.from(s)
         assertEquals("marginX == старая константа", 256f, cfg.marginX, 1e-3f)
@@ -153,6 +155,62 @@ class VideoStyleTest {
     }
 
     @Test
+    fun artworkResolveAndSafeGeometry() {
+        // Левый арт 0.2 от ширины → колонка сдвигается вправо от арта.
+        val left = VideoStyleSettings(
+            leftArtwork = VideoArtworkSettings(
+                fileName = "art_left.png",
+                widthFraction = 0.2f,
+                borderWidth = 3f,
+                cornerRadius = 12f,
+            ),
+        ).resolve(reader)
+        assertNotNull("leftArtwork присутствует", left.leftArtwork)
+        assertEquals("art_left.png", left.leftArtwork!!.fileName)
+        assertEquals(0.2f, left.leftArtwork!!.widthFraction, 1e-4f)
+        assertEquals(3f, left.leftArtwork!!.borderWidth, 1e-4f)
+        assertNull(left.rightArtwork)
+
+        val cfgLeft = VideoLayoutConfig.from(left)
+        val laRect = cfgLeft.leftArtworkRect()!!
+        assertEquals("левый арт прижат к краю", 0f, laRect.left, 1e-3f)
+        assertEquals("ширина арта 0.2*1920", 384f, cfgLeft.leftArtworkX(), 1e-3f)
+        assertEquals("safeTextLeft = арт+zазор", 408f, cfgLeft.safeTextLeft(), 1e-3f)
+        assertEquals("columnLeft упирается в safety", 408f, cfgLeft.columnLeft(), 1e-3f)
+        assertEquals("правый край без арта", 1664f, cfgLeft.columnRight(), 1e-3f)
+        assertTrue(
+            "арт не пересекает карточку по X",
+            laRect.right <= cfgLeft.cardRect().left + 1f,
+        )
+
+        // Левый + правый арт.
+        val both = VideoStyleSettings(
+            leftArtwork = VideoArtworkSettings("l.png", widthFraction = 0.15f),
+            rightArtwork = VideoArtworkSettings("r.png", widthFraction = 0.15f),
+        ).resolve(reader)
+        val cfgBoth = VideoLayoutConfig.from(both)
+        assertEquals("левая безопасная", 312f, cfgBoth.safeTextLeft(), 1e-3f)
+        assertEquals("правая безопасная", 1920f - 288f - 24f, cfgBoth.safeTextRight(), 1e-3f)
+        assertEquals("колонка сужена обоими артами", cfgBoth.safeTextRight() - cfgBoth.safeTextLeft(), cfgBoth.columnWidth(), 1e-3f)
+        assertTrue("правая граница > левой", cfgBoth.columnRight() > cfgBoth.columnLeft())
+
+        // Чрезмерная ширина обрезается (reduce artwork before shrinking text).
+        val clamped = VideoStyleSettings(
+            leftArtwork = VideoArtworkSettings("x.png", widthFraction = 0.9f),
+        ).resolve(reader)
+        assertEquals(
+            "ширина арта ограничена 0.3",
+            VideoArtwork.MAX_WIDTH_FRACTION, clamped.leftArtwork!!.widthFraction, 1e-4f,
+        )
+
+        // Пустое имя файла → арт выключен.
+        val disabled = VideoStyleSettings(
+            leftArtwork = VideoArtworkSettings(fileName = "  "),
+        ).resolve(reader)
+        assertNull("пустой файл = нет арта", disabled.leftArtwork)
+    }
+
+    @Test
     fun resolveUsesAppCardColorsAsFallback() {
         val appColors = VideoFrameRenderer.CardColors(fillArgb = 0x22FF0000.toInt(), strokeArgb = 0x99FFFFFF.toInt())
         val s = VideoStyleSettings().resolve(reader, appCardColors = appColors)
@@ -189,6 +247,8 @@ class VideoStyleTest {
             contextParagraphOpacity = 0.35f,
             marginX = 300f,
             maxTextWidth = 800f,
+            leftArtwork = VideoArtworkSettings("art_l.png", widthFraction = 0.18f, verticalAlignment = ArtworkVerticalAlignment.TOP),
+            rightArtwork = VideoArtworkSettings("art_r.png", widthFraction = 0.1f, borderWidth = 4f),
             presentation = ParagraphPresentation.DYNAMIC_CONTEXT,
         ).resolve(reader)
 
@@ -201,6 +261,10 @@ class VideoStyleTest {
         assertEquals(800f, restored.maxTextWidth!!, 1e-3f)
         assertEquals(0xFF321321.toInt(), restored.cardFillArgb)
         assertEquals(0.35f, restored.contextParagraphOpacity, 1e-4f)
+        assertEquals("арт слева проезжает JSON", "art_l.png", restored.leftArtwork!!.fileName)
+        assertEquals(ArtworkVerticalAlignment.TOP, restored.leftArtwork!!.verticalAlignment)
+        assertEquals(0.18f, restored.leftArtwork!!.widthFraction, 1e-4f)
+        assertEquals("арт справа проезжает JSON", 4f, restored.rightArtwork!!.borderWidth, 1e-4f)
     }
 
     @Test

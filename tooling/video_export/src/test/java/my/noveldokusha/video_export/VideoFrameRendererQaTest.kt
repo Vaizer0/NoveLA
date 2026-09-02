@@ -2,6 +2,7 @@ package my.noveldokusha.video_export
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -114,15 +115,21 @@ class VideoFrameRendererQaTest {
         presetId: String = "paper",
         typeface: Typeface = Typeface.create("serif", Typeface.NORMAL),
         style: VideoStyleSnapshot? = null,
+        artworkFile: String? = null,
+        artworkDecoder: ((String) -> Bitmap?)? = null,
     ): Pair<VideoFrameRenderer, VideoExportTimeline> {
         val snap = snapshot(presetId = presetId)
         val timeline = buildTimeline(paragraphs)
+        val decode: (String) -> Bitmap? = artworkDecoder
+            ?: if (artworkFile != null) { name -> if (name == artworkFile) syntheticArtwork() else null }
+            else { { null } }
         val renderer = VideoFrameRenderer(
             snapshot = snap,
             timeline = timeline,
             typeface = typeface,
             novelTitle = "The Cartographer's Apprentice",
             chapterTitle = "Chapter 12 — The Mud Crossroads",
+            artworkImageDecoder = decode,
             videoStyle = style ?: VideoStyleSnapshot.defaultFor(snap),
         )
         return renderer to timeline
@@ -545,6 +552,92 @@ class VideoFrameRendererQaTest {
         val bfBitmap = renderFrameToBitmap(bf, bfSample)
         assertFrameNotEmpty(bfBitmap)
         savePng(bfBitmap, "19_big_font.png")
+    }
+
+    @Test
+    fun sideArtworkQa() {
+        val artL = VideoArtwork(
+            fileName = "cover-left.png",
+            widthFraction = 0.2f,
+            heightCapFraction = 1f,
+            verticalAlignment = ArtworkVerticalAlignment.CENTER,
+            opacity = 1f,
+            fitMode = ArtworkFitMode.COVER,
+            cornerRadius = 12f,
+            borderWidth = 3f,
+            borderColorArgb = 0x80FFFFFF.toInt(),
+        )
+        val leftStyle = VideoStyleSnapshot.defaultFor(snapshot()).copy(leftArtwork = artL)
+        val (lr, lt) = renderer(listOf(normal), style = leftStyle, artworkFile = "cover-left.png")
+        val lSample = midSample(lt.paragraphs.first())
+        val lPlan = lr.framePlan(lSample)
+        val lCfg = VideoLayoutConfig.from(leftStyle)
+        assertTrue("текст начинается после safeTextLeft", lPlan.current!!.rect.left >= lCfg.safeTextLeft())
+        assertTrue(
+            "арт не заезжает на текст",
+            lCfg.leftArtworkRect()!!.right <= lPlan.current!!.rect.left + 1f,
+        )
+        val lBmp = renderFrameToBitmap(lr, lSample)
+        assertFrameNotEmpty(lBmp)
+        savePng(lBmp, "20_left_artwork.png")
+
+        val artR = VideoArtwork(
+            fileName = "cover-right.png",
+            widthFraction = 0.2f,
+            heightCapFraction = 1f,
+            verticalAlignment = ArtworkVerticalAlignment.CENTER,
+            opacity = 0.85f,
+            fitMode = ArtworkFitMode.CONTAIN,
+            cornerRadius = 0f,
+            borderWidth = 0f,
+            borderColorArgb = 0,
+        )
+        val rightStyle = VideoStyleSnapshot.defaultFor(snapshot()).copy(rightArtwork = artR)
+        val (rr, rt) = renderer(listOf(normal), style = rightStyle, artworkFile = "cover-right.png")
+        val rSample = midSample(rt.paragraphs.first())
+        val rPlan = rr.framePlan(rSample)
+        val rCfg = VideoLayoutConfig.from(rightStyle)
+        assertTrue("текст заканчивается до safeTextRight", rPlan.current!!.rect.right <= rCfg.safeTextRight() + 1f)
+        assertTrue(
+            "правый арт не заезжает на текст",
+            rCfg.rightArtworkRect()!!.left >= rPlan.current!!.rect.right - 1f,
+        )
+        val rBmp = renderFrameToBitmap(rr, rSample)
+        assertFrameNotEmpty(rBmp)
+        savePng(rBmp, "21_right_artwork.png")
+
+        // Обе стороны: колонка между ними, карточка не пересекает арты.
+        val bothStyle = VideoStyleSnapshot.defaultFor(snapshot()).copy(
+            leftArtwork = artL.copy(fileName = "cover-left2.png"),
+            rightArtwork = artR.copy(fileName = "cover-right2.png"),
+        )
+        val (br, bt) = renderer(
+            listOf(normal),
+            style = bothStyle,
+            artworkFile = null,
+            artworkDecoder = { name ->
+                if (name == "cover-left2.png" || name == "cover-right2.png") syntheticArtwork() else null
+            },
+        )
+        val bSample = midSample(bt.paragraphs.first())
+        val bPlan = br.framePlan(bSample)
+        val bCfg = VideoLayoutConfig.from(bothStyle)
+        val bLeft = bCfg.leftArtworkRect()!!
+        val bRight = bCfg.rightArtworkRect()!!
+        assertTrue("оба арта не пересекают текст (exclusive X)", bLeft.right <= bPlan.current!!.rect.left + 1f)
+        assertTrue("оба арта не пересекают текст (right)", bRight.left >= bPlan.current!!.rect.right - 1f)
+        val bBmp = renderFrameToBitmap(br, bSample)
+        assertFrameNotEmpty(bBmp)
+        savePng(bBmp, "22_both_artwork.png")
+    }
+
+    private fun syntheticArtwork(): Bitmap {
+        val bitmap = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bitmap)
+        c.drawColor(0xFF8E44AD.toInt())
+        val stripe = Paint().apply { color = 0xFFECF0F1.toInt() }
+        c.drawRect(0f, 0f, 60f, 900f, stripe)
+        return bitmap
     }
 
     private fun scenario(prefix: String, paragraphs: List<String>) {

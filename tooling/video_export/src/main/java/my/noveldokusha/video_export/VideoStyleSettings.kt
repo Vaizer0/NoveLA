@@ -57,6 +57,11 @@ data class VideoStyleSettings(
     val cardPaddingBottom: Float? = null,
     val cardCornerRadius: Float? = null,
     val cardStrokeWidth: Float? = null,
+    // ── Side artwork ───────────────────────────────────────────────────────
+    /** Левая иллюстрация (null/без файла — выключена). */
+    val leftArtwork: VideoArtworkSettings? = null,
+    /** Правая иллюстрация (null/без файла — выключена). */
+    val rightArtwork: VideoArtworkSettings? = null,
     // ── Paragraph presentation ─────────────────────────────────────────────
     val presentation: ParagraphPresentation = ParagraphPresentation.CURRENT_WITH_CONTEXT,
 ) {
@@ -103,7 +108,28 @@ data class VideoStyleSettings(
             cardPaddingBottom = cardPaddingBottom ?: VideoStyleDefaults.CARD_PAD_BOTTOM,
             cardCornerRadius = cardCornerRadius ?: VideoStyleDefaults.CARD_CORNER_RADIUS,
             cardStrokeWidth = cardStrokeWidth ?: VideoStyleDefaults.CARD_STROKE_WIDTH,
+            leftArtwork = leftArtwork?.let { resolveArtwork(it) },
+            rightArtwork = rightArtwork?.let { resolveArtwork(it) },
             presentation = presentation,
+        )
+    }
+
+    /** Арт активен только при непустом файле-ссылке; иначе — ничего не рисуем. */
+    private fun resolveArtwork(s: VideoArtworkSettings): VideoArtwork? {
+        val fileName = s.fileName?.takeIf { it.isNotBlank() } ?: return null
+        val defaults = VideoArtwork.DEFAULTS
+        return VideoArtwork(
+            fileName = fileName,
+            widthFraction = (s.widthFraction ?: defaults.widthFraction)
+                .coerceIn(0.02f, VideoArtwork.MAX_WIDTH_FRACTION),
+            heightCapFraction = (s.heightCapFraction ?: defaults.heightCapFraction)
+                .coerceIn(0.1f, 1f),
+            verticalAlignment = s.verticalAlignment ?: ArtworkVerticalAlignment.CENTER,
+            opacity = (s.opacity ?: defaults.opacity).coerceIn(0f, 1f),
+            fitMode = s.fitMode ?: ArtworkFitMode.COVER,
+            cornerRadius = (s.cornerRadius ?: defaults.cornerRadius).coerceIn(0f, 200f),
+            borderWidth = (s.borderWidth ?: defaults.borderWidth).coerceIn(0f, 20f),
+            borderColorArgb = s.borderColorArgb ?: defaults.borderColorArgb,
         )
     }
 }
