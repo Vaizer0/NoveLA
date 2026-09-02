@@ -32,14 +32,29 @@ data class TtsAudioExportRequest(
     val outputDirectoryUri: String,
     /** Формат аудио ("wav" для V1). */
     val format: String = TtsAudioFormat.WAV,
+    /**
+     * Снимок пары языков перевода НА МОМЕНТ ПОСТАНОВКИ В ОЧЕРЕДЬ (актуальны только
+     * для [TtsAudioSource.TRANSLATED]; для ORIGINAL пусты). Позволяет воркеру брать
+     * перевод той же пары, что видела UI при запуске, и включается в [jobId]:
+     * смена языка перевода порождает НОВЫЙ идентификатор, а не перезаписывает старый.
+     */
+    val translationSourceLang: String = "",
+    val translationTargetLang: String = "",
 ) {
     /**
      * Детерминированный идентификатор экспорта для дедупликации/перезаписи:
-     * один и тот же (книга, глава, источник) → один и тот же jobId.
+     * один и тот же (книга, глава, источник, пара языков перевода) → один jobId.
      */
     companion object {
-        fun makeJobId(novelUrl: String, chapterUrl: String, source: TtsAudioSource): String {
-            val raw = "$novelUrl::$chapterUrl::${source.name}"
+        fun makeJobId(
+            novelUrl: String,
+            chapterUrl: String,
+            source: TtsAudioSource,
+            translationSourceLang: String = "",
+            translationTargetLang: String = "",
+        ): String {
+            val raw = "$novelUrl::$chapterUrl::${source.name}" +
+                "::${translationSourceLang}::${translationTargetLang}"
             val sha = java.security.MessageDigest.getInstance("SHA-256")
                 .digest(raw.toByteArray(Charsets.UTF_8))
                 .take(8)

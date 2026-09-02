@@ -41,6 +41,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.TranslationLangPair
 import my.noveldokusha.core.appPreferences.resolveExportDirectoryDisplayName
 import my.noveldokusha.core.domain.ChapterPagination
 import my.noveldokusha.core.isContentUri
@@ -1156,8 +1157,21 @@ internal class ChaptersViewModel @Inject constructor(
 
     /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
     private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
+        // Снимок пары языков перевода на момент старта (для TRANSLATED): воркер
+        // возьмёт именно её, а не текущую настройку на момент выполнения.
+        val pair = if (source == TtsAudioSource.TRANSLATED) {
+            appPreferences.translationPairForBook(bookUrl)
+        } else {
+            TranslationLangPair()
+        }
         val request = TtsAudioExportRequest(
-            jobId = TtsAudioExportRequest.makeJobId(bookUrl, chapter.chapter.url, source),
+            jobId = TtsAudioExportRequest.makeJobId(
+                bookUrl,
+                chapter.chapter.url,
+                source,
+                pair.source,
+                pair.target,
+            ),
             novelTitle = bookTitle,
             novelUrl = bookUrl,
             chapterUrl = chapter.chapter.url,
@@ -1169,6 +1183,8 @@ internal class ChaptersViewModel @Inject constructor(
             speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
             pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
             outputDirectoryUri = folderUri,
+            translationSourceLang = pair.source,
+            translationTargetLang = pair.target,
             // V1 поддерживает ТОЛЬКО WAV: пережиток выбора (например "m4a") намеренно
             // сбрасывается — иначе файл с расширением .m4a содержал бы WAV-данные.
             format = TtsAudioFormat.WAV,

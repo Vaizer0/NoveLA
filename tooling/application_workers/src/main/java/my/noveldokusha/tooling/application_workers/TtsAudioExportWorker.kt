@@ -330,10 +330,17 @@ class TtsAudioExportWorker(
         request: TtsAudioExportRequest,
     ): String? {
         return if (request.source == TtsAudioSource.TRANSLATED) {
-            val pair = appPreferences.translationPairForBook(request.novelUrl)
-            if (pair.source.isBlank() || pair.target.isBlank()) return null
+            // Снимок пары языков из запроса (сделан при постановке в очередь); для
+            // старых задач без снимка — фолбэк на текущую настройку книги.
+            val sourceLang = request.translationSourceLang.ifBlank {
+                appPreferences.translationPairForBook(request.novelUrl).source
+            }
+            val targetLang = request.translationTargetLang.ifBlank {
+                appPreferences.translationPairForBook(request.novelUrl).target
+            }
+            if (sourceLang.isBlank() || targetLang.isBlank()) return null
             val translation = appDatabase.chapterTranslationDao()
-                .getTranslations(request.chapterUrl, pair.source, pair.target)
+                .getTranslations(request.chapterUrl, sourceLang, targetLang)
                 ?: return null
             if (translation.translatedParagraphs.isBlank()) return null
             try {
@@ -373,6 +380,9 @@ class TtsAudioExportWorker(
         val pitch = inputData.getFloat(KEY_PITCH, 1f)
         val outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null
         val format = inputData.getString(KEY_FORMAT) ?: TtsAudioFormat.WAV
+        // Снимок пары языков перевода (для TRANSLATED), сделанный при постановке в очередь.
+        val translationSourceLang = inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: ""
+        val translationTargetLang = inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: ""
         return TtsAudioExportRequest(
             jobId = jobId,
             novelTitle = novelTitle,
@@ -387,6 +397,8 @@ class TtsAudioExportWorker(
             pitch = pitch,
             outputDirectoryUri = outputDirectoryUri,
             format = format,
+            translationSourceLang = translationSourceLang,
+            translationTargetLang = translationTargetLang,
         )
     }
 
@@ -547,5 +559,7 @@ class TtsAudioExportWorker(
         const val KEY_PITCH = "pitch"
         const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
         const val KEY_FORMAT = "format"
+        const val KEY_TRANSLATION_SOURCE_LANG = "translation_source_lang"
+        const val KEY_TRANSLATION_TARGET_LANG = "translation_target_lang"
     }
 }
