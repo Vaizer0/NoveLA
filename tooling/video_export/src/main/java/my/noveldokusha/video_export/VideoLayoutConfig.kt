@@ -1,6 +1,7 @@
 package my.noveldokusha.video_export
 
 import android.graphics.RectF
+import android.text.Layout
 
 /**
  * Разрешённая геометрия конвейера абзацев для конкретного [VideoStyleSnapshot].
@@ -31,9 +32,14 @@ class VideoLayoutConfig private constructor(
     val cardStrokeWidth: Float = style.cardStrokeWidth
 
     val previewScale: Float = VideoLayoutSpec.PREVIEW_SCALE
-    val previewAlpha: Float = VideoLayoutSpec.PREVIEW_ALPHA
     val transitionUs: Long = VideoLayoutSpec.TRANSITION_US
     val fontMinAutofit: Float = VideoLayoutSpec.FONT_MIN_AUTOFIT
+
+    /** Непрозрачность контекстных абзацев из стиля (дефолт — старый PREVIEW_ALPHA). */
+    val previewAlpha: Float = style.contextParagraphOpacity
+
+    /** Дополнительный вертикальный зазор между current-карточкой и контекстом. */
+    val paragraphSpacing: Float = style.paragraphSpacing
 
     // ── Типографика (прокидывается в ParagraphLayoutCache) ────────────────
     val fontSizePx: Float = style.fontSizePx
@@ -42,8 +48,15 @@ class VideoLayoutConfig private constructor(
     val bold: Boolean = style.bold
     val italic: Boolean = style.italic
     val fontFamily: String = style.fontFamily
+    val textAlignment: Layout.Alignment = when (style.textAlignment) {
+        TextAlignment.START -> Layout.Alignment.ALIGN_NORMAL
+        TextAlignment.CENTER -> Layout.Alignment.ALIGN_CENTER
+        TextAlignment.END -> Layout.Alignment.ALIGN_OPPOSITE
+    }
     val highlightColorArgb: Int = style.highlightColorArgb
     val highlightAlpha: Float = style.highlightAlpha
+    val highlightRadius: Float = style.highlightRadius
+    val highlightPadding: Float = style.highlightPadding
 
     // ── Колонка и текстовая область ────────────────────────────────────────
 
@@ -85,11 +98,11 @@ class VideoLayoutConfig private constructor(
     fun headerAlpha(): Float = VideoLayoutSpec.HEADER_ALPHA
 
     fun prevTop(): Float = VideoLayoutSpec.PREV_TOP + offsetY
-    fun prevBottom(): Float = VideoLayoutSpec.PREV_BOTTOM + offsetY
+    fun prevBottom(): Float = VideoLayoutSpec.PREV_BOTTOM + offsetY - paragraphSpacing
     fun cardTop(): Float = VideoLayoutSpec.CARD_TOP + offsetY
     fun cardCapBottom(): Float = VideoLayoutSpec.CARD_CAP_BOTTOM + offsetY
-    fun nextTop(): Float = VideoLayoutSpec.NEXT_TOP + offsetY
-    fun nextBottom(): Float = VideoLayoutSpec.NEXT_BOTTOM + offsetY
+    fun nextTop(): Float = VideoLayoutSpec.NEXT_TOP + offsetY + paragraphSpacing
+    fun nextBottom(): Float = VideoLayoutSpec.NEXT_BOTTOM + offsetY + paragraphSpacing
 
     fun prevSlotRect(): RectF = RectF(columnLeft(), prevTop(), columnRight(), prevBottom())
 

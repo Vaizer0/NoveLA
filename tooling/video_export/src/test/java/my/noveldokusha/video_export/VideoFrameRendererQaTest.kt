@@ -117,14 +117,10 @@ class VideoFrameRendererQaTest {
     ): Pair<VideoFrameRenderer, VideoExportTimeline> {
         val snap = snapshot(presetId = presetId)
         val timeline = buildTimeline(paragraphs)
-        val textColor = VideoFrameRenderer.resolveTextColor(snap)
         val renderer = VideoFrameRenderer(
             snapshot = snap,
             timeline = timeline,
             typeface = typeface,
-            resolvedTextColorArgb = textColor,
-            cardFillArgb = VideoFrameRenderer.CardColors.blueprint().fillArgb,
-            cardStrokeArgb = VideoFrameRenderer.CardColors.blueprint().strokeArgb,
             novelTitle = "The Cartographer's Apprentice",
             chapterTitle = "Chapter 12 — The Mud Crossroads",
             videoStyle = style ?: VideoStyleSnapshot.defaultFor(snap),
@@ -435,9 +431,6 @@ class VideoFrameRendererQaTest {
             snapshot = snap,
             timeline = tl,
             typeface = typeface,
-            resolvedTextColorArgb = textColor,
-            cardFillArgb = VideoFrameRenderer.CardColors.blueprint().fillArgb,
-            cardStrokeArgb = VideoFrameRenderer.CardColors.blueprint().strokeArgb,
             novelTitle = "The Cartographer's Apprentice",
             chapterTitle = titleText,
         )

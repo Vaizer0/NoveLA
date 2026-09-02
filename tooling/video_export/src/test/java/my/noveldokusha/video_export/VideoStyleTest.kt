@@ -12,9 +12,10 @@ import my.noveldokusha.reader_visuals.BackgroundType
 import my.noveldokusha.reader_visuals.ReaderVisualSnapshot
 
 /**
- * Фазы A/B: VideoStyleSettings → VideoStyleSnapshot (резолв + JSON) и
- * VideoLayoutConfig (геометрия). Дефолты обязаны повторять старые константы
- * VideoLayoutSpec один в один, чтобы существующие кадры/QA не изменились.
+ * Фазы A–C: VideoStyleSettings → VideoStyleSnapshot (резолв + JSON),
+ * VideoLayoutConfig (геометрия) и вынесение цветов/подсветки в слепок.
+ * Дефолты обязаны повторять старые константы/логику VideoLayoutSpec один в
+ * один, чтобы существующие кадры/QA не изменились.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -38,6 +39,7 @@ class VideoStyleTest {
     @Test
     fun defaultsPreserveReaderAndLegacyGeometry() {
         val s = VideoStyleSnapshot.defaultFor(reader)
+        // Типографика из читалки.
         assertEquals("шрифт из читалки", "lora", s.fontFamily)
         assertEquals("fontSizeSp из читалки", 22f, s.fontSizeSp, 1e-4f)
         assertEquals(
@@ -47,6 +49,19 @@ class VideoStyleTest {
         assertEquals("lineHeight из читалки", 1.4f, s.lineHeight, 1e-4f)
         assertEquals("letterSpacing из читалки", 0.02f, s.letterSpacing, 1e-4f)
         assertEquals("highlight из читалки", 0xFFE53935.toInt(), s.highlightColorArgb)
+        // Новые поля Phase C: консервативные дефолты.
+        assertEquals("textAlignment", TextAlignment.START, s.textAlignment)
+        assertEquals("paragraphSpacing", 0f, s.paragraphSpacing, 1e-4f)
+        assertEquals(
+            "textColorArgb == логике рендера",
+            VideoFrameRenderer.resolveTextColor(reader), s.textColorArgb,
+        )
+        assertEquals("highlightRadius", 6f, s.highlightRadius, 1e-4f)
+        assertEquals("highlightPadding", 3f, s.highlightPadding, 1e-4f)
+        assertEquals("cardFill == блюпринт", VideoFrameRenderer.CardColors.blueprint().fillArgb, s.cardFillArgb)
+        assertEquals("cardStroke == блюпринт", VideoFrameRenderer.CardColors.blueprint().strokeArgb, s.cardStrokeArgb)
+        assertEquals("currentCardAlpha", 1f, s.currentCardAlpha, 1e-4f)
+        assertEquals("contextParagraphOpacity", VideoLayoutSpec.PREVIEW_ALPHA, s.contextParagraphOpacity, 1e-4f)
         assertEquals("дефолтный режим", ParagraphPresentation.CURRENT_WITH_CONTEXT, s.presentation)
 
         val cfg = VideoLayoutConfig.from(s)
@@ -55,6 +70,9 @@ class VideoStyleTest {
         assertEquals("textX0 == MARGIN_X + CARD_PAD_H", 312.0, cfg.textX0().toDouble(), 1e-3)
         assertEquals("cardTop == CARD_TOP", 290f, cfg.cardTop(), 1e-3f)
         assertEquals("cardCapBottom == CARD_CAP_BOTTOM", 810f, cfg.cardCapBottom(), 1e-3f)
+        assertEquals("paragraphSpacing=0 → prev как раньше", 270f, cfg.prevBottom(), 1e-3f)
+        assertEquals("paragraphSpacing=0 → next как раньше", 830f, cfg.nextTop(), 1e-3f)
+        assertEquals("previewAlpha == PREVIEW_ALPHA", VideoLayoutSpec.PREVIEW_ALPHA, cfg.previewAlpha, 1e-4f)
         assertEquals(
             "prevSlotRect == старому прямоугольнику",
             VideoLayoutSpec.prevSlotRect(),
@@ -78,11 +96,20 @@ class VideoStyleTest {
             italic = true,
             lineHeight = 1.6f,
             letterSpacing = 0.05f,
+            paragraphSpacing = 24f,
+            textAlignment = TextAlignment.CENTER,
+            textColorArgb = 0xFFF0FF0F.toInt(),
+            highlightColorArgb = 0xFF00FF00.toInt(),
+            highlightAlpha = 0.25f,
+            highlightRadius = 12f,
+            highlightPadding = 7f,
+            cardFillArgb = 0xFF112233.toInt(),
+            cardStrokeArgb = 0xFFAABBCC.toInt(),
+            currentCardAlpha = 0.6f,
+            contextParagraphOpacity = 0.3f,
             marginX = 400f,
             maxTextWidth = 700f,
             contentOffsetY = 20f,
-            highlightColorArgb = 0xFF00FF00.toInt(),
-            highlightAlpha = 0.25f,
             presentation = ParagraphPresentation.DYNAMIC_CONTEXT,
         ).resolve(reader)
 
@@ -92,11 +119,20 @@ class VideoStyleTest {
         assertTrue(s.italic)
         assertEquals(1.6f, s.lineHeight, 1e-4f)
         assertEquals(0.05f, s.letterSpacing, 1e-4f)
+        assertEquals(24f, s.paragraphSpacing, 1e-4f)
+        assertEquals(TextAlignment.CENTER, s.textAlignment)
+        assertEquals(0xFFF0FF0F.toInt(), s.textColorArgb)
+        assertEquals(0xFF00FF00.toInt(), s.highlightColorArgb)
+        assertEquals(0.25f, s.highlightAlpha, 1e-4f)
+        assertEquals(12f, s.highlightRadius, 1e-4f)
+        assertEquals(7f, s.highlightPadding, 1e-4f)
+        assertEquals(0xFF112233.toInt(), s.cardFillArgb)
+        assertEquals(0xFFAABBCC.toInt(), s.cardStrokeArgb)
+        assertEquals(0.6f, s.currentCardAlpha, 1e-4f)
+        assertEquals(0.3f, s.contextParagraphOpacity, 1e-4f)
         assertEquals(400f, s.marginX, 1e-3f)
         assertEquals(700f, s.maxTextWidth!!, 1e-3f)
         assertEquals(20f, s.contentOffsetY, 1e-3f)
-        assertEquals(0xFF00FF00.toInt(), s.highlightColorArgb)
-        assertEquals(0.25f, s.highlightAlpha, 1e-4f)
         assertEquals(ParagraphPresentation.DYNAMIC_CONTEXT, s.presentation)
         assertEquals(
             "fontSizePx пересчитан",
@@ -110,7 +146,26 @@ class VideoStyleTest {
             610f, cfg.textX0(), 1e-3f,
         )
         assertEquals(700f, cfg.cardTextWidth(), 1e-3f)
+        assertEquals("previewAlpha из контекст-opacity", 0.3f, cfg.previewAlpha, 1e-4f)
+        assertEquals("prev приподнят на paragraphSpacing", 266f, cfg.prevBottom(), 1e-3f)
+        assertEquals("next опущен на paragraphSpacing", 874f, cfg.nextTop(), 1e-3f)
         assertEquals("конвейер сдвинут вниз", 310f, cfg.cardTop(), 1e-3f)
+    }
+
+    @Test
+    fun resolveUsesAppCardColorsAsFallback() {
+        val appColors = VideoFrameRenderer.CardColors(fillArgb = 0x22FF0000.toInt(), strokeArgb = 0x99FFFFFF.toInt())
+        val s = VideoStyleSettings().resolve(reader, appCardColors = appColors)
+        assertEquals("заливка из темы приложения", appColors.fillArgb, s.cardFillArgb)
+        assertEquals("обводка из темы приложения", appColors.strokeArgb, s.cardStrokeArgb)
+
+        // Явная настройка пользователя побеждает тему приложения.
+        val overridden = VideoStyleSettings(
+            cardFillArgb = 0xFF010203.toInt(),
+            cardStrokeArgb = 0xFF040506.toInt(),
+        ).resolve(reader, appCardColors = appColors)
+        assertEquals(0xFF010203.toInt(), overridden.cardFillArgb)
+        assertEquals(0xFF040506.toInt(), overridden.cardStrokeArgb)
     }
 
     @Test
@@ -121,10 +176,19 @@ class VideoStyleTest {
             bold = false,
             italic = true,
             lineHeight = 1.5f,
+            paragraphSpacing = 12f,
+            textAlignment = TextAlignment.END,
+            textColorArgb = 0xFF010101.toInt(),
+            highlightColorArgb = 0xFFABCDEF.toInt(),
+            highlightAlpha = 0.4f,
+            highlightRadius = 9f,
+            highlightPadding = 5f,
+            cardFillArgb = 0xFF321321.toInt(),
+            cardStrokeArgb = 0xFF999999.toInt(),
+            currentCardAlpha = 0.8f,
+            contextParagraphOpacity = 0.35f,
             marginX = 300f,
             maxTextWidth = 800f,
-            highlightAlpha = 0.4f,
-            letterSpacing = 0.0f,
             presentation = ParagraphPresentation.DYNAMIC_CONTEXT,
         ).resolve(reader)
 
@@ -133,7 +197,10 @@ class VideoStyleTest {
 
         assertEquals(s, restored)
         assertEquals(ParagraphPresentation.DYNAMIC_CONTEXT, restored.presentation)
+        assertEquals(TextAlignment.END, restored.textAlignment)
         assertEquals(800f, restored.maxTextWidth!!, 1e-3f)
+        assertEquals(0xFF321321.toInt(), restored.cardFillArgb)
+        assertEquals(0.35f, restored.contextParagraphOpacity, 1e-4f)
     }
 
     @Test
@@ -163,5 +230,6 @@ class VideoStyleTest {
         val cfg = VideoLayoutConfig.from(s)
         assertTrue(cfg.cardTextWidth() >= 0f)
         assertTrue(cfg.textX0() <= cfg.columnRight())
+        assertFalse("цвет текста не обязан быть null", s.textColorArgb == 0)
     }
 }

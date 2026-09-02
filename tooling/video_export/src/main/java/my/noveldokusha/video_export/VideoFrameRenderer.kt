@@ -15,7 +15,6 @@ import android.text.TextPaint
 import android.text.TextUtils
 import androidx.annotation.ColorInt
 import my.noveldokusha.reader_visuals.BackgroundLayer
-import my.noveldokusha.reader_visuals.BackgroundType
 import my.noveldokusha.reader_visuals.HighlightSpan
 import my.noveldokusha.reader_visuals.ReaderVisualSnapshot
 import java.io.File
@@ -28,19 +27,18 @@ import java.io.File
  * состояние конвейера, [renderFrame] его отрисовывает. Один и тот же рендер
  * одного и того же тайминга всегда даёт одинаковый кадр.
  *
- * Цвета карточки ([cardFillArgb]/[cardStrokeArgb]) резолвятся один раз при
- * создании рендера из реальной темы ([resolveThemeCardColors]).
+ * Вся визуальная конфигурация берётся ТОЛЬКО из замороженного
+ * [VideoStyleSnapshot] (через [VideoLayoutConfig]): типографика, цвета, карточка,
+ * отступы, подсветка. Переданных «сбоку» цветов/параметров, обходящих стиль,
+ * не существует. [ReaderVisualSnapshot] используется исключительно для фона и
+ * как источник дефолтов для [VideoStyleSnapshot.defaultFor].
  */
 class VideoFrameRenderer(
     private val snapshot: ReaderVisualSnapshot,
     private val timeline: VideoExportTimeline,
     private val typeface: Typeface,
-    @ColorInt private val resolvedTextColorArgb: Int,
-    @ColorInt private val cardFillArgb: Int,
-    @ColorInt private val cardStrokeArgb: Int,
     private val novelTitle: String = "",
     private val chapterTitle: String = "",
-    @ColorInt private val headerTextColorArgb: Int? = null,
     private val backgroundImageDecoder: (File) -> Bitmap? = { null },
     private val backgroundFileResolver: (String) -> File? = { null },
     private val videoStyle: VideoStyleSnapshot = VideoStyleSnapshot.defaultFor(snapshot),
@@ -84,8 +82,6 @@ class VideoFrameRenderer(
     companion object {
         private const val HEADER_ALPHA = 0.5f
         private const val DEFAULT_BACKGROUND_COLOR = 0xFF15181D.toInt()
-        private const val HIGHLIGHT_PAD_Y = 3f
-        private const val HIGHLIGHT_RADIUS = 6f
 
         /** Крупный шрифт титула во вступлении (после озвучки — обычная шапка). */
         const val TITLE_INTRO_FONT_PX = 64f
@@ -95,7 +91,8 @@ class VideoFrameRenderer(
         /**
          * Разрешает цвета карточки из реальной темы приложения: заливка —
          * ?attr/colorAccentTransparent (coreui), обводка — ?attr/colorControlHighlight
-         * (framework). Вызывается один раз на экспорт; при неудаче — блюпринт.
+         * (framework). Вызывается один раз на enqueue экспорта (результат
+         * замораживается в [VideoStyleSnapshot]); при неудаче — блюпринт.
          */
         fun resolveThemeCardColors(context: Context): CardColors {
             val fillOut = android.util.TypedValue()
@@ -118,22 +115,14 @@ class VideoFrameRenderer(
         /**
          * Цвет текста для рендера: замороженный [ReaderVisualSnapshot.textColorArgb],
          * либо автоцвет по средней яркости фонового слоя (пресет/дефолт).
+         * Делегирует общей логике [VideoStyleSnapshot.resolveDefaultTextColor].
          */
         fun resolveTextColor(
             snapshot: ReaderVisualSnapshot,
-            defaultBackgroundArgb: Int = DEFAULT_BACKGROUND_ARGB,
-        ): Int {
-            snapshot.textColorArgb?.let { return it }
-            val bgAvg = when (snapshot.backgroundType) {
-                BackgroundType.PRESET -> ReaderVisualSnapshot.averageArgb(
-                    snapshot.presetColorsArgb.ifEmpty { listOf(defaultBackgroundArgb) }
-                )
-                else -> defaultBackgroundArgb
-            }
-            return ReaderVisualSnapshot.autoTextColorForLuminance(bgAvg)
-        }
+            defaultBackgroundArgb: Int = VIDEO_DEFAULT_BACKGROUND_ARGB,
+        ): Int = VideoStyleSnapshot.resolveDefaultTextColor(snapshot, defaultBackgroundArgb)
 
-        private const val DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
+        private const val VIDEO_DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
 
         /**
          * Layout крупного титула во вступлении (общий с QA-тестом). Тот же
@@ -166,7 +155,7 @@ class VideoFrameRenderer(
     /** Типографика стиля имеет приоритет над переданным извне шрифтом. */
     private val effectiveTypeface: Typeface = resolveVideoTypeface(typeface, videoStyle)
 
-    private val layoutCache = ParagraphLayoutCache(effectiveTypeface, resolvedTextColorArgb, layoutConfig)
+    private val layoutCache = ParagraphLayoutCache(effectiveTypeface, videoStyle.textColorArgb, layoutConfig)
     private val backgroundLayer: BackgroundLayer = snapshot.backgroundLayer(backgroundFileResolver)
 
     /** Шрифт, реально используемый в рендере (учитывает bold/italic из стиля). */
@@ -181,8 +170,8 @@ class VideoFrameRenderer(
         return runCatching { Typeface.create(style.fontFamily, flag) }.getOrDefault(base)
     }
 
-    private val headerTextColor: Int = headerTextColorArgb
-        ?: ((resolvedTextColorArgb and 0x00FFFFFF) or ((0xFF * HEADER_ALPHA).toInt() shl 24))
+    private val headerTextColor: Int =
+    (videoStyle.textColorArgb and 0x00FFFFFF) or ((0xFF * HEADER_ALPHA).toInt() shl 24)
 
     private fun autofit(index: Int): Float =
         layoutCache.layoutFor(index, timeline.paragraphs[index].displayText).autofitScale
@@ -350,11 +339,13 @@ class VideoFrameRenderer(
         canvas.translate(0f, yCursor)
         val range = title.wordAtSample(sample)?.displayRange
         if (range != null && !range.isEmpty()) {
-            val rects = HighlightSpan.wordRects(layout, range.first, range.last + 1, HIGHLIGHT_PAD_Y)
+            val rects = HighlightSpan.wordRects(
+                layout, range.first, range.last + 1, layoutConfig.highlightPadding,
+            )
             val hpaint = HighlightSpan.paint(layoutConfig.highlightColorArgb)
             hpaint.alpha = (0xFF * layoutConfig.highlightAlpha.coerceIn(0f, 1f)).toInt()
             for (rc in rects) {
-                canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
+                canvas.drawRoundRect(rc, layoutConfig.highlightRadius, layoutConfig.highlightRadius, hpaint)
             }
         }
         layout.draw(canvas)
@@ -471,13 +462,15 @@ class VideoFrameRenderer(
 
     private fun drawCard(canvas: Canvas) {
         val card = layoutConfig.cardRect()
+        val fillAlpha = (Color.alpha(videoStyle.cardFillArgb)
+            * videoStyle.currentCardAlpha.coerceIn(0f, 1f)).toInt().coerceIn(0, 255)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = cardFillArgb
+            color = (videoStyle.cardFillArgb and 0x00FFFFFF) or (fillAlpha shl 24)
             style = Paint.Style.FILL
         }
         canvas.drawRoundRect(card, layoutConfig.cardCornerRadius, layoutConfig.cardCornerRadius, fill)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = cardStrokeArgb
+            color = videoStyle.cardStrokeArgb
             style = Paint.Style.STROKE
             strokeWidth = layoutConfig.cardStrokeWidth
         }
@@ -499,11 +492,13 @@ class VideoFrameRenderer(
 
         slot.highlightWordRange?.let { r ->
             if (!r.isEmpty()) {
-                val rects = HighlightSpan.wordRects(entry.layout, r.first, r.last + 1, HIGHLIGHT_PAD_Y)
+                val rects = HighlightSpan.wordRects(
+                    entry.layout, r.first, r.last + 1, layoutConfig.highlightPadding,
+                )
                 val hpaint = HighlightSpan.paint(layoutConfig.highlightColorArgb)
                 hpaint.alpha = (0xFF * layoutConfig.highlightAlpha.coerceIn(0f, 1f) * slot.alpha).toInt()
                 for (rc in rects) {
-                    canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
+                    canvas.drawRoundRect(rc, layoutConfig.highlightRadius, layoutConfig.highlightRadius, hpaint)
                 }
             }
         }

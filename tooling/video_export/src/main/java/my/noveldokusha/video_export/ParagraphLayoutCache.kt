@@ -2,7 +2,6 @@ package my.noveldokusha.video_export
 
 import android.graphics.Paint
 import android.graphics.Typeface
-import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 
@@ -53,7 +52,7 @@ class ParagraphLayoutCache(
     private fun build(paragraphIndex: Int, displayText: String): ParagraphLayout {
         val layout = StaticLayout.Builder
             .obtain(displayText, 0, displayText.length, paint, config.cardTextWidth().toInt())
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setAlignment(config.textAlignment)
             .setIncludePad(false)
             .setLineSpacing(0f, config.lineHeight)
             .build()
