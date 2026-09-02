@@ -734,6 +734,11 @@ class RestoreDataService : Service() {
                     Timber.d("mergeToSettings: Restored GLOBAL_TRANSLATION_PREFERRED_TARGET")
                 }
 
+                if (settingsJson.has("VIDEO_STYLE_SETTINGS_JSON")) {
+                    appPreferences.VIDEO_STYLE_SETTINGS_JSON.value = settingsJson.getString("VIDEO_STYLE_SETTINGS_JSON")
+                    Timber.d("mergeToSettings: Restored VIDEO_STYLE_SETTINGS_JSON")
+                }
+
                 if (settingsJson.has("USER_REGEX_CLEANUP_RULES")) {
                     val rulesArray = settingsJson.getJSONArray("USER_REGEX_CLEANUP_RULES")
                     val rules = (0 until rulesArray.length()).map { i ->

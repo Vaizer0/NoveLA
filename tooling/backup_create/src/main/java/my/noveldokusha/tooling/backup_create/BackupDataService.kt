@@ -414,6 +414,7 @@ class BackupDataService : Service() {
                         put("GLOBAL_TRANSLATION_ENABLED", appPreferences.GLOBAL_TRANSLATION_ENABLED.value)
                         put("GLOBAL_TRANSLATION_PREFERRED_SOURCE", appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.value)
                         put("GLOBAL_TRANSLATION_PREFERRED_TARGET", appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.value)
+                        put("VIDEO_STYLE_SETTINGS_JSON", appPreferences.VIDEO_STYLE_SETTINGS_JSON.value)
                         put("USER_REGEX_CLEANUP_RULES", org.json.JSONArray(
                             appPreferences.USER_REGEX_CLEANUP_RULES.value.map { rule ->
                                 org.json.JSONObject().apply {
