@@ -2,6 +2,7 @@ package my.noveldokusha
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import my.noveldokusha.text_to_speech.ArtworkMode
@@ -12,6 +13,7 @@ import my.noveldokusha.text_to_speech.TimelineTimingMode
 import my.noveldokusha.text_to_speech.TtsVideoCompositionRenderer
 import my.noveldokusha.text_to_speech.TtsVideoTimeline
 import my.noveldokusha.text_to_speech.TtsVideoVisualSettings
+import my.noveldokusha.text_to_speech.TtsVideoVisualSnapshot
 import my.noveldokusha.text_to_speech.VideoParagraph
 import my.noveldokusha.text_to_speech.VideoSpokenRange
 import org.junit.Test
@@ -69,20 +71,40 @@ class TtsVideoVisualQaTest {
             backgroundMode = BackgroundMode.SOLID,
         )
         val fitFrames = longArrayOf(0, 1_500_000, 4_000_000, 6_500_000)
-        fitFrames.forEachIndexed { index, timeUs -> render(renderer, timeline, base, timeUs, File(outputDir, "auto-fit-$index.png")) }
+        fitFrames.forEachIndexed { index, timeUs ->
+            render(renderer, timeline, base, TtsVideoVisualSnapshot(), timeUs, File(outputDir, "auto-fit-$index.png"))
+        }
 
         val smooth = base.copy(
             longParagraphMode = LongParagraphMode.SMOOTH_SCROLL,
             paragraphMode = ParagraphDisplayMode.CURRENT_ONLY,
         )
-        render(renderer, timeline, smooth, 6_500_000, File(outputDir, "smooth-scroll.png"))
+        render(renderer, timeline, smooth, TtsVideoVisualSnapshot(), 6_500_000, File(outputDir, "smooth-scroll.png"))
 
-        val artwork = base.copy(
-            artworkMode = ArtworkMode.LEFT,
-            artworkUris = listOf("content://visual-qa/missing-image"),
-            artworkOverlay = false,
-        )
-        render(renderer, timeline, artwork, 1_500_000, File(outputDir, "artwork-safe-region.png"))
+        val artworkBitmap = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888)
+        Canvas(artworkBitmap).apply {
+            drawColor(android.graphics.Color.rgb(48, 32, 90))
+            drawCircle(300f, 300f, 180f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(220, 180, 80)
+            })
+        }
+        try {
+            val artwork = base.copy(
+                artworkMode = ArtworkMode.LEFT,
+                artworkUris = listOf("memory://visual-qa/artwork"),
+                artworkOverlay = false,
+            )
+            render(
+                renderer,
+                timeline,
+                artwork,
+                TtsVideoVisualSnapshot(artworkBitmaps = listOf(artworkBitmap)),
+                1_500_000,
+                File(outputDir, "artwork-safe-region.png"),
+            )
+        } finally {
+            artworkBitmap.recycle()
+        }
 
         check(outputDir.listFiles()?.count { it.extension == "png" } == 6)
     }
@@ -91,12 +113,13 @@ class TtsVideoVisualQaTest {
         renderer: TtsVideoCompositionRenderer,
         timeline: TtsVideoTimeline,
         settings: TtsVideoVisualSettings,
+        snapshot: TtsVideoVisualSnapshot,
         timeUs: Long,
         output: File,
     ) {
         val bitmap = Bitmap.createBitmap(settings.width, settings.height, Bitmap.Config.ARGB_8888)
         try {
-            renderer.render(Canvas(bitmap), timeline, settings, my.noveldokusha.text_to_speech.TtsVideoVisualSnapshot(), timeUs)
+            renderer.render(Canvas(bitmap), timeline, settings, snapshot, timeUs)
             output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             check(output.length() > 0) { "Empty visual QA output: ${output.name}" }
         } finally {
