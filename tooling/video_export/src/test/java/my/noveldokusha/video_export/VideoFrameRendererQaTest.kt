@@ -112,6 +112,7 @@ class VideoFrameRendererQaTest {
         paragraphs: List<String>,
         presetId: String = "paper",
         typeface: Typeface = Typeface.create("serif", Typeface.NORMAL),
+        style: VideoStyleSnapshot? = null,
     ): Pair<VideoFrameRenderer, VideoExportTimeline> {
         val snap = snapshot(presetId = presetId)
         val timeline = buildTimeline(paragraphs)
@@ -125,6 +126,7 @@ class VideoFrameRendererQaTest {
             cardStrokeArgb = VideoFrameRenderer.CardColors.blueprint().strokeArgb,
             novelTitle = "The Cartographer's Apprentice",
             chapterTitle = "Chapter 12 — The Mud Crossroads",
+            videoStyle = style ?: VideoStyleSnapshot.defaultFor(snap),
         )
         return renderer to timeline
     }
@@ -210,15 +212,16 @@ class VideoFrameRendererQaTest {
         val scale = plan.current!!.scale
         assertTrue("autofit >= ${VideoLayoutSpec.FONT_MIN_AUTOFIT}", scale >= VideoLayoutSpec.FONT_MIN_AUTOFIT)
         val content = timeline.paragraphs.first().displayText
+        val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(snapshot()))
         val cache = ParagraphLayoutCache(
-            snapshot = snapshot(),
             typeface = Typeface.create("serif", Typeface.NORMAL),
             textColorArgb = 0xFF000000.toInt(),
+            config = cfg,
         )
         val entry = cache.layoutFor(0, content)
         assertTrue(
             "autofitScale согласован с высотой",
-            entry.autofitScale == VideoLayoutSpec.autofitScale(entry.layout.height.toFloat()),
+            entry.autofitScale == cfg.autofitScale(entry.layout.height.toFloat()),
         )
     }
 
@@ -470,6 +473,83 @@ class VideoFrameRendererQaTest {
         val contentBitmap = renderFrameToBitmap(renderer, firstStart + 200_000L)
         assertFrameNotEmpty(contentBitmap)
         savePng(contentBitmap, "15_chapter_content_after_intro.png")
+    }
+
+    @Test
+    fun videoStudioPresentationQa() {
+        val default = VideoStyleSnapshot.defaultFor(snapshot())
+
+        // CURRENT_ONLY — никакого контекста, только карточка текущего абзаца.
+        val (co, coTimeline) = renderer(
+            listOf(veryShort, normal),
+            style = default.copy(presentation = ParagraphPresentation.CURRENT_ONLY),
+        )
+        val coSample = midSample(coTimeline.paragraphs[1])
+        val coPlan = co.framePlan(coSample)
+        assertFalse("current-only: нет вступления", coPlan.chapterIntro)
+        assertNotNull("current-only: current есть", coPlan.current)
+        assertNull("current-only: нет prev", coPlan.prev)
+        assertNull("current-only: нет next", coPlan.next)
+        assertGeometry(coPlan)
+        val coBitmap = renderFrameToBitmap(co, coSample)
+        assertFrameNotEmpty(coBitmap)
+        savePng(coBitmap, "16_current_only.png")
+
+        // DYNAMIC_CONTEXT: короткий current (помещается) → контекст виден.
+        val (ds, dsTimeline) = renderer(
+            listOf(normal, veryShort, dialogue),
+            style = default.copy(presentation = ParagraphPresentation.DYNAMIC_CONTEXT),
+        )
+        val dsSample = dsTimeline.paragraphs[1].startSample + 100_000L
+        val dsPlan = ds.framePlan(dsSample)
+        assertNotNull("dynamic-короткий: prev есть", dsPlan.prev)
+        assertNotNull("dynamic-короткий: next есть", dsPlan.next)
+        assertNotNull("dynamic-короткий: current есть", dsPlan.current)
+        assertGeometry(dsPlan)
+        val dsBitmap = renderFrameToBitmap(ds, dsSample)
+        assertFrameNotEmpty(dsBitmap)
+        savePng(dsBitmap, "17_dynamic_context_short.png")
+
+        // DYNAMIC_CONTEXT: длинный current → контекст убирается ДО сжатия текста.
+        val (dl, dlTimeline) = renderer(
+            listOf(normal, longPara, dialogue),
+            style = default.copy(presentation = ParagraphPresentation.DYNAMIC_CONTEXT),
+        )
+        val dlSample = dlTimeline.paragraphs[1].startSample + 2_000_000L
+        val dlPlan = dl.framePlan(dlSample)
+        assertNull("dynamic-длинный: контекст убран (prev)", dlPlan.prev)
+        assertNull("dynamic-длинный: контекст убран (next)", dlPlan.next)
+        val dlScale = dlPlan.current!!.scale
+        assertTrue(
+            "dynamic-длинный: scale в пределах пола (1.0 > $dlScale >= 0.72)",
+            dlScale in VideoLayoutSpec.FONT_MIN_AUTOFIT until 1f,
+        )
+        val dlBitmap = renderFrameToBitmap(dl, dlSample)
+        assertFrameNotEmpty(dlBitmap)
+        savePng(dlBitmap, "18_dynamic_context_long.png")
+
+        // Крупный шрифт: текст остаётся в колонке, не растягивается на край.
+        val bigStyle = default.copy(fontSizeSp = 32f, fontSizePx = default.fontSizePx * (32f / 18f))
+        val (bf, bfTimeline) = renderer(
+            listOf(normal),
+            style = bigStyle,
+        )
+        val bfSample = midSample(bfTimeline.paragraphs.first())
+        val bfPlan = bf.framePlan(bfSample)
+        assertTrue("big font: autofit < 1", bfPlan.current!!.scale < 1f)
+        assertTrue(
+            "big font: autofit >= floor",
+            bfPlan.current!!.scale >= VideoLayoutSpec.FONT_MIN_AUTOFIT,
+        )
+        val cfg = VideoLayoutConfig.from(bigStyle)
+        val left = cfg.slotContentLeftPx(bfPlan.current!!.scale)
+        val right = cfg.slotContentRightPx(bfPlan.current!!.scale)
+        assertTrue("big font: glyphs внутри канваса", left < right)
+        assertTrue("big font: не у краёв (left=$left)", left >= cfg.columnLeft())
+        assertTrue("big font: не у краёв (right=$right)", right <= cfg.columnRight())
+        val bfBitmap = renderFrameToBitmap(bf, bfSample)
+        assertFrameNotEmpty(bfBitmap)
+        savePng(bfBitmap, "19_big_font.png")
     }
 
     private fun scenario(prefix: String, paragraphs: List<String>) {

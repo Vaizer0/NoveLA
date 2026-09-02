@@ -43,6 +43,7 @@ class VideoFrameRenderer(
     @ColorInt private val headerTextColorArgb: Int? = null,
     private val backgroundImageDecoder: (File) -> Bitmap? = { null },
     private val backgroundFileResolver: (String) -> File? = { null },
+    private val videoStyle: VideoStyleSnapshot = VideoStyleSnapshot.defaultFor(snapshot),
 ) {
 
     data class CardColors(
@@ -85,7 +86,6 @@ class VideoFrameRenderer(
         private const val DEFAULT_BACKGROUND_COLOR = 0xFF15181D.toInt()
         private const val HIGHLIGHT_PAD_Y = 3f
         private const val HIGHLIGHT_RADIUS = 6f
-        private const val HIGHLIGHT_ALPHA = 0x80
 
         /** Крупный шрифт титула во вступлении (после озвучки — обычная шапка). */
         const val TITLE_INTRO_FONT_PX = 64f
@@ -138,15 +138,21 @@ class VideoFrameRenderer(
         /**
          * Layout крупного титула во вступлении (общий с QA-тестом). Тот же
          * builder используется и при подсветке слов — rect'ы глифов точные.
+         * Ширина текста берётся из активного макета, чтобы титул чтил поля.
          */
-        fun buildTitleIntroLayout(text: String, typeface: Typeface, textColorArgb: Int): StaticLayout {
+        fun buildTitleIntroLayout(
+            text: String,
+            typeface: Typeface,
+            textColorArgb: Int,
+            textWidthPx: Int = VideoLayoutSpec.CARD_TEXT_WIDTH,
+        ): StaticLayout {
             val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.typeface = typeface
                 color = textColorArgb
                 textSize = TITLE_INTRO_FONT_PX
             }
             return StaticLayout.Builder
-                .obtain(text, 0, text.length, paint, VideoLayoutSpec.CARD_TEXT_WIDTH.toInt())
+                .obtain(text, 0, text.length, paint, textWidthPx)
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setIncludePad(false)
                 .setMaxLines(TITLE_INTRO_MAX_LINES)
@@ -155,8 +161,25 @@ class VideoFrameRenderer(
         }
     }
 
-    private val layoutCache = ParagraphLayoutCache(snapshot, typeface, resolvedTextColorArgb)
+    private val layoutConfig: VideoLayoutConfig = VideoLayoutConfig.from(videoStyle)
+
+    /** Типографика стиля имеет приоритет над переданным извне шрифтом. */
+    private val effectiveTypeface: Typeface = resolveVideoTypeface(typeface, videoStyle)
+
+    private val layoutCache = ParagraphLayoutCache(effectiveTypeface, resolvedTextColorArgb, layoutConfig)
     private val backgroundLayer: BackgroundLayer = snapshot.backgroundLayer(backgroundFileResolver)
+
+    /** Шрифт, реально используемый в рендере (учитывает bold/italic из стиля). */
+    private fun resolveVideoTypeface(base: Typeface, style: VideoStyleSnapshot): Typeface {
+        val flag = when {
+            style.bold && style.italic -> Typeface.BOLD_ITALIC
+            style.bold -> Typeface.BOLD
+            style.italic -> Typeface.ITALIC
+            else -> Typeface.NORMAL
+        }
+        if (flag == Typeface.NORMAL && style.fontFamily == snapshot.fontFamily) return base
+        return runCatching { Typeface.create(style.fontFamily, flag) }.getOrDefault(base)
+    }
 
     private val headerTextColor: Int = headerTextColorArgb
         ?: ((resolvedTextColorArgb and 0x00FFFFFF) or ((0xFF * HEADER_ALPHA).toInt() shl 24))
@@ -179,8 +202,14 @@ class VideoFrameRenderer(
 
     /**
      * Состояние конвейера на кадре [sample]. Внутри перехода
-     * (sample - start < [VideoLayoutSpec.TRANSITION_US]) старый current уходит
+     * (sample - start < [VideoLayoutConfig.transitionUs]) старый current уходит
      * в prev, следующий поднимается в current, новый следующий всплывает снизу.
+     *
+     * Режим презентации берётся из замороженного стиля:
+     *  - CURRENT_ONLY — всегда только карточка текущего абзаца;
+     *  - CURRENT_WITH_CONTEXT — классический конвейер (prev/current/next);
+     *  - DYNAMIC_CONTEXT — контекст показывается, пока current помещается в
+     *    карточку; при длинном current контекст убирается ДО уменьшения шрифта.
      */
     fun framePlan(sample: Long): FramePlan {
         val intro = timeline.title
@@ -192,23 +221,40 @@ class VideoFrameRenderer(
         if (ps.isEmpty()) return FramePlan()
 
         val i = ps.indexOf(timeline.paragraphAtSample(sample))
+        val cardContentRect = layoutConfig.cardContentRect()
+
+        fun currentOnly(): FramePlan = FramePlan(
+            current = SlotFrame(
+                paragraphIndex = i,
+                rect = cardContentRect,
+                clip = cardContentRect,
+                scale = autofit(i),
+                alpha = 1f,
+                highlightWordRange = highlightRange(i, sample),
+            ),
+        )
+
+        if (videoStyle.presentation == ParagraphPresentation.CURRENT_ONLY) return currentOnly()
+        if (videoStyle.presentation == ParagraphPresentation.DYNAMIC_CONTEXT && autofit(i) < 1f) {
+            return currentOnly()
+        }
+
         val start = ps[i].startSample
         val rawT = if (sample >= start) {
-            ((sample - start).toFloat() / VideoLayoutSpec.TRANSITION_US).coerceIn(0f, 1f)
+            ((sample - start).toFloat() / layoutConfig.transitionUs).coerceIn(0f, 1f)
         } else {
             0f
         }
         val t = VideoLayoutSpec.smoothstep(rawT)
 
-        val prevRect = VideoLayoutSpec.prevSlotRect()
-        val cardContentRect = VideoLayoutSpec.cardContentRect()
-        val cardRect = VideoLayoutSpec.cardRect()
-        val nextRect = VideoLayoutSpec.nextSlotRect()
-        val preRoll = VideoLayoutSpec.nextPreRollRect()
+        val prevRect = layoutConfig.prevSlotRect()
+        val cardRect = layoutConfig.cardRect()
+        val nextRect = layoutConfig.nextSlotRect()
+        val preRoll = layoutConfig.nextPreRollRect()
 
         fun steady(): FramePlan = FramePlan(
             prev = prevIndex(i)?.let {
-                SlotFrame(it, prevRect, prevRect, VideoLayoutSpec.PREVIEW_SCALE, VideoLayoutSpec.PREVIEW_ALPHA)
+                SlotFrame(it, prevRect, prevRect, layoutConfig.previewScale, layoutConfig.previewAlpha)
             },
             current = SlotFrame(
                 paragraphIndex = i,
@@ -219,7 +265,7 @@ class VideoFrameRenderer(
                 highlightWordRange = highlightRange(i, sample),
             ),
             next = nextIndex(i)?.let {
-                SlotFrame(it, nextRect, nextRect, VideoLayoutSpec.PREVIEW_SCALE, VideoLayoutSpec.PREVIEW_ALPHA)
+                SlotFrame(it, nextRect, nextRect, layoutConfig.previewScale, layoutConfig.previewAlpha)
             },
         )
 
@@ -233,8 +279,8 @@ class VideoFrameRenderer(
                     paragraphIndex = i - 2,
                     rect = prevRect,
                     clip = prevRect,
-                    scale = VideoLayoutSpec.PREVIEW_SCALE,
-                    alpha = VideoLayoutSpec.PREVIEW_ALPHA * (1f - t),
+                    scale = layoutConfig.previewScale,
+                    alpha = layoutConfig.previewAlpha * (1f - t),
                 )
             } else {
                 null
@@ -243,26 +289,26 @@ class VideoFrameRenderer(
                 SlotFrame(
                     paragraphIndex = it,
                     rect = VideoLayoutSpec.lerpRect(cardContentRect, prevRect, t),
-                    clip = VideoLayoutSpec.band(prevRect, cardContentRect),
-                    scale = VideoLayoutSpec.lerp(autofit(it), VideoLayoutSpec.PREVIEW_SCALE, t),
-                    alpha = VideoLayoutSpec.lerp(1f, VideoLayoutSpec.PREVIEW_ALPHA, t),
+                    clip = layoutConfig.band(prevRect, cardContentRect),
+                    scale = VideoLayoutSpec.lerp(autofit(it), layoutConfig.previewScale, t),
+                    alpha = VideoLayoutSpec.lerp(1f, layoutConfig.previewAlpha, t),
                 )
             },
             current = SlotFrame(
                 paragraphIndex = i,
                 rect = VideoLayoutSpec.lerpRect(nextRect, cardContentRect, t),
-                clip = VideoLayoutSpec.band(cardRect, nextRect),
-                scale = VideoLayoutSpec.lerp(VideoLayoutSpec.PREVIEW_SCALE, autofit(i), t),
-                alpha = VideoLayoutSpec.lerp(VideoLayoutSpec.PREVIEW_ALPHA, 1f, t),
+                clip = layoutConfig.band(cardRect, nextRect),
+                scale = VideoLayoutSpec.lerp(layoutConfig.previewScale, autofit(i), t),
+                alpha = VideoLayoutSpec.lerp(layoutConfig.previewAlpha, 1f, t),
                 highlightWordRange = highlightRange(i, sample),
             ),
             next = nextIndex(i)?.let {
                 SlotFrame(
                     paragraphIndex = it,
                     rect = VideoLayoutSpec.lerpRect(preRoll, nextRect, t),
-                    clip = VideoLayoutSpec.band(nextRect, preRoll),
-                    scale = VideoLayoutSpec.PREVIEW_SCALE,
-                    alpha = VideoLayoutSpec.lerp(0f, VideoLayoutSpec.PREVIEW_ALPHA, t),
+                    clip = layoutConfig.band(nextRect, preRoll),
+                    scale = layoutConfig.previewScale,
+                    alpha = VideoLayoutSpec.lerp(0f, layoutConfig.previewAlpha, t),
                 )
             },
         )
@@ -293,7 +339,7 @@ class VideoFrameRenderer(
         val layout = introLayout(title.displayText)
 
         canvas.save()
-        canvas.translate((VideoLayoutSpec.MARGIN_X + VideoLayoutSpec.CARD_PAD_H).toFloat(), 0f)
+        canvas.translate(layoutConfig.textX0(), 0f)
         var yCursor = introTop(layout.height.toFloat())
         if (novelTitle.isNotBlank()) {
             drawIntroCaption(canvas, yCursor)
@@ -305,8 +351,8 @@ class VideoFrameRenderer(
         val range = title.wordAtSample(sample)?.displayRange
         if (range != null && !range.isEmpty()) {
             val rects = HighlightSpan.wordRects(layout, range.first, range.last + 1, HIGHLIGHT_PAD_Y)
-            val hpaint = HighlightSpan.paint(snapshot.ttsHighlightColorArgb)
-            hpaint.alpha = HIGHLIGHT_ALPHA
+            val hpaint = HighlightSpan.paint(layoutConfig.highlightColorArgb)
+            hpaint.alpha = (0xFF * layoutConfig.highlightAlpha.coerceIn(0f, 1f)).toInt()
             for (rc in rects) {
                 canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
             }
@@ -319,7 +365,7 @@ class VideoFrameRenderer(
 
     /** Верх титульного блока: блок центрируется по вертикали карточки. */
     private fun introTop(titleHeight: Float): Float {
-        val area = VideoLayoutSpec.cardRect()
+        val area = layoutConfig.cardRect()
         val block = titleHeight + (if (novelTitle.isNotBlank()) TITLE_INTRO_CAPTION_FONT_PX + 16f else 0f)
         return (area.top + (area.height() - block) / 2f).coerceAtLeast(area.top)
     }
@@ -330,7 +376,7 @@ class VideoFrameRenderer(
             textSize = TITLE_INTRO_CAPTION_FONT_PX
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(novelTitle, VideoLayoutSpec.CARD_TEXT_WIDTH / 2f, top + TITLE_INTRO_CAPTION_FONT_PX, paint)
+        canvas.drawText(novelTitle, layoutConfig.cardTextWidth() / 2f, top + TITLE_INTRO_CAPTION_FONT_PX, paint)
     }
 
     /** Layout титула (кэшируется — титул не меняется в течение кадра/экспорта). */
@@ -338,7 +384,12 @@ class VideoFrameRenderer(
 
     private fun introLayout(text: String): StaticLayout {
         introLayoutCache?.let { return it }
-        val layout = buildTitleIntroLayout(text, typeface, headerTextColor)
+        val layout = buildTitleIntroLayout(
+            text,
+            effectiveTypeface,
+            headerTextColor,
+            layoutConfig.cardTextWidth().toInt(),
+        )
         introLayoutCache = layout
         return layout
     }
@@ -348,11 +399,15 @@ class VideoFrameRenderer(
             BackgroundLayer.None -> canvas.drawColor(DEFAULT_BACKGROUND_COLOR)
             is BackgroundLayer.Preset -> {
                 val gradient = LinearGradient(
-                    0f, 0f, 0f, VideoLayoutSpec.HEIGHT.toFloat(),
+                    0f, 0f, 0f, layoutConfig.height.toFloat(),
                     layer.preset.colors.toIntArray(), null, Shader.TileMode.CLAMP,
                 )
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = gradient }
-                canvas.drawRect(0f, 0f, VideoLayoutSpec.WIDTH.toFloat(), VideoLayoutSpec.HEIGHT.toFloat(), paint)
+                canvas.drawRect(
+                    0f, 0f,
+                    layoutConfig.width.toFloat(), layoutConfig.height.toFloat(),
+                    paint,
+                )
             }
             is BackgroundLayer.Image -> {
                 val bitmap = backgroundImageDecoder(layer.file)
@@ -366,8 +421,8 @@ class VideoFrameRenderer(
     }
 
     private fun drawBackgroundImage(canvas: Canvas, bitmap: Bitmap) {
-        val vw = VideoLayoutSpec.WIDTH.toFloat()
-        val vh = VideoLayoutSpec.HEIGHT.toFloat()
+        val vw = layoutConfig.width.toFloat()
+        val vh = layoutConfig.height.toFloat()
         val scale = maxOf(vw / bitmap.width, vh / bitmap.height)
         val drawW = bitmap.width * scale
         val drawH = bitmap.height * scale
@@ -389,12 +444,12 @@ class VideoFrameRenderer(
 
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = headerTextColor
-            textSize = VideoLayoutSpec.HEADER_FONT_PX
+            textSize = layoutConfig.headerFontPx()
         }
         canvas.save()
-        canvas.translate(VideoLayoutSpec.MARGIN_X.toFloat(), 0f)
+        canvas.translate(layoutConfig.columnLeft(), 0f)
         val layout = StaticLayout.Builder
-            .obtain(title, 0, title.length, paint, VideoLayoutSpec.COLUMN_WIDTH.toInt())
+            .obtain(title, 0, title.length, paint, layoutConfig.columnWidth().toInt())
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setMaxLines(1)
             .setEllipsize(TextUtils.TruncateAt.END)
@@ -415,18 +470,18 @@ class VideoFrameRenderer(
     }
 
     private fun drawCard(canvas: Canvas) {
-        val card = VideoLayoutSpec.cardRect()
+        val card = layoutConfig.cardRect()
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = cardFillArgb
             style = Paint.Style.FILL
         }
-        canvas.drawRoundRect(card, VideoLayoutSpec.CARD_CORNER_RADIUS, VideoLayoutSpec.CARD_CORNER_RADIUS, fill)
+        canvas.drawRoundRect(card, layoutConfig.cardCornerRadius, layoutConfig.cardCornerRadius, fill)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = cardStrokeArgb
             style = Paint.Style.STROKE
-            strokeWidth = VideoLayoutSpec.CARD_STROKE_WIDTH
+            strokeWidth = layoutConfig.cardStrokeWidth
         }
-        canvas.drawRoundRect(card, VideoLayoutSpec.CARD_CORNER_RADIUS, VideoLayoutSpec.CARD_CORNER_RADIUS, stroke)
+        canvas.drawRoundRect(card, layoutConfig.cardCornerRadius, layoutConfig.cardCornerRadius, stroke)
     }
 
     private fun drawSlotContent(canvas: Canvas, slot: SlotFrame, index: Int) {
@@ -435,18 +490,18 @@ class VideoFrameRenderer(
         canvas.clipRect(slot.clip)
         canvas.save()
         canvas.translate(0f, slot.rect.top)
-        // Локальная область layout (x0..CARD_TEXT_WIDTH) смещается в левый край
+        // Локальная область layout (x0..cardTextWidth) смещается в левый край
         // контента карточки, после чего центрированно масштабируется от контента.
-        canvas.translate((VideoLayoutSpec.MARGIN_X + VideoLayoutSpec.CARD_PAD_H).toFloat(), 0f)
-        canvas.scale(slot.scale, slot.scale, VideoLayoutSpec.CONTENT_CENTER_X, 0f)
+        canvas.translate(layoutConfig.textX0(), 0f)
+        canvas.scale(slot.scale, slot.scale, layoutConfig.contentCenterX, 0f)
 
         layoutCache.paint.alpha = (0xFF * slot.alpha).toInt()
 
         slot.highlightWordRange?.let { r ->
             if (!r.isEmpty()) {
                 val rects = HighlightSpan.wordRects(entry.layout, r.first, r.last + 1, HIGHLIGHT_PAD_Y)
-                val hpaint = HighlightSpan.paint(snapshot.ttsHighlightColorArgb)
-                hpaint.alpha = (HIGHLIGHT_ALPHA * slot.alpha).toInt()
+                val hpaint = HighlightSpan.paint(layoutConfig.highlightColorArgb)
+                hpaint.alpha = (0xFF * layoutConfig.highlightAlpha.coerceIn(0f, 1f) * slot.alpha).toInt()
                 for (rc in rects) {
                     canvas.drawRoundRect(rc, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS, hpaint)
                 }
