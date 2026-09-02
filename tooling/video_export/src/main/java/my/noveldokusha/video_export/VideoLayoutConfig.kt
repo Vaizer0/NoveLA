@@ -65,7 +65,13 @@ class VideoLayoutConfig private constructor(
     fun textX0(): Float {
         val padded = columnWidth() - cardPadH * 2f
         val x0 = columnLeft() + cardPadH + (padded - cardTextWidth()) / 2f
-        return x0.coerceIn(columnLeft(), columnRight())
+        val left = columnLeft()
+        val right = columnRight()
+        return when {
+            x0 < left -> left
+            x0 > right -> right
+            else -> x0
+        }
     }
 
     fun cardTextMaxHeight(): Float =
