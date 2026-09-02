@@ -7,12 +7,11 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.yield
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.coroutineContext
 
 class TtsVideoAudioSynthesizer(private val context: Context) {
     suspend fun synthesize(request: TtsVideoRequest, blocks: List<String>, output: File, onChunkProgress: (Float) -> Unit = {}): VideoSynthesisResult {
@@ -40,7 +39,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
             for ((blockIndex, chunkIndex, text) in chunks) {
-                coroutineContext.ensureActive()
+                yield()
                 val sourceBlock = blocks.getOrNull(blockIndex) ?: text
                 val cleanMapped = cleanForTtsMapped(sourceBlock)
                 val searchFrom = chunkCursors[blockIndex] ?: 0
@@ -48,12 +47,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
                 if (chunkStart < 0) throw TtsExportException("Unable to map TTS chunk $chunkIndex back to source text")
                 chunkCursors[blockIndex] = chunkStart + text.length
                 val preparedMapped = TtsVideoTextMapper.substring(cleanMapped, chunkStart, chunkStart + text.length)
-                val mapping = VideoDisplayMapping(
-                    sourceText = sourceBlock,
-                    preparedText = preparedMapped,
-                    displayText = TtsVideoTextMapper.identity(sourceBlock),
-                    blockId = "$blockIndex:$chunkIndex",
-                )
+                val mapping = VideoDisplayMapping(sourceText = sourceBlock, preparedText = preparedMapped, displayText = TtsVideoTextMapper.identity(sourceBlock), blockId = "$blockIndex:$chunkIndex")
                 val before = writer.dataBytesWritten()
                 val captured = synthesizeChunk(tts, sink, writer, text, request.chapterTitle)
                 val bytes = writer.dataBytesWritten() - before
@@ -157,9 +151,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             done.invokeOnCompletion { cause -> if (cause is CancellationException) runCatching { tts.stop() } }
             val id = "video_${System.nanoTime()}"
             val bundle = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id) }
-            if (tts.synthesizeToFile(text, bundle, descriptor, id) != TextToSpeech.SUCCESS) {
-                throw TtsExportException("synthesizeToFile rejected input")
-            }
+            if (tts.synthesizeToFile(text, bundle, descriptor, id) != TextToSpeech.SUCCESS) throw TtsExportException("synthesizeToFile rejected input")
             done.await()
             callbackError?.let { throw it }
             return events.toList()
