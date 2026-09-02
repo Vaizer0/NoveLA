@@ -44,16 +44,18 @@ class SlideshowScheduler(
 
     private val slots: List<SlideSlot>
     private val items: List<ArtworkItem> = items
+    private val totalMs: Long
 
     val isEmpty: Boolean get() = items.isEmpty()
 
     init {
         require(totalAudioMs > 0) { "totalAudioMs must be > 0" }
-        slots = buildSlots(config, items, totalAudioMs)
+        totalMs = totalAudioMs
+        slots = buildSlots(config, items, totalMs)
     }
 
     fun frameAt(timeMs: Long): Frame {
-        val t = timeMs.coerceIn(0L, totalAudioMs)
+        val t = timeMs.coerceIn(0L, totalMs)
         val slots = slots
         if (slots.isEmpty()) {
             return Frame(-1, "", -1, -1, 1f)
