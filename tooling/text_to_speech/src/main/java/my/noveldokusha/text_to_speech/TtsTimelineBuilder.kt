@@ -158,7 +158,7 @@ class TtsTimelineBuilder {
                 // Диапазоны native-колбэка бывают «грязными» (пустые start==end,
                 // выходящие за пределы слайса, немонотонные времена). Сантизируем их,
                 // а не валим экспорт: невалидные отбрасываем, оставшиеся клампим.
-                val pageRanges = rangeIndices.mapNotNull { flatIdx ->
+                val pageRanges = perParagraph[pIdx].mapNotNull { flatIdx ->
                     val raw = flat[flatIdx].second
                     // Индексы текста ограничиваем границами абзаца и preparedText.
                     val relStart = raw.offsetInParagraph + raw.start
