@@ -519,8 +519,7 @@ class VideoFrameRendererQaTest {
     }
 
     @Test
-    fun videoStudioPresentationQa() {
-        val default = VideoStyleSnapshot.defaultFor(snapshot())
+    fun videoStudioPresentationQa() {        val default = VideoStyleSnapshot.defaultFor(snapshot())
 
         // CURRENT_ONLY — никакого контекста, только карточка текущего абзаца.
         val (co, coTimeline) = renderer(
@@ -595,31 +594,67 @@ class VideoFrameRendererQaTest {
         assertTrue("big font: не у краёв (left=$left)", left >= cfg.columnLeft())
         assertTrue("big font: не у краёв (right=$right)", right <= cfg.columnRight())
         assertGlyphIsolation(bf, bfPlan)
-        // Window strategy: a paragraph taller than the card is NOT silently
-        // clipped — the text scrolls deterministically and is fully revealed
-        // by the end of the paragraph.
+        // Window strategy: the auto-size card grows to fit a paragraph (up to
+        // the max card content height) and autofits it — so a paragraph that
+        // fits after autofit is FULLY visible with no scroll needed.
         val bfW = cfg.cardTextWidth()
         val bfH = bf.layoutContentHeightFor(0)
         val bfX0 = cfg.textX0()
         val bfStartPlan = bf.framePlan(bfTimeline.paragraphs.first().startSample + 5_000L)
         val bfEndPlan = bf.framePlan(bfTimeline.paragraphs.first().endSample - 20_000L)
         assertTrue(
-            "big font: scroll grows towards paragraph end",
-            bfEndPlan.current!!.scrollOffset > bfStartPlan.current!!.scrollOffset,
+            "big font: autofitted content fully visible, no scroll",
+            bfStartPlan.current!!.scrollOffset == 0f && bfEndPlan.current!!.scrollOffset == 0f,
         )
-        val endBounds = bfEndPlan.current!!.contentBounds(bfW, bfH, bfX0)
+        val bfStartBounds = bfStartPlan.current!!.contentBounds(bfW, bfH, bfX0)
+        val bfEndBounds = bfEndPlan.current!!.contentBounds(bfW, bfH, bfX0)
         assertTrue(
-            "big font: all content revealed by the end (bottom=${endBounds.bottom})",
-            endBounds.bottom >= bfEndPlan.current!!.window.bottom - 2f,
+            "big font: first line visible at start (top=${bfStartBounds.top})",
+            bfStartBounds.top <= bfStartPlan.current!!.window.top + 2f,
         )
-        val startBounds = bfStartPlan.current!!.contentBounds(bfW, bfH, bfX0)
         assertTrue(
-            "big font: first line visible at start (top=${startBounds.top})",
-            startBounds.top <= bfStartPlan.current!!.window.top + 2f,
+            "big font: all content revealed by the end (bottom=${bfEndBounds.bottom})",
+            bfEndBounds.bottom <= bfEndPlan.current!!.window.bottom + 2f,
         )
         val bfBitmap = renderFrameToBitmap(bf, bfSample)
         assertFrameNotEmpty(bfBitmap)
         savePng(bfBitmap, "19_big_font.png")
+    }
+
+    @Test
+    fun marqueeScrollQa() {
+        // Параграф, который даже на полу autofit не помещается в авторазмерную
+        // карточку, — не то обрезается, а прокручивается вслед за произносимой
+        // строкой и к концу абзаца раскрывается полностью.
+        val veryTall = (1..60).joinToString(" ") {
+            "The driver spat into the mud and squinted at the dark, while the cart " +
+                "creaked under the weight of the crates bound for the far market."
+        }
+        val (r, tl) = renderer(listOf(veryTall))
+        val p = tl.paragraphs.first()
+        val startPlan = r.framePlan(p.startSample + 5_000L)
+        val endPlan = r.framePlan(p.endSample - 20_000L)
+        assertTrue(
+            "tall: autofit at floor (${startPlan.current!!.scale})",
+            startPlan.current!!.scale == VideoLayoutSpec.FONT_MIN_AUTOFIT,
+        )
+        assertTrue(
+            "tall: scroll grows towards end",
+            endPlan.current!!.scrollOffset > startPlan.current!!.scrollOffset,
+        )
+        val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(snapshot()))
+        val w = cfg.cardTextWidth()
+        val h = r.layoutContentHeightFor(0)
+        val x0 = cfg.textX0()
+        val startBounds = startPlan.current!!.contentBounds(w, h, x0)
+        val endBounds = endPlan.current!!.contentBounds(w, h, x0)
+        assertTrue("tall: first line visible at start", startBounds.top <= startPlan.current!!.window.top + 2f)
+        assertTrue("tall: content revealed by end", endBounds.bottom >= endPlan.current!!.window.bottom - 2f)
+        assertGeometry(startPlan)
+        assertGlyphIsolation(r, startPlan)
+        val bmp = renderFrameToBitmap(r, p.startSample + 1_000_000L)
+        assertFrameNotEmpty(bmp)
+        savePng(bmp, "20_marquee_scroll.png")
     }
 
     @Test
