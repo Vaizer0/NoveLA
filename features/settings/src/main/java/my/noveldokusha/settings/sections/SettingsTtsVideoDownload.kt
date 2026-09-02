@@ -102,7 +102,7 @@ fun SettingsTtsVideoDownload() {
         bitmap
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(previewBitmap) {
         onDispose { previewBitmap.recycle() }
     }
 
@@ -190,7 +190,7 @@ fun SettingsTtsVideoDownload() {
             }
 
             Text(
-                text = if (draftOutputUri.isBlank()) "Output folder: using Audio Downloads folder"
+                text = if (draftOutputUri.isBlank()) "Output folder: not selected (choose a dedicated video folder)"
                 else "Output folder selected",
                 style = MaterialTheme.typography.bodySmall,
             )
