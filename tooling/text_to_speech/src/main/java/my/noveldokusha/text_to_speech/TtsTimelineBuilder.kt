@@ -211,10 +211,13 @@ class TtsTimelineBuilder {
 
     // ── Внутренние структуры ──────────────────────────────────────────────
 
-    private class SliceEntry(val sliceText: String, val offsetInParagraph: Int) {
+    private class SliceEntry(
+        val sliceText: String,
+        val offsetInParagraph: Int,
+        val startMsAcc: Long,
+    ) {
         var sampleRate: Int = 0
         var channels: Int = 0
-        var startMsAcc: Long = 0
         var totalAudioBytes: Long = 0
         var durationMs: Double = 0.0
     }
