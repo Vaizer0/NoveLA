@@ -200,7 +200,9 @@ class VideoLayoutConfig private constructor(
     /** Геометрия центрированной авторазмерной карточки для текущего абзаца. */
     fun currentCardGeometry(layoutHeightPx: Float): CardGeometry {
         val scale = contentScale(layoutHeightPx)
-        val contentH = layoutHeightPx * scale
+        // Высота контента ограничена максимумом: если даже на полу autofit текст
+        // не помещается, карточка не растёт бесконечно — лишнее уходит в scroll.
+        val contentH = (layoutHeightPx * scale).coerceAtMost(maxCardContentHeight())
         val cardH = contentH + cardPadTop + cardPadBottom
         val clusterH = previewBandHeight + contextGap + cardH + contextGap + previewBandHeight
         val freeSpace = contentBottom() - contentTop()
