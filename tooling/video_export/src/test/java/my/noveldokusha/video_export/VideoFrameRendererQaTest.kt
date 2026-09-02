@@ -8,6 +8,7 @@ import android.text.TextPaint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -522,8 +523,9 @@ class VideoFrameRendererQaTest {
         val dlScale = dlPlan.current!!.scale
         assertTrue(
             "dynamic-длинный: scale в пределах пола (1.0 > $dlScale >= 0.72)",
-            dlScale in VideoLayoutSpec.FONT_MIN_AUTOFIT until 1f,
+            dlScale in VideoLayoutSpec.FONT_MIN_AUTOFIT..1f,
         )
+        assertTrue("dynamic-длинный: scale < 1 (сжатие)", dlScale < 1f)
         val dlBitmap = renderFrameToBitmap(dl, dlSample)
         assertFrameNotEmpty(dlBitmap)
         savePng(dlBitmap, "18_dynamic_context_long.png")
