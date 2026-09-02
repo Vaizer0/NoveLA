@@ -23,10 +23,10 @@ import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.debug.MemoryDiagnostics
+import my.noveldokusha.tooling.application_workers.TtsVideoQueue
 import timber.log.Timber
 import javax.inject.Inject
 import java.util.Locale
-
 
 @HiltAndroidApp
 class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
@@ -36,8 +36,6 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
     @Inject
     lateinit var networkClient: NetworkClient
 
-    // Eager singleton: форсирует создание DownloadManager при старте приложения,
-    // чтобы restoreTasksFromDatabase() запустился сразу, а не при первом открытии книги.
     @Inject
     lateinit var downloadManager: DownloadManager
 
@@ -51,6 +49,13 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
 
         val appPreferences = EntryPoints.get(this, HiltAppEntryPoint::class.java).appPreferences()
         resolveAppLanguage(appPreferences)
+
+        // WorkManager persists independently of the app process. Repair only genuinely orphaned
+        // persisted video jobs at startup; active user-cancelled jobs remain CANCELLED.
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { TtsVideoQueue.recoverOrphanedJobs(applicationContext) }
+                .onFailure { Timber.e(it, "TtsVideo: startup recovery failed") }
+        }
 
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
@@ -68,11 +73,11 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
     override fun newImageLoader(): ImageLoader {
         val diskCache = coil.disk.DiskCache.Builder()
             .directory(cacheDir.resolve("image_cache"))
-            .maxSizeBytes(100 * 1024 * 1024) // 100 MB
+            .maxSizeBytes(100 * 1024 * 1024)
             .build()
 
         val memoryCache = coil.memory.MemoryCache.Builder(this)
-            .maxSizeBytes(64 * 1024 * 1024) // 64 MB
+            .maxSizeBytes(64 * 1024 * 1024)
             .build()
 
         return when (val networkClient = networkClient) {
@@ -122,7 +127,6 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         }
     }
 
-    // WorkManager — custom factory for @HiltWorker workers (LibraryUpdates, UpdatesChecker)
     override val workManagerConfiguration: WorkConfiguration by lazy {
         val appWorkerFactory = EntryPoints
             .get(this, HiltAppEntryPoint::class.java)
