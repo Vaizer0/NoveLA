@@ -65,7 +65,6 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             writer.finish()
             return VideoSynthesisResult(output, audioUs, timings, sampleRate, channels)
         } catch (e: Throwable) {
-            if (e is CancellationException) throw e
             runCatching { writer.close() }
             runCatching { output.delete() }
             throw e
