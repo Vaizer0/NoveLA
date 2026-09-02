@@ -85,3 +85,5 @@ jobs:
             tooling/text_to_speech/build/test-results/
           if-no-files-found: warn
           retention-days: 14
+
+# Final branch-head validation marker: the next push must build this exact revision.
