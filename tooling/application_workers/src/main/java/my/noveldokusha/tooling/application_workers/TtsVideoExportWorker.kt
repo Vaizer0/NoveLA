@@ -20,6 +20,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TtsVideoJobState
 import my.noveldokusha.core.appPreferences.TtsVideoJobStatus
@@ -39,13 +40,14 @@ import java.io.File
 
 class TtsVideoExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     @EntryPoint @InstallIn(SingletonComponent::class)
-    interface EntryPointAccess { fun appDatabase(): AppDatabase }
+    interface EntryPointAccess { fun appDatabase(): AppDatabase; fun appPreferences(): AppPreferences }
 
     override suspend fun doWork(): Result {
         val request = inputData.getString(KEY_REQUEST_JSON)?.toTtsVideoRequest() ?: return Result.failure()
         val prefs = TtsVideoPreferences(applicationContext)
-        update(prefs, request, TtsVideoJobStatus.RUNNING, 1)
         val entry = EntryPointAccessors.fromApplication(applicationContext, EntryPointAccess::class.java)
+        val appPreferences = entry.appPreferences()
+        update(prefs, request, TtsVideoJobStatus.RUNNING, 1)
         val startedAt = android.os.SystemClock.elapsedRealtime()
         var temp: File? = null
         try {
@@ -61,12 +63,11 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
             } catch (e: CancellationException) { throw e }
             catch (e: Throwable) { throw TtsExportException("Unable to promote video export to foreground: ${e.message ?: "unknown error"}") }
 
-            // Re-validate at execution time: a persisted SAF grant can be revoked after enqueue.
             TtsVideoExportLauncher.requireAccessibleTree(applicationContext, request.outputDirectoryUri)
-
-            val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), request) }
+            val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), appPreferences, request) }
                 ?: return fail(prefs, request, if (request.source == TtsAudioSource.TRANSLATED) "Cached translation is missing" else "Chapter text is not downloaded")
             if (request.source == TtsAudioSource.TRANSLATED && textBlocks.isEmpty()) return fail(prefs, request, "Cached translation is empty")
+            if (request.source == TtsAudioSource.ORIGINAL && textBlocks.isEmpty()) return fail(prefs, request, "Chapter contains no readable text")
 
             temp = File(applicationContext.cacheDir, "tts_video/${request.jobId}").apply { mkdirs() }
             val wav = File(temp, "audio.wav")
@@ -112,14 +113,24 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
         if (android.os.SystemClock.elapsedRealtime() - startedAt >= MAX_RUNTIME_MS) throw TtsExportException("Video export exceeded its runtime budget; retry to continue")
     }
 
-    private suspend fun loadText(db: AppDatabase, request: TtsVideoRequest): List<String>? = if (request.source == TtsAudioSource.ORIGINAL) {
-        db.chapterBodyDao().get(request.chapterUrl)?.body?.let { TtsTextPreparer.paragraphsFromBody(it) }
+    private suspend fun loadText(db: AppDatabase, appPreferences: AppPreferences, request: TtsVideoRequest): List<String>? = if (request.source == TtsAudioSource.ORIGINAL) {
+        db.chapterBodyDao().get(request.chapterUrl)?.body?.let {
+            TtsTextPreparer.paragraphsFromBody(it, appPreferences.effectiveRegexRules(request.novelUrl))
+        }
     } else {
         val row = db.chapterTranslationDao().getTranslations(request.chapterUrl, request.translationSourceLang, request.translationTargetLang) ?: return null
         if (row.translatedParagraphs.isBlank()) return emptyList()
         try {
             val a = JSONArray(row.translatedParagraphs)
-            (0 until a.length()).map { index -> if (!a.isNull(index)) a.getString(index) else "" }.filter(String::isNotBlank)
+            buildList {
+                for (index in 0 until a.length()) {
+                    val value = a.get(index)
+                    require(value is String) { "Translation JSON entry $index is not a string" }
+                    val text = value.trim()
+                    require(text.isNotEmpty()) { "Translation JSON entry $index is empty" }
+                    add(text)
+                }
+            }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { throw TtsExportException("Cached translation JSON is malformed: ${e.message ?: "invalid JSON"}", e) }
     }
