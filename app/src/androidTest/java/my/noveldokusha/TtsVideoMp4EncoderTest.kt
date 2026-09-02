@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TtsVideoMp4EncoderTest {
     @Test
-    fun encodesAvcAacMp4WithMonotonicThirtyFpsVideo() {
+    fun encodesAvcAacMp4WithDeterministicThirtyFpsVideoTimestamps() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val wav = File(context.cacheDir, "encoder-smoke.wav")
         val mp4 = File(context.cacheDir, "encoder-smoke.mp4")
@@ -93,7 +93,8 @@ class TtsVideoMp4EncoderTest {
                     if (sample < 0) break
                     if (firstPts == Long.MIN_VALUE) firstPts = sample
                     if (previousPts != Long.MIN_VALUE) {
-                        assertTrue("non-monotonic video PTS", sample > previousPts)
+                        val delta = sample - previousPts
+                        assertTrue("video PTS delta must be ~33.333ms", delta in 33_000L..34_000L)
                     }
                     previousPts = sample
                     lastPts = sample
