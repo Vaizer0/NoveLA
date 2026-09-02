@@ -27,6 +27,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
         if (chunks.isEmpty()) throw TtsExportException("No speakable text in chapter")
         val total = chunks.sumOf { it.third.length }.coerceAtLeast(1)
         val timings = ArrayList<TtsChunkTiming>(chunks.size)
+        val chunkCursors = HashMap<Int, Int>()
         var audioUs = 0L
         var chars = 0
         var sampleRate = 0
@@ -39,15 +40,10 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             for ((blockIndex, chunkIndex, text) in chunks) {
                 val sourceBlock = blocks.getOrNull(blockIndex) ?: text
                 val cleanMapped = cleanForTtsMapped(sourceBlock)
-                var searchFrom = 0
-                val chunkStart = generateSequence {
-                    val found = cleanMapped.text.indexOf(text, searchFrom)
-                    if (found >= 0) {
-                        searchFrom = found + maxOf(1, text.length)
-                        found
-                    } else null
-                }.firstOrNull() ?: -1
-                if (chunkStart < 0) throw TtsExportException("Unable to map TTS chunk back to source text")
+                val searchFrom = chunkCursors[blockIndex] ?: 0
+                val chunkStart = cleanMapped.text.indexOf(text, searchFrom)
+                if (chunkStart < 0) throw TtsExportException("Unable to map TTS chunk $chunkIndex back to source text")
+                chunkCursors[blockIndex] = chunkStart + text.length
                 val preparedMapped = TtsVideoTextMapper.substring(cleanMapped, chunkStart, chunkStart + text.length)
                 val mapping = VideoDisplayMapping(
                     sourceText = sourceBlock,
