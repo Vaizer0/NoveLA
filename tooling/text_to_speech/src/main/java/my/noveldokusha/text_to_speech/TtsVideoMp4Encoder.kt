@@ -40,6 +40,7 @@ class TtsVideoMp4Encoder {
         val audio = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
         val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var surface: Surface? = null
+        var eglRenderer: TtsVideoEglSurfaceRenderer? = null
         var videoTrack = -1
         var audioTrack = -1
         var muxerStarted = false
@@ -56,6 +57,7 @@ class TtsVideoMp4Encoder {
                 setInteger(MediaFormat.KEY_BIT_RATE, 8_000_000)
                 setInteger(MediaFormat.KEY_FRAME_RATE, visual.fps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                if (android.os.Build.VERSION.SDK_INT >= 29) setLong(MediaFormat.KEY_MAX_PTS_GAP_TO_ENCODER, 33_334L)
             }, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             surface = video.createInputSurface()
             audio.configure(MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, wav.sampleRate, wav.channels).apply {
@@ -65,6 +67,7 @@ class TtsVideoMp4Encoder {
             }, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             video.start()
             audio.start()
+            eglRenderer = TtsVideoEglSurfaceRenderer(surface!!)
 
             while (!videoOutputEos || !audioOutputEos) {
                 coroutineContext.ensureActive()
@@ -74,8 +77,7 @@ class TtsVideoMp4Encoder {
                         val bitmap = Bitmap.createBitmap(visual.width, visual.height, Bitmap.Config.ARGB_8888)
                         try {
                             renderer.render(android.graphics.Canvas(bitmap), timeline, visual, snapshot, pts)
-                            val canvas = surface.lockCanvas(null) ?: error("Unable to lock encoder surface")
-                            try { canvas.drawBitmap(bitmap, 0f, 0f, null) } finally { surface.unlockCanvasAndPost(canvas) }
+                            eglRenderer!!.draw(bitmap, pts)
                         } finally { bitmap.recycle() }
                         frameIndex++
                     } else {
@@ -122,6 +124,7 @@ class TtsVideoMp4Encoder {
             runCatching { outputFile.delete() }
             throw e
         } finally {
+            runCatching { eglRenderer?.close() }
             runCatching { video.stop() }
             runCatching { audio.stop() }
             runCatching { video.release() }
