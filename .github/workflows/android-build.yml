@@ -7,7 +7,7 @@ name: Android CI - Build Debug APK
 # compileSdk platform). No signing secrets are required for the debug build.
 on:
   push:
-    branches: [ main, default, feat/tts-audio-download-chapters ]
+    branches: [ main, default, feat/tts-audio-download-chapters, feat/youtube-tts-video-generation-system ]
   pull_request:
     branches: [ main, default ]
   workflow_dispatch:
@@ -15,8 +15,10 @@ on:
 permissions:
   contents: read
 
+# Keep duplicate runs for different commits independent. This prevents an older
+# long-running build from holding a newer commit in the queue.
 concurrency:
-  group: android-debug-apk-${{ github.ref }}
+  group: android-debug-apk-${{ github.repository }}-${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -51,9 +53,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Runs the TTS text-preparer parity test (TtsTextPreparerParityTest), which
-  # guarantees the audio-download pipeline splits chapter text identically to the
-  # reader's live TTS (buildBodyItems). Pure JVM test — no signing needed.
   unit-tests:
     name: Unit tests (TTS text preparer parity)
     runs-on: ubuntu-latest
