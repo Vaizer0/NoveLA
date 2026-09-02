@@ -9,19 +9,17 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.net.Uri
 import android.text.Layout
-import android.text.TextPaint
-import android.text.style.StyleSpan
-import android.text.SpannableString
-import android.graphics.Typeface
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
+import android.text.TextPaint
+import android.graphics.Typeface
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import java.io.InputStream
 
-/** Immutable chapter-facing artwork/background snapshot; no image bytes are persisted in preferences. */
+/** Immutable chapter-facing artwork/background snapshot; image bytes never live in preferences. */
 data class TtsVideoVisualSnapshot(
     val textStyle: Typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL),
     val backgroundBitmap: Bitmap? = null,
@@ -51,111 +49,176 @@ class TtsVideoCompositionRenderer(private val context: Context) {
     }
 
     fun safeTextRect(settings: TtsVideoVisualSettings): SafeTextRect {
-        val margin = settings.safeMarginPx
+        val margin = settings.safeMarginPx.coerceIn(0f, min(settings.width, settings.height).toFloat() / 3f)
         val canvas = RectF(margin, margin, settings.width - margin, settings.height - margin)
         val art = mutableListOf<RectF>()
         if (settings.artworkMode != ArtworkMode.NONE && settings.artworkUris.isNotEmpty() && !settings.artworkOverlay) {
-            val w = settings.artworkWidthPx.coerceIn(120f, settings.width * .35f)
+            val requestedWidth = settings.artworkWidthPx.coerceIn(120f, settings.width * .35f)
             when (settings.artworkMode) {
-                ArtworkMode.LEFT -> { art += RectF(margin, margin, margin + w, settings.height - margin); canvas.left += w + 28f }
-                ArtworkMode.RIGHT -> { art += RectF(settings.width - margin - w, margin, settings.width - margin, settings.height - margin); canvas.right -= w + 28f }
+                ArtworkMode.LEFT -> {
+                    val w = min(requestedWidth, max(0f, canvas.width() - 180f))
+                    if (w > 0f) {
+                        art += RectF(canvas.left, canvas.top, canvas.left + w, canvas.bottom)
+                        canvas.left += w + 28f
+                    }
+                }
+                ArtworkMode.RIGHT -> {
+                    val w = min(requestedWidth, max(0f, canvas.width() - 180f))
+                    if (w > 0f) {
+                        art += RectF(canvas.right - w, canvas.top, canvas.right, canvas.bottom)
+                        canvas.right -= w + 28f
+                    }
+                }
                 ArtworkMode.BOTH -> {
-                    val each = min(w, (settings.width - margin * 2f - 90f) / 2f)
-                    art += RectF(margin, margin, margin + each, settings.height - margin)
-                    art += RectF(settings.width - margin - each, margin, settings.width - margin, settings.height - margin)
-                    canvas.left += each + 28f; canvas.right -= each + 28f
+                    val each = min(requestedWidth, max(0f, (canvas.width() - 90f) / 2f))
+                    if (each > 0f) {
+                        art += RectF(canvas.left, canvas.top, canvas.left + each, canvas.bottom)
+                        art += RectF(canvas.right - each, canvas.top, canvas.right, canvas.bottom)
+                        canvas.left += each + 28f
+                        canvas.right -= each + 28f
+                    }
                 }
                 ArtworkMode.NONE -> Unit
             }
         }
-        val maxWidth = settings.width * settings.maxTextWidthFraction
+        val maxWidth = settings.width * settings.maxTextWidthFraction.coerceIn(.25f, 1f)
         if (canvas.width() > maxWidth) {
             val extra = (canvas.width() - maxWidth) / 2f
-            canvas.left += extra; canvas.right -= extra
+            canvas.left += extra
+            canvas.right -= extra
+        }
+        if (canvas.width() < 64f) {
+            val center = canvas.centerX()
+            canvas.left = center - 32f
+            canvas.right = center + 32f
         }
         return SafeTextRect(canvas, art)
     }
 
-    fun render(canvas: Canvas, timeline: TtsVideoTimeline, settings: TtsVideoVisualSettings, snapshot: TtsVideoVisualSnapshot, timeUs: Long): RenderedLayoutInfo? {
+    fun render(
+        canvas: Canvas,
+        timeline: TtsVideoTimeline,
+        settings: TtsVideoVisualSettings,
+        snapshot: TtsVideoVisualSnapshot,
+        timeUs: Long,
+    ): RenderedLayoutInfo? {
         require(settings.width > 0 && settings.height > 0 && settings.fps > 0)
         canvas.save()
         try {
             drawBackground(canvas, settings, snapshot, timeline.durationUs, timeUs)
-            drawArtwork(canvas, settings, snapshot, timeline.durationUs, timeUs)
+            drawArtwork(canvas, settings, snapshot)
             val current = timeline.paragraphAt(timeUs) ?: return null
             val safe = safeTextRect(settings)
-            val visible = visibleParagraphs(timeline, current, settings, safe.rect.height())
-            visible.forEach { paragraph ->
-                val isCurrent = paragraph.id == current.id
-                val alpha = if (isCurrent) 1f else .62f
-                val scale = if (isCurrent) 1f else .78f
-                drawParagraph(canvas, paragraph, current, settings, snapshot, safe.rect, timeUs, alpha, scale)
-            }
-            return layoutInfo(canvas, current, settings, safe.rect, timeUs)
+            val visible = selectVisibleParagraphs(timeline, current, settings, safe.rect.height())
+            drawParagraphStack(canvas, visible, current, settings, snapshot, safe.rect, timeUs)
+            return layoutInfo(canvas, current, settings, safe.rect, timeUs, snapshot.textStyle)
         } finally {
             canvas.restore()
         }
     }
 
-    private fun drawBackground(canvas: Canvas, settings: TtsVideoVisualSettings, snapshot: TtsVideoVisualSnapshot, durationUs: Long, timeUs: Long) {
-        val bitmap = chooseSlideshowBitmap(snapshot.artworkBitmaps, settings, durationUs, timeUs)
+    private fun drawBackground(
+        canvas: Canvas,
+        settings: TtsVideoVisualSettings,
+        snapshot: TtsVideoVisualSnapshot,
+        durationUs: Long,
+        timeUs: Long,
+    ) {
         when (settings.backgroundMode) {
             BackgroundMode.SOLID, BackgroundMode.PRESET -> canvas.drawColor(settings.backgroundColor)
-            BackgroundMode.IMAGE -> if (snapshot.backgroundBitmap != null) drawCover(canvas, snapshot.backgroundBitmap) else canvas.drawColor(settings.backgroundColor)
+            BackgroundMode.IMAGE -> if (snapshot.backgroundBitmap != null) {
+                drawCover(canvas, snapshot.backgroundBitmap)
+            } else canvas.drawColor(settings.backgroundColor)
         }
-        if (settings.slideshowEnabled && bitmap != null) {
-            val alpha = slideshowAlpha(settings, durationUs, timeUs)
-            paint.alpha = (alpha * 255).roundToInt().coerceIn(0, 255)
-            drawCover(canvas, bitmap, paint)
-            paint.alpha = 255
-        }
-    }
-
-    private fun chooseSlideshowBitmap(bitmaps: List<Bitmap>, settings: TtsVideoVisualSettings, durationUs: Long, timeUs: Long): Bitmap? {
-        if (!settings.slideshowEnabled || bitmaps.isEmpty() || durationUs <= 0) return null
-        val stable = settings.slideshowSeed xor durationUs xor bitmaps.size.toLong()
-        val slot = when (settings.slideshowIntervalMode) {
-            SlideshowIntervalMode.FIXED_INTERVAL -> max(1L, settings.slideshowIntervalMs)
-            SlideshowIntervalMode.PERCENT_OF_TOTAL_DURATION -> max(1L, durationUs / max(1, bitmaps.size))
-            SlideshowIntervalMode.RANDOM_INTERVAL -> {
-                var x = stable
-                x = x xor (x shl 13); x = x xor (x ushr 17); x = x xor (x shl 5)
-                max(1L, settings.slideshowIntervalMs / 2L + abs(x % max(1L, settings.slideshowIntervalMs)))
+        if (!settings.slideshowEnabled || snapshot.artworkBitmaps.isEmpty() || durationUs <= 0) return
+        val state = slideshowState(snapshot.artworkBitmaps.size, settings, durationUs, timeUs)
+        val current = snapshot.artworkBitmaps[state.index]
+        val next = snapshot.artworkBitmaps[state.nextIndex]
+        when (settings.slideshowTransition) {
+            SlideshowTransition.NONE -> drawWithAlpha(canvas, current, .30f)
+            SlideshowTransition.FADE -> {
+                drawWithAlpha(canvas, current, .30f * (1f - state.transitionProgress))
+                drawWithAlpha(canvas, next, .30f * state.transitionProgress)
+            }
+            SlideshowTransition.CROSSFADE -> {
+                drawWithAlpha(canvas, current, .30f * (1f - state.transitionProgress))
+                drawWithAlpha(canvas, next, .30f * state.transitionProgress)
+            }
+            SlideshowTransition.SUBTLE_SLIDE -> {
+                drawWithAlpha(canvas, current, .30f)
+                canvas.save()
+                try {
+                    canvas.translate((1f - state.transitionProgress) * canvas.width, 0f)
+                    drawWithAlpha(canvas, next, .30f)
+                } finally { canvas.restore() }
+            }
+            SlideshowTransition.SUBTLE_ZOOM -> {
+                drawWithAlpha(canvas, current, .30f)
+                canvas.save()
+                try {
+                    val scale = 1.02f + .03f * state.transitionProgress
+                    canvas.scale(scale, scale, canvas.width / 2f, canvas.height / 2f)
+                    drawWithAlpha(canvas, next, .18f * state.transitionProgress)
+                } finally { canvas.restore() }
             }
         }
-        val index = ((timeUs / slot) % bitmaps.size).toInt()
-        return bitmaps[index]
     }
 
-    private fun slideshowAlpha(settings: TtsVideoVisualSettings, durationUs: Long, timeUs: Long): Float {
-        if (settings.slideshowTransition == SlideshowTransition.NONE || durationUs <= 0) return .30f
-        val interval = when (settings.slideshowIntervalMode) {
+    private data class SlideshowState(val index: Int, val nextIndex: Int, val transitionProgress: Float)
+
+    private fun slideshowState(size: Int, settings: TtsVideoVisualSettings, durationUs: Long, timeUs: Long): SlideshowState {
+        val safeSize = max(1, size)
+        val rawSlot = when (settings.slideshowIntervalMode) {
             SlideshowIntervalMode.FIXED_INTERVAL -> max(1L, settings.slideshowIntervalMs)
-            SlideshowIntervalMode.PERCENT_OF_TOTAL_DURATION -> max(1L, durationUs / max(1, 2))
-            SlideshowIntervalMode.RANDOM_INTERVAL -> max(1L, settings.slideshowIntervalMs)
+            SlideshowIntervalMode.PERCENT_OF_TOTAL_DURATION -> max(1L, durationUs / safeSize)
+            SlideshowIntervalMode.RANDOM_INTERVAL -> deterministicRandomInterval(settings.slideshowSeed, max(1L, timeUs / max(1L, settings.slideshowIntervalMs)))
         }
-        val phase = (timeUs % interval).toFloat() / interval.toFloat()
-        return when (settings.slideshowTransition) {
-            SlideshowTransition.FADE, SlideshowTransition.CROSSFADE -> .18f + .18f * (if (phase < .5f) phase * 2f else (1f - phase) * 2f)
-            SlideshowTransition.SUBTLE_SLIDE, SlideshowTransition.SUBTLE_ZOOM, SlideshowTransition.NONE -> .20f
-        }
+        val slotIndex = (timeUs / rawSlot).coerceAtLeast(0L)
+        val slotStart = slotIndex * rawSlot
+        val phase = ((timeUs - slotStart).coerceAtLeast(0L).toDouble() / rawSlot.toDouble()).coerceIn(0.0, 1.0).toFloat()
+        val transitionWindow = .18f
+        val progress = if (phase >= 1f - transitionWindow) {
+            ((phase - (1f - transitionWindow)) / transitionWindow).coerceIn(0f, 1f)
+        } else 0f
+        val index = (slotIndex % safeSize).toInt()
+        return SlideshowState(index, (index + 1) % safeSize, progress)
     }
 
-    private fun drawArtwork(canvas: Canvas, settings: TtsVideoVisualSettings, snapshot: TtsVideoVisualSnapshot, durationUs: Long, timeUs: Long) {
+    private fun deterministicRandomInterval(seed: Long, slot: Long): Long {
+        var x = seed xor (slot * -7046029254386353131L)
+        x = x xor (x ushr 30); x *= -4658895280553007687L
+        x = x xor (x ushr 27); x *= -7723592293110705685L
+        x = x xor (x ushr 31)
+        return 4_000L + abs(x % 8_001L)
+    }
+
+    private fun drawWithAlpha(canvas: Canvas, bitmap: Bitmap, alpha: Float, destination: RectF = RectF(0f, 0f, canvas.width.toFloat(), canvas.height.toFloat())) {
+        paint.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
+        drawCover(canvas, bitmap, paint, destination)
+        paint.alpha = 255
+    }
+
+    private fun drawArtwork(canvas: Canvas, settings: TtsVideoVisualSettings, snapshot: TtsVideoVisualSnapshot) {
         if (snapshot.artworkBitmaps.isEmpty() || settings.artworkMode == ArtworkMode.NONE) return
         val safe = safeTextRect(settings)
-        val selected = snapshot.artworkBitmaps.take(when (settings.artworkMode) { ArtworkMode.BOTH -> 2; else -> 1 })
-        selected.forEachIndexed { index, bitmap ->
-            val bounds = safe.artworkRects.getOrNull(index) ?: return@forEachIndexed
+        val count = when (settings.artworkMode) {
+            ArtworkMode.BOTH -> min(2, snapshot.artworkBitmaps.size)
+            else -> min(1, snapshot.artworkBitmaps.size)
+        }
+        for (index in 0 until count) {
+            val bitmap = snapshot.artworkBitmaps[index]
+            val bounds = safe.artworkRects.getOrNull(index) ?: continue
             canvas.save()
             try {
-                val clip = Path().apply { addRoundRect(bounds, settings.artworkCornerRadiusPx, settings.artworkCornerRadiusPx, Path.Direction.CW) }
+                val clip = Path().apply {
+                    addRoundRect(bounds, settings.artworkCornerRadiusPx, settings.artworkCornerRadiusPx, Path.Direction.CW)
+                }
                 canvas.clipPath(clip)
-                paint.alpha = (settings.artworkOpacity * 255).roundToInt().coerceIn(0, 255)
-                drawCover(canvas, bitmap, paint, bounds)
-                paint.alpha = 255
+                drawWithAlpha(canvas, bitmap, settings.artworkOpacity, bounds)
                 if (settings.artworkBorderWidthPx > 0f) {
-                    paint.style = Paint.Style.STROKE; paint.strokeWidth = settings.artworkBorderWidthPx; paint.color = settings.artworkBorderColor
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = settings.artworkBorderWidthPx
+                    paint.color = settings.artworkBorderColor
                     canvas.drawRoundRect(bounds, settings.artworkCornerRadiusPx, settings.artworkCornerRadiusPx, paint)
                     paint.style = Paint.Style.FILL
                 }
@@ -163,61 +226,134 @@ class TtsVideoCompositionRenderer(private val context: Context) {
         }
     }
 
-    private fun visibleParagraphs(timeline: TtsVideoTimeline, current: VideoParagraph, settings: TtsVideoVisualSettings, height: Float): List<VideoParagraph> {
+    private fun selectVisibleParagraphs(
+        timeline: TtsVideoTimeline,
+        current: VideoParagraph,
+        settings: TtsVideoVisualSettings,
+        height: Float,
+    ): List<VideoParagraph> {
         if (settings.paragraphMode == ParagraphDisplayMode.CURRENT_ONLY) return listOf(current)
-        val result = mutableListOf(current)
-        val currentIndex = current.blockIndex
-        val maxContext = when (settings.paragraphMode) {
-            ParagraphDisplayMode.CURRENT_WITH_CONTEXT -> 2
-            ParagraphDisplayMode.DYNAMIC_CONTEXT -> Int.MAX_VALUE
+        val candidates = timeline.paragraphs
+            .filter { it.id != current.id }
+            .sortedBy { abs(it.blockIndex - current.blockIndex) }
+        val contextScale = .78f
+        val estimatedPerContext = (settings.fontSizePx * contextScale * settings.lineSpacingMultiplier * 2.2f + settings.cardPaddingPx * 2f + settings.paragraphSpacingPx)
+            .coerceAtLeast(80f)
+        val maxContexts = max(0, ((height - 160f) / estimatedPerContext).toInt().coerceAtMost(8))
+        val allowed = when (settings.paragraphMode) {
+            ParagraphDisplayMode.CURRENT_WITH_CONTEXT -> maxContexts.coerceAtMost(2)
+            ParagraphDisplayMode.DYNAMIC_CONTEXT -> maxContexts
             ParagraphDisplayMode.CURRENT_ONLY -> 0
         }
-        var radius = 1
-        while (result.size < maxContext + 1 && radius < 32) {
-            val candidate = timeline.paragraphs.firstOrNull { it.blockIndex == currentIndex - radius }
-                ?: timeline.paragraphs.firstOrNull { it.blockIndex == currentIndex + radius }
-            if (candidate != null) result += candidate else break
-            radius++
-        }
-        return result.distinctBy { it.id }.sortedBy { it.startUs }
+        val chosen = candidates.take(allowed)
+            .sortedWith(compareBy<VideoParagraph>({ it.startUs < current.startUs }, { abs(it.blockIndex - current.blockIndex) }, { it.startUs }))
+        return (chosen + current).distinctBy { it.id }.sortedBy { it.startUs }
     }
 
-    private fun drawParagraph(canvas: Canvas, paragraph: VideoParagraph, current: VideoParagraph, settings: TtsVideoVisualSettings, snapshot: TtsVideoVisualSnapshot, rect: RectF, timeUs: Long, alpha: Float, scale: Float) {
-        val baseSize = if (paragraph.id == current.id) fitTextSize(paragraph.displayText, settings, rect.width(), rect.height()) else settings.fontSizePx * .78f
-        val layout = makeLayout(paragraph.displayText, baseSize, settings, rect.width().roundToInt(), snapshot.textStyle)
-        val card = RectF(0f, 0f, layout.width.toFloat() + settings.cardPaddingPx * 2f, layout.height.toFloat() + settings.cardPaddingPx * 2f)
-        val x = rect.centerX() - card.width() / 2f
-        val y = rect.centerY() - card.height() / 2f + if (paragraph.id == current.id) scrollOffset(layout, paragraph, settings, timeUs) else 0f
+    private data class ParagraphLayout(val paragraph: VideoParagraph, val layout: StaticLayout, val card: RectF, val isCurrent: Boolean)
+
+    private fun drawParagraphStack(
+        canvas: Canvas,
+        paragraphs: List<VideoParagraph>,
+        current: VideoParagraph,
+        settings: TtsVideoVisualSettings,
+        snapshot: TtsVideoVisualSnapshot,
+        rect: RectF,
+        timeUs: Long,
+    ) {
+        val layouts = paragraphs.map { paragraph ->
+            val isCurrent = paragraph.id == current.id
+            val size = if (isCurrent) fitTextSize(paragraph.displayText, settings, rect.width(), rect.height()) else settings.fontSizePx * .78f
+            val layout = makeLayout(paragraph.displayText, size, settings, rect.width().roundToInt(), snapshot.textStyle)
+            val card = RectF(0f, 0f, layout.width.toFloat() + settings.cardPaddingPx * 2f, layout.height.toFloat() + settings.cardPaddingPx * 2f)
+            ParagraphLayout(paragraph, layout, card, isCurrent)
+        }
+        val gap = settings.paragraphSpacingPx.coerceAtLeast(12f)
+        val totalHeight = layouts.sumOf { it.card.height().toDouble() }.toFloat() + gap * max(0, layouts.size - 1)
+        val currentCenterY = rect.centerY()
+        val currentIndex = layouts.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+        val yPositions = FloatArray(layouts.size)
+        var y = currentCenterY - layouts[currentIndex].card.height() / 2f
+        yPositions[currentIndex] = y
+        for (i in currentIndex - 1 downTo 0) {
+            y -= gap + layouts[i].card.height()
+            yPositions[i] = y
+        }
+        y = currentCenterY + layouts[currentIndex].card.height() / 2f
+        for (i in currentIndex + 1 until layouts.size) {
+            y += gap
+            yPositions[i] = y
+            y += layouts[i].card.height()
+        }
+        val shift = when {
+            totalHeight <= rect.height() -> 0f
+            yPositions.first() < rect.top -> rect.top - yPositions.first()
+            yPositions.last() + layouts.last().card.height() > rect.bottom -> rect.bottom - (yPositions.last() + layouts.last().card.height())
+            else -> 0f
+        }
+        layouts.forEachIndexed { index, item ->
+            drawParagraph(canvas, item, settings, rect, yPositions[index] + shift, timeUs)
+        }
+    }
+
+    private fun drawParagraph(
+        canvas: Canvas,
+        item: ParagraphLayout,
+        settings: TtsVideoVisualSettings,
+        rect: RectF,
+        top: Float,
+        timeUs: Long,
+    ) {
+        val scale = if (item.isCurrent) 1f else .88f
+        val alpha = if (item.isCurrent) 1f else .62f
         canvas.save()
         try {
-            canvas.translate(rect.centerX(), rect.centerY())
+            canvas.translate(rect.centerX(), top + item.card.height() / 2f)
             canvas.scale(scale, scale)
-            canvas.translate(-card.width() / 2f, -card.height() / 2f)
+            canvas.translate(-item.card.width() / 2f, -item.card.height() / 2f)
             paint.alpha = (alpha * settings.cardAlpha * 255).roundToInt().coerceIn(0, 255)
             if (settings.cardEnabled) {
-                paint.style = Paint.Style.FILL; paint.color = settings.cardColor
-                canvas.drawRoundRect(0f, 0f, card.width(), card.height(), settings.cardCornerRadiusPx, settings.cardCornerRadiusPx, paint)
+                paint.style = Paint.Style.FILL
+                paint.color = settings.cardColor
+                canvas.drawRoundRect(item.card, settings.cardCornerRadiusPx, settings.cardCornerRadiusPx, paint)
                 if (settings.cardStrokeWidthPx > 0f) {
-                    paint.style = Paint.Style.STROKE; paint.strokeWidth = settings.cardStrokeWidthPx; paint.color = settings.cardStrokeColor
-                    canvas.drawRoundRect(0f, 0f, card.width(), card.height(), settings.cardCornerRadiusPx, settings.cardCornerRadiusPx, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = settings.cardStrokeWidthPx
+                    paint.color = settings.cardStrokeColor
+                    canvas.drawRoundRect(item.card, settings.cardCornerRadiusPx, settings.cardCornerRadiusPx, paint)
                     paint.style = Paint.Style.FILL
                 }
             }
             canvas.translate(settings.cardPaddingPx, settings.cardPaddingPx)
-            textPaint.alpha = (alpha * 255).roundToInt().coerceIn(0, 255)
-            layout.draw(canvas)
-            if (paragraph.id == current.id) drawHighlight(canvas, layout, paragraph, settings, timeUs)
-        } finally { canvas.restore() }
+            if (item.isCurrent && settings.longParagraphMode == LongParagraphMode.SMOOTH_SCROLL) {
+                canvas.save()
+                try {
+                    val viewport = RectF(0f, 0f, item.layout.width.toFloat(), item.layout.height.toFloat())
+                    canvas.clipRect(viewport)
+                    canvas.translate(0f, scrollOffset(item.layout, item.paragraph, settings, timeUs))
+                    item.layout.draw(canvas)
+                    drawHighlight(canvas, item.layout, item.paragraph, settings, timeUs)
+                } finally { canvas.restore() }
+            } else {
+                item.layout.draw(canvas)
+                if (item.isCurrent) drawHighlight(canvas, item.layout, item.paragraph, settings, timeUs)
+            }
+        } finally {
+            paint.alpha = 255
+            canvas.restore()
+        }
     }
 
     private fun drawHighlight(canvas: Canvas, layout: StaticLayout, paragraph: VideoParagraph, settings: TtsVideoVisualSettings, timeUs: Long) {
         val range = paragraph.spokenRanges.firstOrNull { timeUs >= it.startUs && timeUs < it.endUs } ?: return
         val start = range.displayStart.coerceIn(0, layout.text.length)
         val end = range.displayEnd.coerceIn(start, layout.text.length)
-        path.reset(); layout.getSelectionPath(start, end, path)
-        paint.color = settings.highlightColor; paint.alpha = (settings.highlightAlpha * 255).roundToInt().coerceIn(0, 255)
+        if (end <= start) return
+        path.reset()
+        layout.getSelectionPath(start, end, path)
+        paint.color = settings.highlightColor
+        paint.alpha = (settings.highlightAlpha * 255).roundToInt().coerceIn(0, 255)
         canvas.drawPath(path, paint)
-        // The selection path is the exact StaticLayout glyph geometry; redraw text so the highlight sits behind glyphs.
         textPaint.alpha = 255
         layout.draw(canvas)
         paint.alpha = 255
@@ -231,6 +367,8 @@ class TtsVideoCompositionRenderer(private val context: Context) {
             if (layout.height <= height * .78f && layout.width <= width) return size
             size -= 2f
         }
+        val minLayout = makeLayout(text, minSize, settings, width.roundToInt(), Typeface.SANS_SERIF)
+        if (minLayout.height <= height * .9f) return minSize
         return minSize
     }
 
@@ -239,45 +377,73 @@ class TtsVideoCompositionRenderer(private val context: Context) {
         textPaint.color = settings.textColor
         textPaint.typeface = typeface
         textPaint.isAntiAlias = true
-        val builder = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, width.coerceAtLeast(1))
+        textPaint.letterSpacing = settings.letterSpacingEm
+        return StaticLayout.Builder.obtain(text, 0, text.length, textPaint, width.coerceAtLeast(1))
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_LTR)
             .setIncludePad(true)
             .setLineSpacing(settings.paragraphSpacingPx, settings.lineSpacingMultiplier)
-        return builder.build()
+            .build()
     }
 
     private fun scrollOffset(layout: StaticLayout, paragraph: VideoParagraph, settings: TtsVideoVisualSettings, timeUs: Long): Float {
         if (settings.longParagraphMode != LongParagraphMode.SMOOTH_SCROLL || paragraph.spokenRanges.isEmpty()) return 0f
         val active = paragraph.spokenRanges.firstOrNull { timeUs in it.startUs until it.endUs } ?: return 0f
         val line = layout.getLineForOffset(active.displayStart.coerceIn(0, max(0, layout.text.length - 1)))
-        val target = max(0f, line * layout.height.toFloat() / max(1, layout.lineCount) - layout.height * .22f)
+        val lineHeight = if (layout.lineCount > 0) layout.height.toFloat() / layout.lineCount else 0f
+        val target = max(0f, line * lineHeight - layout.height * .22f)
         val t = ((timeUs - paragraph.startUs).coerceAtLeast(0L).toDouble() / max(1L, paragraph.endUs - paragraph.startUs)).coerceIn(0.0, 1.0)
         val eased = t * t * (3.0 - 2.0 * t)
         return -target.toFloat() * eased.toFloat()
     }
 
-    private fun layoutInfo(canvas: Canvas, paragraph: VideoParagraph, settings: TtsVideoVisualSettings, rect: RectF, timeUs: Long): RenderedLayoutInfo {
+    private fun layoutInfo(
+        canvas: Canvas,
+        paragraph: VideoParagraph,
+        settings: TtsVideoVisualSettings,
+        rect: RectF,
+        timeUs: Long,
+        typeface: Typeface,
+    ): RenderedLayoutInfo {
         val size = fitTextSize(paragraph.displayText, settings, rect.width(), rect.height())
-        val layout = makeLayout(paragraph.displayText, size, settings, rect.width().roundToInt(), Typeface.SANS_SERIF)
-        return RenderedLayoutInfo(RectF(rect.centerX() - layout.width / 2f, rect.centerY() - layout.height / 2f, rect.centerX() + layout.width / 2f, rect.centerY() + layout.height / 2f), size, scrollOffset(layout, paragraph, settings, timeUs))
+        val layout = makeLayout(paragraph.displayText, size, settings, rect.width().roundToInt(), typeface)
+        return RenderedLayoutInfo(
+            RectF(
+                rect.centerX() - layout.width / 2f,
+                rect.centerY() - layout.height / 2f,
+                rect.centerX() + layout.width / 2f,
+                rect.centerY() + layout.height / 2f,
+            ),
+            size,
+            scrollOffset(layout, paragraph, settings, timeUs),
+        )
     }
 
-    private fun drawCover(canvas: Canvas, bitmap: Bitmap, overridePaint: Paint = paint, destination: RectF = RectF(0f, 0f, settingsWidth(canvas), settingsHeight(canvas))) {
+    private fun drawCover(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        overridePaint: Paint = paint,
+        destination: RectF = RectF(0f, 0f, canvas.width.toFloat(), canvas.height.toFloat()),
+    ) {
         val sourceRatio = bitmap.width.toFloat() / max(1, bitmap.height)
         val dstRatio = destination.width() / max(1f, destination.height())
         val src = if (sourceRatio > dstRatio) {
             val w = (bitmap.height * dstRatio).roundToInt().coerceAtMost(bitmap.width)
-            RectF((bitmap.width - w) / 2f, 0f, (bitmap.width + w) / 2f, bitmap.height.toFloat())
+            android.graphics.Rect(
+                ((bitmap.width - w) / 2).coerceAtLeast(0),
+                0,
+                ((bitmap.width + w) / 2).coerceAtMost(bitmap.width),
+                bitmap.height,
+            )
         } else {
-            val h = (bitmap.width / dstRatio).roundToInt().coerceAtMost(bitmap.height)
-            RectF(0f, (bitmap.height - h) / 2f, bitmap.width.toFloat(), (bitmap.height + h) / 2f)
+            val h = (bitmap.width / max(0.0001f, dstRatio)).roundToInt().coerceAtMost(bitmap.height)
+            android.graphics.Rect(
+                0,
+                ((bitmap.height - h) / 2).coerceAtLeast(0),
+                bitmap.width,
+                ((bitmap.height + h) / 2).coerceAtMost(bitmap.height),
+            )
         }
-        canvas.drawBitmap(bitmap, android.graphics.RectF(src).toRect(), destination, overridePaint)
+        canvas.drawBitmap(bitmap, src, destination, overridePaint)
     }
-
-    private fun settingsWidth(canvas: Canvas) = canvas.width.toFloat()
-    private fun settingsHeight(canvas: Canvas) = canvas.height.toFloat()
 }
-
-private fun RectF.toRect(): android.graphics.Rect = android.graphics.Rect(left.roundToInt(), top.roundToInt(), right.roundToInt(), bottom.roundToInt())
