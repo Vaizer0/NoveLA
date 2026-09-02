@@ -36,20 +36,18 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim
           disable-animations: true
-          script: |
-            ./gradlew :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=my.noveldokusha.TtsVideoVisualQaTest \
-              --no-daemon --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=my.noveldokusha.TtsVideoVisualQaTest --no-daemon --stacktrace
       - name: Collect PNG frames
         if: always()
         run: |
           mkdir -p visual-qa
-          adb shell "run-as my.novela.vaizer0.debug sh -c 'find files/tts-video-qa -maxdepth 1 -name \"*.png\" -print0'" \
-            | tr '\0' '\n' | while read -r remote; do
+          if adb shell "run-as my.novela.vaizer0.debug sh -c 'find files/tts-video-qa -maxdepth 1 -name \"*.png\" -print0'" > /tmp/qa-files 2>/dev/null; then
+            tr '\0' '\n' < /tmp/qa-files | while read -r remote; do
               [ -z "$remote" ] && continue
               name=$(basename "$remote")
               adb exec-out run-as my.novela.vaizer0.debug cat "$remote" > "visual-qa/$name"
             done
+          fi
           ls -lah visual-qa
       - name: Upload rendered PNG frames
         if: always()
