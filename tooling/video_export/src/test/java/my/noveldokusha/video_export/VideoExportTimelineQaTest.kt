@@ -75,8 +75,14 @@ class VideoExportTimelineQaTest {
         assertEquals(1L * rate, para.wordTimings[0].samplePosition)
         assertEquals(4L * rate, para.wordTimings[2].samplePosition)
 
-        val same = paragraph("x", 0L, 5L * rate, words = listOf(1L * rate))
-        val p = listOf(same).let { VideoExportTimeline(rate, 2, 5L * rate, it) }.paragraphs[0]
-        assertEquals(same.wordTimings[0], p.wordAtSample(1L * rate))
+        val timeline = VideoExportTimeline(
+            sampleRate = rate,
+            channelCount = 2,
+            totalSamples = 6L * rate,
+            paragraphs = listOf(para),
+        )
+        val p = timeline.paragraphs[0]
+        assertEquals(para.wordTimings[0], timeline.wordAtSample(1L * rate, p))
+        assertEquals(para.wordTimings[2], timeline.wordAtSample(4L * rate, p))
     }
 }
