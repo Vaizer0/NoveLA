@@ -59,6 +59,7 @@ import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
 import my.noveldokusha.settings.sections.SettingsTtsAudioDownload
+import my.noveldokusha.settings.sections.SettingsTtsVideoDownload
 
 @Composable
 internal fun SettingsScreenBody(
@@ -94,7 +95,6 @@ internal fun SettingsScreenBody(
     onLanguageChange: (AppLanguage) -> Unit,
     onNavigateToRegexCleanup: () -> Unit,
     onDeleteNovelPrompt: (String) -> Unit,
-    // Auto Backup
     onAutoBackupEnabledChange: (Boolean) -> Unit,
     onAutoBackupSelectDirectory: () -> Unit,
     onAutoBackupMaxCountChange: (Int) -> Unit,
@@ -102,40 +102,28 @@ internal fun SettingsScreenBody(
     onAutoBackupIncludeImagesChange: (Boolean) -> Unit,
     onAutoBackupIncludeSettingsChange: (Boolean) -> Unit,
     onAutoBackupIncludePluginsChange: (Boolean) -> Unit,
-    // Audio downloads (TTS)
     onAudioVoiceChange: (enginePackage: String, voiceId: String) -> Unit,
     onAudioVoiceSpeedChange: (Float) -> Unit,
     onAudioVoicePitchChange: (Float) -> Unit,
     onAudioSourceChange: (my.noveldokusha.core.appPreferences.TtsAudioSource) -> Unit,
     onAudioSelectDirectory: () -> Unit,
 ) {
-    // Refresh size displays every time the user navigates to this screen
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                onRefreshSizes()
-            }
+            if (event == Lifecycle.Event.ON_RESUME) onRefreshSizes()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val showNovelPromptsDialog = remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-    ) {
+    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
         val currentLanguageObj = remember(state.currentLanguage.value) {
-            AppLanguageProvider.fromCode(state.currentLanguage.value)
-                ?: AppLanguageProvider.supportedLanguages.first()
+            AppLanguageProvider.fromCode(state.currentLanguage.value) ?: AppLanguageProvider.supportedLanguages.first()
         }
-        SettingsLanguage(
-            currentLanguage = currentLanguageObj,
-            onLanguageChange = onLanguageChange,
-        )
+        SettingsLanguage(currentLanguage = currentLanguageObj, onLanguageChange = onLanguageChange)
         HorizontalDivider()
         SettingsTheme(
             currentAppTheme = state.currentAppTheme.value,
@@ -189,39 +177,37 @@ internal fun SettingsScreenBody(
             autoBackupLastTimestamp = state.autoBackupLastTimestamp.value,
         )
         SettingsGeminiTranslation(
-                translationProvider            = state.translationProvider.value,
-                onTranslationProviderChange    = onTranslationProviderChange,
-                translationGlobalMode          = state.translationGlobalMode.value,
-                onTranslationGlobalModeChange  = onTranslationGlobalModeChange,
-                geminiApiKey                   = state.geminiApiKey.value,
-                geminiModel                    = state.geminiModel.value,
-                googlePaApiKeys                = state.googlePaApiKeys.value,
-                openAiBaseUrl                  = state.openAiBaseUrl.value,
-                openAiApiKeys                  = state.openAiApiKeys.value,
-                openAiModel                    = state.openAiModel.value,
-                activeSystemPrompt             = state.activeSystemPrompt.value,
-                promptPresets                  = state.promptPresets.value,
-                promptUseEnglishLocale         = state.promptUseEnglishLocale.value,
-                onGeminiApiKeyChange           = onGeminiApiKeyChange,
-                onGeminiModelChange            = onGeminiModelChange,
-                onGooglePaApiKeysChange        = onGooglePaApiKeysChange,
-                onOpenAiBaseUrlChange          = onOpenAiBaseUrlChange,
-                onOpenAiApiKeysChange          = onOpenAiApiKeysChange,
-                onOpenAiModelChange            = onOpenAiModelChange,
-                onActiveSystemPromptChange     = onActiveSystemPromptChange,
-                onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
-                onSavePreset                   = onSavePreset,
-                onDeletePreset                 = onDeletePreset,
-                llmBatchSize                   = state.llmBatchSize.value,
-                llmMaxOutputTokens             = state.llmMaxOutputTokens.value,
-                onLlmBatchSizeChange           = onLlmBatchSizeChange,
-                onLlmMaxOutputTokensChange     = onLlmMaxOutputTokensChange,
-                novelPromptCount               = state.translationNovelPrompts.value.size,
-                onNovelPromptsClick            = { showNovelPromptsDialog.value = true },
-            )
-        SettingsRegexCleanup(
-            onNavigateToRegexCleanup = onNavigateToRegexCleanup
+            translationProvider = state.translationProvider.value,
+            onTranslationProviderChange = onTranslationProviderChange,
+            translationGlobalMode = state.translationGlobalMode.value,
+            onTranslationGlobalModeChange = onTranslationGlobalModeChange,
+            geminiApiKey = state.geminiApiKey.value,
+            geminiModel = state.geminiModel.value,
+            googlePaApiKeys = state.googlePaApiKeys.value,
+            openAiBaseUrl = state.openAiBaseUrl.value,
+            openAiApiKeys = state.openAiApiKeys.value,
+            openAiModel = state.openAiModel.value,
+            activeSystemPrompt = state.activeSystemPrompt.value,
+            promptPresets = state.promptPresets.value,
+            promptUseEnglishLocale = state.promptUseEnglishLocale.value,
+            onGeminiApiKeyChange = onGeminiApiKeyChange,
+            onGeminiModelChange = onGeminiModelChange,
+            onGooglePaApiKeysChange = onGooglePaApiKeysChange,
+            onOpenAiBaseUrlChange = onOpenAiBaseUrlChange,
+            onOpenAiApiKeysChange = onOpenAiApiKeysChange,
+            onOpenAiModelChange = onOpenAiModelChange,
+            onActiveSystemPromptChange = onActiveSystemPromptChange,
+            onPromptUseEnglishLocaleChange = onPromptUseEnglishLocaleChange,
+            onSavePreset = onSavePreset,
+            onDeletePreset = onDeletePreset,
+            llmBatchSize = state.llmBatchSize.value,
+            llmMaxOutputTokens = state.llmMaxOutputTokens.value,
+            onLlmBatchSizeChange = onLlmBatchSizeChange,
+            onLlmMaxOutputTokensChange = onLlmMaxOutputTokensChange,
+            novelPromptCount = state.translationNovelPrompts.value.size,
+            onNovelPromptsClick = { showNovelPromptsDialog.value = true },
         )
+        SettingsRegexCleanup(onNavigateToRegexCleanup = onNavigateToRegexCleanup)
         HorizontalDivider()
         SettingsTtsAudioDownload(
             voiceId = state.audioVoiceId.value,
@@ -239,194 +225,20 @@ internal fun SettingsScreenBody(
             directoryDisplayName = state.audioDirectoryDisplayName.value,
         )
         HorizontalDivider()
+        SettingsTtsVideoDownload()
+        HorizontalDivider()
         LibraryAutoUpdate(state = state.libraryAutoUpdate)
         HorizontalDivider()
-        AppUpdates(
-            state = state.updateAppSetting,
-            onCheckForUpdatesManual = onCheckForUpdatesManual
-        )
+        AppUpdates(state = state.updateAppSetting, onCheckForUpdatesManual = onCheckForUpdatesManual)
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "(°.°)",
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(120.dp))
-    }
-
-    if (showNovelPromptsDialog.value) {
-        SettingsNovelPromptsDialog(
-            novelPrompts = state.translationNovelPrompts.value,
-            onDeleteNovelPrompt = onDeleteNovelPrompt,
-            onDismiss = { showNovelPromptsDialog.value = false },
-        )
-    }
-
-    val confirmationType = state.cleanConfirmationType.value
-    if (confirmationType != null) {
-        val titleRes = when (confirmationType) {
-            CleanConfirmationType.DATABASE -> R.string.clean_database
-            CleanConfirmationType.IMAGES_FOLDER -> R.string.clean_images_folder
-            CleanConfirmationType.CHAPTER_CACHE -> R.string.clean_chapter_cache
-        }
-        val textRes = when (confirmationType) {
-            CleanConfirmationType.DATABASE -> R.string.clean_database_confirmation
-            CleanConfirmationType.IMAGES_FOLDER -> R.string.clean_images_folder_confirmation
-            CleanConfirmationType.CHAPTER_CACHE -> R.string.clean_chapter_cache_confirmation
-        }
-        AlertDialog(
-            onDismissRequest = onDismissClean,
-            title = {
-                Text(
-                    text = stringResource(id = titleRes),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
-            text = {
-                Text(
-                    text = stringResource(id = textRes),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            confirmButton = {
-                OutlinedButton(
-                    onClick = onConfirmClean,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(id = android.R.string.ok))
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = onDismissClean,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Text(stringResource(id = R.string.cancel))
-                }
-            }
-        )
-    }
-}
-
-
-@PreviewThemes
-@Composable
-private fun Preview() {
-    val isDark = isSystemInDarkTheme()
-    InternalTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            SettingsScreenBody(
-                state = SettingsScreenState(
-                    currentAppTheme = remember { mutableStateOf(AppTheme.DEFAULT) },
-                    currentDarkMode = remember { mutableStateOf(DarkMode.SYSTEM) },
-                    currentLanguage = remember { mutableStateOf("en") },
-                    databaseSize = remember { mutableStateOf("1 MB") },
-                    imageFolderSize = remember { mutableStateOf("10 MB") },
-                    isCleaningDatabase = remember { mutableStateOf(false) },
-                    isCleaningImages = remember { mutableStateOf(false) },
-                    chapterCacheSize = remember { mutableStateOf("5 MB") },
-                    isCleaningChapterCache = remember { mutableStateOf(false) },
-                    updateAppSetting = SettingsScreenState.UpdateApp(
-                        currentAppVersion = "1.0.0",
-                        appUpdateCheckerEnabled = remember { mutableStateOf(true) },
-                        showNewVersionDialog = remember { mutableStateOf(null) },
-                        checkingForNewVersion = remember { mutableStateOf(true) },
-                    ),
-                    libraryAutoUpdate = SettingsScreenState.LibraryAutoUpdate(
-                        autoUpdateEnabled = remember { mutableStateOf(true) },
-                        autoUpdateIntervalHours = remember { mutableIntStateOf(24) },
-                    ),
-                    massAddDelayMs = remember { derivedStateOf { 2000L } },
-                    downloadDelayMs = remember { derivedStateOf { 2000L } },
-                    geminiApiKey = remember { derivedStateOf { "" } },
-                    geminiModel = remember { derivedStateOf { "" } },
-                    translationProvider = remember { mutableStateOf("GOOGLE_PA") },
-                    translationGlobalMode = remember { mutableStateOf(false) },
-                    googlePaApiKeys = remember { derivedStateOf { "" } },
-                    scraperUserAgent = remember { mutableStateOf("") },
-                    cloudflareBypassEnabled = remember { mutableStateOf(true) },
-                    cloudflareChallengeTimeoutSeconds = remember { mutableStateOf(120) },
-                    openAiBaseUrl = remember { derivedStateOf { "" } },
-                    openAiApiKeys = remember { derivedStateOf { "" } },
-                    openAiModel = remember { derivedStateOf { "gpt-4o-mini" } },
-                    activeSystemPrompt = remember { derivedStateOf { "" } },
-                    promptPresets = remember { derivedStateOf { emptyList<Pair<String, String>>() } },
-                    promptUseEnglishLocale = remember { derivedStateOf { true } },
-                    llmBatchSize = remember { derivedStateOf { 60 } },
-                    llmMaxOutputTokens = remember { derivedStateOf { 0 } },
-                    autoBackupEnabled = remember { mutableStateOf(false) },
-                    autoBackupDirectoryUri = remember { derivedStateOf { "" } },
-                    autoBackupDirectoryDisplayName = remember { mutableStateOf("") },
-                    autoBackupMaxCount = remember { derivedStateOf { 5 } },
-                    autoBackupIntervalMinutes = remember { derivedStateOf { 60L } },
-                    autoBackupIncludeImages = remember { derivedStateOf { false } },
-                    autoBackupIncludeSettings = remember { derivedStateOf { true } },
-                    autoBackupIncludePlugins = remember { derivedStateOf { true } },
-                    autoBackupLastTimestamp = remember { derivedStateOf { 0L } },
-                    translationNovelPrompts = remember { derivedStateOf { emptyMap<String, NovelPromptData>() } },
-                    cleanConfirmationType = remember { mutableStateOf(null) },
-                    audioVoiceId = remember { derivedStateOf { "" } },
-                    audioVoiceEngine = remember { derivedStateOf { "" } },
-                    audioVoiceSpeed = remember { derivedStateOf { 1f } },
-                    audioVoicePitch = remember { derivedStateOf { 1f } },
-                    audioSource = remember { derivedStateOf { my.noveldokusha.core.appPreferences.TtsAudioSource.ASK_EVERY_TIME } },
-                    audioDirectoryUri = remember { derivedStateOf { "" } },
-                    audioDirectoryDisplayName = remember { mutableStateOf("") },
-                ),
-                onRefreshSizes = { },
-                onRequestCleanDatabase = { },
-                onRequestCleanImageFolder = { },
-                onRequestCleanChapterCache = { },
-                onConfirmClean = { },
-                onDismissClean = { },
-                onMassAddDelayChange = { },
-                onDownloadDelayChange = { },
-                onBackupData = { },
-                onRestoreData = { },
-                onCheckForUpdatesManual = { },
-                onGeminiApiKeyChange = { },
-                onGeminiModelChange = { },
-                onTranslationProviderChange = { },
-                onTranslationGlobalModeChange = { },
-                onGooglePaApiKeysChange = { },
-                onOpenAiBaseUrlChange = { },
-                onOpenAiApiKeysChange = { },
-                onOpenAiModelChange = { },
-                onActiveSystemPromptChange = { },
-                onPromptUseEnglishLocaleChange = { },
-                onSavePreset = { _, _ -> },
-                onDeletePreset = { },
-                onLlmBatchSizeChange = { },
-                onLlmMaxOutputTokensChange = { },
-                    onLanguageChange = { },
-                    onAppThemeSelected = { },
-                    onDarkModeSelected = { },
-                    onNavigateToRegexCleanup = { },
-                    onAutoBackupEnabledChange = { },
-                    onAutoBackupSelectDirectory = { },
-                    onAutoBackupMaxCountChange = { },
-                    onAutoBackupIntervalMinutesChange = { },
-                    onAutoBackupIncludeImagesChange = { },
-                    onAutoBackupIncludeSettingsChange = { },
-                    onAutoBackupIncludePluginsChange = { },
-                    onDeleteNovelPrompt = { },
-                    onAudioVoiceChange = { _, _ -> },
-                    onAudioVoiceSpeedChange = { _ -> },
-                    onAudioVoicePitchChange = { _ -> },
-                    onAudioSourceChange = { _ -> },
-                    onAudioSelectDirectory = { },
-            )
-        }
     }
 }
