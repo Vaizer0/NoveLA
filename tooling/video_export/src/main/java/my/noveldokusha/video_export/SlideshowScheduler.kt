@@ -46,12 +46,15 @@ class SlideshowScheduler(
     private val items: List<ArtworkItem> = items
     private val totalMs: Long
 
-    val isEmpty: Boolean get() = items.isEmpty()
+    val isEmpty: Boolean get() = slots.isEmpty()
 
     init {
-        require(totalAudioMs > 0) { "totalAudioMs must be > 0" }
         totalMs = totalAudioMs
-        slots = buildSlots(config, items, totalMs)
+        if (config.enabled && totalAudioMs > 0) {
+            slots = buildSlots(config, items, totalAudioMs)
+        } else {
+            slots = emptyList()
+        }
     }
 
     fun frameAt(timeMs: Long): Frame {
@@ -179,7 +182,7 @@ class SlideshowScheduler(
             var h = 1125899906842597L
             for (c in components) {
                 for (ch in c) {
-                    h = 31L * h + ch.toLong()
+                    h = 31L * h + ch.code.toLong()
                 }
             }
             return h
