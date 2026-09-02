@@ -116,6 +116,8 @@ internal fun ChaptersScreenBody(
                     context = context,
                     appPreferences = appPreferences,
                     videoPreferences = videoPreferences,
+                    novelUrl = state.book.value.url,
+                    novelTitle = state.book.value.title,
                     chapter = pending.chapter,
                     source = pending.source,
                 )
@@ -167,6 +169,8 @@ internal fun ChaptersScreenBody(
                         context = context,
                         appPreferences = appPreferences,
                         videoPreferences = videoPreferences,
+                        novelUrl = state.book.value.url,
+                        novelTitle = state.book.value.title,
                         chapter = chapter,
                         source = source,
                     )
@@ -311,7 +315,6 @@ internal fun ChaptersScreenBody(
                     ) {
                         VideoChapterAction(
                             label = "Video",
-                            source = TtsAudioSource.ORIGINAL,
                             job = state.videoJobs[VideoJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)],
                             enabled = true,
                             onClick = { handleVideo(it, TtsAudioSource.ORIGINAL) },
@@ -321,7 +324,6 @@ internal fun ChaptersScreenBody(
                         ) {
                             VideoChapterAction(
                                 label = "Translated video",
-                                source = TtsAudioSource.TRANSLATED,
                                 job = state.videoJobs[VideoJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)],
                                 enabled = true,
                                 onClick = { handleVideo(it, TtsAudioSource.TRANSLATED) },
@@ -344,7 +346,6 @@ internal fun ChaptersScreenBody(
 @Composable
 private fun VideoChapterAction(
     label: String,
-    source: TtsAudioSource,
     job: TtsVideoJobState?,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -386,20 +387,27 @@ private fun enqueueVideoChapter(
     context: android.content.Context,
     appPreferences: AppPreferences,
     videoPreferences: TtsVideoPreferences,
+    novelUrl: String,
+    novelTitle: String,
     chapter: ChapterWithContext,
     source: TtsAudioSource,
 ) {
+    // The launcher snapshots the dedicated video settings and TTS profile at enqueue time.
+    // Keep all user-visible failures explicit instead of silently pretending a job started.
     runCatching {
+        require(videoPreferences.outputDirectoryUri.isNotBlank()) { "Select a video output folder first" }
         TtsVideoExportLauncher.enqueue(
             context = context,
             appPreferences = appPreferences,
-            novelUrl = chapter.chapter.bookUrl,
-            novelTitle = chapter.chapter.bookUrl,
+            novelUrl = novelUrl,
+            novelTitle = novelTitle,
             chapterUrl = chapter.chapter.url,
             chapterIndex = chapter.chapter.position,
             chapterTitle = chapter.chapter.title,
             source = source,
         )
+    }.onFailure {
+        android.widget.Toast.makeText(context, it.message ?: "Unable to start video export", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
