@@ -242,15 +242,40 @@ class VideoFrameRenderer(
         val i = ps.indexOf(timeline.paragraphAtSample(sample))
         val cardWindow = layoutConfig.cardWindow()
 
+        // Marquee reveal for paragraphs taller than the card: instead of a
+        // single screenful that silently clips the rest, the text scrolls in
+        // lockstep with the currently SPOKEN LINE so the reading region stays
+        // in view, and the bottom of the content settles exactly at the window
+        // bottom by paragraph end (nothing cut at both ends at once).
         fun scrollOffsetFor(index: Int, scale: Float): Float {
             val p = ps[index]
             val layout = layoutCache.layoutFor(index, p.displayText).layout
             val fitted = layout.height.toFloat() * scale
-            val overflow = fitted - cardWindow.height()
+            val windowH = cardWindow.height()
+            val overflow = fitted - windowH
             if (overflow <= 0f) return 0f
-            val span = maxOf(1L, p.endSample - p.startSample)
-            val progress = ((sample - p.startSample).toFloat() / span).coerceIn(0f, 1f)
-            return overflow * progress
+
+            // Vertical position of the current line's top, scaled to the card.
+            val currentLineY = activeLineTopInLayout(layout, sample, p) * scale
+
+            // Desired scroll: bring the spoken line's top near the window top
+            // (with a small lead so the next line peeks in), clamped so the
+            // scroll can never exceed overflow (the last line ends at bottom).
+            val leadLineHeight =
+                if (layout.lineCount > 0) layout.getLineTop(0) + (layout.getLineBottom(0) - layout.getLineTop(0))
+                else 0f
+            val lead = leadLineHeight * scale
+            val desired = (currentLineY - lead).coerceAtLeast(0f)
+            return desired.coerceAtMost(overflow)
+        }
+
+        // Top of the line containing the currently spoken word (in layout-space px).
+        fun activeLineTopInLayout(layout: StaticLayout, sample: Long, p: ParagraphTiming): Float {
+            val word = timeline.wordAtSample(sample, p) ?: return 0f
+            if (word.displayRange.isEmpty()) return 0f
+            val offset = word.displayRange.first.coerceIn(0, p.displayText.length)
+            val line = layout.getLineForOffset(offset)
+            return layout.getLineTop(line).toFloat()
         }
 
         fun currentOnly(): FramePlan {
