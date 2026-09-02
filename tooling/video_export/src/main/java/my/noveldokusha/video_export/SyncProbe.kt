@@ -40,10 +40,15 @@ object SyncProbe {
     /**
      * Ищет сдвиг, при котором [decodedPcm] воспроизводит окно [sourcePcm].
      *
-     * Берётся окно речи от первого не-тихого сэмпла; грубый поиск с шагом
-     * ~20 мс, затем мелкий по сэмплу вокруг лучшего кандидата.
+     * Берётся окно речи от первого не-тихого сэмпла [sourcePcm]; поиск ведётся
+     * по *относительному* сдвигу σ вокруг этого окна: результат (σ) не зависит
+     * от того, когда в source начинается голос — это и есть дрейф в сэмплах.
+     * >0 — в decoded речь слышна позже (отстаёт); <0 — раньше (лид).
      *
-     * @param maxLagMs максимальный искомый лаг
+     * Грубый поиск с шагом ~20 мс и ранний выход при сильной корреляции,
+     * затем мелкий по сэмплу вокруг лучшего кандидата.
+     *
+     * @param maxLagMs максимальный искомый |лаг| в обе стороны
      * @param windowMs длина окна корреляции
      */
     fun findLag(
@@ -60,41 +65,50 @@ object SyncProbe {
 
         // Окно речи в source: от первого не-тихого сэмпла.
         val onset = firstNonSilentOnset(sourcePcm)
-        val windowStart = min(onset, sourcePcm.size - windowLen)
-        if (windowStart < 0) return PcmLag(0, 0.0)
+        val windowStart = min(onset, sourcePcm.size - windowLen).coerceAtLeast(0)
+        val windowLenEff = min(windowLen, sourcePcm.size - windowStart)
 
-        val window = FloatArray(windowLen)
-        System.arraycopy(sourcePcm, windowStart, window, 0, windowLen)
+        // Допустимые относительные сдвиги σ: срез decoded[windowStart+σ .. +W)
+        // обязан целиком лежать внутри decoded.
+        val sigmaLo = -windowStart.toLong()
+        val sigmaHi = (decodedPcm.size - (windowStart + windowLenEff)).toLong()
 
-        val maxSearchLag = min(maxLag, (decodedPcm.size - windowLen).toLong())
-        val coarseStep = max(1L, sampleRate / 50L)
+        // Поиск симметричен вокруг 0 (|лаг| ≤ maxLag); сначала явно пробуем σ=0.
+        val searchLo = sigmaLo.coerceAtLeast(-maxLag)
+        val searchHi = sigmaHi.coerceAtMost(maxLag)
 
         // Грубый проход.
-        var bestLag = 0L
-        var bestCorr = Double.NEGATIVE_INFINITY
-        var lag = 0L
-        while (lag <= maxSearchLag) {
-            val c = correlation(window, decodedPcm, lag.toInt())
-            if (c > bestCorr) {
-                bestCorr = c
-                bestLag = lag
+        val coarseStep = max(1L, maxLag / 5L)
+        var bestSigma = 0L
+        var bestCorr = correlation(sourcePcm, windowStart, windowLenEff, decodedPcm, windowStart + 0L)
+        var sigma = searchLo
+        while (sigma <= searchHi) {
+            if (sigma != 0L) {
+                val c = correlation(sourcePcm, windowStart, windowLenEff, decodedPcm, windowStart + sigma)
+                if (c > bestCorr) {
+                    bestCorr = c
+                    bestSigma = sigma
+                }
+                if (bestCorr > 0.5) break
             }
-            lag += coarseStep
+            sigma += coarseStep
         }
 
-        // Мелкий проход вокруг грубого кандидата.
-        val lo = max(0L, bestLag - coarseStep)
-        val hi = min(maxSearchLag, bestLag + coarseStep)
-        var fineLag = bestLag
+        // Мелкий проход: вокруг грубого кандидата, если тот сильный; иначе — полная
+        // область с шагом 1 (грубый кандидат мог не лечь на сетку и не дать сигнала).
+        val tight = bestCorr > 0.5
+        val lo = if (tight) max(searchLo, bestSigma - coarseStep) else searchLo
+        val hi = if (tight) min(searchHi, bestSigma + coarseStep) else searchHi
         var fineCorr = bestCorr
-        for (d in lo..hi) {
-            val c = correlation(window, decodedPcm, d.toInt())
+        var fineSigma = bestSigma
+        for (sigma in lo..hi) {
+            val c = correlation(sourcePcm, windowStart, windowLenEff, decodedPcm, windowStart + sigma)
             if (c > fineCorr) {
                 fineCorr = c
-                fineLag = d
+                fineSigma = sigma
             }
         }
-        return PcmLag(fineLag, fineCorr.coerceIn(0.0, 1.0))
+        return PcmLag(fineSigma, fineCorr.coerceIn(0.0, 1.0))
     }
 
     /** Индекс первого сэмпла со значимой энергией. */
@@ -112,15 +126,15 @@ object SyncProbe {
         return 0
     }
 
-    /** Нормированная (по энергии) корреляция окна [w] и decodedPcm[offset..]. */
-    private fun correlation(w: FloatArray, d: FloatArray, offset: Int): Double {
-        if (offset < 0 || offset + w.size > d.size) return Double.NEGATIVE_INFINITY
+    /** Нормированная (по энергии) корреляция окна sourcePcm[ws..ws+W] и decodedPcm[offset..]. */
+    private fun correlation(sourcePcm: FloatArray, ws: Int, len: Int, d: FloatArray, offset: Long): Double {
+        if (offset < 0 || offset + len > d.size) return Double.NEGATIVE_INFINITY
         var dot = 0.0
         var wEn = 0.0
         var dEn = 0.0
-        for (i in w.indices) {
-            val wi = w[i].toDouble()
-            val di = d[offset + i].toDouble()
+        for (i in 0 until len) {
+            val wi = sourcePcm[ws + i].toDouble()
+            val di = d[(offset + i).toInt()].toDouble()
             dot += wi * di
             wEn += wi * wi
             dEn += di * di
