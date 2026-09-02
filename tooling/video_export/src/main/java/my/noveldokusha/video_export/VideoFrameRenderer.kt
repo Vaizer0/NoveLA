@@ -273,7 +273,7 @@ class VideoFrameRenderer(
             val leadLineHeight =
                 if (layout.lineCount > 0) layout.getLineBottom(0) - layout.getLineTop(0)
                 else 0f
-            val lead = leadLineHeight * scale
+            val lead = leadLineHeight.toFloat() * scale
             val desired = (currentLineY - lead).coerceAtLeast(0f)
             return desired.coerceAtMost(overflow)
         }
