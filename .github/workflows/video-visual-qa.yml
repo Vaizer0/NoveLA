@@ -14,9 +14,8 @@ concurrency:
 
 jobs:
   visual-qa:
-    # The hosted Ubuntu VM used by the previous run had no usable KVM and the
-    # x86_64 emulator remained offline for the entire boot timeout. macOS provides
-    # native hypervisor acceleration for this instrumentation-only visual check.
+    # macOS gives the Android emulator hardware hypervisor acceleration; the
+    # previous Ubuntu runner remained offline because KVM was unavailable.
     runs-on: macos-13
     steps:
       - name: Checkout
@@ -54,9 +53,15 @@ jobs:
           fi
           count=$(find visual-qa -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')
           echo "Collected PNG frames: $count"
-          test "$count" -eq 6
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+        id: collect
+      - name: Verify six visual QA frames were produced
+        if: success()
+        env:
+          COUNT: ${{ steps.collect.outputs.count }}
+        run: test "$COUNT" -eq 6
       - name: Upload rendered PNG frames
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: NoveLA-video-visual-qa
