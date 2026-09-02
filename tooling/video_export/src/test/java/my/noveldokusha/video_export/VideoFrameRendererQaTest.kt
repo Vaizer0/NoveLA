@@ -203,8 +203,7 @@ class VideoFrameRendererQaTest {
         val textX0 = cfg.textX0()
         val layoutW = cfg.cardTextWidth()
         val cardRect = cfg.cardRect()
-        val current = plan.current
-        assertNotNull("current present", current)
+        val current = plan.current ?: error("current present")
         val slots = listOfNotNull(plan.prev, current, plan.next, plan.fadingOut)
         val visible = mutableListOf<Pair<VideoFrameRenderer.SlotFrame, RectF>>()
         for (s in slots) {
