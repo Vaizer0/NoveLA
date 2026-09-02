@@ -72,13 +72,13 @@ data class VideoStyleSettings(
     }
 }
 
-private val VideoStyleDefaults = object {
-    const val MARGIN_X = 256f
-    const val CONTENT_OFFSET_Y = 0f
-    const val HIGHLIGHT_ALPHA = 0.5019608f // 0x80 / 255
-    const val CARD_PAD_H = 56f
-    const val CARD_PAD_TOP = 40f
-    const val CARD_PAD_BOTTOM = 48f
-    const val CARD_CORNER_RADIUS = 20f
-    const val CARD_STROKE_WIDTH = 2f
+private object VideoStyleDefaults {
+    val MARGIN_X = 256f
+    val CONTENT_OFFSET_Y = 0f
+    val HIGHLIGHT_ALPHA = 0.5019608f // 0x80 / 255
+    val CARD_PAD_H = 56f
+    val CARD_PAD_TOP = 40f
+    val CARD_PAD_BOTTOM = 48f
+    val CARD_CORNER_RADIUS = 20f
+    val CARD_STROKE_WIDTH = 2f
 }
