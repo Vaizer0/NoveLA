@@ -3,7 +3,7 @@ package my.noveldokusha.text_to_speech
 /**
  * Provenance for transformed text. All indices are Android/Kotlin UTF-16 code-unit indices.
  * Each output range points to the source range which produced it; replacements map to the full
- * matched range rather than pretending a character-for-character mapping exists.
+ * matched source range rather than pretending a character-for-character mapping exists.
  */
 data class TextProvenance(val outputStart: Int, val outputEnd: Int, val sourceStart: Int, val sourceEnd: Int)
 
@@ -24,31 +24,55 @@ data class MappedText(val text: String, val provenance: List<TextProvenance>) {
     }
 }
 
-/** A small deterministic transformation primitive used by the video mapping layer. */
+/** Transformation primitives used by the video mapping layer. */
 object TtsVideoTextMapper {
     fun identity(text: String): MappedText =
         MappedText(text, if (text.isEmpty()) emptyList() else listOf(TextProvenance(0, text.length, 0, text.length)))
 
     fun replaceRange(input: MappedText, start: Int, end: Int, replacement: String): MappedText {
         require(start in 0..input.text.length && end in start..input.text.length)
-        val source = input.sourceForOutput(start, end)
-        val prefix = input.text.substring(0, start)
-        val suffix = input.text.substring(end)
-        val result = prefix + replacement + suffix
+        val replacementSource = input.sourceForOutput(start, end)
         val shift = replacement.length - (end - start)
         val out = buildList {
             input.provenance.forEach { p ->
-                when {
-                    p.outputEnd <= start -> add(p)
-                    p.outputStart >= end -> add(p.copy(outputStart = p.outputStart + shift, outputEnd = p.outputEnd + shift))
-                    else -> Unit
+                // Preserve the unaffected prefix/suffix of a provenance span instead of
+                // dropping the entire span when the replacement only intersects part of it.
+                if (p.outputStart < start) {
+                    val prefixEnd = minOf(p.outputEnd, start)
+                    if (prefixEnd > p.outputStart) {
+                        add(
+                            TextProvenance(
+                                outputStart = p.outputStart,
+                                outputEnd = prefixEnd,
+                                sourceStart = p.sourceStart,
+                                sourceEnd = p.sourceStart + (prefixEnd - p.outputStart),
+                            )
+                        )
+                    }
+                }
+                if (p.outputEnd > end) {
+                    val suffixStart = maxOf(p.outputStart, end)
+                    if (p.outputEnd > suffixStart) {
+                        val sourceSuffixStart = p.sourceEnd - (p.outputEnd - suffixStart)
+                        add(
+                            TextProvenance(
+                                outputStart = suffixStart + shift,
+                                outputEnd = p.outputEnd + shift,
+                                sourceStart = sourceSuffixStart,
+                                sourceEnd = p.sourceEnd,
+                            )
+                        )
+                    }
                 }
             }
-            if (replacement.isNotEmpty() && source != null) {
-                add(TextProvenance(start, start + replacement.length, source.sourceStart, source.sourceEnd))
+            if (replacement.isNotEmpty() && replacementSource != null) {
+                add(TextProvenance(start, start + replacement.length, replacementSource.sourceStart, replacementSource.sourceEnd))
             }
         }.sortedBy { it.outputStart }
-        return MappedText(result, out)
+        return MappedText(
+            input.text.substring(0, start) + replacement + input.text.substring(end),
+            out,
+        )
     }
 
     fun normalizeWhitespace(input: MappedText): MappedText {
