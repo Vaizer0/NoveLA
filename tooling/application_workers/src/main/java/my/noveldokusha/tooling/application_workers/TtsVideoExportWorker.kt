@@ -61,6 +61,9 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
             } catch (e: CancellationException) { throw e }
             catch (e: Throwable) { throw TtsExportException("Unable to promote video export to foreground: ${e.message ?: "unknown error"}") }
 
+            // Re-validate at execution time: a persisted SAF grant can be revoked after enqueue.
+            TtsVideoExportLauncher.requireAccessibleTree(applicationContext, request.outputDirectoryUri)
+
             val textBlocks = withContext(Dispatchers.IO) { loadText(entry.appDatabase(), request) }
                 ?: return fail(prefs, request, if (request.source == TtsAudioSource.TRANSLATED) "Cached translation is missing" else "Chapter text is not downloaded")
             if (request.source == TtsAudioSource.TRANSLATED && textBlocks.isEmpty()) return fail(prefs, request, "Cached translation is empty")
@@ -101,6 +104,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
             return Result.failure()
         } finally {
             temp?.deleteRecursively()
+            runCatching { applicationContext.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID) }
         }
     }
 
@@ -158,6 +162,7 @@ class TtsVideoExportWorker(context: Context, params: WorkerParameters) : Corouti
     private fun update(p: TtsVideoPreferences, r: TtsVideoRequest, status: TtsVideoJobStatus, progress: Int, output: String = "", message: String = "") {
         val jobs = p.jobs().toMutableMap()
         val old = jobs[r.jobId] ?: TtsVideoJobState(r.chapterUrl, r.novelUrl, r.chapterTitle, r.source, status)
+        if (old.status == TtsVideoJobStatus.CANCELLED && status == TtsVideoJobStatus.RUNNING) return
         jobs[r.jobId] = old.copy(status = status, progress = progress, requestJson = r.serialize(), outputUri = output.ifBlank { old.outputUri }, message = message)
         p.saveJobs(jobs)
     }
