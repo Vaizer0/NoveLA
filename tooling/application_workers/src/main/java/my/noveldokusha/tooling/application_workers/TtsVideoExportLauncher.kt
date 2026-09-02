@@ -26,8 +26,17 @@ object TtsVideoExportLauncher {
             if (settings.slideshowSeed != 0L) settings
             else settings.copy(slideshowSeed = stableSeed(novelUrl, chapterUrl))
         }
-        val outputUri = videoPrefs.outputDirectoryUri.ifBlank { appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value }
-        require(outputUri.isNotBlank()) { "Select a video output folder or an audio output folder first" }
+        // Video exports intentionally use their own SAF tree. Never fall back to the
+        // audio-download directory: the two output locations are independent settings.
+        val outputUri = videoPrefs.outputDirectoryUri
+        require(outputUri.isNotBlank()) { "Select a video output folder first" }
+
+        if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value.isBlank() ||
+            appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()
+        ) {
+            throw IllegalStateException("Select a TTS voice for video export first")
+        }
+
         val pair = if (source == TtsAudioSource.TRANSLATED) {
             appPreferences.translationPairForBook(novelUrl)
         } else TranslationLangPair()
