@@ -39,7 +39,14 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             for ((blockIndex, chunkIndex, text) in chunks) {
                 val sourceBlock = blocks.getOrNull(blockIndex) ?: text
                 val cleanMapped = cleanForTtsMapped(sourceBlock)
-                val chunkStart = cleanMapped.text.indexOf(text, 0)
+                var searchFrom = 0
+                val chunkStart = generateSequence {
+                    val found = cleanMapped.text.indexOf(text, searchFrom)
+                    if (found >= 0) {
+                        searchFrom = found + maxOf(1, text.length)
+                        found
+                    } else null
+                }.firstOrNull() ?: -1
                 if (chunkStart < 0) throw TtsExportException("Unable to map TTS chunk back to source text")
                 val preparedMapped = TtsVideoTextMapper.substring(cleanMapped, chunkStart, chunkStart + text.length)
                 val mapping = VideoDisplayMapping(
@@ -75,29 +82,34 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
         }
     }
 
+    /** The shared cleaner performs deletion/trim-only transforms, so the result can be mapped as an ordered UTF-16 subsequence. */
     private fun cleanForTtsMapped(source: String): MappedText {
-        var mapped = TtsVideoTextMapper.identity(source)
-        val lines = source.split("\n", ignoreCase = false, limit = -1)
-        var offset = 0
-        for (line in lines) {
-            var start = offset
-            var end = offset + line.length
-            val leading = TtsTextPreparer.leadingDecoratorLength(line)
-            if (leading > 0) mapped = TtsVideoTextMapper.replaceRange(mapped, start, start + leading, "")
-            // Keep the same regex semantics as TtsTextPreparer.cleanForTts for trailing decorators.
-            val trailingMatch = Regex("\\s*[-=*_~+#·•°─┿]{3,}$").find(line)
-            if (trailingMatch != null && trailingMatch.range.first < line.length) {
-                val currentEnd = end - leading
-                val trailingStart = offset + trailingMatch.range.first - leading
-                val trailingEnd = offset + line.length - leading
-                if (trailingStart < trailingEnd) mapped = TtsVideoTextMapper.replaceRange(mapped, trailingStart, trailingEnd, "")
+        val cleaned = TtsTextPreparer.cleanForTts(source)
+        if (cleaned.isEmpty()) return MappedText("", emptyList())
+        val provenance = ArrayList<TextProvenance>()
+        var sourceCursor = 0
+        var outputCursor = 0
+        var rangeSourceStart = -1
+        var rangeOutputStart = -1
+        var previousSource = -2
+        for (i in cleaned.indices) {
+            val target = cleaned[i]
+            while (sourceCursor < source.length && source[sourceCursor] != target) sourceCursor++
+            if (sourceCursor >= source.length) throw TtsExportException("Unable to preserve TTS cleanup provenance")
+            if (rangeSourceStart < 0) {
+                rangeSourceStart = sourceCursor
+                rangeOutputStart = outputCursor
+            } else if (sourceCursor != previousSource + 1) {
+                provenance += TextProvenance(rangeOutputStart, outputCursor, rangeSourceStart, previousSource + 1)
+                rangeSourceStart = sourceCursor
+                rangeOutputStart = outputCursor
             }
-            // Remove whitespace introduced by edge removal only in the same way as the shared cleaner.
-            val trimmed = TtsVideoTextMapper.trim(mapped)
-            mapped = trimmed
-            offset = source.length.coerceAtMost(offset + line.length + 1)
+            previousSource = sourceCursor
+            sourceCursor++
+            outputCursor++
         }
-        return TtsVideoTextMapper.trim(mapped)
+        if (rangeSourceStart >= 0) provenance += TextProvenance(rangeOutputStart, outputCursor, rangeSourceStart, previousSource + 1)
+        return MappedText(cleaned, provenance)
     }
 
     private suspend fun synthesizeChunk(tts: TextToSpeech, sink: File, writer: WavWriter, text: String, title: String): List<TtsRangeEvent> {
