@@ -42,13 +42,6 @@ import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.strings.R as StringsR
 import kotlin.coroutines.resume
 
-/**
- * Настройки «Загрузка аудио»: голос (выделенный TTS-инстанс, независимый от
- * живой озвучки), скорость/высота, источник текста и папка назначения (SAF).
- *
- * Голоса перечисляются ВЫДЕЛЕННЫМ probe-инстансом TextToSpeech (не общим
- * AppTtsEngine), поэтому настройка никогда не трогает озвучку читалки.
- */
 @Composable
 internal fun SettingsTtsAudioDownload(
     voiceId: String,
@@ -77,16 +70,10 @@ internal fun SettingsTtsAudioDownload(
         )
         HorizontalDivider()
 
-        // Voice + engine
         SlimListItem(
-            headlineContent = {
-                Text(text = stringResource(StringsR.string.settings_audio_download_voice))
-            },
+            headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_voice)) },
             supportingContent = {
-                Text(
-                    text = voiceId.ifBlank { stringResource(StringsR.string.tts_audio_voice_not_set) },
-                    maxLines = 1,
-                )
+                Text(text = voiceId.ifBlank { stringResource(StringsR.string.tts_audio_voice_not_set) }, maxLines = 1)
             },
             leadingContent = {
                 Icon(Icons.Outlined.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -94,7 +81,6 @@ internal fun SettingsTtsAudioDownload(
             modifier = Modifier.clickable { openVoiceDialog = true }
         )
 
-        // Speed
         var localSpeed by remember { mutableStateOf(speed) }
         LaunchedEffect(speed) { localSpeed = speed }
         PillSlider(
@@ -106,7 +92,7 @@ internal fun SettingsTtsAudioDownload(
             valueText = "%.2f".format(localSpeed),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
-        // Pitch
+
         var localPitch by remember { mutableStateOf(pitch) }
         LaunchedEffect(pitch) { localPitch = pitch }
         PillSlider(
@@ -119,31 +105,21 @@ internal fun SettingsTtsAudioDownload(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
 
-        // Text source
         SlimListItem(
-            headlineContent = {
-                Text(text = stringResource(StringsR.string.settings_audio_download_source))
-            },
-            supportingContent = {
-                Text(text = sourceLabel(source))
-            },
+            headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_source)) },
+            supportingContent = { Text(text = sourceLabel(source)) },
             leadingContent = {
                 Icon(Icons.Outlined.LibraryMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable { openSourceDialog = true }
         )
 
-        // Destination folder (SAF)
         SlimListItem(
-            headlineContent = {
-                Text(text = stringResource(StringsR.string.settings_audio_download_folder))
-            },
+            headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_folder)) },
             supportingContent = {
-                Text(
-                    text = directoryDisplayName.ifBlank {
-                        stringResource(StringsR.string.tts_audio_download_folder_is_not_within_library)
-                    }
-                )
+                Text(text = directoryDisplayName.ifBlank {
+                    stringResource(StringsR.string.tts_audio_download_folder_is_not_within_library)
+                })
             },
             leadingContent = {
                 Icon(Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -163,10 +139,7 @@ internal fun SettingsTtsAudioDownload(
                         SlimListItem(
                             headlineContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = sourceLabel(entry),
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Text(text = sourceLabel(entry), modifier = Modifier.weight(1f))
                                     if (selected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
                                 }
                             },
@@ -191,6 +164,7 @@ internal fun SettingsTtsAudioDownload(
     if (openVoiceDialog) {
         VoicePickerDialog(
             initialVoiceId = voiceId,
+            initialEnginePackage = voiceEngine,
             onDismiss = { openVoiceDialog = false },
             onPick = { engine, voice ->
                 onVoiceChange(engine, voice)
@@ -209,16 +183,18 @@ private fun sourceLabel(source: TtsAudioSource): String = stringResource(
     }
 )
 
-/** Диалог выбора голоса для загрузки аудио (отдельный TTS-инстанс-пробник). */
 @Composable
 private fun VoicePickerDialog(
     initialVoiceId: String,
+    initialEnginePackage: String,
     onDismiss: () -> Unit,
     onPick: (enginePackage: String, voiceId: String) -> Unit,
 ) {
     val context = LocalContext.current
     var voices by remember { mutableStateOf<List<VoiceEntry>>(emptyList()) }
-    var selected by remember { mutableStateOf(initialVoiceId) }
+    var selectedKey by remember(initialVoiceId, initialEnginePackage) {
+        mutableStateOf(voiceKey(initialEnginePackage, initialVoiceId))
+    }
 
     LaunchedEffect(Unit) {
         voices = withContext(Dispatchers.Default) { probeVoices(context) }
@@ -239,14 +215,12 @@ private fun VoicePickerDialog(
                         modifier = Modifier.padding(8.dp)
                     )
                 } else {
-                    voices.sortedBy { it.language }.forEach { voice ->
-                        val isSelected = voice.id == selected
+                    voices.sortedWith(compareBy<VoiceEntry>({ it.engineLabel }, { it.language }, { it.id })).forEach { voice ->
+                        val isSelected = voiceKey(voice.enginePackage, voice.id) == selectedKey
                         SlimListItem(
-                            headlineContent = {
-                                Text(text = voice.id, maxLines = 1)
-                            },
+                            headlineContent = { Text(text = voice.id, maxLines = 1) },
                             supportingContent = {
-                                Text(text = voice.language, maxLines = 1)
+                                Text(text = "${voice.engineLabel} · ${voice.language}", maxLines = 1)
                             },
                             trailingContent = {
                                 if (isSelected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
@@ -254,7 +228,7 @@ private fun VoicePickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selected = voice.id
+                                    selectedKey = voiceKey(voice.enginePackage, voice.id)
                                     onPick(voice.enginePackage, voice.id)
                                 }
                         )
@@ -270,40 +244,50 @@ private fun VoicePickerDialog(
     )
 }
 
-/** Неизменяемая запись голоса, доступного для загрузки аудио. */
 private data class VoiceEntry(
     val enginePackage: String,
+    val engineLabel: String,
     val id: String,
     val language: String,
 )
 
-/** Перечисляет голоса выделенным TextToSpeech-инстансом (не трогая AppTtsEngine). */
-private suspend fun probeVoices(context: Context): List<VoiceEntry> {
-    var engine: TextToSpeech? = null
-    suspendCancellableCoroutine<Unit> { cont ->
-        // Инстанс присваивается до init-колбэка (он асинхронный), поэтому
-        // self-reference внутри own-initializer не требуется.
-        engine = TextToSpeech(context.applicationContext) { status ->
-            if (cont.isActive) {
-                cont.resume(Unit)
-            }
-        }
+private fun voiceKey(enginePackage: String, voiceId: String): String = "$enginePackage\u0000$voiceId"
+
+private suspend fun createTts(context: Context, enginePackage: String): TextToSpeech? =
+    suspendCancellableCoroutine { cont ->
+        var instance: TextToSpeech? = null
+        instance = TextToSpeech(
+            context.applicationContext,
+            { status ->
+                if (!cont.isActive) return@TextToSpeech
+                if (status == TextToSpeech.SUCCESS) cont.resume(instance) else cont.resume(null)
+            },
+            enginePackage,
+        )
         cont.invokeOnCancellation {
-            runCatching { engine?.stop() }
-            runCatching { engine?.shutdown() }
+            runCatching { instance?.stop() }
+            runCatching { instance?.shutdown() }
         }
     }
-    val tts = engine ?: return emptyList()
-    val enginePackage = tts.defaultEngine ?: ""
-    val result = runCatching {
-        (tts.voices ?: emptyList()).map { voice ->
-            VoiceEntry(
-                enginePackage = enginePackage,
-                id = voice.name,
-                language = voice.locale?.displayLanguage ?: "",
-            )
+
+private suspend fun probeVoices(context: Context): List<VoiceEntry> {
+    val discovery = createTts(context, "") ?: return emptyList()
+    val engines = discovery.engines.toList()
+    runCatching { discovery.shutdown() }
+
+    return engines.flatMap { info ->
+        val tts = createTts(context, info.name) ?: return@flatMap emptyList()
+        try {
+            (tts.voices ?: emptyList()).map { voice ->
+                VoiceEntry(
+                    enginePackage = info.name,
+                    engineLabel = info.label ?: info.name,
+                    id = voice.name,
+                    language = voice.locale?.toLanguageTag() ?: "",
+                )
+            }
+        } finally {
+            runCatching { tts.shutdown() }
         }
-    }.getOrDefault(emptyList())
-    runCatching { tts.shutdown() }
-    return result
+    }
 }
