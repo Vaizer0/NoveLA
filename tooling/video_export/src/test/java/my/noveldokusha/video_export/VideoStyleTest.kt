@@ -277,6 +277,89 @@ class VideoStyleTest {
     }
 
     @Test
+    fun settingsJsonRoundTrip() {
+        val s = VideoStyleSettings(
+            fontFamily = "merriweather",
+            fontSizeSp = 20f,
+            bold = false,
+            italic = true,
+            lineHeight = 1.5f,
+            paragraphSpacing = 12f,
+            textAlignment = TextAlignment.END,
+            textColorArgb = 0xFF010101.toInt(),
+            highlightColorArgb = 0xFFABCDEF.toInt(),
+            highlightAlpha = 0.4f,
+            highlightRadius = 9f,
+            highlightPadding = 5f,
+            cardFillArgb = 0xFF321321.toInt(),
+            cardStrokeArgb = 0xFF999999.toInt(),
+            currentCardAlpha = 0.8f,
+            contextParagraphOpacity = 0.35f,
+            marginX = 300f,
+            maxTextWidth = 800f,
+            contentOffsetY = -10f,
+            cardPaddingH = 60f,
+            cardPaddingTop = 44f,
+            cardPaddingBottom = 50f,
+            cardCornerRadius = 24f,
+            cardStrokeWidth = 3f,
+            leftArtwork = VideoArtworkSettings("art_l.png", widthFraction = 0.18f, verticalAlignment = ArtworkVerticalAlignment.TOP),
+            rightArtwork = VideoArtworkSettings("art_r.png", widthFraction = 0.1f, borderWidth = 4f),
+            presentation = ParagraphPresentation.DYNAMIC_CONTEXT,
+            slideshowConfig = SlideshowConfig(
+                enabled = true,
+                timingMode = SlideshowTimingMode.FIXED_INTERVAL,
+                fixedIntervalMs = 5000,
+                percentageSections = 0.3f,
+                randomMinMs = 3000,
+                randomMaxMs = 8000,
+                randomSeed = 42,
+                transitionType = SlideshowTransition.FADE,
+                transitionDurationMs = 700,
+            ),
+            slideshowItems = listOf(
+                ArtworkItem("a", "a.png", true, 0.75f, 0.6f, 0.9f, ArtworkFitMode.COVER, 16f, 2f, 0x60FFFFFF.toInt(), true),
+                ArtworkItem("b", "b.png", true, 0.2f, 0.4f, 0.5f, ArtworkFitMode.CONTAIN, 8f, 0f, 0xFFFFFFFF.toInt(), false),
+            ),
+            chapterIdentity = "ch",
+            sourceId = "src",
+        )
+
+        val restored = VideoStyleSettings.fromJson(s.toJson())!!
+
+        assertEquals(s, restored)
+        assertEquals(TextAlignment.END, restored.textAlignment)
+        assertEquals(ParagraphPresentation.DYNAMIC_CONTEXT, restored.presentation)
+        assertEquals("art_l.png", restored.leftArtwork!!.fileName)
+        assertEquals(4f, restored.rightArtwork!!.borderWidth, 1e-4f)
+        assertEquals(SlideshowTimingMode.FIXED_INTERVAL, restored.slideshowConfig!!.timingMode)
+        assertEquals(42L, restored.slideshowConfig!!.randomSeed)
+        assertEquals(SlideshowTransition.FADE, restored.slideshowConfig!!.transitionType)
+        assertEquals(2, restored.slideshowItems.size)
+        assertEquals("b.png", restored.slideshowItems[1].fileName)
+        assertEquals("ch", restored.chapterIdentity)
+    }
+
+    @Test
+    fun settingsJsonNullFieldsRoundTrip() {
+        val s = VideoStyleSettings()
+        val restored = VideoStyleSettings.fromJson(s.toJson())!!
+        assertEquals(s, restored)
+        assertNull(restored.maxTextWidth)
+        assertNull(restored.leftArtwork)
+        assertNull(restored.rightArtwork)
+        assertNull(restored.slideshowConfig)
+        assertEquals(ParagraphPresentation.CURRENT_WITH_CONTEXT, restored.presentation)
+    }
+
+    @Test
+    fun settingsJsonHandlesBlankAndCorrupt() {
+        assertNull(VideoStyleSettings.fromJson(null))
+        assertNull(VideoStyleSettings.fromJson(""))
+        assertNull(VideoStyleSettings.fromJson("{ not valid json"))
+    }
+
+    @Test
     fun defaultConfigKeepsTitleIntroWidth() {
         val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(reader))
         assertEquals(

@@ -121,4 +121,57 @@ data class VideoArtworkSettings(
     val cornerRadius: Float? = null,
     val borderWidth: Float? = null,
     val borderColorArgb: Int? = null,
-)
+) {
+    fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
+        put(KEY_FILE, fileName ?: org.json.JSONObject.NULL)
+        put(KEY_WIDTH_FRACTION, widthFraction?.toDouble() ?: org.json.JSONObject.NULL)
+        put(KEY_HEIGHT_CAP, heightCapFraction?.toDouble() ?: org.json.JSONObject.NULL)
+        put(KEY_ALIGNMENT, verticalAlignment?.name ?: org.json.JSONObject.NULL)
+        put(KEY_OPACITY, opacity?.toDouble() ?: org.json.JSONObject.NULL)
+        put(KEY_FIT, fitMode?.name ?: org.json.JSONObject.NULL)
+        put(KEY_RADIUS, cornerRadius?.toDouble() ?: org.json.JSONObject.NULL)
+        put(KEY_BORDER, borderWidth?.toDouble() ?: org.json.JSONObject.NULL)
+        put(KEY_BORDER_COLOR, borderColorArgb ?: org.json.JSONObject.NULL)
+    }
+
+    companion object {
+        private const val KEY_FILE = "fileName"
+        private const val KEY_WIDTH_FRACTION = "widthFraction"
+        private const val KEY_HEIGHT_CAP = "heightCapFraction"
+        private const val KEY_ALIGNMENT = "verticalAlignment"
+        private const val KEY_OPACITY = "opacity"
+        private const val KEY_FIT = "fitMode"
+        private const val KEY_RADIUS = "cornerRadius"
+        private const val KEY_BORDER = "borderWidth"
+        private const val KEY_BORDER_COLOR = "borderColorArgb"
+
+        fun fromJson(obj: org.json.JSONObject?): VideoArtworkSettings? {
+            if (obj == null) return null
+            fun f(key: String): Float? {
+                val v = obj.opt(key)
+                return if (v is Number) v.toFloat() else null
+            }
+            fun i(key: String): Int? {
+                val v = obj.opt(key)
+                return if (v is Number) v.toInt() else null
+            }
+            fun s(key: String): String? {
+                val v = obj.opt(key)
+                return if (v == null || v == org.json.JSONObject.NULL) null else v.toString()
+            }
+            return VideoArtworkSettings(
+                fileName = s(KEY_FILE),
+                widthFraction = f(KEY_WIDTH_FRACTION),
+                heightCapFraction = f(KEY_HEIGHT_CAP),
+                verticalAlignment = runCatching {
+                    ArtworkVerticalAlignment.valueOf(obj.getString(KEY_ALIGNMENT))
+                }.getOrNull(),
+                opacity = f(KEY_OPACITY),
+                fitMode = runCatching { ArtworkFitMode.valueOf(obj.getString(KEY_FIT)) }.getOrNull(),
+                cornerRadius = f(KEY_RADIUS),
+                borderWidth = f(KEY_BORDER),
+                borderColorArgb = i(KEY_BORDER_COLOR),
+            )
+        }
+    }
+}
