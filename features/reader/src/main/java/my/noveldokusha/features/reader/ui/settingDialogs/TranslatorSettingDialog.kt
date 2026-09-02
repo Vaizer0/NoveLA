@@ -3,6 +3,7 @@ package my.noveldokusha.features.reader.ui.settingDialogs
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Button
@@ -149,7 +151,10 @@ internal fun TranslatorSettingDialog(
             HorizontalDivider()
 
             // ── Language selection ──────────────────────────────────────
-            LanguageSelector(state = state)
+            LanguageSelector(
+                state = state,
+                onRemovePair = state.onRemovePair,
+            )
 
             // ── Display options ────────────────────────────────────────
             DisplayOptionsSection(state = state)
@@ -266,7 +271,10 @@ private fun ProviderSelector(state: LiveTranslationSettingData) {
 }
 
 @Composable
-private fun LanguageSelector(state: LiveTranslationSettingData) {
+private fun LanguageSelector(
+    state: LiveTranslationSettingData,
+    onRemovePair: (TranslationLangPair) -> Unit = {},
+) {
     var showSourceDialog by rememberSaveable { mutableStateOf(false) }
     var showTargetDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -315,6 +323,7 @@ private fun LanguageSelector(state: LiveTranslationSettingData) {
             onToggleFavorite = state.onToggleFavorite,
             recentPairs = state.recentPairs,
             onApplyRecentPair = state.onApplyRecentPair,
+            onRemovePair = onRemovePair,
         )
     }
 
@@ -328,6 +337,7 @@ private fun LanguageSelector(state: LiveTranslationSettingData) {
             onToggleFavorite = state.onToggleFavorite,
             recentPairs = state.recentPairs,
             onApplyRecentPair = state.onApplyRecentPair,
+            onRemovePair = onRemovePair,
         )
     }
 }
@@ -371,6 +381,7 @@ private fun LanguageSearchDialog(
     onToggleFavorite: (String) -> Unit,
     recentPairs: List<TranslationLangPair>,
     onApplyRecentPair: (String, String) -> Unit,
+    onRemovePair: (TranslationLangPair) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -423,83 +434,15 @@ private fun LanguageSearchDialog(
             )
             Spacer(Modifier.height(8.dp))
 
+            // Последние пары перевода (порядок — от свежих к старым).
+            val displayPairs = recentPairs
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp),
+                    .heightIn(max = 400.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                // ── Избранные языки (закреплены сверху) ────────────────
-                if (favoriteItems.isNotEmpty()) {
-                    item(key = "fav_header") {
-                        Text(
-                            text = stringResource(R.string.language_favorites),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-                        )
-                    }
-                    items(favoriteItems, key = { "fav_${it.language}" }) { item ->
-                        val isSelected = selected?.language == item.language
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(
-                                    if (isSelected) Modifier
-                                        .clip(MaterialTheme.shapes.small)
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                    else Modifier
-                                )
-                                .clickable(enabled = item.available) {
-                                    onSelect(if (isSelected) null else item)
-                                }
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                        ) {
-                            Text(
-                                text = "${item.displayName} (${item.language})",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f),
-                                color = when {
-                                    !item.available -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                    isSelected -> colorAccent()
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                },
-                            )
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Outlined.CheckCircle,
-                                    contentDescription = null,
-                                    tint = colorAccent(),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                            IconButton(
-                                onClick = { onToggleFavorite(item.language) },
-                            ) {
-                                Icon(
-                                    if (favoriteLanguages.contains(item.language)) Icons.Filled.Star
-                                    else Icons.Outlined.StarBorder,
-                                    contentDescription = stringResource(
-                                        if (favoriteLanguages.contains(item.language))
-                                            R.string.language_favorite_remove
-                                        else R.string.language_favorite_add
-                                    ),
-                                    tint = if (favoriteLanguages.contains(item.language))
-                                        colorAccent()
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // ── Разделитель между избранными и парами ──────────────
-                item(key = "divider_1") {
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                }
-
                 // ── Последние пары перевода (всегда видна) ─────────────
                 item(key = "pairs_header") {
                     Text(
@@ -507,11 +450,11 @@ private fun LanguageSearchDialog(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                     )
                 }
-                if (recentPairs.isNotEmpty()) {
-                    items(recentPairs, key = { "pair_${it.source}_${it.target}" }) { pair ->
+                if (displayPairs.isNotEmpty()) {
+                    items(displayPairs, key = { "pair_${it.source}_${it.target}" }) { pair ->
                         val sourceItem = itemByCode[pair.source]
                         val targetItem = itemByCode[pair.target]
                         // Показываем чип только если оба кода есть в списке языков.
@@ -522,9 +465,7 @@ private fun LanguageSearchDialog(
                                 shape = MaterialTheme.shapes.medium,
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -534,39 +475,28 @@ private fun LanguageSearchDialog(
                                             onApplyRecentPair(pair.source, pair.target)
                                             onDismiss()
                                         }
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
                                 ) {
                                     Text(
                                         text = label,
-                                        style = MaterialTheme.typography.bodyLarge,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         modifier = Modifier.weight(1f),
                                         color = if (available)
                                             MaterialTheme.colorScheme.onSurface
                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                                     )
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowRightAlt,
-                                        contentDescription = null,
-                                        tint = if (available)
-                                            colorAccent()
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    // Звезда для закрепления исходного языка пары в избранном.
-                                    IconButton(
-                                        onClick = { onToggleFavorite(pair.source) },
+                                    // Удаление пары из списка последних.
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable { onRemovePair(pair) },
+                                        contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            if (favoriteLanguages.contains(pair.source)) Icons.Filled.Star
-                                            else Icons.Outlined.StarBorder,
-                                            contentDescription = stringResource(
-                                                if (favoriteLanguages.contains(pair.source))
-                                                    R.string.language_favorite_remove
-                                                else R.string.language_favorite_add
-                                            ),
-                                            tint = if (favoriteLanguages.contains(pair.source))
-                                                colorAccent()
-                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            imageVector = Icons.Outlined.Delete,
+                                            contentDescription = stringResource(R.string.delete),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp),
                                         )
                                     }
                                 }
@@ -593,7 +523,82 @@ private fun LanguageSearchDialog(
                     }
                 }
 
-                // ── Разделитель между парами и основным списком ────────
+                // ── Разделитель между парами и избранными языками ──────
+                item(key = "divider_1") {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                }
+
+                // ── Избранные языки (закреплены сверху) ────────────────
+                if (favoriteItems.isNotEmpty()) {
+                    item(key = "fav_header") {
+                        Text(
+                            text = stringResource(R.string.language_favorites),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                        )
+                    }
+                    items(favoriteItems, key = { "fav_${it.language}" }) { item ->
+                        val isSelected = selected?.language == item.language
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (isSelected) Modifier
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                    else Modifier
+                                )
+                                .clickable(enabled = item.available) {
+                                    onSelect(if (isSelected) null else item)
+                                }
+                                .padding(vertical = 2.dp, horizontal = 4.dp),
+                        ) {
+                            Text(
+                                text = "${item.displayName} (${item.language})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                                color = when {
+                                    !item.available -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                    isSelected -> colorAccent()
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Outlined.CheckCircle,
+                                    contentDescription = null,
+                                    tint = colorAccent(),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clickable { onToggleFavorite(item.language) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    if (favoriteLanguages.contains(item.language)) Icons.Filled.Star
+                                    else Icons.Outlined.StarBorder,
+                                    contentDescription = stringResource(
+                                        if (favoriteLanguages.contains(item.language))
+                                            R.string.language_favorite_remove
+                                        else R.string.language_favorite_add
+                                    ),
+                                    tint = if (favoriteLanguages.contains(item.language))
+                                        colorAccent()
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── Разделитель между избранными и основным списком ────
                 item(key = "divider_2") {
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 }
@@ -605,7 +610,7 @@ private fun LanguageSearchDialog(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                     )
                 }
                 items(filtered, key = { "lang_${it.language}" }) { item ->
@@ -623,11 +628,11 @@ private fun LanguageSearchDialog(
                             .clickable(enabled = item.available) {
                                 onSelect(if (isSelected) null else item)
                             }
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                            .padding(vertical = 2.dp, horizontal = 4.dp),
                     ) {
                         Text(
                             text = "${item.displayName} (${item.language})",
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                             color = when {
                                 !item.available -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -644,8 +649,11 @@ private fun LanguageSearchDialog(
                             )
                         }
                         // Звезда для добавления/удаления языка из избранного.
-                        IconButton(
-                            onClick = { onToggleFavorite(item.language) },
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clickable { onToggleFavorite(item.language) },
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 if (favoriteLanguages.contains(item.language)) Icons.Filled.Star
@@ -658,6 +666,7 @@ private fun LanguageSearchDialog(
                                 tint = if (favoriteLanguages.contains(item.language))
                                     colorAccent()
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }
