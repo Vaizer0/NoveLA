@@ -125,6 +125,7 @@ fun SettingsScreen(
                 onAudioVoicePitchChange = viewModel::onAudioVoicePitchChange,
                 onAudioSourceChange = viewModel::onAudioSourceChange,
                 onAudioSelectDirectory = { audioDirectoryPicker.launch(null) },
+                onVideoStyleChange = viewModel::onVideoStyleChange,
                 modifier = Modifier.padding(innerPadding),
             )
         }

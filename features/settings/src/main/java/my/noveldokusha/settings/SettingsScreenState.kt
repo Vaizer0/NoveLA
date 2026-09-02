@@ -10,6 +10,7 @@ import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.core.appPreferences.NovelPromptData
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.video_export.VideoStyleSettings
 
 enum class CleanConfirmationType { DATABASE, IMAGES_FOLDER, CHAPTER_CACHE }
 
@@ -68,6 +69,8 @@ data class SettingsScreenState(
     val audioSource: State<TtsAudioSource>,
     val audioDirectoryUri: State<String>,
     val audioDirectoryDisplayName: MutableState<String>,
+    // Video appearance (Video Studio export)
+    val videoStyle: MutableState<VideoStyleSettings>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

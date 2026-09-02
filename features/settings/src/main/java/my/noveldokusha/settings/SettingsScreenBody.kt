@@ -57,6 +57,8 @@ import my.noveldokusha.settings.sections.SettingsLanguage
 import my.noveldokusha.settings.sections.SettingsNovelPromptsDialog
 import my.noveldokusha.settings.sections.SettingsNetwork
 import my.noveldokusha.settings.sections.SettingsTheme
+import my.noveldokusha.settings.sections.SettingsVideoAppearance
+import my.noveldokusha.video_export.VideoStyleSettings
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
 import my.noveldokusha.settings.sections.SettingsTtsAudioDownload
 
@@ -108,6 +110,7 @@ internal fun SettingsScreenBody(
     onAudioVoicePitchChange: (Float) -> Unit,
     onAudioSourceChange: (my.noveldokusha.core.appPreferences.TtsAudioSource) -> Unit,
     onAudioSelectDirectory: () -> Unit,
+    onVideoStyleChange: (VideoStyleSettings) -> Unit,
 ) {
     // Refresh size displays every time the user navigates to this screen
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -237,6 +240,11 @@ internal fun SettingsScreenBody(
             onSourceChange = onAudioSourceChange,
             onSelectDirectory = onAudioSelectDirectory,
             directoryDisplayName = state.audioDirectoryDisplayName.value,
+        )
+        HorizontalDivider()
+        SettingsVideoAppearance(
+            style = state.videoStyle.value,
+            onStyleChange = onVideoStyleChange,
         )
         HorizontalDivider()
         LibraryAutoUpdate(state = state.libraryAutoUpdate)

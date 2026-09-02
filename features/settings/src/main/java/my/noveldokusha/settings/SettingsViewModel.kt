@@ -25,6 +25,7 @@ import my.noveldokusha.core.isCoverValid
 import my.noveldokusha.core.Toasty
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.tooling.application_workers.AppWorkersInteractions
+import my.noveldokusha.video_export.VideoStyleSettings
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.io.File
@@ -52,6 +53,17 @@ internal class SettingsViewModel @Inject constructor(
     var isCleaningChapterCache = mutableStateOf(false)
 
     private val cloudflareBypassEnabled by appPreferences.CLOUDFLARE_BYPASS_ENABLED.state(viewModelScope)
+
+    /** Текущие настройки внешнего вида видео; изменение сохраняет весь JSON. */
+    private val videoStyleState = mutableStateOf(
+        VideoStyleSettings.fromJson(appPreferences.VIDEO_STYLE_SETTINGS_JSON.value)
+            ?: VideoStyleSettings()
+    )
+
+    fun onVideoStyleChange(newStyle: VideoStyleSettings) {
+        videoStyleState.value = newStyle
+        appPreferences.VIDEO_STYLE_SETTINGS_JSON.value = newStyle.toJson().toString()
+    }
 
     private val appThemePref = appPreferences.APP_THEME.state(viewModelScope)
     private val darkModePref = appPreferences.THEME_DARK_MODE.state(viewModelScope)
@@ -128,6 +140,7 @@ internal class SettingsViewModel @Inject constructor(
         audioDirectoryDisplayName = mutableStateOf(
             resolveDirectoryName(appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value)
         ),
+        videoStyle = videoStyleState,
     )
 
     init {

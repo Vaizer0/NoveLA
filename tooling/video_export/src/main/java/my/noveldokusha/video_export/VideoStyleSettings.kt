@@ -161,7 +161,7 @@ data class VideoStyleSettings(
         putNullIf(KEY_LETTER_SPACING, letterSpacing)
         putNullIf(KEY_LINE_HEIGHT, lineHeight)
         putNullIf(KEY_PARAGRAPH_SPACING, paragraphSpacing)
-        put(KEY_TEXT_ALIGNMENT, textAlignment.name)
+        put(KEY_TEXT_ALIGNMENT, textAlignment?.name ?: JSONObject.NULL)
         putNullIf(KEY_TEXT_COLOR, textColorArgb)
         putNullIf(KEY_HIGHLIGHT_COLOR, highlightColorArgb)
         putNullIf(KEY_HIGHLIGHT_ALPHA, highlightAlpha)
@@ -253,9 +253,7 @@ data class VideoStyleSettings(
                     letterSpacing = obj.optFloatOrNull(KEY_LETTER_SPACING),
                     lineHeight = obj.optFloatOrNull(KEY_LINE_HEIGHT),
                     paragraphSpacing = obj.optFloatOrNull(KEY_PARAGRAPH_SPACING),
-                    textAlignment = runCatching {
-                        TextAlignment.valueOf(obj.getString(KEY_TEXT_ALIGNMENT))
-                    }.getOrDefault(TextAlignment.START),
+                    textAlignment = obj.optEnumOrNull(KEY_TEXT_ALIGNMENT, TextAlignment::valueOf),
                     textColorArgb = obj.optIntOrNull(KEY_TEXT_COLOR),
                     highlightColorArgb = obj.optIntOrNull(KEY_HIGHLIGHT_COLOR),
                     highlightAlpha = obj.optFloatOrNull(KEY_HIGHLIGHT_ALPHA),
@@ -278,7 +276,8 @@ data class VideoStyleSettings(
                     presentation = runCatching {
                         ParagraphPresentation.valueOf(obj.getString(KEY_PRESENTATION))
                     }.getOrDefault(ParagraphPresentation.CURRENT_WITH_CONTEXT),
-                    slideshowConfig = SlideshowConfig.fromJson(obj.optJSONObject(KEY_SLIDESHOW_CONFIG)),
+                    slideshowConfig = if (obj.isNull(KEY_SLIDESHOW_CONFIG)) null
+                    else SlideshowConfig.fromJson(obj.optJSONObject(KEY_SLIDESHOW_CONFIG)),
                     slideshowItems = fromArtworkJsonArray(obj.optJSONArray(KEY_SLIDESHOW_ITEMS)),
                     chapterIdentity = obj.optString(KEY_CHAPTER_IDENTITY),
                     sourceId = obj.optString(KEY_SOURCE_ID),
@@ -304,6 +303,12 @@ data class VideoStyleSettings(
         private fun JSONObject.optStringOrNull(key: String): String? {
             val v = opt(key)
             return if (v == JSONObject.NULL || v == null) null else v.toString()
+        }
+
+        private fun <T : Enum<T>> JSONObject.optEnumOrNull(key: String, parse: (String) -> T): T? {
+            val v = opt(key)
+            return if (v == JSONObject.NULL || v == null) null
+            else runCatching { parse(v.toString()) }.getOrNull()
         }
     }
 }

@@ -1182,6 +1182,10 @@ class AppPreferences @Inject constructor(
         )
     }
 
+    /** Настройки внешнего вида видео-экспорта (Video Studio) как JSON-строка. */
+    val VIDEO_STYLE_SETTINGS_JSON = object : Preference<String>("VIDEO_STYLE_SETTINGS_JSON") {
+        override var value by SharedPreference_String(name, preferences, "")
+    }
 
     abstract inner class Preference<T>(val name: String) {
         abstract var value: T
