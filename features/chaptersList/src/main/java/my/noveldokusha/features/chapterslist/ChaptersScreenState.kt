@@ -3,6 +3,7 @@ package my.noveldokusha.features.chapterslist
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import my.noveldokusha.core.appPreferences.TernaryState
@@ -19,10 +20,9 @@ internal data class ChaptersScreenState(
     val isRefreshable: State<Boolean>, val genres: MutableState<List<String>>, val rating: MutableState<String>, val status: MutableState<String>, val lastUpdateDate: MutableState<String>,
     val translatedChapterTitles: MutableState<Map<String, String>>, val translatedAudioAvailable: MutableState<Map<String, Boolean>>, val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>, val audioJobs: SnapshotStateMap<AudioJobKey, TtsAudioJobState>, val audioFilesExist: SnapshotStateMap<AudioJobKey, Boolean>,
-    val audioNeedDirectory: MutableState<Boolean>, val videoJobs: SnapshotStateMap<VideoJobKey, TtsVideoJobState>,
+    val audioNeedDirectory: MutableState<Boolean>, val videoJobs: SnapshotStateMap<VideoJobKey, TtsVideoJobState> = mutableStateMapOf(),
 ) {
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }
-
     data class BookState(
         val title: String, val url: String, val completed: Boolean = false, val lastReadChapter: String? = null, val inLibrary: Boolean = false,
         val coverImageUrl: String? = null, val description: String = "", val category: String = "",
