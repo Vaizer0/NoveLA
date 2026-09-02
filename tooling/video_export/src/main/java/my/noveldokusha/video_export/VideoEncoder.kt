@@ -155,17 +155,31 @@ class VideoEncoder(
     ) {
         val sampleRate = timeline.sampleRate
         val channels = timeline.channelCount
-        val totalFrames = EncodeTiming.frameCount(timeline.totalSamples, sampleRate)
-        val audioLeadSamples = sampleRate / 4L
 
+        // Ground truth of what is actually on disk (WAV header), not just the
+        // timeline estimate. Every frame count / feed target below uses this so
+        // the video track covers exactly the real audio and a tail is never
+        // truncated or hung far past the last real sample.
         if (output.exists()) runCatching { output.delete() }
 
         var videoCodec: MediaCodec? = null
         var audioCodec: MediaCodec? = null
         var surface: Surface? = null
         WavPcmSource(wav).use { source ->
+            val audioTotalSamples = source.totalSamples
+            val totalFrames = EncodeTiming.frameCount(audioTotalSamples, sampleRate)
+            val audioLeadSamples = sampleRate / 4L
             val muxer = MuxerSink(output.absolutePath)
             try {
+                // Diagnostics: capture the real audio length and target frame
+                // count so a bad build is identifiable from logcat without a
+                // debugging session.
+                android.util.Log.i(
+                    "VideoExport", "encode start: timeline.totalSamples=${timeline.totalSamples} " +
+                        "wav.totalSamples=$audioTotalSamples sampleRate=$sampleRate ch=$channels " +
+                        "totalFrames=$totalFrames aacPrimingUs=$aacPrimingOffsetUs " +
+                        "timelineAudioMs=${timeline.totalSamples * 1000L / sampleRate}"
+                )
                 videoCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC).apply {
                     configure(videoFormat(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 }
@@ -182,14 +196,14 @@ class VideoEncoder(
                 val audioBuffer = ByteArray(audioChunkBytes)
 
                 for (frame in 0L until totalFrames) {
-                    val frameSample = EncodeTiming.sampleForFrame(frame, sampleRate, timeline.totalSamples)
+                    val frameSample = EncodeTiming.sampleForFrame(frame, sampleRate, audioTotalSamples)
 
                     // Подкармливаем аудио с лидом, чтобы буфер кодека не пустел.
                     while (!audioEos && nextAudioSample < frameSample + audioLeadSamples) {
                         val n = source.readBytes(audioBuffer, audioBuffer.size)
                         if (n <= 0) {
-                            queueAacEnd(audioCodec!!, sampleRate, nextAudioSample, aacPrimingOffsetUs)
                             audioEos = true
+                            break
                         } else {
                             queueAac(
                                 audioCodec!!, audioBuffer, n, sampleRate, nextAudioSample, aacPrimingOffsetUs,
@@ -212,8 +226,35 @@ class VideoEncoder(
                     videoCodec!!.signalEndOfInputStream()
                     drainVideo(videoCodec!!, muxer)
                 }
+
+                // Доливаем ВЕСЬ остаток аудио до конца реального WAV, а не просто
+                // ставим EOS. Раньше хвост после (lastFrameSample + lead) молча
+                // обрезался: кадры покрывали totalSamples, а аудио нет — A/V не
+                // сходилось, и MP4-дорожки могли расходиться по длительности.
+                while (!audioEos && nextAudioSample < audioTotalSamples) {
+                    val n = source.readBytes(audioBuffer, audioBuffer.size)
+                    if (n <= 0) {
+                        audioEos = true
+                        break
+                    } else {
+                        queueAac(
+                            audioCodec!!, audioBuffer, n, sampleRate, nextAudioSample, aacPrimingOffsetUs,
+                        )
+                        nextAudioSample += (n / (channels * 2L)).coerceAtLeast(1)
+                    }
+                    drainAudio(audioCodec!!, muxer)
+                }
                 if (!audioEos) queueAacEnd(audioCodec!!, sampleRate, nextAudioSample, aacPrimingOffsetUs)
                 drainAudio(audioCodec!!, muxer)
+
+                android.util.Log.i(
+                    "VideoExport",
+                    "encode end: frames=$totalFrames audioSamplesFed=$nextAudioSample " +
+                        "wavTotalSamples=$audioTotalSamples " +
+                        "aacEndPtsUs=${EncodeTiming.audioPtsUs(nextAudioSample, sampleRate, aacPrimingOffsetUs)} " +
+                        "muxerMaxPtsUs=${muxer.maxPresentTimeUs()} " +
+                        "muxerMaxSec=${muxer.maxPresentTimeUs() / 1_000_000L}"
+                )
 
                 muxer.requireStarted()
             } catch (e: Exception) {
@@ -323,6 +364,9 @@ private class MuxerSink(path: String) {
     private var audioTrack = -1
     private val pending = ArrayDeque<Pair<Track, Pair<ByteBuffer, BufferInfo>>>()
 
+    /** Наибольший PresentationTimeUs среди записанных выборок (≈ mvhd duration). */
+    private var maxPtsUs: Long = 0L
+
     fun addTrack(track: Track, format: MediaFormat) {
         if (trackIndex(track) >= 0) return
         val idx = muxer.addTrack(format)
@@ -335,6 +379,7 @@ private class MuxerSink(path: String) {
     }
 
     fun write(track: Track, buffer: ByteBuffer, info: BufferInfo) {
+        if (info.presentationTimeUs > maxPtsUs) maxPtsUs = info.presentationTimeUs
         if (!started) {
             // Копируем: буфер кодека реиспользуется после releaseOutputBuffer.
             val src = buffer.duplicate()
@@ -373,6 +418,9 @@ private class MuxerSink(path: String) {
     fun requireStarted() {
         if (!started) throw TtsExportException("MediaMuxer: tracks not ready (video=$videoTrack audio=$audioTrack)")
     }
+
+    /** Наибольший PTS среди записанных выборок (для диагностики длительности). */
+    fun maxPresentTimeUs(): Long = maxPtsUs
 
     fun finish() {
         if (started) runCatching { muxer.stop() }

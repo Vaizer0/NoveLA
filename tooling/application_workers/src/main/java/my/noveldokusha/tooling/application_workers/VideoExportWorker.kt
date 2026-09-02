@@ -2,6 +2,7 @@ package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.media.MediaExtractor
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -149,6 +150,22 @@ class VideoExportWorker(
                 onProgress = { fraction -> report((fraction * 40).toInt().coerceIn(0, 39)) },
             )
 
+            // Diagnostics: verify the timeline sample-space and audio length agree.
+            // If totalSamples is wildly larger than the real WAV (bytes-vs-samples,
+            // or a synthesis-scale bug), the renderer freezes and the duration blows up.
+            val wavTotal = runCatching {
+                my.noveldokusha.video_export.WavPcmSource(wav).use {
+                    it.totalSamples to it.sampleRate
+                }
+            }.getOrNull()
+            Timber.w(
+                "VideoExport(timeline): paragraphs=${timeline.paragraphs.size} " +
+                    "titleEnabled=${timeline.title != null} totalSamples=${timeline.totalSamples} " +
+                    "sampleRate=${timeline.sampleRate} ch=${timeline.channelCount} " +
+                    "wavTotalSamples=${wavTotal?.first} wavRate=${wavTotal?.second} " +
+                    "approxSec=${timeline.totalSamples / timeline.sampleRate}"
+            )
+
             // ── Stage 2: Renderer construction ──────────────────────────────────
             val readerSnapshot = ReaderVisualSnapshot.fromJson(snapshotJson)
             ReaderFontResolver.init(context)
@@ -187,12 +204,18 @@ class VideoExportWorker(
                 aacPrimingOffsetUs = aacPrimingOffsetUs,
             ) { fraction -> report(40 + (fraction * 40).toInt().coerceIn(0, 39)) }
 
+            logMp4Duration(tempMp4)
+
             val tempMp4Size = tempMp4.length()
 
             // ── Stage 4: SAF write ──────────────────────────────────────────────
+            val sourceSuffix = when (sourceId) {
+                "translated" -> context.getString(StringsR.string.tts_audio_file_suffix_translated)
+                else -> context.getString(StringsR.string.tts_audio_file_suffix_original)
+            }
             val baseName = "${chapterTitle.ifBlank { "chapter" }}"
                 .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80)
-            val fileName = "$baseName.mp4"
+            val fileName = "$baseName $sourceSuffix.mp4"
             val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, parentUri, MIME_MP4, fileName)
@@ -328,6 +351,37 @@ class VideoExportWorker(
             } else null
         }
     }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    /**
+     * Независимый пост-фактум контроль: читает длительности дорожек готового MP4
+     * через MediaExtractor и логирует их. Это диагностика огромной (59:39:08)
+     * длительности — сюда смотрится логатель, чтобы понять, откуда берётся цифра.
+     */
+    private fun logMp4Duration(mp4: File) {
+        runCatching {
+            val extractor = MediaExtractor()
+            try {
+                extractor.setDataSource(mp4.absolutePath)
+                for (i in 0 until extractor.trackCount) {
+                    val f = extractor.getTrackFormat(i)
+                    val mime = f.getString(android.media.MediaFormat.KEY_MIME) ?: "?"
+                    // MediaFormat.KEY_DURATION даёт длительность дорожки в мкс.
+                    val dur = if (f.containsKey(android.media.MediaFormat.KEY_DURATION))
+                        f.getLong(android.media.MediaFormat.KEY_DURATION)
+                    else -1L
+                    Timber.w("VideoExport(mp4): track $i mime=$mime durationUs=$dur sec=${dur / 1_000_000L}")
+                }
+                val max = (0 until extractor.trackCount).mapNotNull { i ->
+                    val f = extractor.getTrackFormat(i)
+                    if (f.containsKey(android.media.MediaFormat.KEY_DURATION))
+                        f.getLong(android.media.MediaFormat.KEY_DURATION) else null
+                }.maxOrNull()
+                Timber.w("VideoExport(mp4): level maxDurationUs=$max sec=${(max ?: 0L) / 1_000_000L}")
+            } finally {
+                runCatching { extractor.release() }
+            }
+        }.onFailure { Timber.e(it, "VideoExport(mp4): could not read duration") }
+    }
 
     private fun sanitize(name: String, fallback: String = "novel"): String =
         name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
