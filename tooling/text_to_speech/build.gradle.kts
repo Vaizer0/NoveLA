@@ -15,7 +15,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
-    implementation(libs.test.junit)
+    testImplementation(libs.test.junit)
 
     implementation(libs.timber)
 }
