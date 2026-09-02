@@ -105,7 +105,7 @@ data class VideoStyleSnapshot(
         put(KEY_CARD_PAD_TOP, cardPaddingTop.toDouble())
         put(KEY_CARD_PAD_BOTTOM, cardPaddingBottom.toDouble())
         put(KEY_CARD_RADIUS, cardCornerRadius.toDouble())
-        put(KEY_CARD_STROKE, cardStrokeWidth.toDouble())
+        put(KEY_CARD_STROKE_WIDTH, cardStrokeWidth.toDouble())
         put(KEY_PRESENTATION, presentation.name)
     }.toString()
 
@@ -138,7 +138,7 @@ data class VideoStyleSnapshot(
         private const val KEY_CARD_PAD_TOP = "cardPaddingTop"
         private const val KEY_CARD_PAD_BOTTOM = "cardPaddingBottom"
         private const val KEY_CARD_RADIUS = "cardCornerRadius"
-        private const val KEY_CARD_STROKE = "cardStrokeWidth"
+        private const val KEY_CARD_STROKE_WIDTH = "cardStrokeWidth"
         private const val KEY_PRESENTATION = "presentation"
 
         val DEFAULT_BACKGROUND_ARGB = 0xFF15181D.toInt()
@@ -206,7 +206,7 @@ data class VideoStyleSnapshot(
                 cardPaddingTop = optFloat(KEY_CARD_PAD_TOP, 40f),
                 cardPaddingBottom = optFloat(KEY_CARD_PAD_BOTTOM, 48f),
                 cardCornerRadius = optFloat(KEY_CARD_RADIUS, 20f),
-                cardStrokeWidth = optFloat(KEY_CARD_STROKE, 2f),
+                cardStrokeWidth = optFloat(KEY_CARD_STROKE_WIDTH, 2f),
                 presentation = presentation,
             )
         }
