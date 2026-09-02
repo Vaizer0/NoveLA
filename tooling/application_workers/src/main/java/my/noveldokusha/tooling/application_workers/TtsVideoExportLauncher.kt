@@ -1,6 +1,8 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
+import android.net.Uri
+import android.provider.DocumentsContract
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TranslationLangPair
@@ -30,6 +32,7 @@ object TtsVideoExportLauncher {
         // audio-download directory: the two output locations are independent settings.
         val outputUri = videoPrefs.outputDirectoryUri
         require(outputUri.isNotBlank()) { "Select a video output folder first" }
+        requireAccessibleTree(context, outputUri)
 
         if (appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value.isBlank() ||
             appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value.isBlank()
@@ -77,6 +80,32 @@ object TtsVideoExportLauncher {
         )
         TtsVideoQueue.enqueue(context, request)
         return jobId
+    }
+
+    /** Background export requires a persisted write grant and a queryable tree root. */
+    private fun requireAccessibleTree(context: Context, uriString: String) {
+        val uri = runCatching { Uri.parse(uriString) }.getOrElse {
+            throw IllegalStateException("Video output folder URI is invalid")
+        }
+        require(DocumentsContract.isTreeUri(uri)) { "Video output folder is not a SAF tree" }
+        val resolver = context.contentResolver
+        val persisted = resolver.persistedUriPermissions.any {
+            it.uri == uri && it.isWritePermission
+        }
+        require(persisted) { "Video output folder permission was revoked; choose the folder again" }
+        val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrElse {
+            throw IllegalStateException("Video output folder URI is inaccessible")
+        }
+        val root = DocumentsContract.buildDocumentUriUsingTree(uri, documentId)
+        try {
+            resolver.query(root, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null).use { cursor ->
+                require(cursor?.moveToFirst() == true) { "Video output folder is inaccessible; choose the folder again" }
+            }
+        } catch (e: IllegalStateException) {
+            throw e
+        } catch (_: Throwable) {
+            throw IllegalStateException("Video output folder is inaccessible; choose the folder again")
+        }
     }
 
     private fun sha256(s: String): String = MessageDigest.getInstance("SHA-256")
