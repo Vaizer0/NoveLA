@@ -119,7 +119,7 @@ class TtsAudioExportWorker(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Timber.w(e, "TtsAudio: setForeground failed, continuing as background worker")
+                throw TtsExportException("Unable to promote audio export to foreground: ${e.message ?: "unknown error"}")
             }
 
             TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING) }
@@ -169,8 +169,10 @@ class TtsAudioExportWorker(
                 "$baseName $sourceSuffix.${request.format}"
             val mime = if (request.format == TtsAudioFormat.WAV) MIME_WAV else "application/octet-stream"
             val parentUri = novelFolderUri
+            var createdNewDocument = false
             createdUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)
+                findDocument(context, parentUri, fileName, mime)
+                    ?: DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)?.also { createdNewDocument = true }
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
 
             withContext(Dispatchers.IO) {
@@ -214,7 +216,9 @@ class TtsAudioExportWorker(
         } catch (e: CancellationException) {
             // Отмена очереди (пользователь): это не ошибка. Убираем временные файлы,
             // помечаем запись CANCELLED (non-error) и закрываем уведомление.
-            createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            if (createdNewDocument) {
+                createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            }
             tempWav.delete()
             TtsAudioQueue.updateState(appPreferences, jobId) {
                 it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
@@ -224,7 +228,9 @@ class TtsAudioExportWorker(
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: EXPORT FAILED for $jobId")
             // Частично созданный файл в SAF не оставляем.
-            createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            if (createdNewDocument) {
+                createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            }
             tempWav.delete()
             val message = context.getString(StringsR.string.tts_audio_export_failure_detail, e.message ?: "")
             notification.showError(message)
@@ -348,22 +354,42 @@ class TtsAudioExportWorker(
     }
 
     private fun isDirectoryAccessible(context: Context, directoryUri: String): Boolean {
+        if (directoryUri.isBlank()) return false
         return try {
             val treeUri = Uri.parse(directoryUri)
+            if (!DocumentsContract.isTreeUri(treeUri)) return false
+            val permission = context.contentResolver.persistedUriPermissions.firstOrNull { it.uri == treeUri }
+            if (permission?.isReadPermission != true || permission.isWritePermission != true) return false
             val docUri = DocumentsContract.buildDocumentUriUsingTree(
                 treeUri,
                 DocumentsContract.getTreeDocumentId(treeUri)
             )
             context.contentResolver.query(
                 docUri,
-                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-                null,
-                null,
-                null
-            )?.use { true } ?: false
+                arrayOf(DocumentsContract.Document.COLUMN_MIME_TYPE),
+                null, null, null
+            )?.use { cursor ->
+                cursor.moveToFirst() && cursor.getString(0) == DocumentsContract.Document.MIME_TYPE_DIR
+            } ?: false
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: isDirectoryAccessible FAILED")
             false
+        }
+    }
+
+    private fun findDocument(context: Context, parent: Uri, name: String, mimeType: String): Uri? {
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(parent, DocumentsContract.getTreeDocumentId(parent))
+        return context.contentResolver.query(
+            children,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),
+            null, null, null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                if (cursor.getString(1) == name && cursor.getString(2) == mimeType) {
+                    return@use DocumentsContract.buildDocumentUriUsingTree(parent, cursor.getString(0))
+                }
+            }
+            null
         }
     }
 
