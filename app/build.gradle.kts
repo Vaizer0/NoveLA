@@ -151,6 +151,7 @@ dependencies {
     androidTestImplementation(libs.test.androidx.core.ktx)
     androidTestImplementation(libs.test.androidx.junit.ktx)
     androidTestImplementation(libs.test.androidx.espresso.core)
+    androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.androidx.ui.test.junit4)
     androidTestImplementation(libs.test.androidx.rules)
     androidTestImplementation(libs.test.androidx.runner)
@@ -171,6 +172,7 @@ dependencies {
     implementation(libs.jsoup)
 
     // Jetpack compose
+    implementation(platform(libs.compose.bom))
     implementation(libs.compose.androidx.activity)
     implementation(libs.compose.androidx.animation)
     implementation(libs.compose.androidx.runtime.livedata)
