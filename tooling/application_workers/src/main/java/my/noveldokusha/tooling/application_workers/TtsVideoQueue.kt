@@ -19,10 +19,7 @@ object TtsVideoQueue {
     const val CHAIN_NAME = "tts-video-download"
     private val lock = Any()
 
-    /**
-     * Idempotent for an exact immutable request: repeated enqueue calls for the same jobId
-     * while that request is queued/running are ignored. Failed/cancelled jobs may be retried.
-     */
+    /** Idempotent for an exact immutable request while its persisted job is active. */
     fun enqueue(context: Context, request: TtsVideoRequest): Boolean {
         val prefs = TtsVideoPreferences(context)
         synchronized(lock) {
@@ -31,9 +28,7 @@ object TtsVideoQueue {
             if (existing != null && existing.status in setOf(TtsVideoJobStatus.QUEUED, TtsVideoJobStatus.RUNNING)) return false
 
             val work = buildWork(request)
-            val wm = WorkManager.getInstance(context)
-            // APPEND_OR_REPLACE preserves the single sequential export chain. The persisted
-            // request snapshot is written before enqueue so the UI has a durable QUEUED record.
+            val workManager = WorkManager.getInstance(context)
             jobs[request.jobId] = TtsVideoJobState(
                 chapterUrl = request.chapterUrl,
                 novelUrl = request.novelUrl,
@@ -44,7 +39,7 @@ object TtsVideoQueue {
                 requestJson = request.serialize(),
             )
             prefs.saveJobs(jobs)
-            wm.beginUniqueWork(CHAIN_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, work).enqueue()
+            workManager.beginUniqueWork(CHAIN_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, work).enqueue()
             return true
         }
     }
@@ -62,36 +57,65 @@ object TtsVideoQueue {
 
     fun cancel(context: Context, jobId: String) {
         val prefs = TtsVideoPreferences(context)
-        val current = prefs.jobs()[jobId] ?: return
-        current.workRequestId.takeIf(String::isNotBlank)?.let { id ->
-            runCatching { WorkManager.getInstance(context).cancelWorkById(UUID.fromString(id)) }
+        synchronized(lock) {
+            val current = prefs.jobs()[jobId] ?: return
+            current.workRequestId.takeIf(String::isNotBlank)?.let { id ->
+                runCatching { WorkManager.getInstance(context).cancelWorkById(UUID.fromString(id)) }
+            }
+            prefs.saveJobs(prefs.jobs().toMutableMap().apply {
+                put(jobId, current.copy(status = TtsVideoJobStatus.CANCELLED, progress = 0, message = "cancelled"))
+            })
         }
-        prefs.saveJobs(prefs.jobs().toMutableMap().apply {
-            put(jobId, current.copy(status = TtsVideoJobStatus.CANCELLED, progress = 0, message = "cancelled"))
-        })
     }
 
     fun cancelAll(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(CHAIN_NAME)
+        synchronized(lock) {
+            val prefs = TtsVideoPreferences(context)
+            val current = prefs.jobs().toMutableMap()
+            current.replaceAll { _, job ->
+                if (job.isActive) job.copy(status = TtsVideoJobStatus.CANCELLED, progress = 0, message = "cancelled") else job
+            }
+            prefs.saveJobs(current)
+        }
     }
 
-    /** Re-enqueues persisted QUEUED/RUNNING jobs whose WorkManager item disappeared after process death. */
+    /**
+     * Repairs persisted active jobs whose WorkManager request disappeared or was cancelled by
+     * process death/force-stop/system cleanup. Intentional user cancellation is not recovered
+     * because cancel() changes the persisted state to CANCELLED before cancelling WorkManager.
+     */
     suspend fun recoverOrphanedJobs(context: Context) = withContext(Dispatchers.IO) {
         val prefs = TtsVideoPreferences(context)
+        val workManager = WorkManager.getInstance(context)
         val jobs = prefs.jobs()
         jobs.forEach { (jobId, job) ->
             if (job.status !in setOf(TtsVideoJobStatus.QUEUED, TtsVideoJobStatus.RUNNING)) return@forEach
             val request = job.requestJson.toTtsVideoRequest() ?: run {
-                prefs.saveJobs(prefs.jobs().toMutableMap().apply {
-                    put(jobId, job.copy(status = TtsVideoJobStatus.FAILED, progress = 0, message = "Persisted video request is invalid"))
-                })
+                synchronized(lock) {
+                    prefs.saveJobs(prefs.jobs().toMutableMap().apply {
+                        put(jobId, job.copy(status = TtsVideoJobStatus.FAILED, progress = 0, message = "Persisted video request is invalid"))
+                    })
+                }
                 return@forEach
             }
             val workId = runCatching { UUID.fromString(job.workRequestId) }.getOrNull()
-            val state = workId?.let { runCatching { WorkManager.getInstance(context).getWorkInfoById(it).get() }.getOrNull() }
-            if (state == null) {
-                enqueue(context, request)
+            val state = workId?.let { id -> runCatching { workManager.getWorkInfoById(id).get() }.getOrNull() }
+            val alive = state?.state == androidx.work.WorkInfo.State.ENQUEUED ||
+                state?.state == androidx.work.WorkInfo.State.RUNNING ||
+                state?.state == androidx.work.WorkInfo.State.BLOCKED
+            if (alive) return@forEach
+
+            synchronized(lock) {
+                val current = prefs.jobs()[jobId] ?: return@synchronized
+                if (current.status !in setOf(TtsVideoJobStatus.QUEUED, TtsVideoJobStatus.RUNNING)) return@synchronized
+                // Release the idempotency guard for the dead WorkManager request. enqueue()
+                // then creates one replacement request with the same immutable jobId/snapshot.
+                prefs.saveJobs(prefs.jobs().toMutableMap().apply {
+                    put(jobId, current.copy(status = TtsVideoJobStatus.FAILED, progress = 0, message = "interrupted; recovered"))
+                })
             }
+            enqueue(context, request)
         }
     }
 
