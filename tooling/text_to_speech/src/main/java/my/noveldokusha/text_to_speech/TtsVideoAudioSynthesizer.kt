@@ -7,6 +7,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import kotlin.coroutines.resume
@@ -81,7 +82,6 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
         }
     }
 
-    /** The shared cleaner performs deletion/trim-only transforms, so the result can be mapped as an ordered UTF-16 subsequence. */
     private fun cleanForTtsMapped(source: String): MappedText {
         val cleaned = TtsTextPreparer.cleanForTts(source)
         if (cleaned.isEmpty()) return MappedText("", emptyList())
@@ -154,19 +154,13 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
         tts.setOnUtteranceProgressListener(listener)
         val descriptor = ParcelFileDescriptor.open(sink, ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE)
         try {
-            done.invokeOnCompletion { cause ->
-                if (cause is CancellationException) runCatching { tts.stop() }
-            }
+            done.invokeOnCompletion { cause -> if (cause is CancellationException) runCatching { tts.stop() } }
             val id = "video_${System.nanoTime()}"
             val bundle = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id) }
             if (tts.synthesizeToFile(text, bundle, descriptor, id) != TextToSpeech.SUCCESS) {
                 throw TtsExportException("synthesizeToFile rejected input")
             }
-            try {
-                done.await()
-            } finally {
-                if (!done.isCompleted) runCatching { tts.stop() }
-            }
+            done.await()
             callbackError?.let { throw it }
             return events.toList()
         } finally {
