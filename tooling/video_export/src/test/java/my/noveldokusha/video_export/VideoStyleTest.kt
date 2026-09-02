@@ -325,13 +325,13 @@ class VideoStyleTest {
             sourceId = "src",
         )
 
-        val restored = VideoStyleSettings.fromJson(s.toJson())!!
+        val restored = VideoStyleSettings.fromJson(s.toJson().toString())!!
 
         assertEquals(s, restored)
         assertEquals(TextAlignment.END, restored.textAlignment)
         assertEquals(ParagraphPresentation.DYNAMIC_CONTEXT, restored.presentation)
         assertEquals("art_l.png", restored.leftArtwork!!.fileName)
-        assertEquals(4f, restored.rightArtwork!!.borderWidth, 1e-4f)
+        assertEquals(4f, restored.rightArtwork!!.borderWidth!!, 1e-4f)
         assertEquals(SlideshowTimingMode.FIXED_INTERVAL, restored.slideshowConfig!!.timingMode)
         assertEquals(42L, restored.slideshowConfig!!.randomSeed)
         assertEquals(SlideshowTransition.FADE, restored.slideshowConfig!!.transitionType)
@@ -343,7 +343,7 @@ class VideoStyleTest {
     @Test
     fun settingsJsonNullFieldsRoundTrip() {
         val s = VideoStyleSettings()
-        val restored = VideoStyleSettings.fromJson(s.toJson())!!
+        val restored = VideoStyleSettings.fromJson(s.toJson().toString())!!
         assertEquals(s, restored)
         assertNull(restored.maxTextWidth)
         assertNull(restored.leftArtwork)
