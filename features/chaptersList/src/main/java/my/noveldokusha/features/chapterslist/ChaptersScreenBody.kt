@@ -111,25 +111,17 @@ internal fun ChaptersScreenBody(
             val pending = pendingVideo
             pendingVideo = null
             if (pending != null) {
-                enqueueVideoChapter(
-                    context = context,
-                    appPreferences = appPreferences,
-                    videoPreferences = videoPreferences,
-                    novelUrl = state.book.value.url,
-                    novelTitle = state.book.value.title,
-                    chapter = pending.chapter,
-                    source = pending.source,
-                )
+                enqueueVideoChapter(context, appPreferences, videoPreferences, state.book.value.url, state.book.value.title, pending.chapter, pending.source)
             }
         }
     }
 
     LaunchedEffect(state.book.value.url) {
         while (true) {
-            val byChapter = videoPreferences.jobs().entries
+            val byChapter = videoPreferences.jobs().values
                 .asSequence()
-                .filter { it.value.novelUrl == state.book.value.url }
-                .associate { (jobId, job) -> VideoJobKey(job.chapterUrl, job.source) to job.copy(message = if (job.message.isBlank()) jobId else job.message) }
+                .filter { it.novelUrl == state.book.value.url }
+                .associateBy { VideoJobKey(it.chapterUrl, it.source) }
             state.videoJobs.clear()
             state.videoJobs.putAll(byChapter)
             delay(750)
@@ -142,32 +134,24 @@ internal fun ChaptersScreenBody(
         when {
             job?.status == TtsVideoJobStatus.SUCCESS && job.outputUri.isNotBlank() -> {
                 runCatching {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(android.net.Uri.parse(job.outputUri), "video/mp4")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                    )
+                    context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(android.net.Uri.parse(job.outputUri), "video/mp4")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
                 }
             }
-            job?.status == TtsVideoJobStatus.QUEUED || job?.status == TtsVideoJobStatus.RUNNING -> {
-                val jobId = job.message.takeIf { it.length == 64 && it.all(Char::isLetterOrDigit) }
-                if (jobId != null) TtsVideoQueue.cancel(context, jobId)
+            job?.isActive == true -> {
+                videoPreferences.jobs().entries
+                    .firstOrNull { (_, stored) -> stored == job }
+                    ?.key
+                    ?.let { TtsVideoQueue.cancel(context, it) }
             }
             else -> {
                 if (videoPreferences.outputDirectoryUri.isBlank()) {
                     pendingVideo = PendingVideoExport(chapter, source)
                     videoDirectoryPicker.launch(null)
                 } else {
-                    enqueueVideoChapter(
-                        context = context,
-                        appPreferences = appPreferences,
-                        videoPreferences = videoPreferences,
-                        novelUrl = state.book.value.url,
-                        novelTitle = state.book.value.title,
-                        chapter = chapter,
-                        source = source,
-                    )
+                    enqueueVideoChapter(context, appPreferences, videoPreferences, state.book.value.url, state.book.value.title, chapter, source)
                 }
             }
         }
@@ -175,7 +159,6 @@ internal fun ChaptersScreenBody(
 
     var highlightedChapterUrl by remember { mutableStateOf<String?>(null) }
     val scrollOffset = -350
-
     suspend fun smoothScrollToIndex(index: Int) {
         val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
         val firstVisible = lazyListState.firstVisibleItemIndex
@@ -192,9 +175,7 @@ internal fun ChaptersScreenBody(
         val idx = state.chapters.indexOfFirst { it.chapter.url == url }
         if (idx == -1) null else idx + 1
     }
-
     val readChapters by remember { derivedStateOf { state.chapters.count { it.chapter.read } } }
-
     val onScrollToLastRead: (() -> Unit)? = lastReadChapterIndex?.let { index ->
         {
             coroutineScope.launch {
@@ -208,7 +189,6 @@ internal fun ChaptersScreenBody(
     }
 
     var showGoToChapterDialog by rememberSaveable { mutableStateOf(false) }
-
     if (showGoToChapterDialog) {
         GoToChapterDialog(
             chapters = state.chapters,
@@ -224,16 +204,8 @@ internal fun ChaptersScreenBody(
         )
     }
 
-    PullToRefreshBox(
-        modifier = modifier,
-        isRefreshing = isRefreshingDelayed,
-        onRefresh = onPullRefresh,
-        state = pullToRefreshState,
-    ) {
-        LazyColumn(
-            state = lazyListState,
-            contentPadding = PaddingValues(bottom = 300.dp),
-        ) {
+    PullToRefreshBox(modifier = modifier, isRefreshing = isRefreshingDelayed, onRefresh = onPullRefresh, state = pullToRefreshState) {
+        LazyColumn(state = lazyListState, contentPadding = PaddingValues(bottom = 300.dp)) {
             item(key = "header", contentType = { 0 }) {
                 ChaptersScreenHeader(
                     bookState = state.book.value,
@@ -283,10 +255,7 @@ internal fun ChaptersScreenBody(
                         onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
                         translatedAudioAvailable = state.translatedAudioAvailable.value[it.chapter.url] ?: false,
                     )
-                    Row(
-                        modifier = Modifier.padding(start = 16.dp, end = 8.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Row(modifier = Modifier.padding(start = 16.dp, end = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         VideoChapterAction(
                             label = "Video",
                             job = state.videoJobs[VideoJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)],
@@ -312,12 +281,7 @@ internal fun ChaptersScreenBody(
 }
 
 @Composable
-private fun VideoChapterAction(
-    label: String,
-    job: TtsVideoJobState?,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
+private fun VideoChapterAction(label: String, job: TtsVideoJobState?, enabled: Boolean, onClick: () -> Unit) {
     val status = job?.status
     val active = status == TtsVideoJobStatus.QUEUED || status == TtsVideoJobStatus.RUNNING
     val displayText = when (status) {
@@ -332,17 +296,13 @@ private fun VideoChapterAction(
         when {
             active -> {
                 Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        progress = { ((job?.progress ?: 0).coerceIn(0, 100)) / 100f },
-                        strokeWidth = 2.dp,
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), progress = { ((job?.progress ?: 0).coerceIn(0, 100)) / 100f }, strokeWidth = 2.dp)
                     Text(text = "${(job?.progress ?: 0).coerceIn(0, 100)}", fontSize = 7.sp)
                 }
             }
-            status == TtsVideoJobStatus.SUCCESS -> androidx.compose.material3.Icon(Icons.Filled.CheckCircle, contentDescription = null)
-            status == TtsVideoJobStatus.FAILED -> androidx.compose.material3.Icon(Icons.Filled.Refresh, contentDescription = null)
-            else -> androidx.compose.material3.Icon(Icons.Filled.PlayArrow, contentDescription = null)
+            status == TtsVideoJobStatus.SUCCESS -> Icon(Icons.Filled.CheckCircle, contentDescription = null)
+            status == TtsVideoJobStatus.FAILED -> Icon(Icons.Filled.Refresh, contentDescription = null)
+            else -> Icon(Icons.Filled.PlayArrow, contentDescription = null)
         }
         Text(text = displayText, modifier = Modifier.padding(start = 4.dp))
     }
@@ -359,22 +319,10 @@ private fun enqueueVideoChapter(
 ) {
     runCatching {
         require(videoPreferences.outputDirectoryUri.isNotBlank()) { "Select a video output folder first" }
-        TtsVideoExportLauncher.enqueue(
-            context = context,
-            appPreferences = appPreferences,
-            novelUrl = novelUrl,
-            novelTitle = novelTitle,
-            chapterUrl = chapter.chapter.url,
-            chapterIndex = chapter.chapter.position,
-            chapterTitle = chapter.chapter.title,
-            source = source,
-        )
+        TtsVideoExportLauncher.enqueue(context, appPreferences, novelUrl, novelTitle, chapter.chapter.url, chapter.chapter.position, chapter.chapter.title, source)
     }.onFailure {
         android.widget.Toast.makeText(context, it.message ?: "Unable to start video export", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
-private data class PendingVideoExport(
-    val chapter: ChapterWithContext,
-    val source: TtsAudioSource,
-)
+private data class PendingVideoExport(val chapter: ChapterWithContext, val source: TtsAudioSource)
