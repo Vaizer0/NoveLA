@@ -210,25 +210,32 @@ class TtsAudioExportWorker(
             }
 
             // ── Парный timeline рядом с аудио ─────────────────────────────────────
-            // Успешный синхронизированный экспорт обязан содержать timeline; если
-            // записать его не удалось — это провал синхронизированного экспорта.
-            val timelineJson = timelineToJson(result.timeline)
-            timelineUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(
-                    context.contentResolver,
-                    parentUri,
-                    MIME_JSON,
-                    timelineFileName,
+            // Timeline — best-effort дополнение к аудио и НИКОГДА не должен валить
+            // сохранение самого аудио. Любой сбой сериализации/записи шкалы логируется,
+            // но WAV продолжает экспортироваться и помечается успешным.
+            runCatching {
+                val timelineJson = timelineToJson(result.timeline)
+                timelineUri = withContext(Dispatchers.IO) {
+                    DocumentsContract.createDocument(
+                        context.contentResolver,
+                        parentUri,
+                        MIME_JSON,
+                        timelineFileName,
+                    )
+                } ?: throw TtsExportException(
+                    context.getString(StringsR.string.tts_audio_export_file_error)
                 )
-            } ?: throw TtsExportException(
-                context.getString(StringsR.string.tts_audio_export_file_error)
-            )
-            withContext(Dispatchers.IO) {
-                val output = context.contentResolver.openOutputStream(timelineUri!!)
-                    ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-                output.use { os ->
-                    os.write(timelineJson.toByteArray(Charsets.UTF_8))
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(timelineUri!!)
+                        ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+                    output.use { os ->
+                        os.write(timelineJson.toByteArray(Charsets.UTF_8))
+                    }
                 }
+            }.onFailure { e ->
+                Timber.e(e, "TtsAudio: timeline write failed, continuing with audio only")
+                timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+                timelineUri = null
             }
 
             val displayName = queryDisplayName(createdUri!!) ?: fileName

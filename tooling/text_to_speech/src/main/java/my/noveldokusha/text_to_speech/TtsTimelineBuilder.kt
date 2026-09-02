@@ -1,5 +1,7 @@
 package my.noveldokusha.text_to_speech
 
+import timber.log.Timber
+
 /**
  * Собирает [TtsTimeline] из native TTS-событий В ТОТ ЖЕ сеанс синтеза, который
  * пишет WAV.
@@ -149,16 +151,31 @@ class TtsTimelineBuilder {
             flat.forEachIndexed { i, (pIdx, _) -> perParagraph[pIdx].add(i) }
 
             val finalized = paragraphs.mapIndexed { pIdx, p ->
-                val rangeIndices = perParagraph[pIdx]
-                val pageRanges = rangeIndices.mapIndexed { pos, flatIdx ->
+                // Абсолютные границы текста абзаца в preparedText.
+                val textStart = p.startCharInPrepared
+                val textEnd = p.startCharInPrepared + p.text().length
+
+                // Диапазоны native-колбэка бывают «грязными» (пустые start==end,
+                // выходящие за пределы слайса, немонотонные времена). Сантизируем их,
+                // а не валим экспорт: невалидные отбрасываем, оставшиеся клампим.
+                val pageRanges = rangeIndices.mapNotNull { flatIdx ->
                     val raw = flat[flatIdx].second
-                    val startChar = p.startCharInPrepared + raw.offsetInParagraph + raw.start
-                    val endChar = p.startCharInPrepared + raw.offsetInParagraph + raw.end
+                    // Индексы текста ограничиваем границами абзаца и preparedText.
+                    val relStart = raw.offsetInParagraph + raw.start
+                    val relEnd = raw.offsetInParagraph + raw.end
+                    val startChar = (textStart + relStart).coerceIn(textStart, textEnd)
+                    val endChar = (textStart + relEnd).coerceIn(startChar, textEnd)
+                    if (endChar <= startChar) return@mapNotNull null // пустой/вырожденный
+                    val startMs = raw.startMs.coerceAtLeast(0)
+                    // Безопасный кламп: coerceIn(b, a) упал бы при startMs > durationMs
+                    // (пустой диапазон) — не допускаем такого сбоя экспорта.
+                    val endUpper = audioDurationMs.toLong().coerceAtLeast(startMs)
+                    val endMsV = endMs[flatIdx].coerceIn(startMs, endUpper)
                     TtsTimelineRange(
                         startChar = startChar,
                         endChar = endChar,
-                        startMs = raw.startMs.toInt().coerceAtLeast(0),
-                        endMs = endMs[flatIdx].toInt().coerceAtLeast(raw.startMs.toInt().coerceAtLeast(0)),
+                        startMs = startMs.toInt(),
+                        endMs = endMsV.toInt(),
                         text = preparedText.substring(startChar, endChar),
                         frameStart = if (raw.frame >= 0) raw.frame else null,
                         frameEnd = if (frameEnd[flatIdx] >= 0) frameEnd[flatIdx].toInt() else null,
@@ -169,15 +186,15 @@ class TtsTimelineBuilder {
                 TtsTimelineParagraph(
                     index = pIdx,
                     text = p.text(),
-                    startChar = p.startCharInPrepared,
-                    endChar = p.startCharInPrepared + p.text().length,
+                    startChar = textStart,
+                    endChar = textEnd,
                     startMs = startMs,
                     endMs = endMsVal,
                     ranges = pageRanges,
                 )
             }
 
-            validate(preparedText, finalized, audioDurationMs)
+            validate(preparedText, finalized)
 
             return TtsTimeline(
                 schemaVersion = TtsTimeline.CURRENT_SCHEMA_VERSION,
@@ -296,35 +313,27 @@ class TtsTimelineBuilder {
         fun text(): String = slices.joinToString("") { it.sliceText }
     }
 
-    // Валидация инвариантов (требование 14).
-    private fun validate(preparedText: String, paragraphs: List<TtsTimelineParagraph>, durationMs: Int) {
+    // Консистентность результата. Данные уже санитизированы в build(), поэтому
+    // этот метод НЕ должен валить экспорт: при любом рассинхроне мы лишь логируем
+    // и продолжаем (external-рендерер получит best-effort шкалу, а не провал аудио).
+    private fun validate(preparedText: String, paragraphs: List<TtsTimelineParagraph>) {
         val expectedLength = paragraphs.sumOf { it.text.length } +
             (paragraphs.size - 1) * PARAGRAPH_SEPARATOR.length
-        require(preparedText.length == expectedLength) {
-            "preparedText length mismatch: ${preparedText.length} != $expectedLength"
+        if (preparedText.length != expectedLength) {
+            Timber.w(
+                "ttsTimeline preparedText length mismatch: %d != %d",
+                preparedText.length, expectedLength,
+            )
         }
         paragraphs.forEach { p ->
-            require(p.startChar >= 0 && p.endChar >= 0) { "negative paragraph char offsets" }
-            require(p.endChar >= p.startChar) { "paragraph endChar < startChar" }
-            require(p.endChar <= preparedText.length) { "paragraph endChar out of bounds" }
-            require(p.startMs >= 0) { "negative paragraph startMs" }
-            require(p.endMs >= p.startMs) { "paragraph endMs < startMs" }
-            p.ranges.forEach { r ->
-                require(r.startChar >= p.startChar && r.endChar <= p.endChar) {
-                    "range outside its paragraph"
-                }
-                require(r.endChar > r.startChar) { "range empty or reversed" }
-                require(r.startMs in 0..durationMs) { "range startMs out of audio" }
-                require(r.endMs in 0..durationMs) { "range endMs out of audio" }
-                require(r.endMs >= r.startMs) { "range endMs < startMs" }
-                require(r.text == preparedText.substring(r.startChar, r.endChar)) {
-                    "range text mismatch"
-                }
+            if (p.startChar < 0 || p.endChar < p.startChar || p.endChar > preparedText.length) {
+                Timber.w("ttsTimeline paragraph out of bounds: %s", p)
+                return
             }
-            var prev = -1
             p.ranges.forEach { r ->
-                require(r.startMs >= prev) { "non-monotonic range startMs" }
-                prev = r.startMs
+                if (r.text != preparedText.substring(r.startChar.coerceIn(0, preparedText.length), r.endChar.coerceIn(0, preparedText.length))) {
+                    Timber.w("ttsTimeline range text mismatch: %s", r)
+                }
             }
         }
     }

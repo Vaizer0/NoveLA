@@ -481,4 +481,40 @@ class TtsTimelineBuilderTest {
             // ok
         }
     }
+
+    // 18. «Грязные» native-диапазоны (пустые, вырожденные, выходящие за пределы
+    // текста/аудио) НЕ должны валить экспорт: они отбрасываются/клампятся.
+    @Test
+    fun `messy native ranges are sanitized not fatal`() {
+        val t = drive(
+            audioDurationMs = 1000,
+            paragraphs = listOf(
+                Para(
+                    listOf(
+                        Slice(
+                            text = "hello world",
+                            sampleRate = 48000,
+                            audioBytes = 48000 * 2,
+                            // end>start (пусто),end за пределы текста, start>end (вырожден),
+                            // startMs вне аудио (frame велик) — всё должно быть безопасно.
+                            ranges = listOf(
+                                Triple(0, 0, 0),   // пустой -> отбрасывается
+                                Triple(5, 3, 0),   // reversed -> отбрасывается
+                                Triple(0, 99, 0),  // выходит за пределы -> клампится
+                                Triple(6, 11, 50000), // 50000 frame вне аудио -> клампится
+                            ),
+                        )
+                    )
+                )
+            ),
+        )
+        val p = t.paragraphs[0]
+        // Хотя бы один валидный range сохранился, build не бросил исключение.
+        assertTrue(p.ranges.isNotEmpty())
+        p.ranges.forEach { r ->
+            assertTrue(r.endChar > r.startChar)
+            assertTrue(r.endMs >= r.startMs)
+            assertTrue(r.startMs >= 0)
+        }
+    }
 }
