@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -125,20 +124,14 @@ internal fun ChaptersScreenBody(
         }
     }
 
-    // TtsVideoPreferences is intentionally a simple persisted store, so the chapter
-    // screen polls it at a low cadence and mirrors only changes into Compose state.
-    // This keeps queue/work-manager progress visible without touching the large
-    // ChaptersViewModel or coupling the chapter UI to the worker implementation.
     LaunchedEffect(state.book.value.url) {
         while (true) {
-            val byChapter = videoPreferences.jobs().values
+            val byChapter = videoPreferences.jobs().entries
                 .asSequence()
-                .filter { it.novelUrl == state.book.value.url }
-                .associateBy { VideoJobKey(it.chapterUrl, it.source) }
-            if (state.videoJobs != byChapter) {
-                state.videoJobs.clear()
-                state.videoJobs.putAll(byChapter)
-            }
+                .filter { it.value.novelUrl == state.book.value.url }
+                .associate { (jobId, job) -> VideoJobKey(job.chapterUrl, job.source) to job.copy(message = if (job.message.isBlank()) jobId else job.message) }
+            state.videoJobs.clear()
+            state.videoJobs.putAll(byChapter)
             delay(750)
         }
     }
@@ -158,7 +151,8 @@ internal fun ChaptersScreenBody(
                 }
             }
             job?.status == TtsVideoJobStatus.QUEUED || job?.status == TtsVideoJobStatus.RUNNING -> {
-                TtsVideoQueue.cancel(context, job.jobId)
+                val jobId = job.message.takeIf { it.length == 64 && it.all(Char::isLetterOrDigit) }
+                if (jobId != null) TtsVideoQueue.cancel(context, jobId)
             }
             else -> {
                 if (videoPreferences.outputDirectoryUri.isBlank()) {
@@ -180,7 +174,6 @@ internal fun ChaptersScreenBody(
     }
 
     var highlightedChapterUrl by remember { mutableStateOf<String?>(null) }
-
     val scrollOffset = -350
 
     suspend fun smoothScrollToIndex(index: Int) {
@@ -241,10 +234,7 @@ internal fun ChaptersScreenBody(
             state = lazyListState,
             contentPadding = PaddingValues(bottom = 300.dp),
         ) {
-            item(
-                key = "header",
-                contentType = { 0 },
-            ) {
+            item(key = "header", contentType = { 0 }) {
                 ChaptersScreenHeader(
                     bookState = state.book.value,
                     genres = state.genres.value,
@@ -254,9 +244,7 @@ internal fun ChaptersScreenBody(
                     sourceCatalogName = if (state.sourceCatalogNameStrRes.value == 0) {
                         val source = scraper.getCompatibleSource(state.book.value.url)
                         source?.name ?: stringResource(R.string.invalid_source)
-                    } else {
-                        stringResource(id = state.sourceCatalogNameStrRes.value ?: R.string.invalid_source)
-                    },
+                    } else stringResource(id = state.sourceCatalogNameStrRes.value ?: R.string.invalid_source),
                     numberOfChapters = state.chapters.size,
                     readChapters = readChapters,
                     paddingValues = innerPadding,
@@ -275,29 +263,16 @@ internal fun ChaptersScreenBody(
                     onCategoryClick = onCategoryClick,
                 )
             }
-
-            items(
-                items = state.chapters,
-                key = { "_" + it.chapter.url },
-                contentType = { 1 }
-            ) {
+            items(items = state.chapters, key = { "_" + it.chapter.url }, contentType = { 1 }) {
                 Column {
                     ChaptersScreenChapterItem(
                         chapterWithContext = it,
                         translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                         chapterSize = state.chapterSizes.value[it.chapter.url],
-                        audioOriginalJob = state.audioJobs[
-                            AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
-                        ],
-                        audioOriginalFileExists = state.audioFilesExist[
-                            AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
-                        ] ?: false,
-                        audioTranslatedJob = state.audioJobs[
-                            AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
-                        ],
-                        audioTranslatedFileExists = state.audioFilesExist[
-                            AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
-                        ] ?: false,
+                        audioOriginalJob = state.audioJobs[AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)],
+                        audioOriginalFileExists = state.audioFilesExist[AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)] ?: false,
+                        audioTranslatedJob = state.audioJobs[AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)],
+                        audioTranslatedFileExists = state.audioFilesExist[AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)] ?: false,
                         selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                         isLocalSource = state.isLocalSource.value,
                         highlighted = it.chapter.url == highlightedChapterUrl,
@@ -306,8 +281,7 @@ internal fun ChaptersScreenBody(
                         onDownload = { onChapterDownload(it) },
                         onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
                         onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
-                        translatedAudioAvailable =
-                            state.translatedAudioAvailable.value[it.chapter.url] ?: false
+                        translatedAudioAvailable = state.translatedAudioAvailable.value[it.chapter.url] ?: false,
                     )
                     Row(
                         modifier = Modifier.padding(start = 16.dp, end = 8.dp, bottom = 2.dp),
@@ -319,9 +293,7 @@ internal fun ChaptersScreenBody(
                             enabled = true,
                             onClick = { handleVideo(it, TtsAudioSource.ORIGINAL) },
                         )
-                        if (state.translatedAudioAvailable.value[it.chapter.url] == true ||
-                            state.videoJobs.containsKey(VideoJobKey(it.chapter.url, TtsAudioSource.TRANSLATED))
-                        ) {
+                        if (state.translatedAudioAvailable.value[it.chapter.url] == true || state.videoJobs.containsKey(VideoJobKey(it.chapter.url, TtsAudioSource.TRANSLATED))) {
                             VideoChapterAction(
                                 label = "Translated video",
                                 job = state.videoJobs[VideoJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)],
@@ -332,11 +304,7 @@ internal fun ChaptersScreenBody(
                     }
                 }
             }
-
-            if (state.error.value.isNotBlank()) item(
-                key = "error",
-                contentType = { 2 }
-            ) {
+            if (state.error.value.isNotBlank()) item(key = "error", contentType = { 2 }) {
                 ErrorView(error = state.error.value)
             }
         }
@@ -352,7 +320,7 @@ private fun VideoChapterAction(
 ) {
     val status = job?.status
     val active = status == TtsVideoJobStatus.QUEUED || status == TtsVideoJobStatus.RUNNING
-    val text = when (status) {
+    val displayText = when (status) {
         TtsVideoJobStatus.QUEUED -> "$label · queued"
         TtsVideoJobStatus.RUNNING -> "$label · ${job?.progress?.coerceIn(0, 100) ?: 0}%"
         TtsVideoJobStatus.SUCCESS -> "$label · ready"
@@ -369,17 +337,14 @@ private fun VideoChapterAction(
                         progress = { ((job?.progress ?: 0).coerceIn(0, 100)) / 100f },
                         strokeWidth = 2.dp,
                     )
-                    Text(
-                        text = "${(job?.progress ?: 0).coerceIn(0, 100)}",
-                        fontSize = 7.sp,
-                    )
+                    Text(text = "${(job?.progress ?: 0).coerceIn(0, 100)}", fontSize = 7.sp)
                 }
             }
-            status == TtsVideoJobStatus.SUCCESS -> Icon(Icons.Filled.CheckCircle, contentDescription = null)
-            status == TtsVideoJobStatus.FAILED -> Icon(Icons.Filled.Refresh, contentDescription = null)
-            else -> Icon(Icons.Filled.PlayArrow, contentDescription = null)
+            status == TtsVideoJobStatus.SUCCESS -> androidx.compose.material3.Icon(Icons.Filled.CheckCircle, contentDescription = null)
+            status == TtsVideoJobStatus.FAILED -> androidx.compose.material3.Icon(Icons.Filled.Refresh, contentDescription = null)
+            else -> androidx.compose.material3.Icon(Icons.Filled.PlayArrow, contentDescription = null)
         }
-        Text(text = text, modifier = Modifier.padding(start = 4.dp))
+        Text(text = displayText, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
@@ -392,8 +357,6 @@ private fun enqueueVideoChapter(
     chapter: ChapterWithContext,
     source: TtsAudioSource,
 ) {
-    // The launcher snapshots the dedicated video settings and TTS profile at enqueue time.
-    // Keep all user-visible failures explicit instead of silently pretending a job started.
     runCatching {
         require(videoPreferences.outputDirectoryUri.isNotBlank()) { "Select a video output folder first" }
         TtsVideoExportLauncher.enqueue(
