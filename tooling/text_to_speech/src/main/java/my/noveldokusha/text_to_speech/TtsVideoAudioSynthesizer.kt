@@ -11,6 +11,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.coroutineContext
 
 class TtsVideoAudioSynthesizer(private val context: Context) {
     suspend fun synthesize(request: TtsVideoRequest, blocks: List<String>, output: File, onChunkProgress: (Float) -> Unit = {}): VideoSynthesisResult {
@@ -38,6 +39,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
             for ((blockIndex, chunkIndex, text) in chunks) {
+                coroutineContext.ensureActive()
                 val sourceBlock = blocks.getOrNull(blockIndex) ?: text
                 val cleanMapped = cleanForTtsMapped(sourceBlock)
                 val searchFrom = chunkCursors[blockIndex] ?: 0
@@ -53,9 +55,10 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
                 )
                 val before = writer.dataBytesWritten()
                 val captured = synthesizeChunk(tts, sink, writer, text, request.chapterTitle)
+                val bytes = writer.dataBytesWritten() - before
+                if (bytes <= 0L) throw TtsExportException("TTS synthesis produced zero PCM for chunk $chunkIndex")
                 sampleRate = writer.sampleRate() ?: throw TtsExportException("TTS sample rate unavailable")
                 channels = writer.channelCount() ?: throw TtsExportException("TTS channel count unavailable")
-                val bytes = writer.dataBytesWritten() - before
                 val duration = bytes * 1_000_000L / (sampleRate.toLong() * channels * 2L)
                 val start = audioUs
                 val end = start + maxOf(1L, duration)
@@ -141,7 +144,7 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
                 }
             }
             override fun onAudioAvailable(utteranceId: String?, audio: ByteArray) {
-                if (audio.isEmpty()) return
+                if (!done.isActive || audio.isEmpty()) return
                 runCatching { writer.writePcm(audio) }.onFailure {
                     callbackError = it
                     done.completeExceptionally(it)
@@ -149,17 +152,21 @@ class TtsVideoAudioSynthesizer(private val context: Context) {
             }
         }
         tts.setOnUtteranceProgressListener(listener)
-        val descriptor = ParcelFileDescriptor.open(
-            sink,
-            ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
-        )
+        val descriptor = ParcelFileDescriptor.open(sink, ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE)
         try {
+            done.invokeOnCompletion { cause ->
+                if (cause is CancellationException) runCatching { tts.stop() }
+            }
             val id = "video_${System.nanoTime()}"
             val bundle = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id) }
             if (tts.synthesizeToFile(text, bundle, descriptor, id) != TextToSpeech.SUCCESS) {
                 throw TtsExportException("synthesizeToFile rejected input")
             }
-            done.await()
+            try {
+                done.await()
+            } finally {
+                if (!done.isCompleted) runCatching { tts.stop() }
+            }
             callbackError?.let { throw it }
             return events.toList()
         } finally {
