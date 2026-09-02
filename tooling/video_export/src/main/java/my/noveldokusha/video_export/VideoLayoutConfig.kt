@@ -18,6 +18,14 @@ import android.text.Layout
 class VideoLayoutConfig private constructor(
     private val style: VideoStyleSnapshot,
 ) {
+
+    /** Геометрия центрированной авторазмерной карточки текущего абзаца. */
+    data class CardGeometry(
+        val card: RectF,
+        val textWindow: RectF,
+        val scale: Float,
+    )
+
     val width: Int = VideoLayoutSpec.WIDTH
     val height: Int = VideoLayoutSpec.HEIGHT
     val contentCenterX: Float = width / 2f
@@ -153,6 +161,76 @@ class VideoLayoutConfig private constructor(
     fun cardContentRect(): RectF = RectF(
         textX0(), cardTop() + cardPadTop,
         textX0() + cardTextWidth(), cardCapBottom() - cardPadBottom,
+    )
+
+    // ── Авто-размерная карточка текущего абзаца (hugs в live-TTS стиле) ─────
+    // Вместо фиксированной полосы 290..810 текущий абзац получает карточку,
+    // высота которой равна высоте его текста + отступы (hug), а весь кластер
+    // (prev-полоса + карточка + next-полоса) центрируется по вертикали в сво-
+    // бодной области ниже шапки. Длинные абзацы вписываются через autofit, а
+    // если и после пола не помещаются — прокручиваются (scroll), но контекст
+    // (prev/next) остаётся.
+
+    /** Высота контекстной полосы prev/next (превью). */
+    val previewBandHeight: Float get() = 120f
+
+    /** Зазор между карточкой и контекстными полосами. */
+    val contextGap: Float get() = VideoLayoutSpec.SLOT_GAP.toFloat()
+
+    /** Верх свободной вертикальной области (сразу под шапкой). */
+    fun contentTop(): Float = headerBottom() + 24f
+
+    /** Низ свободной вертикальной области. */
+    fun contentBottom(): Float = height.toFloat() - 40f
+
+    /** Максимальная высота текстовой области карточки (оставляет место контексту). */
+    fun maxCardContentHeight(): Float =
+        (contentBottom() - contentTop() - (previewBandHeight + contextGap) * 2f)
+            .coerceAtLeast(120f)
+
+    /**
+     * Масштаб текста текущего абзаца: 1.0 (hug) пока текст помещается,
+     * иначе autofit вписывает, но не больше пола, оставляя контекст.
+     */
+    fun contentScale(layoutHeightPx: Float): Float = when {
+        layoutHeightPx <= maxCardContentHeight() -> 1f
+        else -> maxOf(fontMinAutofit, maxCardContentHeight() / layoutHeightPx)
+    }
+
+    /** Геометрия центрированной авторазмерной карточки для текущего абзаца. */
+    fun currentCardGeometry(layoutHeightPx: Float): CardGeometry {
+        val scale = contentScale(layoutHeightPx)
+        val contentH = layoutHeightPx * scale
+        val cardH = contentH + cardPadTop + cardPadBottom
+        val clusterH = previewBandHeight + contextGap + cardH + contextGap + previewBandHeight
+        val freeSpace = contentBottom() - contentTop()
+        val clusterTop = (contentTop() + (freeSpace - clusterH) / 2f).coerceAtLeast(contentTop())
+        val cardTop = clusterTop + previewBandHeight + contextGap
+        val cardBottom = cardTop + cardH
+        val l = columnLeft()
+        val r = columnRight()
+        val card = RectF(l, cardTop, r, cardBottom)
+        val window = RectF(
+            textX0(), cardTop + cardPadTop,
+            textX0() + cardTextWidth(), cardBottom - cardPadBottom,
+        )
+        return CardGeometry(card = card, textWindow = window, scale = scale)
+    }
+
+    /** prev контекстная полоса для карточки [card]. */
+    fun prevBandFor(card: CardGeometry): RectF =
+        RectF(columnLeft(), card.card.top - contextGap - previewBandHeight, columnRight(), card.card.top - contextGap)
+
+    /** next контекстная полоса для карточки [card]. */
+    fun nextBandFor(card: CardGeometry): RectF =
+        RectF(columnLeft(), card.card.bottom + contextGap, columnRight(), card.card.bottom + contextGap + previewBandHeight)
+
+    /** Полная карточка (фон) по текстовому окну [window]. */
+    fun cardRectFor(window: RectF): RectF = RectF(
+        columnLeft(),
+        window.top - cardPadTop,
+        columnRight(),
+        window.bottom + cardPadBottom,
     )
 
     /** Прямоугольный бэнд клиппинга между двумя слотами. */

@@ -178,14 +178,11 @@ class VideoFrameRendererQaTest {
             assertTrue("glyphs inside column (left=$left)", left >= VideoLayoutSpec.MARGIN_X)
             assertTrue("glyphs inside column (right=$right)", right <= VideoLayoutSpec.MARGIN_X + VideoLayoutSpec.COLUMN_WIDTH)
         }
-        // prev/next боксы не перекрывают карточку
-        val card = VideoLayoutSpec.cardRect()
-        val prev = VideoLayoutSpec.prevSlotRect()
-        val next = VideoLayoutSpec.nextSlotRect()
-        assertFalse("prev не пересекает карточку", prev.intersect(card))
-        assertFalse("next не пересекает карточку", next.intersect(card))
-        assertTrue("prev над карточкой", prev.bottom <= card.top)
-        assertTrue("next под карточкой", next.top >= card.bottom)
+        // prev/next боксы не перекрывают авторазмерную карточку
+        val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(snapshot()))
+        val card = cfg.cardRectFor(plan.current!!.window)
+        plan.prev?.let { assertFalse("prev не пересекает карточку", it.window.intersect(card)) }
+        plan.next?.let { assertFalse("next не пересекает карточку", it.window.intersect(card)) }
     }
 
     /**
@@ -202,8 +199,8 @@ class VideoFrameRendererQaTest {
         val cfg = VideoLayoutConfig.from(VideoStyleSnapshot.defaultFor(snapshot()))
         val textX0 = cfg.textX0()
         val layoutW = cfg.cardTextWidth()
-        val cardRect = cfg.cardRect()
         val current = plan.current ?: error("current present")
+        val currentCard = cfg.cardRectFor(current.window)
         val slots = listOfNotNull(plan.prev, current, plan.next, plan.fadingOut)
         val visible = mutableListOf<Pair<VideoFrameRenderer.SlotFrame, RectF>>()
         for (s in slots) {
@@ -215,8 +212,8 @@ class VideoFrameRendererQaTest {
             assertTrue("visible right in column (${v.right})", v.right <= cfg.columnRight() + 1f)
             assertTrue("visible top<=bottom", v.top <= v.bottom)
             if (s.paragraphIndex != current.paragraphIndex) {
-                assertFalse("context window (${s.paragraphIndex}) does not touch card", s.window.intersect(cardRect))
-                assertFalse("context glyphs (${s.paragraphIndex}) do not touch card", v.intersect(cardRect))
+                assertFalse("context window (${s.paragraphIndex}) does not touch card", s.window.intersect(currentCard))
+                assertFalse("context glyphs (${s.paragraphIndex}) do not touch card", v.intersect(currentCard))
             }
         }
         for (i in visible.indices) for (j in i + 1 until visible.size) {
