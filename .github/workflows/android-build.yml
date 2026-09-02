@@ -7,9 +7,9 @@ name: Android CI - Build Debug APK
 # compileSdk platform). No signing secrets are required for the debug build.
 on:
   push:
-    branches: [ main, default, feat/tts-audio-download-chapters ]
+    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info ]
   pull_request:
-    branches: [ main, default ]
+    branches: [ main, default, feat/tts-audio-download-chapters ]
   workflow_dispatch:
 
 permissions:

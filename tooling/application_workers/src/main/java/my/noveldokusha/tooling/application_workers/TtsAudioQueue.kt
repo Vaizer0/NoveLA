@@ -54,6 +54,8 @@ object TtsAudioQueue {
                     TtsAudioExportWorker.KEY_PITCH to request.pitch,
                     TtsAudioExportWorker.KEY_OUTPUT_DIRECTORY_URI to request.outputDirectoryUri,
                     TtsAudioExportWorker.KEY_FORMAT to request.format,
+                    TtsAudioExportWorker.KEY_TRANSLATION_SOURCE_LANG to request.translationSourceLang,
+                    TtsAudioExportWorker.KEY_TRANSLATION_TARGET_LANG to request.translationTargetLang,
                 )
             )
             .build()

@@ -96,6 +96,12 @@ class WavWriter(
     /** Записывает данные без финализации (для отладочных целей). */
     fun dataBytesWritten(): Long = dataSize
 
+    /** Частота дискретизации открытого WAV (0 — пока не открыт). */
+    fun sampleRate(): Int = sampleRate
+
+    /** Число каналов открытого WAV (0 — пока не открыт). */
+    fun channels(): Int = channels
+
     private fun placeholderHeader(): ByteArray {
         val header = ByteArray(44)
         val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
