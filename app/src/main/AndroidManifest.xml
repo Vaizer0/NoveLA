@@ -6,6 +6,7 @@
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -40,10 +41,8 @@
 			</intent-filter>
 			<intent-filter>
 				<action android:name="android.intent.action.VIEW" />
-
 				<category android:name="android.intent.category.DEFAULT" />
 				<category android:name="android.intent.category.BROWSABLE" />
-
 				<data android:mimeType="application/epub+zip" />
 				<data android:scheme="content" />
 				<data android:scheme="file" />
@@ -67,12 +66,11 @@
 			android:foregroundServiceType="dataSync">
 		</service>
 
-		<!-- WorkManager запускает SystemForegroundService для setForeground().
-		     Без явного foregroundServiceType на Android 14+ краш:
-		     "foregroundServiceType ... is not a subset ... in service element". -->
+		<!-- WorkManager's shared foreground service supports both existing audio/data-sync
+		     work and Android 15+ media-processing work used by native video encoding. -->
 		<service
 			android:name="androidx.work.impl.foreground.SystemForegroundService"
-			android:foregroundServiceType="dataSync"
+			android:foregroundServiceType="dataSync|mediaProcessing"
 			tools:node="merge">
 		</service>
 
