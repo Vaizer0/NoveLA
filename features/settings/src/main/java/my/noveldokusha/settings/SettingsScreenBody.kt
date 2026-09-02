@@ -391,6 +391,7 @@ private fun Preview() {
                     audioSource = remember { derivedStateOf { my.noveldokusha.core.appPreferences.TtsAudioSource.ASK_EVERY_TIME } },
                     audioDirectoryUri = remember { derivedStateOf { "" } },
                     audioDirectoryDisplayName = remember { mutableStateOf("") },
+                    videoStyle = remember { mutableStateOf(VideoStyleSettings()) },
                 ),
                 onRefreshSizes = { },
                 onRequestCleanDatabase = { },
@@ -434,6 +435,7 @@ private fun Preview() {
                     onAudioVoicePitchChange = { _ -> },
                     onAudioSourceChange = { _ -> },
                     onAudioSelectDirectory = { },
+                    onVideoStyleChange = { },
             )
         }
     }
