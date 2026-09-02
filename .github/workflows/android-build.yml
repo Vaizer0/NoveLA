@@ -1,0 +1,52 @@
+name: Android CI - Build Debug APK
+
+# Builds the debug APK and uploads it as a workflow artifact.
+# This workflow is intentionally self-contained and mirrors the setup proven by
+# the repo's existing buildRelease/nightly workflows (setup-java + setup-gradle,
+# relying on the runner's pre-installed Android SDK + AGP auto-download of the
+# compileSdk platform). No signing secrets are required for the debug build.
+on:
+  push:
+    branches: [ main, default, feat/tts-audio-download-chapters ]
+  pull_request:
+    branches: [ main, default ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-debug-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.3.0
+
+      - name: Remove local Java home from gradle.properties
+        run: sed -i '/org\.gradle\.java\.home/d' gradle.properties
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: NoveLA-debug-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
