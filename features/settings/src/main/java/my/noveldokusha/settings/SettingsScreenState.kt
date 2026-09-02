@@ -71,6 +71,9 @@ data class SettingsScreenState(
     val audioDirectoryDisplayName: MutableState<String>,
     // Video appearance (Video Studio export)
     val videoStyle: MutableState<VideoStyleSettings>,
+    // Video export folder (SAF)
+    val videoDirectoryUri: State<String>,
+    val videoDirectoryDisplayName: MutableState<String>,
 ) {
     data class UpdateApp(
         val currentAppVersion: String,

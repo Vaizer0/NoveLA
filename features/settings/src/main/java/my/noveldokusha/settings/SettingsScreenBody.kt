@@ -111,6 +111,7 @@ internal fun SettingsScreenBody(
     onAudioSourceChange: (my.noveldokusha.core.appPreferences.TtsAudioSource) -> Unit,
     onAudioSelectDirectory: () -> Unit,
     onVideoStyleChange: (VideoStyleSettings) -> Unit,
+    onVideoSelectDirectory: () -> Unit,
 ) {
     // Refresh size displays every time the user navigates to this screen
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -245,6 +246,8 @@ internal fun SettingsScreenBody(
         SettingsVideoAppearance(
             style = state.videoStyle.value,
             onStyleChange = onVideoStyleChange,
+            directoryDisplayName = state.videoDirectoryDisplayName.value,
+            onSelectDirectory = onVideoSelectDirectory,
         )
         HorizontalDivider()
         LibraryAutoUpdate(state = state.libraryAutoUpdate)
@@ -392,6 +395,8 @@ private fun Preview() {
                     audioDirectoryUri = remember { derivedStateOf { "" } },
                     audioDirectoryDisplayName = remember { mutableStateOf("") },
                     videoStyle = remember { mutableStateOf(VideoStyleSettings()) },
+                    videoDirectoryUri = remember { derivedStateOf { "" } },
+                    videoDirectoryDisplayName = remember { mutableStateOf("") },
                 ),
                 onRefreshSizes = { },
                 onRequestCleanDatabase = { },
@@ -436,6 +441,7 @@ private fun Preview() {
                     onAudioSourceChange = { _ -> },
                     onAudioSelectDirectory = { },
                     onVideoStyleChange = { },
+                    onVideoSelectDirectory = { },
             )
         }
     }

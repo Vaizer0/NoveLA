@@ -1140,6 +1140,11 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "")
     }
 
+    // URI папки (tree URI) для видео экспорта глав, выбранный через SAF
+    val VIDEO_DIRECTORY_URI = object : Preference<String>("VIDEO_DIRECTORY_URI") {
+        override var value by SharedPreference_String(name, preferences, "")
+    }
+
     // Максимальное количество хранимых файлов автобекапа
     val BACKUP_AUTO_MAX_COUNT = object : Preference<Int>("BACKUP_AUTO_MAX_COUNT") {
         override var value by SharedPreference_Int(name, preferences, 5)

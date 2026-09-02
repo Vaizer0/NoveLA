@@ -141,6 +141,10 @@ internal class SettingsViewModel @Inject constructor(
             resolveDirectoryName(appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value)
         ),
         videoStyle = videoStyleState,
+        videoDirectoryUri = appPreferences.VIDEO_DIRECTORY_URI.state(viewModelScope),
+        videoDirectoryDisplayName = mutableStateOf(
+            resolveDirectoryName(appPreferences.VIDEO_DIRECTORY_URI.value)
+        ),
     )
 
     init {
@@ -583,6 +587,11 @@ internal class SettingsViewModel @Inject constructor(
     fun onAudioDirectoryUriChange(uri: String) {
         appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri
         (state.audioDirectoryDisplayName as? MutableState<String>)?.value = resolveDirectoryName(uri)
+    }
+
+    fun onVideoDirectoryUriChange(uri: String) {
+        appPreferences.VIDEO_DIRECTORY_URI.value = uri
+        (state.videoDirectoryDisplayName as? MutableState<String>)?.value = resolveDirectoryName(uri)
     }
 
     fun onAutoBackupMaxCountChange(count: Int) {

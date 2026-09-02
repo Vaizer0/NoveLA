@@ -29,6 +29,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,8 @@ import my.noveldokusha.video_export.VideoStyleSettings
 internal fun SettingsVideoAppearance(
     style: VideoStyleSettings,
     onStyleChange: (VideoStyleSettings) -> Unit,
+    directoryDisplayName: String,
+    onSelectDirectory: () -> Unit,
 ) {
     var expandedGroup by remember { mutableStateOf<String?>("Typography") }
 
@@ -73,6 +76,19 @@ internal fun SettingsVideoAppearance(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             color = colorAccent(),
+        )
+
+        SlimListItem(
+            headlineContent = { Text("Video folder") },
+            supportingContent = {
+                Text(
+                    text = directoryDisplayName.ifBlank { "Select a folder for exported videos" }
+                )
+            },
+            leadingContent = {
+                Icon(Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            modifier = Modifier.clickable { onSelectDirectory() },
         )
 
         VideoStylePreview(style)

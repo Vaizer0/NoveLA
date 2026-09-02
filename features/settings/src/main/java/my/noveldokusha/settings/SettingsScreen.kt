@@ -58,6 +58,19 @@ fun SettingsScreen(
         }
     )
 
+    // Video export destination folder picker
+    val videoDirectoryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+                viewModel.onVideoDirectoryUriChange(uri.toString())
+            }
+        }
+    )
+
     val appTheme = LocalAppTheme.current
     val isDark = LocalIsDark.current
 
@@ -126,6 +139,7 @@ fun SettingsScreen(
                 onAudioSourceChange = viewModel::onAudioSourceChange,
                 onAudioSelectDirectory = { audioDirectoryPicker.launch(null) },
                 onVideoStyleChange = viewModel::onVideoStyleChange,
+                onVideoSelectDirectory = { videoDirectoryPicker.launch(null) },
                 modifier = Modifier.padding(innerPadding),
             )
         }
