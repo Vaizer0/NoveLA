@@ -9,6 +9,7 @@ data class TtsVideoJobState(
     val source: TtsAudioSource,
     val status: TtsVideoJobStatus,
     val workRequestId: String = "",
+    val requestJson: String = "",
     val progress: Int = 0,
     val outputUri: String = "",
     val message: String = "",
