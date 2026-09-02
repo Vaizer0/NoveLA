@@ -29,6 +29,7 @@ import my.noveldokusha.text_to_speech.TtsAudioFormat
 import my.noveldokusha.text_to_speech.TtsAudioExporter
 import my.noveldokusha.text_to_speech.TtsExportException
 import my.noveldokusha.text_to_speech.TtsTextPreparer
+import my.noveldokusha.text_to_speech.timelineToJson
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
@@ -87,6 +88,7 @@ class TtsAudioExportWorker(
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val tempWav = File(tempDir, "$jobId.wav")
         var createdUri: Uri? = null
+        var timelineUri: Uri? = null
 
         try {
             // Валидация папки до чтения данных из БД: недоступная папка = нет
@@ -143,18 +145,7 @@ class TtsAudioExportWorker(
             val regexRules = appPreferences.effectiveRegexRules(request.novelUrl)
             val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, regexRules)
 
-            // ── Синтез в temp WAV ───────────────────────────────────────────────
-            // Диапазон прогресса: синтез занимает 0..89%, копирование в SAF — 90..99%,
-            // финал — 100%. Синтез взвешен по символам текста. Репортим только при
-            // смене процента (≤100 записей), уведомление троттлим ≥1с.
-            val report = progressReporter(appPreferences, jobId, notification)
-            TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav) { fraction ->
-                report(89 + (fraction * 10).toInt().coerceIn(0, 9))
-            }
-
-            val tempWavSize = tempWav.length()
-
-            // ── Копирование в SAF-папку и финализация ──────────────────────────
+            // ── Имена файлов ─────────────────────────────────────────────────────
             // fileName снабжается суффиксом источника, чтобы Original и Translated
             // одной главы не коллизировали в одной папке (иначе SAF добавит "(1)").
             val sourceSuffix = when (request.source) {
@@ -167,6 +158,27 @@ class TtsAudioExportWorker(
                 "$baseName.${request.format}"
             else
                 "$baseName $sourceSuffix.${request.format}"
+            // Парный timeline-файл: "<audio-basename>.timeline.json".
+            val timelineFileName = "${fileName.removeSuffix(".${request.format}")}.timeline.json"
+
+            // ── Синтез в temp WAV ───────────────────────────────────────────────
+            // Диапазон прогресса: синтез занимает 0..89%, копирование в SAF — 90..99%,
+            // финал — 100%. Синтез взвешен по символам текста. Репортим только при
+            // смене процента (≤100 записей), уведомление троттлим ≥1с.
+            val report = progressReporter(appPreferences, jobId, notification)
+            val result = TtsAudioExporter(context).exportAudio(
+                request = request,
+                paragraphs = paragraphs,
+                destFile = tempWav,
+                // Имя, под которым WAV реально будет сохранён (для timeline.chapter.audioFile).
+                audioFileName = fileName,
+            ) { fraction ->
+                report(89 + (fraction * 10).toInt().coerceIn(0, 9))
+            }
+
+            val tempWavSize = tempWav.length()
+
+            // ── Копирование в SAF-папку и финализация ──────────────────────────
             val mime = if (request.format == TtsAudioFormat.WAV) MIME_WAV else "application/octet-stream"
             val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
@@ -197,6 +209,28 @@ class TtsAudioExportWorker(
                 }
             }
 
+            // ── Парный timeline рядом с аудио ─────────────────────────────────────
+            // Успешный синхронизированный экспорт обязан содержать timeline; если
+            // записать его не удалось — это провал синхронизированного экспорта.
+            val timelineJson = timelineToJson(result.timeline)
+            timelineUri = withContext(Dispatchers.IO) {
+                DocumentsContract.createDocument(
+                    context.contentResolver,
+                    parentUri,
+                    MIME_JSON,
+                    timelineFileName,
+                )
+            } ?: throw TtsExportException(
+                context.getString(StringsR.string.tts_audio_export_file_error)
+            )
+            withContext(Dispatchers.IO) {
+                val output = context.contentResolver.openOutputStream(timelineUri!!)
+                    ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+                output.use { os ->
+                    os.write(timelineJson.toByteArray(Charsets.UTF_8))
+                }
+            }
+
             val displayName = queryDisplayName(createdUri!!) ?: fileName
 
             notification.updateProgress(100)
@@ -215,6 +249,7 @@ class TtsAudioExportWorker(
             // Отмена очереди (пользователь): это не ошибка. Убираем временные файлы,
             // помечаем запись CANCELLED (non-error) и закрываем уведомление.
             createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
             TtsAudioQueue.updateState(appPreferences, jobId) {
                 it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
@@ -223,8 +258,9 @@ class TtsAudioExportWorker(
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: EXPORT FAILED for $jobId")
-            // Частично созданный файл в SAF не оставляем.
+            // Частично созданные файлы в SAF не оставляем (и WAV, и парный timeline).
             createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+            timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
             val message = context.getString(StringsR.string.tts_audio_export_failure_detail, e.message ?: "")
             notification.showError(message)
@@ -483,6 +519,7 @@ class TtsAudioExportWorker(
     companion object {
         const val TAG = "TtsAudioExport"
         const val MIME_WAV = "audio/wav"
+        const val MIME_JSON = "application/json"
 
         /** Постоянная папка-обёртка для аудио внутри выбранного корня. */
         const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
