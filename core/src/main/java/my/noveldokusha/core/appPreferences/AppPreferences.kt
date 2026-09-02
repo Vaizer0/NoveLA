@@ -323,7 +323,8 @@ class AppPreferences @Inject constructor(
             override var value by SharedPreference_Float(name, preferences, 1f)
         }
 
-    /** Источник текста для загрузки аудио: ORIGINAL / TRANSLATED / ASK_EVERY_TIME. */
+    /** @deprecated Source selection is now explicit per chapter export; retained only for backward-compatible preference migration. */
+    @Deprecated("No longer used by the audio/video export UI")
     val TTS_AUDIO_DOWNLOAD_SOURCE =
         object : Preference<TtsAudioSource>("TTS_AUDIO_DOWNLOAD_SOURCE") {
             override var value by SharedPreference_Enum(

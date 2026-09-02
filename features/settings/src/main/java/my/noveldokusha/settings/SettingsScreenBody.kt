@@ -105,7 +105,6 @@ internal fun SettingsScreenBody(
     onAudioVoiceChange: (enginePackage: String, voiceId: String) -> Unit,
     onAudioVoiceSpeedChange: (Float) -> Unit,
     onAudioVoicePitchChange: (Float) -> Unit,
-    onAudioSourceChange: (my.noveldokusha.core.appPreferences.TtsAudioSource) -> Unit,
     onAudioSelectDirectory: () -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -214,13 +213,11 @@ internal fun SettingsScreenBody(
             voiceEngine = state.audioVoiceEngine.value,
             speed = state.audioVoiceSpeed.value,
             pitch = state.audioVoicePitch.value,
-            source = state.audioSource.value,
             speedRange = 0.1f..5f,
             pitchRange = 0.1f..5f,
             onVoiceChange = onAudioVoiceChange,
             onSpeedChange = onAudioVoiceSpeedChange,
             onPitchChange = onAudioVoicePitchChange,
-            onSourceChange = onAudioSourceChange,
             onSelectDirectory = onAudioSelectDirectory,
             directoryDisplayName = state.audioDirectoryDisplayName.value,
         )

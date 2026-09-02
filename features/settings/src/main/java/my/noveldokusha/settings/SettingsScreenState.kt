@@ -9,7 +9,6 @@ import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.core.appPreferences.NovelPromptData
-import my.noveldokusha.core.appPreferences.TtsAudioSource
 
 enum class CleanConfirmationType { DATABASE, IMAGES_FOLDER, CHAPTER_CACHE }
 
@@ -65,7 +64,7 @@ data class SettingsScreenState(
     val audioVoiceEngine: State<String>,
     val audioVoiceSpeed: State<Float>,
     val audioVoicePitch: State<Float>,
-    val audioSource: State<TtsAudioSource>,
+
     val audioDirectoryUri: State<String>,
     val audioDirectoryDisplayName: MutableState<String>,
 ) {

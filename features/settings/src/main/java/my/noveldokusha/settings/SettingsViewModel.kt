@@ -16,7 +16,6 @@ import androidx.lifecycle.ViewModel
 import my.noveldokusha.coreui.theme.AppTheme
 import my.noveldokusha.coreui.theme.DarkMode
 import my.noveldokusha.core.appPreferences.AppLanguage
-import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.core.AppCoroutineScope
@@ -123,7 +122,6 @@ internal class SettingsViewModel @Inject constructor(
         audioVoiceEngine = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.state(viewModelScope),
         audioVoiceSpeed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.state(viewModelScope),
         audioVoicePitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.state(viewModelScope),
-        audioSource = appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.state(viewModelScope),
         audioDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.state(viewModelScope),
         audioDirectoryDisplayName = mutableStateOf(
             resolveDirectoryName(appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value)
@@ -563,9 +561,6 @@ internal class SettingsViewModel @Inject constructor(
         appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value = pitch.coerceIn(0.1f, 5f)
     }
 
-    fun onAudioSourceChange(source: TtsAudioSource) {
-        appPreferences.TTS_AUDIO_DOWNLOAD_SOURCE.value = source
-    }
 
     fun onAudioDirectoryUriChange(uri: String) {
         appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri

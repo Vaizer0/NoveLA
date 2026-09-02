@@ -12,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -34,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.components.PillSlider
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.colorAccent
@@ -48,13 +46,11 @@ internal fun SettingsTtsAudioDownload(
     voiceEngine: String,
     speed: Float,
     pitch: Float,
-    source: TtsAudioSource,
     speedRange: ClosedFloatingPointRange<Float>,
     pitchRange: ClosedFloatingPointRange<Float>,
     onVoiceChange: (enginePackage: String, voiceId: String) -> Unit,
     onSpeedChange: (Float) -> Unit,
     onPitchChange: (Float) -> Unit,
-    onSourceChange: (TtsAudioSource) -> Unit,
     onSelectDirectory: () -> Unit,
     directoryDisplayName: String,
 ) {
@@ -106,15 +102,6 @@ internal fun SettingsTtsAudioDownload(
         )
 
         SlimListItem(
-            headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_source)) },
-            supportingContent = { Text(text = sourceLabel(source)) },
-            leadingContent = {
-                Icon(Icons.Outlined.LibraryMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
-            modifier = Modifier.clickable { openSourceDialog = true }
-        )
-
-        SlimListItem(
             headlineContent = { Text(text = stringResource(StringsR.string.settings_audio_download_folder)) },
             supportingContent = {
                 Text(text = directoryDisplayName.ifBlank {
@@ -125,39 +112,6 @@ internal fun SettingsTtsAudioDownload(
                 Icon(Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             modifier = Modifier.clickable { onSelectDirectory() }
-        )
-    }
-
-    if (openSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { openSourceDialog = false },
-            title = { Text(text = stringResource(StringsR.string.settings_audio_download_source)) },
-            text = {
-                Column {
-                    TtsAudioSource.entries.forEach { entry ->
-                        val selected = entry == source
-                        SlimListItem(
-                            headlineContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(text = sourceLabel(entry), modifier = Modifier.weight(1f))
-                                    if (selected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSourceChange(entry)
-                                    openSourceDialog = false
-                                }
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                OutlinedButton(onClick = { openSourceDialog = false }) {
-                    Text(text = stringResource(android.R.string.cancel))
-                }
-            }
         )
     }
 
@@ -173,15 +127,6 @@ internal fun SettingsTtsAudioDownload(
         )
     }
 }
-
-@Composable
-private fun sourceLabel(source: TtsAudioSource): String = stringResource(
-    when (source) {
-        TtsAudioSource.ORIGINAL -> StringsR.string.tts_audio_source_original
-        TtsAudioSource.TRANSLATED -> StringsR.string.tts_audio_source_translated
-        TtsAudioSource.ASK_EVERY_TIME -> StringsR.string.tts_audio_source_ask_every_time
-    }
-)
 
 @Composable
 private fun VoicePickerDialog(
