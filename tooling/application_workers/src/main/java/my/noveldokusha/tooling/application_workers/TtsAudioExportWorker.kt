@@ -173,7 +173,8 @@ class TtsAudioExportWorker(
                 // Имя, под которым WAV реально будет сохранён (для timeline.chapter.audioFile).
                 audioFileName = fileName,
             ) { fraction ->
-                report(89 + (fraction * 10).toInt().coerceIn(0, 9))
+                // Синтез занимает 0..89% (взвешен по символам текста).
+                report((fraction * 89).toInt().coerceIn(0, 89))
             }
 
             val tempWavSize = tempWav.length()

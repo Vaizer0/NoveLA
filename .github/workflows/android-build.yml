@@ -7,9 +7,9 @@ name: Android CI - Build Debug APK
 # compileSdk platform). No signing secrets are required for the debug build.
 on:
   push:
-    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info ]
+    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
   pull_request:
-    branches: [ main, default, feat/tts-audio-download-chapters ]
+    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
   workflow_dispatch:
 
 permissions:
@@ -51,11 +51,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Runs the TTS text-preparer parity test (TtsTextPreparerParityTest), which
-  # guarantees the audio-download pipeline splits chapter text identically to the
-  # reader's live TTS (buildBodyItems). Pure JVM test — no signing needed.
+  # Runs the TTS unit tests, including timeline tests, so exported timing logic
+  # is compiled and validated by the same workflow as the APK.
   unit-tests:
-    name: Unit tests (TTS text preparer parity)
+    name: Unit tests (TTS)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -6,8 +6,9 @@ import java.io.File
  * Результат одного экспорта аудио главы: сам аудиофайл И синхронизационная
  * временная шкала, построенная в ТОТ ЖЕ сеанс синтеза, что и аудио.
  *
- * Успешный синхронизированный экспорт означает наличие обоих артефактов; отсутствие
- * валидного timeline — неудача (см. TtsAudioExportWorker/TtsAudioExporter).
+ * Аудио — главный артефакт: сбой сериализации/записи timeline НЕ валит экспорт
+ * (воркер логирует и продолжает только с аудио — см. TtsAudioExportWorker,
+ * коммит "never let timeline capture fail the audio export").
  */
 data class TtsAudioExportResult(
     val audioFile: File,

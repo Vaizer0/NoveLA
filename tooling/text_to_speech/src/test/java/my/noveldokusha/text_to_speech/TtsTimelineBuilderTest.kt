@@ -319,6 +319,9 @@ class TtsTimelineBuilderTest {
     }
 
     // 10. Пустая/отсутствующая коллбэк-информация (без ranges).
+    //     Абзацные времена ДОЛЖНЫ браться из реального PCM: 48000*2 байт
+    //     16-bit mono @48kHz = ровно 1000мс аудио, независимо от наличия
+    //     native onRangeStart коллбеков (см. TtsTimelineParagraphTimingTest).
     @Test
     fun `empty ranges are handled safely`() {
         val t = drive(
@@ -334,7 +337,7 @@ class TtsTimelineBuilderTest {
         assertEquals(1, t.paragraphs.size)
         assertTrue(t.paragraphs[0].ranges.isEmpty())
         assertEquals(0, t.paragraphs[0].startMs)
-        assertEquals(0, t.paragraphs[0].endMs)
+        assertEquals(1000, t.paragraphs[0].endMs)
     }
 
     // 11. Длинный абзац / границы кусков — времена монотонны и не сбрасываются.
@@ -391,7 +394,10 @@ class TtsTimelineBuilderTest {
         assertEquals(2000, p.ranges[2].startMs)
     }
 
-    // 13. Параграф-тайминг от детей.
+    // 13. Абзацные времена происходят из фактических PCM-байт, а НЕ из
+    //     дочерних native ranges: slice содержит 48000*2 байт = 1000мс аудио,
+    //     поэтому endMs = 1000 независимо от длительности WAV (см. также
+    //     TtsTimelineParagraphTimingTest, где движок вообще не даёт ranges).
     @Test
     fun `paragraph timing derived from child ranges`() {
         val t = drive(
@@ -410,8 +416,9 @@ class TtsTimelineBuilderTest {
             ),
         )
         assertEquals(0, t.paragraphs[0].startMs)
-        // Самый последний дочерний range заканчивается на длительности аудио.
-        assertEquals(2500, t.paragraphs[0].endMs)
+        // PCM-байты куска дают 1000мс — WAV длиннее (2500мс), но абзац на
+        // нативные ranges не растягивается.
+        assertEquals(1000, t.paragraphs[0].endMs)
     }
 
     // 14. JSON round-trip.
