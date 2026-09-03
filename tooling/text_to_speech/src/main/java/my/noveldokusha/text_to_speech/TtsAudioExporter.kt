@@ -5,27 +5,21 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.suspendCancellableCoroutine
 import timber.log.Timber
 import java.io.File
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * Exports a chapter to WAV and captures synchronization metadata for that exact
- * PCM stream.
+ * PCM stream. Export TTS clients are obtained from [TtsAudioEnginePool] and are
+ * completely separate from the reader's [TextToSpeechManager].
  *
- * The export intentionally uses silent TextToSpeech.speak() rather than only
- * synthesizeToFile(): Android documents onRangeStart as a playback-head timing
- * callback, so a speak request is required for engines that expose native range
- * markers through the normal playback path. KEY_PARAM_VOLUME=0 silences the
- * spoken output while onAudioAvailable still exposes the PCM that is synthesized.
+ * Silent TextToSpeech.speak() is used because engines expose native range timing
+ * through the playback path. The utterance volume is forced to zero, so the
+ * export path never audibly reads the chapter.
  */
 class TtsAudioExporter(
     private val context: Context,
 ) {
-    private val appContext = context.applicationContext
-
     suspend fun exportAudio(
         request: TtsAudioExportRequest,
         paragraphs: List<String>,
@@ -46,7 +40,8 @@ class TtsAudioExporter(
             source = request.source.name,
         )
 
-        val tts = createDedicatedTts(request.enginePackage)
+        val lease = TtsAudioEnginePool.acquire(context, request.enginePackage)
+        val tts = lease.tts
         var finished = false
         try {
             val maxInputLength = TextToSpeech.getMaxSpeechInputLength()
@@ -81,7 +76,7 @@ class TtsAudioExporter(
                         writer = writer,
                         chapterTitle = request.chapterTitle,
                         timelineBuilder = timelineBuilder,
-                        utteranceId = "tts_export_$chunkIndex",
+                        utteranceId = "tts_export_${chunkIndex}_$${System.identityHashCode(this)}",
                     )
                     chunkIndex++
                     processedChars += chunk.length
@@ -106,7 +101,6 @@ class TtsAudioExporter(
             val sampleRate = writer.sampleRate()
             val channels = writer.channels()
             val durationMs = if (sampleRate > 0 && channels > 0) {
-                // Preserve sub-second precision; avoid integer division before *1000.
                 ((writer.dataBytesWritten().toDouble() * 1000.0) /
                     (sampleRate.toDouble() * channels.toDouble() * 2.0)).toInt()
             } else {
@@ -125,36 +119,10 @@ class TtsAudioExporter(
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
             runCatching { tts.stop() }
-            runCatching { tts.shutdown() }
+            lease.close()
             if (!finished) runCatching { writer.close() }
         }
     }
-
-    private suspend fun createDedicatedTts(enginePackage: String): TextToSpeech =
-        suspendCancellableCoroutine { cont ->
-            lateinit var tts: TextToSpeech
-            val listener = object : TextToSpeech.OnInitListener {
-                override fun onInit(status: Int) {
-                    if (cont.isCancelled) return
-                    if (status == TextToSpeech.SUCCESS) {
-                        if (cont.isActive) cont.resume(tts)
-                    } else {
-                        cont.resumeWithException(
-                            TtsExportException("TTS engine '$enginePackage' init failed: status=$status")
-                        )
-                    }
-                }
-            }
-            tts = TextToSpeech(
-                appContext,
-                listener,
-                enginePackage.ifBlank { null },
-            )
-            cont.invokeOnCancellation {
-                runCatching { tts.stop() }
-                runCatching { tts.shutdown() }
-            }
-        }
 
     private suspend fun synthesizeChunk(
         tts: TextToSpeech,
