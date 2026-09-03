@@ -3,22 +3,12 @@ package my.noveldokusha.text_to_speech
 import timber.log.Timber
 
 /**
- * Собирает [TtsTimeline] из native TTS-событий В ТОТ ЖЕ сеанс синтеза, который
- * пишет WAV.
+ * Builds a timeline from native TTS range callbacks and the exact PCM stream
+ * written to the exported WAV.
  *
- * Координаты native колбэков:
- *  - [android.speech.tts.UtteranceProgressListener.onRangeStart] (start, end)
- *    смещены ОТНОСИТЕЛЬНО ТЕКУЩЕГО TTS-куска (slice), а не главы/абзаца.
- *    Куски партиционируют текст абзаца без потерь (см. [TtsTextPreparer]),
- *    поэтому у каждого куска есть детерминированное смещение внутри абзаца.
- *    Абсолютное смещение в preparedText = startParagraph + sliceOffset + rangeStart.
- *  - [android.speech.tts.UtteranceProgressListener.onRangeStart] frame отсчитан в
- *    реальной частоте синтеза куска ([...onBeginSynthesis]) —
- *    timeMs = sliceStartMs + frame / sampleRate * 1000, где sliceStartMs
- *    накапливается из фактических PCM-байт ([...onAudioAvailable]) каждого куска.
- *
- * Все времена — абсолютные монотонные мс от начала аудиофайла.
- * Состояние защищено mutex: пишется из треда TTS-колбэка, читается после синтеза.
+ * Native range callbacks are optional: paragraph timing must never depend on
+ * them. Paragraph boundaries come from the actual sequential PCM bytes, while
+ * ranges come only from native TTS timing information.
  */
 class TtsTimelineBuilder {
 
@@ -35,7 +25,9 @@ class TtsTimelineBuilder {
     private var preparedTextAcc = StringBuilder()
     private var nextParagraphStart = 0
 
-    /** Точка входа: начать главу (перед синтезом). */
+    /** Absolute PCM duration already received from the TTS callbacks. */
+    private var chapterAudioDurationMs = 0L
+
     fun beginChapter(
         novelTitle: String,
         chapterTitle: String,
@@ -51,66 +43,73 @@ class TtsTimelineBuilder {
             currentParagraph = null
             preparedTextAcc = StringBuilder()
             nextParagraphStart = 0
+            chapterAudioDurationMs = 0L
         }
     }
 
-    /** Начать новый абзац в порядке главы (перед его кусками). */
+    /** Start a logical paragraph before synthesizing its slices. */
     fun beginParagraph() {
         synchronized(lock) {
-            currentParagraph = MutableParagraph(startCharInPrepared = nextParagraphStart)
+            currentParagraph = MutableParagraph(
+                startCharInPrepared = nextParagraphStart,
+                startMs = chapterAudioDurationMs,
+            )
         }
     }
 
-    /** Зарегистрировать TTS-кусок (slice) перед синтезом. */
+    /** Register a TTS slice before synthesis starts. */
     fun registerSlice(sliceText: String) {
         synchronized(lock) {
             val para = currentParagraph ?: throw IllegalStateException("No open paragraph")
-            para.addSlice(sliceText)
+            para.addSlice(
+                sliceText = sliceText,
+                startMsAcc = chapterAudioDurationMs,
+            )
         }
     }
 
-    /** Формат синтеза текущего куска (из onBeginSynthesis). */
+    /** Format from onBeginSynthesis for the current slice. */
     fun setSliceFormat(sampleRate: Int, channels: Int) {
         synchronized(lock) {
             currentParagraph?.setSliceFormat(sampleRate, channels)
         }
     }
 
-    /** Фактические PCM-байты текущего куска (из onAudioAvailable) — для длительности куска. */
+    /** Actual PCM bytes received for the current slice. */
     fun onAudioAvailable(byteCount: Int) {
         synchronized(lock) {
             if (byteCount <= 0) return
-            currentParagraph?.addSliceAudioBytes(byteCount)
+            val para = currentParagraph ?: return
+            val addedDurationMs = para.addSliceAudioBytes(byteCount)
+            chapterAudioDurationMs = para.currentAudioEndMs(chapterAudioDurationMs)
+                .coerceAtLeast(chapterAudioDurationMs)
+            if (addedDurationMs <= 0.0) {
+                // Keep the cursor unchanged when format information is missing.
+                Timber.w("ttsTimeline audio callback received without a valid PCM format")
+            }
         }
     }
 
-    /** Записать native range-событие (из onRangeStart) текущего куска. */
+    /** Native timing event supplied by the TTS engine. */
     fun onRangeStart(start: Int, end: Int, frame: Int) {
         synchronized(lock) {
             currentParagraph?.addRange(start, end, frame)
         }
     }
 
-    /** Завершить текущий абзац после синтеза всех его кусков. */
+    /** Finish a paragraph after all of its slices have completed. */
     fun endParagraph() {
         synchronized(lock) {
             val para = currentParagraph ?: return
+            para.endMs = chapterAudioDurationMs.coerceAtLeast(para.startMs)
             if (paragraphs.isNotEmpty()) preparedTextAcc.append(PARAGRAPH_SEPARATOR)
             preparedTextAcc.append(para.text())
             paragraphs += para
             currentParagraph = null
-            // Следующий абзац начинается ПОСЛЕ разделителя.
             nextParagraphStart = preparedTextAcc.length + PARAGRAPH_SEPARATOR.length
         }
     }
 
-    /**
-     * Финализировать timeline по завершении синтеза и записи WAV.
-     * @param audioFileName имя сгенерированного аудиофайла (как сохраняется воркером).
-     * @param audioSampleRate частота готового WAV.
-     * @param audioChannels число каналов готового WAV.
-     * @param audioDurationMs фактическая длительность WAV (из метаданных файла).
-     */
     fun build(
         audioFileName: String,
         audioSampleRate: Int,
@@ -125,52 +124,51 @@ class TtsTimelineBuilder {
             if (paragraphs.isEmpty()) {
                 throw IllegalStateException("Cannot build empty timeline: no text synthesized")
             }
-            val preparedText = preparedTextAcc.toString()
 
-            // flat-список всех диапазонов в порядке главы (абзацы и их ranges уже упорядочены).
+            val preparedText = preparedTextAcc.toString()
             val flat = buildList {
-                paragraphs.forEachIndexed { pIdx, p -> p.rangeEntries.forEach { add(pIdx to it) } }
+                paragraphs.forEachIndexed { pIdx, p ->
+                    p.rangeEntries.forEach { add(pIdx to it) }
+                }
             }
 
-            // endMs = старт следующего диапазона; последний диапазон оканчивается на длительности аудио.
-            val endMs = LongArray(flat.size) { i ->
+            // A range ends at the next native range. The final range ends at the
+            // actual WAV duration. Paragraph endMs is independent of this.
+            val rangeEndMs = LongArray(flat.size) { i ->
                 if (i + 1 < flat.size) flat[i + 1].second.startMs
                 else audioDurationMs.toLong()
             }
 
-            // frameEnd = frameStart следующего диапазона в ТОМ ЖЕ куске, иначе null.
+            // frameEnd is meaningful only for two adjacent ranges from the same
+            // paragraph and the same slice. sliceIndex is intentionally local to
+            // a paragraph, so compare the paragraph index as well.
             val frameEnd = LongArray(flat.size) { -1L }
             for (i in 0 until flat.size - 1) {
-                if (flat[i].second.sliceIndex == flat[i + 1].second.sliceIndex) {
-                    frameEnd[i] = flat[i + 1].second.frame.toLong()
+                val (p0, r0) = flat[i]
+                val (p1, r1) = flat[i + 1]
+                if (p0 == p1 && r0.sliceIndex == r1.sliceIndex) {
+                    frameEnd[i] = r1.frame.toLong()
                 }
             }
 
-            // Позиция диапазона в flat для каждого абзаца (для присвоения текста/времён).
             val perParagraph = Array(paragraphs.size) { mutableListOf<Int>() }
             flat.forEachIndexed { i, (pIdx, _) -> perParagraph[pIdx].add(i) }
 
             val finalized = paragraphs.mapIndexed { pIdx, p ->
-                // Абсолютные границы текста абзаца в preparedText.
                 val textStart = p.startCharInPrepared
                 val textEnd = p.startCharInPrepared + p.text().length
 
-                // Диапазоны native-колбэка бывают «грязными» (пустые start==end,
-                // выходящие за пределы слайса, немонотонные времена). Сантизируем их,
-                // а не валим экспорт: невалидные отбрасываем, оставшиеся клампим.
                 val pageRanges = perParagraph[pIdx].mapNotNull { flatIdx ->
                     val raw = flat[flatIdx].second
-                    // Индексы текста ограничиваем границами абзаца и preparedText.
                     val relStart = raw.offsetInParagraph + raw.start
                     val relEnd = raw.offsetInParagraph + raw.end
                     val startChar = (textStart + relStart).coerceIn(textStart, textEnd)
                     val endChar = (textStart + relEnd).coerceIn(startChar, textEnd)
-                    if (endChar <= startChar) return@mapNotNull null // пустой/вырожденный
-                    val startMs = raw.startMs.coerceAtLeast(0)
-                    // Безопасный кламп: coerceIn(b, a) упал бы при startMs > durationMs
-                    // (пустой диапазон) — не допускаем такого сбоя экспорта.
+                    if (endChar <= startChar) return@mapNotNull null
+
+                    val startMs = raw.startMs.coerceIn(0L, audioDurationMs.toLong().coerceAtLeast(0L))
                     val endUpper = audioDurationMs.toLong().coerceAtLeast(startMs)
-                    val endMsV = endMs[flatIdx].coerceIn(startMs, endUpper)
+                    val endMsV = rangeEndMs[flatIdx].coerceIn(startMs, endUpper)
                     TtsTimelineRange(
                         startChar = startChar,
                         endChar = endChar,
@@ -181,19 +179,33 @@ class TtsTimelineBuilder {
                         frameEnd = if (frameEnd[flatIdx] >= 0) frameEnd[flatIdx].toInt() else null,
                     )
                 }
-                val startMs = pageRanges.firstOrNull()?.startMs ?: 0
-                val endMsVal = pageRanges.lastOrNull()?.endMs?.coerceAtLeast(startMs) ?: startMs
+
+                // IMPORTANT: paragraph timing is derived from the real PCM byte
+                // boundaries, not from native ranges. This remains valid when the
+                // engine supplies no onRangeStart callbacks.
+                val paragraphStartMs = p.startMs.coerceIn(0L, audioDurationMs.toLong().coerceAtLeast(0L))
+                val paragraphEndMs = p.endMs
+                    .coerceIn(paragraphStartMs, audioDurationMs.toLong().coerceAtLeast(paragraphStartMs))
+                    .toInt()
+
                 TtsTimelineParagraph(
                     index = pIdx,
                     text = p.text(),
                     startChar = textStart,
                     endChar = textEnd,
-                    startMs = startMs,
-                    endMs = endMsVal,
+                    startMs = paragraphStartMs.toInt(),
+                    endMs = paragraphEndMs,
                     ranges = pageRanges,
                 )
             }
 
+            if (chapterAudioDurationMs != audioDurationMs.toLong()) {
+                Timber.w(
+                    "ttsTimeline PCM duration mismatch: callbacks=%dms, WAV=%dms",
+                    chapterAudioDurationMs,
+                    audioDurationMs,
+                )
+            }
             validate(preparedText, finalized)
 
             return TtsTimeline(
@@ -220,13 +232,9 @@ class TtsTimelineBuilder {
         }
     }
 
-    /** Сериализация в детерминированный UTF-8 JSON (схема версионируется). */
     fun toJson(timeline: TtsTimeline): String = timelineToJson(timeline)
 
-    /** Десериализация (для round-trip тестов и внешних потребителей). */
     fun fromJson(json: String): TtsTimeline = timelineFromJson(json)
-
-    // ── Внутренние структуры ──────────────────────────────────────────────
 
     private class SliceEntry(
         val sliceText: String,
@@ -248,26 +256,23 @@ class TtsTimelineBuilder {
         val startMs: Long,
     )
 
-    private class MutableParagraph(val startCharInPrepared: Int) {
+    private class MutableParagraph(
+        val startCharInPrepared: Int,
+        val startMs: Long,
+    ) {
         private val slices = mutableListOf<SliceEntry>()
         private val ranges = mutableListOf<RangeEntry>()
         private var nextSliceOffset = 0
-        private var sliceStartAcc = 0L
+
+        var endMs: Long = startMs
 
         val rangeEntries: List<RangeEntry> get() = ranges
 
-        fun addSlice(sliceText: String) {
-            // Финализируем длительность ПРЕДЫДУЩЕГО куска в накопленный старт:
-            // onAudioAvailable может приходить несколько раз за кусок, поэтому старт
-            // следующего куска считается по ПОЛНОЙ длительности предыдущего.
-            val prev = slices.lastOrNull()
-            if (prev != null) {
-                sliceStartAcc += prev.durationMs.toLong()
-            }
+        fun addSlice(sliceText: String, startMsAcc: Long) {
             slices += SliceEntry(
                 sliceText = sliceText,
                 offsetInParagraph = nextSliceOffset,
-                startMsAcc = sliceStartAcc,
+                startMsAcc = startMsAcc,
             )
             nextSliceOffset += sliceText.length
         }
@@ -279,15 +284,19 @@ class TtsTimelineBuilder {
             if (channels > 0) last.channels = channels
         }
 
-        fun addSliceAudioBytes(byteCount: Int) {
-            if (slices.isEmpty()) return
+        fun addSliceAudioBytes(byteCount: Int): Double {
+            if (slices.isEmpty()) return 0.0
             val last = slices.last()
-            if (last.sampleRate > 0 && last.channels > 0) {
-                // Накопление: один кусок может прийти несколькими onAudioAvailable.
-                last.totalAudioBytes += byteCount
-                last.durationMs = last.totalAudioBytes.toDouble() /
-                    (last.sampleRate.toDouble() * last.channels * 2.0) * 1000.0
-            }
+            if (last.sampleRate <= 0 || last.channels <= 0) return 0.0
+            last.totalAudioBytes += byteCount
+            last.durationMs = last.totalAudioBytes.toDouble() /
+                (last.sampleRate.toDouble() * last.channels * 2.0) * 1000.0
+            return last.durationMs
+        }
+
+        fun currentAudioEndMs(previousChapterEndMs: Long): Long {
+            val last = slices.lastOrNull() ?: return previousChapterEndMs
+            return (last.startMsAcc + last.durationMs).toLong()
         }
 
         fun addRange(start: Int, end: Int, frame: Int) {
@@ -295,8 +304,8 @@ class TtsTimelineBuilder {
             val slice = slices.last()
             val sliceIdx = slices.size - 1
             val sampleRate = slice.sampleRate
-            val startMs = if (sampleRate > 0) {
-                slice.startMsAcc + (frame.toLong() * 1000L) / sampleRate
+            val startMs = if (sampleRate > 0 && frame >= 0) {
+                slice.startMsAcc + (frame.toDouble() * 1000.0 / sampleRate.toDouble()).toLong()
             } else {
                 slice.startMsAcc
             }
@@ -313,16 +322,14 @@ class TtsTimelineBuilder {
         fun text(): String = slices.joinToString("") { it.sliceText }
     }
 
-    // Консистентность результата. Данные уже санитизированы в build(), поэтому
-    // этот метод НЕ должен валить экспорт: при любом рассинхроне мы лишь логируем
-    // и продолжаем (external-рендерер получит best-effort шкалу, а не провал аудио).
     private fun validate(preparedText: String, paragraphs: List<TtsTimelineParagraph>) {
         val expectedLength = paragraphs.sumOf { it.text.length } +
             (paragraphs.size - 1) * PARAGRAPH_SEPARATOR.length
         if (preparedText.length != expectedLength) {
             Timber.w(
                 "ttsTimeline preparedText length mismatch: %d != %d",
-                preparedText.length, expectedLength,
+                preparedText.length,
+                expectedLength,
             )
         }
         paragraphs.forEach { p ->
@@ -331,7 +338,11 @@ class TtsTimelineBuilder {
                 return
             }
             p.ranges.forEach { r ->
-                if (r.text != preparedText.substring(r.startChar.coerceIn(0, preparedText.length), r.endChar.coerceIn(0, preparedText.length))) {
+                if (r.text != preparedText.substring(
+                        r.startChar.coerceIn(0, preparedText.length),
+                        r.endChar.coerceIn(0, preparedText.length),
+                    )
+                ) {
                     Timber.w("ttsTimeline range text mismatch: %s", r)
                 }
             }
@@ -339,7 +350,6 @@ class TtsTimelineBuilder {
     }
 
     companion object {
-        /** Разделитель между абзацами в preparedText. */
         const val PARAGRAPH_SEPARATOR = "\n\n"
     }
 }

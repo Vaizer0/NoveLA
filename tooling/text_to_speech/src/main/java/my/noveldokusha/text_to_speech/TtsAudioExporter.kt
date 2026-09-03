@@ -2,7 +2,6 @@ package my.noveldokusha.text_to_speech
 
 import android.content.Context
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CompletableDeferred
@@ -13,37 +12,20 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Независимый экспорт главы в WAV через ВЫДЕЛЕННЫЙ инстанс [TextToSpeech].
+ * Exports a chapter to WAV and captures synchronization metadata for that exact
+ * PCM stream.
  *
- * - Использует собственную копию движка (не общий AppTtsEngine) с движком
- *   [TtsAudioExportRequest.enginePackage]: живая озвучка в читалке (общий
- *   инстанс) никогда не перезапускается и не сбивается.
- * - Ничего не проигрывает: каждый кусок уходит в [TextToSpeech.synthesizeToFile],
- *   PCM ловится в [UtteranceProgressListener.onAudioAvailable] и потоково пишется в
- *   [WavWriter].
- * - Куски синтезируются строго последовательно (дождавшись предыдущего), что
- *   гарантирует порядок текста и ограничивает память.
- * - В ТОТ ЖЕ сеанс синтеза через [TtsTimelineBuilder] фиксируются native
- *   [UtteranceProgressListener.onRangeStart]/[UtteranceProgressListener.onBeginSynthesis]/
- *   [UtteranceProgressListener.onAudioAvailable] события, из которых строится
- *   синхронизационная временная шкала для РОВНО этого WAV.
- * - Возвращает [TtsAudioExportResult] (WAV-файл + timeline); воркер копирует их
- *   в SAF-папку и удаляет временный файл.
+ * The export intentionally uses silent TextToSpeech.speak() rather than only
+ * synthesizeToFile(): Android documents onRangeStart as a playback-head timing
+ * callback, so a speak request is required for engines that expose native range
+ * markers through the normal playback path. KEY_PARAM_VOLUME=0 silences the
+ * spoken output while onAudioAvailable still exposes the PCM that is synthesized.
  */
 class TtsAudioExporter(
     private val context: Context,
 ) {
     private val appContext = context.applicationContext
 
-    /**
-     * Синтезирует указанные абзацы и возвращает WAV + синхронизационную шкалу.
-     * @param request параметры экспорта (в т.ч. метаданные главы для timeline).
-     * @param paragraphs уже подготовленные абзацы (см. TtsTextPreparer.paragraphsFromBody).
-     * @param destFile временный файл для WAV.
-     * @param audioFileName имя, под которым WAV реально будет сохранён (для timeline.chapter.audioFile).
-     * @param onProgress колбэк прогресса: доля (0..1) выполненного текста по числу
-     *   символов кусков (монотонна, вызывается после каждого синтезированного куска).
-     */
     suspend fun exportAudio(
         request: TtsAudioExportRequest,
         paragraphs: List<String>,
@@ -55,7 +37,6 @@ class TtsAudioExporter(
             throw TtsExportException("Chapter has no text to synthesize")
         }
 
-        val throwawaySink = File(appContext.cacheDir, "tts_export_sink.bin")
         val writer = WavWriter(destFile)
         val timelineBuilder = TtsTimelineBuilder()
         timelineBuilder.beginChapter(
@@ -68,7 +49,7 @@ class TtsAudioExporter(
         val tts = createDedicatedTts(request.enginePackage)
         var finished = false
         try {
-            val syntheinputLength = TextToSpeech.getMaxSpeechInputLength()
+            val maxInputLength = TextToSpeech.getMaxSpeechInputLength()
             val voices = tts.voices ?: emptyList()
             val voice = voices.find { it.name == request.voiceId }
                 ?: throw TtsExportException(
@@ -78,20 +59,18 @@ class TtsAudioExporter(
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
 
-            // Куски собираем заранее (с уже применённой фильтрацией декораторов), чтобы
-            // прогресс был честным: вес куска = число его символов (1% ≈ 1% текста).
-            // Декораторные абзацы пропускаются — такие же, как и в timeline.
             val paragraphPlans = buildList {
                 for (paragraph in paragraphs) {
                     val cleaned = TtsTextPreparer.cleanForTts(paragraph)
                     if (TtsTextPreparer.isOnlyDecorators(cleaned)) continue
-                    add(cleaned to TtsTextPreparer.chunkIntoUtterances(cleaned, syntheinputLength))
+                    add(cleaned to TtsTextPreparer.chunkIntoUtterances(cleaned, maxInputLength))
                 }
             }
             val totalChars = paragraphPlans.sumOf { it.first.length }
 
             var synthesizedAny = false
             var processedChars = 0
+            var chunkIndex = 0
             for ((_, slices) in paragraphPlans) {
                 timelineBuilder.beginParagraph()
                 for (chunk in slices) {
@@ -99,11 +78,12 @@ class TtsAudioExporter(
                     synthesizeChunk(
                         tts = tts,
                         text = chunk,
-                        throwawaySink = throwawaySink,
                         writer = writer,
                         chapterTitle = request.chapterTitle,
                         timelineBuilder = timelineBuilder,
+                        utteranceId = "tts_export_$chunkIndex",
                     )
+                    chunkIndex++
                     processedChars += chunk.length
                     if (writer.dataBytesWritten() > 0) synthesizedAny = true
                     onProgress(
@@ -126,12 +106,14 @@ class TtsAudioExporter(
             val sampleRate = writer.sampleRate()
             val channels = writer.channels()
             val durationMs = if (sampleRate > 0 && channels > 0) {
-                (writer.dataBytesWritten() / (sampleRate.toLong() * channels * 2L) * 1000L).toInt()
+                // Preserve sub-second precision; avoid integer division before *1000.
+                ((writer.dataBytesWritten().toDouble() * 1000.0) /
+                    (sampleRate.toDouble() * channels.toDouble() * 2.0)).toInt()
             } else {
                 0
             }
-            if (sampleRate <= 0) {
-                throw TtsExportException("Chapter '${request.chapterTitle}' has no valid sample rate")
+            if (sampleRate <= 0 || channels <= 0) {
+                throw TtsExportException("Chapter '${request.chapterTitle}' has no valid audio format")
             }
 
             val timeline = timelineBuilder.build(
@@ -142,22 +124,14 @@ class TtsAudioExporter(
             )
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
-            try {
-                tts.stop()
-            } catch (_: Throwable) {
-            }
+            runCatching { tts.stop() }
             runCatching { tts.shutdown() }
-            // При ошибке/отмене WavWriter может остаться незакрытым — закрываем,
-            // чтобы не утечь fd. При успехе finish() уже закрыл поток.
             if (!finished) runCatching { writer.close() }
-            runCatching { throwawaySink.delete() }
         }
     }
 
     private suspend fun createDedicatedTts(enginePackage: String): TextToSpeech =
         suspendCancellableCoroutine { cont ->
-            // Локальная var захватывается анонимным OnInitListener, избегая
-            // хрупкого class-поля: каждый вызов получает собственный инстанс.
             lateinit var tts: TextToSpeech
             val listener = object : TextToSpeech.OnInitListener {
                 override fun onInit(status: Int) {
@@ -174,7 +148,7 @@ class TtsAudioExporter(
             tts = TextToSpeech(
                 appContext,
                 listener,
-                enginePackage.ifBlank { null }
+                enginePackage.ifBlank { null },
             )
             cont.invokeOnCancellation {
                 runCatching { tts.stop() }
@@ -185,32 +159,25 @@ class TtsAudioExporter(
     private suspend fun synthesizeChunk(
         tts: TextToSpeech,
         text: String,
-        throwawaySink: File,
         writer: WavWriter,
         chapterTitle: String,
         timelineBuilder: TtsTimelineBuilder,
+        utteranceId: String,
     ) {
         val done = CompletableDeferred<Unit>()
 
-        // Сообщает об ошибке построения timeline: любой сбой здесь — сбой экспорта
-        // (синхронизированный экспорт без валидной шкалы не допускается).
-        fun failTimeline(e: Throwable) {
-            Timber.e(e, "ttsExport timeline capture failed for '$chapterTitle'")
-            done.completeExceptionally(
-                TtsExportException("Failed capturing TTS timeline: ${e.message}", e)
-            )
+        fun failOnce(error: Throwable) {
+            if (!done.isCompleted) done.completeExceptionally(error)
         }
 
         val listener = object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                Timber.d("ttsExport chunk done id=$utteranceId")
                 done.complete(Unit)
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                Timber.w("ttsExport chunk error id=$utteranceId code=$errorCode")
                 done.completeExceptionally(
                     TtsExportException("Synthesis failed (error $errorCode) for '$chapterTitle'")
                 )
@@ -218,29 +185,38 @@ class TtsAudioExporter(
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                Timber.w("ttsExport chunk error (deprecated) id=$utteranceId")
                 done.completeExceptionally(
                     TtsExportException("Synthesis failed for '$chapterTitle'")
                 )
             }
 
-            override fun onBeginSynthesis(utteranceId: String?, sampleRateInHz: Int, audioFormat: Int, channelCount: Int) {
+            override fun onBeginSynthesis(
+                utteranceId: String?,
+                sampleRateInHz: Int,
+                audioFormat: Int,
+                channelCount: Int,
+            ) {
                 if (sampleRateInHz <= 0 || channelCount <= 0) {
-                    Timber.w("ttsExport invalid synthesis format id=$utteranceId rate=$sampleRateInHz ch=$channelCount")
+                    failOnce(
+                        TtsExportException(
+                            "TTS engine returned invalid audio format: ${sampleRateInHz}Hz/$channelCount channels"
+                        )
+                    )
                     return
                 }
                 if (!writer.isValidPcmFormat(audioFormat)) {
-                    Timber.w("ttsExport unsupported audioFormat=$audioFormat (only PCM16 supported)")
+                    failOnce(
+                        TtsExportException(
+                            "TTS engine returned unsupported audio format: $audioFormat (PCM16 required)"
+                        )
+                    )
                     return
                 }
                 try {
                     writer.open(sampleRateInHz, channelCount)
                     timelineBuilder.setSliceFormat(sampleRateInHz, channelCount)
                 } catch (e: Exception) {
-                    Timber.e(e, "ttsExport opening WAV failed id=$utteranceId")
-                    done.completeExceptionally(
-                        TtsExportException("Failed initializing audio writer: ${e.message}", e)
-                    )
+                    failOnce(TtsExportException("Failed initializing audio writer: ${e.message}", e))
                 }
             }
 
@@ -249,14 +225,9 @@ class TtsAudioExporter(
                 try {
                     timelineBuilder.onAudioAvailable(audio.size)
                     writer.writePcm(audio)
-                } catch (e: AudioTooLargeException) {
-                    Timber.e(e, "ttsExport WAV exceeds 4GB id=$utteranceId")
-                    done.completeExceptionally(TtsExportException(e.message ?: "WAV too large", e))
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     Timber.e(e, "ttsExport writing PCM failed id=$utteranceId")
-                    done.completeExceptionally(
-                        TtsExportException("Failed writing audio data: ${e.message}", e)
-                    )
+                    failOnce(TtsExportException("Failed writing audio data: ${e.message}", e))
                 }
             }
 
@@ -264,33 +235,22 @@ class TtsAudioExporter(
                 try {
                     timelineBuilder.onRangeStart(start, end, frame)
                 } catch (e: Throwable) {
-                    failTimeline(e)
+                    Timber.e(e, "ttsExport native range capture failed id=$utteranceId")
+                    failOnce(TtsExportException("Failed capturing native TTS timing: ${e.message}", e))
                 }
             }
         }
         tts.setOnUtteranceProgressListener(listener)
 
-        var descriptor: ParcelFileDescriptor? = null
-        try {
-            descriptor = ParcelFileDescriptor.open(
-                throwawaySink,
-                ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
-            )
-            val bundle = Bundle().apply {
-                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "tts_chunk")
-            }
-            val result = tts.synthesizeToFile(text, bundle, descriptor, "tts_chunk")
-            if (result != TextToSpeech.SUCCESS) {
-                done.completeExceptionally(
-                    TtsExportException("synthesizeToFile rejected input (result=$result)")
-                )
-            }
-            done.await()
-        } finally {
-            runCatching { descriptor?.close() }
+        val bundle = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
         }
+        val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, utteranceId)
+        if (result != TextToSpeech.SUCCESS) {
+            failOnce(TtsExportException("speak rejected input (result=$result)"))
+        }
+        done.await()
     }
 }
 
-/** Ошибка экспорта аудио главы (отображается пользователю в уведомлении/логе). */
 class TtsExportException(message: String, cause: Throwable? = null) : Exception(message, cause)
