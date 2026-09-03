@@ -1,15 +1,13 @@
 name: Android CI - Build Debug APK
 
-# Builds the debug APK and uploads it as a workflow artifact.
-# This workflow is intentionally self-contained and mirrors the setup proven by
-# the repo's existing buildRelease/nightly workflows (setup-java + setup-gradle,
-# relying on the runner's pre-installed Android SDK + AGP auto-download of the
-# compileSdk platform). No signing secrets are required for the debug build.
+# Builds the debug APK and runs the TTS unit-test suite for every supported
+# development branch. Demo is included so changes there cannot be merged without
+# a green APK build and green TTS tests.
 on:
   push:
-    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
+    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
   pull_request:
-    branches: [ main, default, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
+    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
   workflow_dispatch:
 
 permissions:
@@ -51,10 +49,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Runs the TTS unit tests, including timeline tests, so exported timing logic
-  # is compiled and validated by the same workflow as the APK.
   unit-tests:
-    name: Unit tests (TTS)
+    name: Unit tests (all TTS)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -79,7 +75,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: tts-text-preparer-test-reports
+          name: tts-unit-test-reports
           path: |
             tooling/text_to_speech/build/reports/tests/
             tooling/text_to_speech/build/test-results/
