@@ -19,7 +19,7 @@ import timber.log.Timber
  * Each lane corresponds to one export-only TTS slot. This allows up to five chapter
  * exports to run concurrently while keeping each TTS client isolated from the reader
  * and from the other export jobs. WorkManager persists each lane across process death
- * and app restarts; [reconcile] repairs stale in-memory job records on startup.
+ * and app restarts; [reconcile] repairs stale persisted job records on startup.
  */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
@@ -91,38 +91,63 @@ object TtsAudioQueue {
     fun observeJobs(appPreferences: AppPreferences): Flow<Map<String, TtsAudioJobState>> =
         appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow()
 
-    /** Repair QUEUED/RUNNING records after process death or force-stop. */
+    /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
         val workInfos = runCatching {
             WorkManager.getInstance(context).getWorkInfosByTag(AUDIO_TAG)
         }.getOrNull() ?: return
 
-        val runningIds = workInfos.asSequence()
-            .filter { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
-            .map { it.id.toString() }
-            .toSet()
-        val cancelledIds = workInfos.asSequence()
-            .filter { it.state == WorkInfo.State.CANCELLED }
-            .map { it.id.toString() }
-            .toSet()
+        val infoById = HashMap<String, WorkInfo>(workInfos.size)
+        for (info in workInfos) {
+            infoById[info.id.toString()] = info
+        }
 
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
             var changed = false
             for ((jobId, job) in current) {
                 if (!job.isActive) continue
+
                 val wid = job.workRequestId
-                if (wid.isNotBlank() && runningIds.contains(wid)) continue
-                changed = true
-                current[jobId] = job.copy(
-                    status = if (wid.isNotBlank() && cancelledIds.contains(wid)) {
-                        TtsAudioJobStatus.CANCELLED
-                    } else {
-                        TtsAudioJobStatus.FAILED
-                    },
-                    message = "interrupted",
-                )
+                val info = infoById[wid]
+                if (info == null) {
+                    changed = true
+                    current[jobId] = job.copy(
+                        status = TtsAudioJobStatus.FAILED,
+                        message = "interrupted",
+                    )
+                    continue
+                }
+
+                val repaired = when (info.state) {
+                    WorkInfo.State.ENQUEUED,
+                    WorkInfo.State.RUNNING,
+                    WorkInfo.State.BLOCKED,
+                    -> null
+
+                    WorkInfo.State.SUCCEEDED -> job.copy(
+                        status = TtsAudioJobStatus.SUCCESS,
+                        progress = 100,
+                        message = "",
+                    )
+
+                    WorkInfo.State.CANCELLED -> job.copy(
+                        status = TtsAudioJobStatus.CANCELLED,
+                        message = "Cancelled",
+                    )
+
+                    WorkInfo.State.FAILED -> job.copy(
+                        status = TtsAudioJobStatus.FAILED,
+                        message = if (job.message.isBlank()) "failed" else job.message,
+                    )
+                }
+
+                if (repaired != null && repaired != job) {
+                    changed = true
+                    current[jobId] = repaired
+                }
             }
+
             if (changed) {
                 Timber.w("TtsAudio: reconciled persisted export jobs after process restart")
                 appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
