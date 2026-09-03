@@ -76,7 +76,7 @@ class TtsAudioExporter(
                         writer = writer,
                         chapterTitle = request.chapterTitle,
                         timelineBuilder = timelineBuilder,
-                        utteranceId = "tts_export_${chunkIndex}_$${System.identityHashCode(this)}",
+                        utteranceId = "tts_export_${request.jobId}_$chunkIndex",
                     )
                     chunkIndex++
                     processedChars += chunk.length
