@@ -23,6 +23,7 @@ import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.network.NetworkClient
 import my.noveldokusha.network.ScraperNetworkClient
 import my.noveldokusha.debug.MemoryDiagnostics
+import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import timber.log.Timber
 import javax.inject.Inject
 import java.util.Locale
@@ -52,6 +53,17 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         val appPreferences = EntryPoints.get(this, HiltAppEntryPoint::class.java).appPreferences()
         resolveAppLanguage(appPreferences)
 
+        // WorkManager persists audio-export work independently of the process. Reconcile
+        // the persisted UI state at every process start so reopening NoveLA never leaves
+        // completed/vanished workers looking permanently QUEUED or RUNNING.
+        applicationScope.launch {
+            runCatching {
+                TtsAudioQueue.reconcile(this@App, appPreferences)
+            }.onFailure { error ->
+                Timber.w(error, "TtsAudio: startup reconciliation failed")
+            }
+        }
+
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
             MemoryDiagnostics.logMemoryStats()
@@ -72,7 +84,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
             .build()
 
         val memoryCache = coil.memory.MemoryCache.Builder(this)
-            .maxSizeBytes(64 * 1024 * 1024) // 64 MB
+            .maxSizeBytes(64 * 1024 * 1024)
             .build()
 
         return when (val networkClient = networkClient) {
