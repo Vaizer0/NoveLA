@@ -6,7 +6,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
@@ -94,7 +96,9 @@ object TtsAudioQueue {
     /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
         val workInfos = runCatching {
-            WorkManager.getInstance(context).getWorkInfosByTag(AUDIO_TAG)
+            withContext(Dispatchers.IO) {
+                WorkManager.getInstance(context).getWorkInfosByTag(AUDIO_TAG).get()
+            }
         }.getOrNull() ?: return
 
         val infoById = HashMap<String, WorkInfo>(workInfos.size)
