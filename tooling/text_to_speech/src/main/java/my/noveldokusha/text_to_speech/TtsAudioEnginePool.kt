@@ -61,15 +61,16 @@ object TtsAudioEnginePool {
             created = TextToSpeech(
                 context,
                 { status ->
-                    if (!continuation.isActive) return@TextToSpeech
-                    if (status == TextToSpeech.SUCCESS) {
-                        continuation.resume(created)
-                    } else {
-                        continuation.resumeWithException(
-                            TtsExportException(
-                                "TTS engine '${enginePackage.ifBlank { "default" }}' init failed: status=$status"
+                    if (continuation.isActive) {
+                        if (status == TextToSpeech.SUCCESS) {
+                            continuation.resume(created)
+                        } else {
+                            continuation.resumeWithException(
+                                TtsExportException(
+                                    "TTS engine '${enginePackage.ifBlank { "default" }}' init failed: status=$status"
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 enginePackage.ifBlank { null },
