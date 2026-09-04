@@ -285,11 +285,13 @@ class TtsAudioExporter(
         try {
             done.await()
         } catch (e: CancellationException) {
-            // Cancellation must not use tts.stop(): on some engines stop is delivered to
-            // the service globally and can interrupt the reader's live utterance. Instead,
-            // mark this listener inert and let the current engine request settle naturally;
-            // no late callback can touch the export WAV after the lease is released.
+            // Do not call tts.stop() here: on some engines stop is delivered at service
+            // scope and can interrupt the reader's live TTS. Mark callbacks inert and wait
+            // for the current request to settle before releasing the pooled client.
             cancelled.set(true)
+            withContext(NonCancellable) {
+                runCatching { done.await() }
+            }
             throw e
         } finally {
             runCatching { scratchFile.delete() }
