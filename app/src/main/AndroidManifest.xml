@@ -63,7 +63,7 @@
 
 		<service
 			android:name="my.noveldokusha.data.DownloadForegroundService"
-			exported="false"
+			android:exported="false"
 			android:foregroundServiceType="dataSync">
 		</service>
 
