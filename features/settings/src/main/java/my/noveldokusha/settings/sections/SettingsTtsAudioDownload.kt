@@ -11,14 +11,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.RecordVoiceOver
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.preference.PreferenceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -41,6 +47,8 @@ import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.strings.R as StringsR
 import kotlin.coroutines.resume
+
+private const val FAVORITE_VOICE_PREF_KEY = "TTS_AUDIO_DOWNLOAD_FAVORITE_VOICES"
 
 /**
  * Настройки «Загрузка аудио»: голос (выделенный TTS-инстанс, независимый от
@@ -77,7 +85,6 @@ internal fun SettingsTtsAudioDownload(
         )
         HorizontalDivider()
 
-        // Voice + engine
         SlimListItem(
             headlineContent = {
                 Text(text = stringResource(StringsR.string.settings_audio_download_voice))
@@ -94,7 +101,6 @@ internal fun SettingsTtsAudioDownload(
             modifier = Modifier.clickable { openVoiceDialog = true }
         )
 
-        // Speed
         var localSpeed by remember { mutableStateOf(speed) }
         LaunchedEffect(speed) { localSpeed = speed }
         PillSlider(
@@ -106,7 +112,7 @@ internal fun SettingsTtsAudioDownload(
             valueText = "%.2f".format(localSpeed),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
-        // Pitch
+
         var localPitch by remember { mutableStateOf(pitch) }
         LaunchedEffect(pitch) { localPitch = pitch }
         PillSlider(
@@ -119,7 +125,6 @@ internal fun SettingsTtsAudioDownload(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
 
-        // Text source
         SlimListItem(
             headlineContent = {
                 Text(text = stringResource(StringsR.string.settings_audio_download_source))
@@ -133,7 +138,6 @@ internal fun SettingsTtsAudioDownload(
             modifier = Modifier.clickable { openSourceDialog = true }
         )
 
-        // Destination folder (SAF)
         SlimListItem(
             headlineContent = {
                 Text(text = stringResource(StringsR.string.settings_audio_download_folder))
@@ -191,6 +195,7 @@ internal fun SettingsTtsAudioDownload(
     if (openVoiceDialog) {
         VoicePickerDialog(
             initialVoiceId = voiceId,
+            initialVoiceEngine = voiceEngine,
             onDismiss = { openVoiceDialog = false },
             onPick = { engine, voice ->
                 onVoiceChange(engine, voice)
@@ -209,19 +214,50 @@ private fun sourceLabel(source: TtsAudioSource): String = stringResource(
     }
 )
 
-/** Диалог выбора голоса для загрузки аудио (отдельный TTS-инстанс-пробник). */
 @Composable
 private fun VoicePickerDialog(
     initialVoiceId: String,
+    initialVoiceEngine: String,
     onDismiss: () -> Unit,
     onPick: (enginePackage: String, voiceId: String) -> Unit,
 ) {
     val context = LocalContext.current
+    val preferences = remember(context) { PreferenceManager.getDefaultSharedPreferences(context) }
     var voices by remember { mutableStateOf<List<VoiceEntry>>(emptyList()) }
-    var selected by remember { mutableStateOf(initialVoiceId) }
+    var selected by remember { mutableStateOf(initialVoiceKey(initialVoiceEngine, initialVoiceId)) }
+    var searchQuery by remember { mutableStateOf("") }
+    var favorites by remember {
+        mutableStateOf(preferences.getStringSet(FAVORITE_VOICE_PREF_KEY, emptySet()).orEmpty())
+    }
 
     LaunchedEffect(Unit) {
         voices = withContext(Dispatchers.Default) { probeVoices(context) }
+    }
+
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val filteredVoices = remember(voices, normalizedQuery, favorites) {
+        voices
+            .filter { voice ->
+                normalizedQuery.isBlank() ||
+                    voice.id.lowercase().contains(normalizedQuery) ||
+                    voice.language.lowercase().contains(normalizedQuery) ||
+                    voice.enginePackage.lowercase().contains(normalizedQuery)
+            }
+            .sortedWith(
+                compareByDescending<VoiceEntry> { favorites.contains(voiceKey(it)) }
+                    .thenBy { it.language.lowercase() }
+                    .thenBy { it.id.lowercase() }
+                    .thenBy { it.enginePackage.lowercase() }
+            )
+    }
+
+    fun toggleFavorite(voice: VoiceEntry) {
+        val key = voiceKey(voice)
+        val updated = favorites.toMutableSet().apply {
+            if (!add(key)) remove(key)
+        }.toSet()
+        favorites = updated
+        preferences.edit().putStringSet(FAVORITE_VOICE_PREF_KEY, updated).apply()
     }
 
     AlertDialog(
@@ -233,28 +269,77 @@ private fun VoicePickerDialog(
                     .padding(bottom = 8.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Search, contentDescription = null)
+                    },
+                    placeholder = {
+                        Text(text = "Search voices")
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Text("×")
+                            }
+                        }
+                    }
+                )
+
                 if (voices.isEmpty()) {
                     Text(
                         text = stringResource(StringsR.string.settings_audio_download_queue_empty),
                         modifier = Modifier.padding(8.dp)
                     )
+                } else if (filteredVoices.isEmpty()) {
+                    Text(
+                        text = "No voices found",
+                        modifier = Modifier.padding(8.dp)
+                    )
                 } else {
-                    voices.sortedBy { it.language }.forEach { voice ->
-                        val isSelected = voice.id == selected
+                    filteredVoices.forEach { voice ->
+                        val key = voiceKey(voice)
+                        val isSelected = key == selected
+                        val isFavorite = favorites.contains(key)
                         SlimListItem(
                             headlineContent = {
                                 Text(text = voice.id, maxLines = 1)
                             },
                             supportingContent = {
-                                Text(text = voice.language, maxLines = 1)
+                                Text(
+                                    text = buildString {
+                                        append(voice.language)
+                                        if (voice.enginePackage.isNotBlank()) {
+                                            append(" • ")
+                                            append(voice.enginePackage)
+                                        }
+                                    },
+                                    maxLines = 1,
+                                )
                             },
                             trailingContent = {
-                                if (isSelected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { toggleFavorite(voice) }) {
+                                        Icon(
+                                            imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                            contentDescription = if (isFavorite) "Unfavorite voice" else "Favorite voice",
+                                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selected = voice.id
+                                    selected = key
                                     onPick(voice.enginePackage, voice.id)
                                 }
                         )
@@ -270,20 +355,23 @@ private fun VoicePickerDialog(
     )
 }
 
-/** Неизменяемая запись голоса, доступного для загрузки аудио. */
 private data class VoiceEntry(
     val enginePackage: String,
     val id: String,
     val language: String,
 )
 
-/** Перечисляет голоса выделенным TextToSpeech-инстансом (не трогая AppTtsEngine). */
+private fun voiceKey(enginePackage: String, voiceId: String): String = "$enginePackage|$voiceId"
+
+private fun voiceKey(voice: VoiceEntry): String = voiceKey(voice.enginePackage, voice.id)
+
+private fun initialVoiceKey(enginePackage: String, voiceId: String): String =
+    voiceKey(enginePackage, voiceId)
+
 private suspend fun probeVoices(context: Context): List<VoiceEntry> {
     var engine: TextToSpeech? = null
     suspendCancellableCoroutine<Unit> { cont ->
-        // Инстанс присваивается до init-колбэка (он асинхронный), поэтому
-        // self-reference внутри own-initializer не требуется.
-        engine = TextToSpeech(context.applicationContext) { status ->
+        engine = TextToSpeech(context.applicationContext) {
             if (cont.isActive) {
                 cont.resume(Unit)
             }
