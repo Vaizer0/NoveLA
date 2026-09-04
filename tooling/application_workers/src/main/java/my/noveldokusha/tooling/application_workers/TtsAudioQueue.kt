@@ -14,6 +14,7 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import timber.log.Timber
+import java.util.UUID
 
 /**
  * Persistent audio-export scheduler with five independent lanes.
@@ -66,8 +67,6 @@ object TtsAudioQueue {
             )
         }
 
-        // Stable hash-to-lane assignment gives five persistent workers without relying
-        // on in-memory round-robin state that would be lost after process death.
         WorkManager.getInstance(context)
             .beginUniqueWork(
                 laneName(jobId),
@@ -77,12 +76,42 @@ object TtsAudioQueue {
             .enqueue()
     }
 
+    /**
+     * Cancel one chapter export. The Worker handles cancellation cleanup for its temporary
+     * WAV and any partially-created SAF audio/timeline documents.
+     */
+    fun cancel(
+        context: Context,
+        appPreferences: AppPreferences,
+        jobId: String,
+        workRequestId: String,
+    ) {
+        runCatching { UUID.fromString(workRequestId) }
+            .onSuccess { id -> WorkManager.getInstance(context).cancelWorkById(id) }
+            .onFailure { Timber.w(it, "TtsAudio: invalid WorkRequest id for cancel: $workRequestId") }
+
+        updateState(appPreferences, jobId) {
+            it?.copy(
+                status = TtsAudioJobStatus.CANCELLED,
+                message = "Cancelled",
+            )
+        }
+    }
+
     fun cancelAll(context: Context, appPreferences: AppPreferences) {
         WorkManager.getInstance(context).cancelAllWorkByTag(AUDIO_TAG)
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            current.entries.removeAll { it.value.isActive }
-            appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+            var changed = false
+            for ((jobId, job) in current) {
+                if (!job.isActive) continue
+                current[jobId] = job.copy(
+                    status = TtsAudioJobStatus.CANCELLED,
+                    message = "Cancelled",
+                )
+                changed = true
+            }
+            if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
     }
 
