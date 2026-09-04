@@ -3,11 +3,15 @@ package my.noveldokusha.text_to_speech
 import android.content.Context
 import android.speech.tts.TextToSpeech
 
+/**
+ * Owns the single live/reader TTS client. Background chapter exports never use this
+ * instance; they are created by [TtsAudioEnginePool].
+ */
 class AppTtsEngine private constructor(context: Context) {
 
     private val appContext = context.applicationContext
     private var engine: TextToSpeech? = null
-    // null означает системный движок по умолчанию (service.defaultEngine его всегда и возвращает).
+    // null means the system default engine.
     private var boundEnginePackage: String? = null
 
     fun getOrCreate(onReady: (() -> Unit)? = null): TextToSpeech {
@@ -30,26 +34,6 @@ class AppTtsEngine private constructor(context: Context) {
     }
 
     fun getBoundEnginePackage(): String? = boundEnginePackage
-
-    /** Returns whether the reader/live TTS client is currently speaking. */
-    fun isSpeaking(): Boolean = engine?.isSpeaking == true
-
-    /**
-     * True only when the live reader is speaking through the same engine package
-     * requested by an export. Default-engine clients are resolved to the actual
-     * system engine package so isolation also works when the preference stores
-     * the concrete default package name.
-     */
-    fun isSpeakingWithEngine(enginePackage: String): Boolean {
-        if (!isSpeaking()) return false
-        val requested = enginePackage.trim()
-        val liveEngine = (boundEnginePackage ?: engine?.defaultEngine.orEmpty()).trim()
-        return if (requested.isEmpty()) {
-            liveEngine.isEmpty()
-        } else {
-            liveEngine == requested
-        }
-    }
 
     fun shutdown() {
         engine?.stop()
