@@ -16,10 +16,11 @@ import java.io.File
  * PCM stream. Export TTS clients are obtained from [TtsAudioEnginePool] and are
  * completely separate from the reader's [TextToSpeechManager].
  *
- * Export uses a muted TextToSpeech.speak() request instead of synthesizeToFile().
- * Android TTS engines expose native onRangeStart() timing through the playback
- * synthesis path; KEY_PARAM_VOLUME=0 keeps that path completely silent while
- * onAudioAvailable() supplies the exact PCM written to the exported WAV.
+ * Export always uses TextToSpeech.synthesizeToFile(), never speak(). This keeps
+ * the export silent without paying the much higher playback-path latency.
+ * onAudioAvailable() supplies the exact PCM written to the final WAV; the
+ * synthesizeToFile() destination is a temporary scratch file required by some
+ * engines to reliably emit native onRangeStart() callbacks.
  */
 class TtsAudioExporter(
     private val context: Context,
@@ -148,8 +149,6 @@ class TtsAudioExporter(
             )
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
-            // Never call tts.stop() here: Android TTS playback/synthesis is scoped to
-            // the calling app, so stopping an export client can interrupt reader TTS.
             lease.close()
             if (!finished) runCatching { writer.close() }
         }
@@ -164,6 +163,8 @@ class TtsAudioExporter(
         utteranceId: String,
     ) {
         val done = CompletableDeferred<Unit>()
+        val rangeNormalizer = TtsNativeRangeNormalizer(text.length)
+        val scratchFile = File.createTempFile("tts_export_", ".wav", context.cacheDir)
 
         fun failOnce(error: Throwable) {
             if (!done.isCompleted) done.completeExceptionally(error)
@@ -232,7 +233,16 @@ class TtsAudioExporter(
 
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
                 try {
-                    timelineBuilder.onRangeStart(start, end, frame)
+                    val normalized = rangeNormalizer.normalize(start, end, frame)
+                        ?: throw TtsExportException(
+                            "Invalid native TTS range callback for text length ${text.length}: " +
+                                "($start,$end,$frame)"
+                        )
+                    timelineBuilder.onRangeStart(
+                        start = normalized.start,
+                        end = normalized.end,
+                        frame = normalized.frame,
+                    )
                 } catch (e: Throwable) {
                     Timber.e(e, "ttsExport native range capture failed id=$utteranceId")
                     failOnce(TtsExportException("Failed capturing native TTS timing: ${e.message}", e))
@@ -241,37 +251,87 @@ class TtsAudioExporter(
         }
         tts.setOnUtteranceProgressListener(listener)
 
-        // Use the same TTS path as the reader's proven word-highlighting flow.
-        // Android's KEY_PARAM_VOLUME is explicitly defined as a 0..1 relative
-        // speech volume, where 0 is silence. The generated audio delivered through
-        // onAudioAvailable() is still the same synthesized PCM, while engines that
-        // provide SynthesisCallback.rangeStart() produce native onRangeStart() markers.
-        val params = Bundle().apply {
-            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
-        }
-        val result = tts.speak(
+        // synthesizeToFile() is the fast, silent export path. The final WAV is built
+        // from onAudioAvailable(); scratchFile only satisfies the engine's output
+        // contract and is deleted immediately after the utterance completes.
+        val result = tts.synthesizeToFile(
             text,
-            TextToSpeech.QUEUE_FLUSH,
-            params,
+            Bundle(),
+            scratchFile,
             utteranceId,
         )
         if (result != TextToSpeech.SUCCESS) {
-            failOnce(TtsExportException("speak rejected input (result=$result)"))
+            failOnce(TtsExportException("synthesizeToFile rejected input (result=$result)"))
         }
 
         try {
             done.await()
         } catch (e: CancellationException) {
-            // Do not stop/cancel TTS here because that could interrupt reader TTS.
-            // Let the current export request finish before releasing the pool slot,
-            // otherwise another export could reuse the client while callbacks for
-            // this utterance are still arriving.
             withContext(NonCancellable) {
                 runCatching { done.await() }
             }
             throw e
+        } finally {
+            runCatching { scratchFile.delete() }
         }
     }
+}
+
+internal data class NormalizedTtsRange(
+    val start: Int,
+    val end: Int,
+    val frame: Int,
+)
+
+internal class TtsNativeRangeNormalizer(
+    private val textLength: Int,
+) {
+    private enum class Order { UNKNOWN, NORMAL, SWAPPED }
+
+    private var order = Order.UNKNOWN
+
+    fun normalize(start: Int, end: Int, frame: Int): NormalizedTtsRange? {
+        val normalValid = isValidTextRange(start, end)
+        val swappedValid = isValidTextRange(end, frame)
+        val swappedClearlyIndicated = swappedValid && (
+            start >= textLength ||
+                frame > textLength ||
+                !normalValid
+            )
+
+        if (order == Order.UNKNOWN) {
+            order = when {
+                swappedClearlyIndicated -> Order.SWAPPED
+                normalValid && !swappedValid -> Order.NORMAL
+                !normalValid && swappedValid -> Order.SWAPPED
+                normalValid && swappedValid -> Order.NORMAL
+                else -> Order.UNKNOWN
+            }
+        }
+
+        return when (order) {
+            Order.NORMAL -> if (normalValid) {
+                NormalizedTtsRange(start, end, frame)
+            } else if (swappedValid) {
+                order = Order.SWAPPED
+                NormalizedTtsRange(end, frame, start)
+            } else {
+                null
+            }
+            Order.SWAPPED -> if (swappedValid) {
+                NormalizedTtsRange(end, frame, start)
+            } else if (normalValid) {
+                order = Order.NORMAL
+                NormalizedTtsRange(start, end, frame)
+            } else {
+                null
+            }
+            Order.UNKNOWN -> null
+        }
+    }
+
+    private fun isValidTextRange(start: Int, end: Int): Boolean =
+        start >= 0 && start < end && end <= textLength
 }
 
 class TtsExportException(message: String, cause: Throwable? = null) : Exception(message, cause)
