@@ -36,8 +36,8 @@ class TtsNativeRangeNormalizerTest {
     fun `invalid callback is rejected`() {
         val normalizer = TtsNativeRangeNormalizer(textLength = 20)
 
-        assertNull(normalizer.normalize(20, 0, 5))
-        assertNull(normalizer.normalize(-1, 2, 10))
+        assertNull(normalizer.normalize(20, 20, 5))
+        assertNull(normalizer.normalize(-1, -2, 10))
     }
 
     @Test
