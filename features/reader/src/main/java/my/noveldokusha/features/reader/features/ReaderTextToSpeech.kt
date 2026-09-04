@@ -115,7 +115,9 @@ internal class ReaderTextToSpeech(
         var userPaused: Boolean = false
     }
 
-    private val halfBuffer = 5
+    // Keep only one live utterance queued at a time. Android TTS engines may serialize
+    // synthesis internally, so a large live prebuffer can starve background file synthesis.
+    private val halfBuffer = 1
     private val _originalVoiceId = mutableStateOf(getPreferredVoiceIdForOriginal())
     private var updateJob: Job? = null
     private val manager = TextToSpeechManager(
@@ -276,7 +278,6 @@ internal class ReaderTextToSpeech(
 
     init {
         coroutineScope.launch {
-            // Ждём пока все голоса собраны (один раз при старте)
             manager.serviceLoadedFlow.take(1).collect {
                 manager.trySetVoicePitch(getPreferredVoicePitch())
                 manager.trySetVoiceSpeed(getPreferredVoiceSpeed())
@@ -285,12 +286,10 @@ internal class ReaderTextToSpeech(
                 val preferredEngine = getPreferredVoiceEngine()
                 val currentEngine = manager.getCurrentEnginePackage()
 
-                // Ищем голос в availableVoices — там все движки с правильным enginePackage
                 val voiceData = manager.availableVoices.find { it.id == preferredVoiceId }
                 val targetEngine = voiceData?.enginePackage ?: preferredEngine
 
                 if (targetEngine.isNotEmpty() && targetEngine != currentEngine) {
-                    // Голос из другого движка — переключаем service для воспроизведения
                     manager.reinitWithEngine(
                         enginePackage = targetEngine,
                         voiceId = preferredVoiceId
@@ -303,7 +302,6 @@ internal class ReaderTextToSpeech(
 
         manager.init()
 
-        // Калибровка скорости чтения в реальном времени
         coroutineScope.launch {
             val paragraphStartTimes = mutableMapOf<String, Long>()
             manager.currentTextSpeakFlow.collect { utterance ->
@@ -381,8 +379,6 @@ internal class ReaderTextToSpeech(
 
     private fun claimMediaSession() {
         try {
-            // Освобождаем предыдущий трек, если он ещё не был релизнут
-            // (защита от утечки при множественных вызовах start())
             activeClaimTrack?.let { runCatching { it.release() } }
             activeClaimTrack = null
 
@@ -407,7 +403,6 @@ internal class ReaderTextToSpeech(
             val silence = ShortArray(bufferSize)
             audioTrack.write(silence, 0, silence.size)
             audioTrack.play()
-            // NonCancellable гарантирует, что release() выполнится даже при отмене coroutineScope
             coroutineScope.launch(NonCancellable) {
                 try {
                     delay(200)
@@ -436,30 +431,30 @@ internal class ReaderTextToSpeech(
                 manager
                     .currentTextSpeakFlow
                     .filter { it.playState == Utterance.PlayState.FINISHED }
-                    .collect {
+                    .collect { finishedUtterance ->
                         Timber.d("collect FINISHED queueSize=${manager.queueList.size}")
                         withContext(Dispatchers.Main) {
-                            when (manager.queueList.size) {
-                                halfBuffer -> {
-                                    val lastUtterance = manager
-                                        .queueList
-                                        .asSequence()
-                                        .last().value
-                                    Timber.d("TTS-JUMP halfBuffer: lastUtterance=(${lastUtterance.itemPos.chapterIndex},${lastUtterance.itemPos.chapterItemPosition}) readingNextChunk")
-                                    readChapterNextChunk(
-                                        chapterIndex = lastUtterance.itemPos.chapterIndex,
-                                        chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
-                                        quantity = halfBuffer
+                            // Do not keep a large live TTS backlog. Once the current item is
+                            // finished, enqueue exactly one next item, then yield the engine to
+                            // background export synthesis. This prevents live TTS from starving
+                            // the export workers when both use the same underlying engine.
+                            if (manager.queueList.isEmpty()) {
+                                readChapterNextChunk(
+                                    chapterIndex = finishedUtterance.itemPos.chapterIndex,
+                                    chapterItemPosition = finishedUtterance.itemPos.chapterItemPosition,
+                                    quantity = halfBuffer
+                                )
+                                onBufferLow?.invoke()
+
+                                if (manager.queueList.isEmpty()) {
+                                    Timber.w(
+                                        "TTS-JUMP queue empty after refill: emit reachedChapterEnd " +
+                                            "finished=(${finishedUtterance.itemPos.chapterIndex},${finishedUtterance.itemPos.chapterItemPosition})"
                                     )
-                                    onBufferLow?.invoke()
-                                }
-                                0 -> {
-                                    Timber.w("TTS-JUMP queueSize==0 emit reachedChapterEnd: finished=(${it.itemPos.chapterIndex},${it.itemPos.chapterItemPosition})")
                                     launch {
-                                        reachedChapterEndFlowChapterIndex.emit(it.itemPos.chapterIndex)
+                                        reachedChapterEndFlowChapterIndex.emit(finishedUtterance.itemPos.chapterIndex)
                                     }
                                 }
-                                else -> Unit
                             }
                         }
                     }
@@ -528,10 +523,12 @@ internal class ReaderTextToSpeech(
         itemIndex: Int,
         chapterIndex: Int,
     ) = withContext(Dispatchers.Main.immediate) {
+        // Only queue the bounded live buffer. A larger backlog monopolizes the Android
+        // engine's synthesis queue and can starve background file generation.
         val nextItems = getChapterNextItems(
             itemIndex = itemIndex,
             chapterIndex = chapterIndex,
-            quantity = halfBuffer * 2
+            quantity = halfBuffer
         )
 
         if (nextItems.isEmpty()) {
@@ -586,39 +583,21 @@ internal class ReaderTextToSpeech(
         }
     }
 
-    /**
-     * Returns the actual current playing position directly from the TTS manager.
-     * Unlike currentTextPlaying.value.itemPos which may be stale when app is backgrounded,
-     * this always returns the up-to-date position from the underlying utterance state.
-     *
-     * Returns null if there is no actively playing/loading item (i.e. TTS is
-     * between chapters or has finished all content). Callers should fall back
-     * to waiting for the next currentReaderItem emission.
-     */
     fun getActualPlayingPosition(): ReaderItem.Position? {
-        // All items in the queue are non-finished — the first one is the current
         val playingItem = manager.queueList.values
             .firstOrNull { it.playState == Utterance.PlayState.PLAYING }
         if (playingItem != null) {
             return playingItem.itemPos
         }
 
-        // Queue is empty — check if currentActiveItemState is still active
         val currentState = currentTextPlaying.value
         if (currentState.playState != Utterance.PlayState.FINISHED) {
             return currentState.itemPos
         }
 
-        // Queue empty and state is FINISHED: TTS is between items/chapters.
-        // Don't return a stale position — let the caller wait for the next emission.
         return null
     }
 
-    /**
-     * Forces the currentActiveItemState to reflect the actual playing position
-     * from the TTS queue. This ensures that after screen unlock, the LiveData
-     * observer receives the up-to-date position instead of a stale one.
-     */
     fun forceUpdateCurrentItemState() {
         val playingItem = manager.queueList.values
             .firstOrNull { it.playState == Utterance.PlayState.PLAYING }
@@ -854,19 +833,15 @@ internal class ReaderTextToSpeech(
 
     private fun setVoice(voiceId: String) {
         val voiceData = manager.availableVoices.find { it.id == voiceId }
-        // Берём движок из найденного голоса, иначе из текущего service
         val targetEngine = voiceData?.enginePackage ?: manager.getCurrentEnginePackage()
         val currentEngine = manager.getCurrentEnginePackage()
 
         if (targetEngine.isNotEmpty() && targetEngine != currentEngine) {
-            // Голос из другого движка — пересоздаём service для воспроизведения
             val wasPlaying = state.isPlaying.value
             stop()
             setPreferredVoiceId(voiceId)
             setPreferredVoiceEngine(targetEngine)
             if (wasPlaying) {
-                // Подписка ДО reinitWithEngine: reinitDoneFlow имеет replay=0, поэтому
-                // коллектор должен зарегистрироваться раньше, чем reinit-колбэк эмитнет.
                 coroutineScope.launch {
                     manager.reinitDoneFlow.take(1).collect()
                     start()
@@ -959,7 +934,14 @@ internal class ReaderTextToSpeech(
             .asSequence()
             .filter { it is ReaderItem.Title || it is ReaderItem.Body }
             .filterIsInstance<ReaderItem.Position>()
-            .takeWhile { it.chapterIndex == chapterIndex }
+            .filter { it.chapterIndex == chapterIndex }
+            // Skip non-speakable/decorator-only positions so a bounded live buffer of one
+            // item never mistakes a formatting-only item for the end of the chapter.
+            .filter { position ->
+                val textItem = position as? ReaderItem.Text ?: return@filter false
+                val displayText = ttsText(textItem)
+                !isOnlyDecorators(displayText) && cleanTextForTts(displayText).isNotBlank()
+            }
             .take(quantity)
             .toList()
         Timber.d(
