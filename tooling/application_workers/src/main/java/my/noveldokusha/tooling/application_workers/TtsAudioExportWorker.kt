@@ -10,8 +10,7 @@ import android.provider.OpenableColumns
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
-import dagger.hilt.EntryPoint
+dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -33,7 +32,6 @@ import my.noveldokusha.text_to_speech.timelineToJson
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
-import kotlin.io.DEFAULT_BUFFER_SIZE
 
 /**
  * Синтезирует одну главу в аудиофайл (V1: WAV) в выбранную через SAF папку.
@@ -193,7 +191,7 @@ class TtsAudioExportWorker(
                     tempWav.inputStream().use { input ->
                         // Копия больших файлов может быть долгой — ведём её прогрессом
                         // 90..99 по байтам, чтобы индикатор не «зависал» на 89%.
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        val buffer = ByteArray(64 * 1024)
                         var copied = 0L
                         while (true) {
                             val read = input.read(buffer)
@@ -292,8 +290,10 @@ class TtsAudioExportWorker(
     }
 
     /**
-     * Троттлит публикацию прогресса: персистит в состояние и WorkManager только
-     * при смене процента (≤100 записей), уведомление — не чаще раза в секунду.
+     * Троттлит публикацию прогресса: персистит только в AppPreferences при смене
+     * процента; уведомление — не чаще раза в секунду. WorkManager progress storage
+     * здесь не используется: UI получает состояние из AppPreferences, а запись в
+     * WorkManager на каждый процент только добавляла SQLite/IPC overhead.
      */
     private fun progressReporter(
         appPreferences: AppPreferences,
@@ -307,7 +307,6 @@ class TtsAudioExportWorker(
             if (clamped == lastReported) return@report
             lastReported = clamped
             Timber.d("TtsAudio progress $clamped%")
-            runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to clamped)) }
             TtsAudioQueue.updateState(appPreferences, jobId) {
                 it?.copy(progress = clamped)
             }
