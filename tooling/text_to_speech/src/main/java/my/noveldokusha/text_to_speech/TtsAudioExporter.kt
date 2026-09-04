@@ -1,7 +1,9 @@
 package my.noveldokusha.text_to_speech
 
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CancellationException
@@ -18,7 +20,7 @@ import java.io.File
  *
  * Export uses TextToSpeech.synthesizeToFile(), never speak(). This keeps export
  * silent and prevents export work from flushing or playing through the reader's
- * live TTS playback queue. PCM is still captured from onAudioAvailable().
+ * live TTS playback queue. PCM is captured from onAudioAvailable().
  */
 class TtsAudioExporter(
     private val context: Context,
@@ -137,7 +139,12 @@ class TtsAudioExporter(
         utteranceId: String,
     ) {
         val done = CompletableDeferred<Unit>()
-        val scratchFile = File.createTempFile("tts_export_", ".wav", context.cacheDir)
+        // Android requires synthesizeToFile() to receive an output destination, even
+        // though this exporter gets the exact PCM stream from onAudioAvailable().
+        // On API 26+, /dev/null removes the redundant second WAV write entirely.
+        // Older Android versions retain a cache-file fallback for compatibility.
+        var scratchFile: File? = null
+        var sinkFd: ParcelFileDescriptor? = null
 
         fun failOnce(error: Throwable) {
             if (!done.isCompleted) done.completeExceptionally(error)
@@ -216,15 +223,26 @@ class TtsAudioExporter(
             }
             tts.setOnUtteranceProgressListener(listener)
 
-            // synthesizeToFile() performs synthesis/file output without playing the
-            // utterance through the reader's audible TTS path. The scratch file is
-            // required by the Android API; PCM is captured from onAudioAvailable().
-            val result = tts.synthesizeToFile(
-                text,
-                Bundle(),
-                scratchFile,
-                utteranceId,
-            )
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                sinkFd = ParcelFileDescriptor.open(
+                    File("/dev/null"),
+                    ParcelFileDescriptor.MODE_WRITE_ONLY,
+                )
+                tts.synthesizeToFile(
+                    text,
+                    Bundle(),
+                    sinkFd!!,
+                    utteranceId,
+                )
+            } else {
+                scratchFile = File.createTempFile("tts_export_", ".wav", context.cacheDir)
+                tts.synthesizeToFile(
+                    text,
+                    Bundle(),
+                    scratchFile!!,
+                    utteranceId,
+                )
+            }
             if (result != TextToSpeech.SUCCESS) {
                 failOnce(TtsExportException("synthesizeToFile rejected input (result=$result)"))
             }
@@ -242,7 +260,8 @@ class TtsAudioExporter(
                 throw e
             }
         } finally {
-            runCatching { scratchFile.delete() }
+            runCatching { sinkFd?.close() }
+            runCatching { scratchFile?.delete() }
         }
     }
 }
