@@ -134,6 +134,18 @@ class TtsAudioExporter(
                 audioChannels = channels,
                 audioDurationMs = durationMs,
             )
+            val rangeCount = timeline.paragraphs.sumOf { it.ranges.size }
+            if (rangeCount == 0) {
+                throw TtsExportException(
+                    "TTS engine '${request.enginePackage}' produced audio but no native " +
+                        "range timing data for chapter '${request.chapterTitle}'. " +
+                        "The exported JSON would not contain word-highlight timing."
+                )
+            }
+            Timber.d(
+                "ttsExport timeline ready: chapter=${request.chapterTitle}, " +
+                    "ranges=$rangeCount, durationMs=$durationMs"
+            )
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
             // Never call tts.stop() here: Android TTS playback/synthesis is scoped to
@@ -157,112 +169,107 @@ class TtsAudioExporter(
             if (!done.isCompleted) done.completeExceptionally(error)
         }
 
+        val listener = object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
+                done.complete(Unit)
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                done.completeExceptionally(
+                    TtsExportException("Synthesis failed (error $errorCode) for '$chapterTitle'")
+                )
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                done.completeExceptionally(
+                    TtsExportException("Synthesis failed for '$chapterTitle'")
+                )
+            }
+
+            override fun onBeginSynthesis(
+                utteranceId: String?,
+                sampleRateInHz: Int,
+                audioFormat: Int,
+                channelCount: Int,
+            ) {
+                if (sampleRateInHz <= 0 || channelCount <= 0) {
+                    failOnce(
+                        TtsExportException(
+                            "TTS engine returned invalid audio format: ${sampleRateInHz}Hz/$channelCount channels"
+                        )
+                    )
+                    return
+                }
+                if (!writer.isValidPcmFormat(audioFormat)) {
+                    failOnce(
+                        TtsExportException(
+                            "TTS engine returned unsupported audio format: $audioFormat (PCM16 required)"
+                        )
+                    )
+                    return
+                }
+                try {
+                    writer.open(sampleRateInHz, channelCount)
+                    timelineBuilder.setSliceFormat(sampleRateInHz, channelCount)
+                } catch (e: Exception) {
+                    failOnce(TtsExportException("Failed initializing audio writer: ${e.message}", e))
+                }
+            }
+
+            override fun onAudioAvailable(utteranceId: String?, audio: ByteArray) {
+                if (audio.isEmpty()) return
+                try {
+                    timelineBuilder.onAudioAvailable(audio.size)
+                    writer.writePcm(audio)
+                } catch (e: Throwable) {
+                    Timber.e(e, "ttsExport writing PCM failed id=$utteranceId")
+                    failOnce(TtsExportException("Failed writing audio data: ${e.message}", e))
+                }
+            }
+
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                try {
+                    timelineBuilder.onRangeStart(start, end, frame)
+                } catch (e: Throwable) {
+                    Timber.e(e, "ttsExport native range capture failed id=$utteranceId")
+                    failOnce(TtsExportException("Failed capturing native TTS timing: ${e.message}", e))
+                }
+            }
+        }
+        tts.setOnUtteranceProgressListener(listener)
+
+        // Use the same TTS path as the reader's proven word-highlighting flow.
+        // Android's KEY_PARAM_VOLUME is explicitly defined as a 0..1 relative
+        // speech volume, where 0 is silence. The generated audio delivered through
+        // onAudioAvailable() is still the same synthesized PCM, while engines that
+        // provide SynthesisCallback.rangeStart() produce native onRangeStart() markers.
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
+        }
+        val result = tts.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            params,
+            utteranceId,
+        )
+        if (result != TextToSpeech.SUCCESS) {
+            failOnce(TtsExportException("speak rejected input (result=$result)"))
+        }
+
         try {
-            val listener = object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) = Unit
-
-                override fun onDone(utteranceId: String?) {
-                    done.complete(Unit)
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    done.completeExceptionally(
-                        TtsExportException("Synthesis failed (error $errorCode) for '$chapterTitle'")
-                    )
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String?) {
-                    done.completeExceptionally(
-                        TtsExportException("Synthesis failed for '$chapterTitle'")
-                    )
-                }
-
-                override fun onBeginSynthesis(
-                    utteranceId: String?,
-                    sampleRateInHz: Int,
-                    audioFormat: Int,
-                    channelCount: Int,
-                ) {
-                    if (sampleRateInHz <= 0 || channelCount <= 0) {
-                        failOnce(
-                            TtsExportException(
-                                "TTS engine returned invalid audio format: ${sampleRateInHz}Hz/$channelCount channels"
-                            )
-                        )
-                        return
-                    }
-                    if (!writer.isValidPcmFormat(audioFormat)) {
-                        failOnce(
-                            TtsExportException(
-                                "TTS engine returned unsupported audio format: $audioFormat (PCM16 required)"
-                            )
-                        )
-                        return
-                    }
-                    try {
-                        writer.open(sampleRateInHz, channelCount)
-                        timelineBuilder.setSliceFormat(sampleRateInHz, channelCount)
-                    } catch (e: Exception) {
-                        failOnce(TtsExportException("Failed initializing audio writer: ${e.message}", e))
-                    }
-                }
-
-                override fun onAudioAvailable(utteranceId: String?, audio: ByteArray) {
-                    if (audio.isEmpty()) return
-                    try {
-                        timelineBuilder.onAudioAvailable(audio.size)
-                        writer.writePcm(audio)
-                    } catch (e: Throwable) {
-                        Timber.e(e, "ttsExport writing PCM failed id=$utteranceId")
-                        failOnce(TtsExportException("Failed writing audio data: ${e.message}", e))
-                    }
-                }
-
-                override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                    try {
-                        timelineBuilder.onRangeStart(start, end, frame)
-                    } catch (e: Throwable) {
-                        Timber.e(e, "ttsExport native range capture failed id=$utteranceId")
-                        failOnce(TtsExportException("Failed capturing native TTS timing: ${e.message}", e))
-                    }
-                }
+            done.await()
+        } catch (e: CancellationException) {
+            // Do not stop/cancel TTS here because that could interrupt reader TTS.
+            // Let the current export request finish before releasing the pool slot,
+            // otherwise another export could reuse the client while callbacks for
+            // this utterance are still arriving.
+            withContext(NonCancellable) {
+                runCatching { done.await() }
             }
-            tts.setOnUtteranceProgressListener(listener)
-
-            // Use the same TTS path as the reader's proven word-highlighting flow.
-            // Android's KEY_PARAM_VOLUME is explicitly defined as a 0..1 relative
-            // speech volume, where 0 is silence. The TTS engine still synthesizes the
-            // request, emits onAudioAvailable() PCM, and can emit native onRangeStart()
-            // markers, but nothing is audible to the user.
-            val params = Bundle().apply {
-                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
-            }
-            val result = tts.speak(
-                text,
-                TextToSpeech.QUEUE_FLUSH,
-                params,
-                utteranceId,
-            )
-            if (result != TextToSpeech.SUCCESS) {
-                failOnce(TtsExportException("speak rejected input (result=$result)"))
-            }
-
-            try {
-                done.await()
-            } catch (e: CancellationException) {
-                // Do not stop/cancel TTS here because that could interrupt reader TTS.
-                // Let the current export request finish before releasing the pool slot,
-                // otherwise another export could reuse the client while callbacks for
-                // this utterance are still arriving.
-                withContext(NonCancellable) {
-                    runCatching { done.await() }
-                }
-                throw e
-            }
-        } finally {
-            // No engine scratch file is needed: the exact PCM arrives through
-            // onAudioAvailable() and native word timing arrives through onRangeStart().
+            throw e
         }
     }
 }
