@@ -1,0 +1,42 @@
+name: temporary live TTS coexistence fix
+
+on:
+  push:
+    branches:
+      - Demo
+    paths-ignore:
+      - .github/workflows/_tmp_live_tts_fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Demo
+          fetch-depth: 0
+      - name: Apply live TTS queue fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt'
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt')
+          s = p.read_text()
+          old = '    private val halfBuffer = 5\n'
+          new = '''    // Keep only one live utterance ahead. Android TTS engines can serialize synthesis\n    // across clients, so a deep reader queue can starve background synthesizeToFile() exports.\n    // One-item look-ahead preserves continuous live playback while allowing export synthesis\n    // to interleave instead of waiting behind five pre-queued reader utterances.\n    private val halfBuffer = 1\n'''
+          if old not in s:
+              raise SystemExit('expected halfBuffer declaration not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          rm -f .github/workflows/_tmp_live_tts_fix.yml
+          git add "$file" .github/workflows/_tmp_live_tts_fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(tts): reduce live TTS queue for export coexistence'
+          git push origin HEAD:Demo
