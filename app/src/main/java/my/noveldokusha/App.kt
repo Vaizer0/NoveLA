@@ -27,6 +27,7 @@ import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import timber.log.Timber
 import javax.inject.Inject
 import java.util.Locale
+import java.util.concurrent.Executors
 
 
 @HiltAndroidApp
@@ -80,7 +81,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
     override fun newImageLoader(): ImageLoader {
         val diskCache = coil.disk.DiskCache.Builder()
             .directory(cacheDir.resolve("image_cache"))
-            .maxSizeBytes(100 * 1024 * 1024) // 100 MB
+            .maxSizeBytes(100 * 1024 * 1024)
             .build()
 
         val memoryCache = coil.memory.MemoryCache.Builder(this)
@@ -134,7 +135,9 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         }
     }
 
-    // WorkManager — custom factory for @HiltWorker workers (LibraryUpdates, UpdatesChecker)
+    // WorkManager — custom factory for @HiltWorker workers (LibraryUpdates, UpdatesChecker).
+    // Keep more worker threads than the audio-export pool so five export workers can
+    // execute simultaneously while non-audio WorkManager jobs still have a thread.
     override val workManagerConfiguration: WorkConfiguration by lazy {
         val appWorkerFactory = EntryPoints
             .get(this, HiltAppEntryPoint::class.java)
@@ -143,6 +146,7 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         WorkConfiguration.Builder()
             .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.DEBUG else Log.INFO)
             .setWorkerFactory(appWorkerFactory)
+            .setExecutor(Executors.newFixedThreadPool(8))
             .build()
     }
 }
