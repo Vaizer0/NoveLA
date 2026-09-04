@@ -36,10 +36,9 @@ import java.io.File
 /**
  * Синтезирует одну главу в аудиофайл (V1: WAV) в выбранную через SAF папку.
  *
- * Независим от живой озвучки в читалке: использует ВЫДЕЛЕННЫЙ инстанс TTS
- * (движок/голос/скорость/высота из профиля TTS_AUDIO_DOWNLOAD_*), ничего не
- * проигрывает, и по завершении перезаписывает тот же файл при повторной
- * генерации (детерминированный jobId).
+ * Независим от живой озвучки в читалке: использует ВЫДЕЛЕННЫЕ export-only TTS
+ * clients и динамически оставляет один TTS concurrency slot для live reader
+ * playback when both use the same engine.
  *
  * Источник текста: ORIGINAL — кэш тела главы; TRANSLATED — ТОЛЬКО закэшированный
  * перевод пары языков книги (при отсутствии — явная ошибка, без скачивания
@@ -77,9 +76,6 @@ class TtsAudioExportWorker(
             notificationsCenter = notificationsCenter,
         )
 
-        // V1 умеет генерировать только WAV/PCM: любой другой формат (например
-        // "m4a") отклоняется явно ДО синтеза — никогда не создаём файл с чужим
-        // расширением (.m4a), содержащий WAV-данные. M4A остаётся опцией V2.
         if (request.format != TtsAudioFormat.WAV) {
             Timber.e("TtsAudio: unsupported format '${request.format}' for job $jobId (V1 supports WAV only)")
             fail(appPreferences, jobId, notification,
@@ -87,8 +83,9 @@ class TtsAudioExportWorker(
             return Result.failure()
         }
 
-        // Временные файлы для WAV — в cacheDir, не трогают user-данные.
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
+        // jobId contains the generation UUID, so retries/re-enqueues cannot share a temporary
+        // WAV with an older cancelled generation.
         val tempWav = File(tempDir, "$jobId.wav")
         var createdUri: Uri? = null
         var timelineUri: Uri? = null
@@ -102,7 +99,6 @@ class TtsAudioExportWorker(
                 return Result.failure()
             }
 
-            val treeUri = Uri.parse(request.outputDirectoryUri)
             val novelFolderUri = resolveNovelFolder(context, request)
             if (novelFolderUri == null) {
                 Timber.e("TtsAudio: could not create novel folder for $jobId")
@@ -165,11 +161,13 @@ class TtsAudioExportWorker(
             }
 
             val tempWavSize = tempWav.length()
+            if (tempWavSize <= 0L) {
+                throw TtsExportException("Generated WAV is empty for '${request.chapterTitle}'")
+            }
 
-            val mime = if (request.format == TtsAudioFormat.WAV) MIME_WAV else "application/octet-stream"
             val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(context.contentResolver, parentUri, mime, fileName)
+                DocumentsContract.createDocument(context.contentResolver, parentUri, MIME_WAV, fileName)
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
 
             withContext(Dispatchers.IO) {
@@ -177,7 +175,6 @@ class TtsAudioExportWorker(
                     ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
                 output.use { os ->
                     tempWav.inputStream().use { input ->
-                        // Larger SAF copy buffer reduces I/O overhead without changing output bytes.
                         val buffer = ByteArray(64 * 1024)
                         var copied = 0L
                         while (true) {
@@ -185,41 +182,33 @@ class TtsAudioExportWorker(
                             if (read <= 0) break
                             os.write(buffer, 0, read)
                             copied += read
-                            if (tempWavSize > 0) {
-                                report(90 + ((copied * 10) / tempWavSize).toInt().coerceIn(0, 9))
-                            }
+                            report(90 + ((copied * 10) / tempWavSize).toInt().coerceIn(0, 9))
                         }
                     }
                 }
             }
 
-            runCatching {
-                val timelineJson = timelineToJson(result.timeline)
-                timelineUri = withContext(Dispatchers.IO) {
-                    DocumentsContract.createDocument(
-                        context.contentResolver,
-                        parentUri,
-                        MIME_JSON,
-                        timelineFileName,
-                    )
-                } ?: throw TtsExportException(
-                    context.getString(StringsR.string.tts_audio_export_file_error)
+            // Audio and timeline are an atomic logical result: if JSON cannot be created or
+            // written, do not report success with an audio-only artifact.
+            val timelineJson = timelineToJson(result.timeline)
+            timelineUri = withContext(Dispatchers.IO) {
+                DocumentsContract.createDocument(
+                    context.contentResolver,
+                    parentUri,
+                    MIME_JSON,
+                    timelineFileName,
                 )
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(timelineUri!!)
-                        ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-                    output.use { os ->
-                        os.write(timelineJson.toByteArray(Charsets.UTF_8))
-                    }
+            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+
+            withContext(Dispatchers.IO) {
+                val output = context.contentResolver.openOutputStream(timelineUri!!)
+                    ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+                output.use { os ->
+                    os.write(timelineJson.toByteArray(Charsets.UTF_8))
                 }
-            }.onFailure { e ->
-                Timber.e(e, "TtsAudio: timeline write failed, continuing with audio only")
-                timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
-                timelineUri = null
             }
 
             val displayName = queryDisplayName(createdUri!!) ?: fileName
-
             notification.updateProgress(100)
             notification.showComplete(displayName, createdUri)
             TtsAudioQueue.updateState(appPreferences, jobId) {
@@ -270,8 +259,7 @@ class TtsAudioExportWorker(
     /**
      * Троттлит публикацию прогресса: персистит только в AppPreferences при смене
      * процента; уведомление — не чаще раза в секунду. WorkManager progress storage
-     * здесь не используется: UI получает состояние из AppPreferences, а запись в
-     * WorkManager на каждый процент только добавляла SQLite/IPC overhead.
+     * здесь не используется: UI получает состояние из AppPreferences.
      */
     private fun progressReporter(
         appPreferences: AppPreferences,
