@@ -10,7 +10,7 @@ import android.provider.OpenableColumns
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
-dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -70,7 +70,12 @@ class TtsAudioExportWorker(
         val appDatabase = entryPoint.appDatabase()
         val notificationsCenter = entryPoint.notificationsCenter()
 
-        val notification = TtsAudioExportNotification(request.chapterTitle, context, notificationsCenter)
+        val notification = TtsAudioExportNotification(
+            chapterTitle = request.chapterTitle,
+            workRequestId = id.toString(),
+            context = context,
+            notificationsCenter = notificationsCenter,
+        )
 
         // V1 умеет генерировать только WAV/PCM: любой другой формат (например
         // "m4a") отклоняется явно ДО синтеза — никогда не создаём файл с чужим
@@ -89,8 +94,6 @@ class TtsAudioExportWorker(
         var timelineUri: Uri? = null
 
         try {
-            // Валидация папки до чтения данных из БД: недоступная папка = нет
-            // смысла синтезировать. Сброс приводит к повторному запросу выбора.
             if (!isDirectoryAccessible(context, request.outputDirectoryUri)) {
                 Timber.e("TtsAudio: directory NOT accessible, clearing TTS_AUDIO_DOWNLOAD_LOCATION_URI")
                 appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = ""
@@ -99,8 +102,6 @@ class TtsAudioExportWorker(
                 return Result.failure()
             }
 
-            // Per-novel подпапка внутри постоянной обёртки "NoveLA Audio" в выбранном
-            // корне: <root>/NoveLA Audio/<Novel Title>/. Не смогли создать — ошибка.
             val treeUri = Uri.parse(request.outputDirectoryUri)
             val novelFolderUri = resolveNovelFolder(context, request)
             if (novelFolderUri == null) {
@@ -124,7 +125,6 @@ class TtsAudioExportWorker(
 
             TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING) }
 
-            // ── Текст главы (оригинал или закэшированный перевод) ──────────────
             val chapterText = withContext(Dispatchers.IO) {
                 fetchChapterText(appDatabase, appPreferences, request)
             }
@@ -139,13 +139,9 @@ class TtsAudioExportWorker(
                 return Result.failure()
             }
 
-            // Правила пользователя применяются ТЕ ЖЕ, что в читалке.
             val regexRules = appPreferences.effectiveRegexRules(request.novelUrl)
             val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, regexRules)
 
-            // ── Имена файлов ─────────────────────────────────────────────────────
-            // fileName снабжается суффиксом источника, чтобы Original и Translated
-            // одной главы не коллизировали в одной папке (иначе SAF добавит "(1)").
             val sourceSuffix = when (request.source) {
                 TtsAudioSource.ORIGINAL -> context.getString(StringsR.string.tts_audio_file_suffix_original)
                 TtsAudioSource.TRANSLATED -> context.getString(StringsR.string.tts_audio_file_suffix_translated)
@@ -156,28 +152,20 @@ class TtsAudioExportWorker(
                 "$baseName.${request.format}"
             else
                 "$baseName $sourceSuffix.${request.format}"
-            // Парный timeline-файл: "<audio-basename>.timeline.json".
             val timelineFileName = "${fileName.removeSuffix(".${request.format}")}.timeline.json"
 
-            // ── Синтез в temp WAV ───────────────────────────────────────────────
-            // Диапазон прогресса: синтез занимает 0..89%, копирование в SAF — 90..99%,
-            // финал — 100%. Синтез взвешен по символам текста. Репортим только при
-            // смене процента (≤100 записей), уведомление троттлим ≥1с.
             val report = progressReporter(appPreferences, jobId, notification)
             val result = TtsAudioExporter(context).exportAudio(
                 request = request,
                 paragraphs = paragraphs,
                 destFile = tempWav,
-                // Имя, под которым WAV реально будет сохранён (для timeline.chapter.audioFile).
                 audioFileName = fileName,
             ) { fraction ->
-                // Синтез занимает 0..89% (взвешен по символам текста).
                 report((fraction * 89).toInt().coerceIn(0, 89))
             }
 
             val tempWavSize = tempWav.length()
 
-            // ── Копирование в SAF-папку и финализация ──────────────────────────
             val mime = if (request.format == TtsAudioFormat.WAV) MIME_WAV else "application/octet-stream"
             val parentUri = novelFolderUri
             createdUri = withContext(Dispatchers.IO) {
@@ -189,8 +177,7 @@ class TtsAudioExportWorker(
                     ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
                 output.use { os ->
                     tempWav.inputStream().use { input ->
-                        // Копия больших файлов может быть долгой — ведём её прогрессом
-                        // 90..99 по байтам, чтобы индикатор не «зависал» на 89%.
+                        // Larger SAF copy buffer reduces I/O overhead without changing output bytes.
                         val buffer = ByteArray(64 * 1024)
                         var copied = 0L
                         while (true) {
@@ -199,19 +186,13 @@ class TtsAudioExportWorker(
                             os.write(buffer, 0, read)
                             copied += read
                             if (tempWavSize > 0) {
-                                report(
-                                    90 + ((copied * 10) / tempWavSize).toInt().coerceIn(0, 9)
-                                )
+                                report(90 + ((copied * 10) / tempWavSize).toInt().coerceIn(0, 9))
                             }
                         }
                     }
                 }
             }
 
-            // ── Парный timeline рядом с аудио ─────────────────────────────────────
-            // Timeline — best-effort дополнение к аудио и НИКОГДА не должен валить
-            // сохранение самого аудио. Любой сбой сериализации/записи шкалы логируется,
-            // но WAV продолжает экспортироваться и помечается успешным.
             runCatching {
                 val timelineJson = timelineToJson(result.timeline)
                 timelineUri = withContext(Dispatchers.IO) {
@@ -252,8 +233,6 @@ class TtsAudioExportWorker(
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
-            // Отмена очереди (пользователь): это не ошибка. Убираем временные файлы,
-            // помечаем запись CANCELLED (non-error) и закрываем уведомление.
             createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
@@ -264,7 +243,6 @@ class TtsAudioExportWorker(
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: EXPORT FAILED for $jobId")
-            // Частично созданные файлы в SAF не оставляем (и WAV, и парный timeline).
             createdUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             timelineUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             tempWav.delete()
@@ -306,7 +284,6 @@ class TtsAudioExportWorker(
             val clamped = percent.coerceIn(0, 100)
             if (clamped == lastReported) return@report
             lastReported = clamped
-            Timber.d("TtsAudio progress $clamped%")
             TtsAudioQueue.updateState(appPreferences, jobId) {
                 it?.copy(progress = clamped)
             }
@@ -318,20 +295,12 @@ class TtsAudioExportWorker(
         }
     }
 
-    /**
-     * Возвращает сырой текст главы по источнику.
-     * ORIGINAL: тело из кэша (ChapterBody). TRANSLATED: закэшированный перевод
-     * пары языков книги (ChapterTranslation) — тела с невалидным JSON пропускаются.
-     * null означает «источник недоступен» (у воркера нет права качать).
-     */
     private suspend fun fetchChapterText(
         appDatabase: AppDatabase,
         appPreferences: AppPreferences,
         request: TtsAudioExportRequest,
     ): String? {
         return if (request.source == TtsAudioSource.TRANSLATED) {
-            // Снимок пары языков из запроса (сделан при постановке в очередь); для
-            // старых задач без снимка — фолбэк на текущую настройку книги.
             val sourceLang = request.translationSourceLang.ifBlank {
                 appPreferences.translationPairForBook(request.novelUrl).source
             }
@@ -369,10 +338,7 @@ class TtsAudioExportWorker(
         val chapterTitle = inputData.getString(KEY_CHAPTER_TITLE) ?: return null
         val chapterIndex = inputData.getInt(KEY_CHAPTER_INDEX, 0)
         val sourceName = inputData.getString(KEY_SOURCE) ?: return null
-        val source = runCatching {
-            TtsAudioSource.valueOf(sourceName)
-        }.getOrNull() ?: return null
-        // ASK_EVERY_TIME — только «дефолтная» настройка; в воркере это не источник.
+        val source = runCatching { TtsAudioSource.valueOf(sourceName) }.getOrNull() ?: return null
         if (source == TtsAudioSource.ASK_EVERY_TIME) return null
         val enginePackage = inputData.getString(KEY_ENGINE_PACKAGE) ?: ""
         val voiceId = inputData.getString(KEY_VOICE_ID) ?: ""
@@ -380,7 +346,6 @@ class TtsAudioExportWorker(
         val pitch = inputData.getFloat(KEY_PITCH, 1f)
         val outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null
         val format = inputData.getString(KEY_FORMAT) ?: TtsAudioFormat.WAV
-        // Снимок пары языков перевода (для TRANSLATED), сделанный при постановке в очередь.
         val translationSourceLang = inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: ""
         val translationTargetLang = inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: ""
         return TtsAudioExportRequest(
@@ -436,15 +401,9 @@ class TtsAudioExportWorker(
         }
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
-    // То же ограничение, что у BookExportWorker: SAF режет длинные имена.
     private fun sanitize(name: String, fallback: String = "chapter"): String =
         name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
 
-    /**
-     * Возвращает document URI папки книги: <root>/NoveLA Audio/<Novel Title>/.
-     * Папка и обёртка создаются при отсутствии; null — если недоступна/не создаётся.
-     * Ищем по имени сгенерированную физически (SAF не даёт «find», только листинг).
-     */
     private suspend fun resolveNovelFolder(
         context: Context,
         request: TtsAudioExportRequest,
@@ -471,7 +430,6 @@ class TtsAudioExportWorker(
         }.getOrNull()
     }
 
-    /** Ищет папку [folderName] среди детей [parentDocId] или создаёт её. */
     private fun findOrCreateDirectoryDocId(
         context: Context,
         treeUri: Uri,
@@ -499,9 +457,6 @@ class TtsAudioExportWorker(
             }
         if (existing != null) return existing
 
-        // Пытаемся создать. Если create вернул null или документ уже существует
-        // (гоночный случай — e.g. другой воркер той же очереди), перечитываем
-        // листинг один раз, прежде чем объявлять неудачу.
         val createdDocId = runCatching {
             val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId)
             DocumentsContract.createDocument(
@@ -514,7 +469,6 @@ class TtsAudioExportWorker(
 
         if (createdDocId != null) return createdDocId
 
-        // Ретрай по листингу: папку мог создать параллельный экспорт этого же романа.
         return context.contentResolver.query(childrenUri, null, null, null, null)
             ?.use { cursor ->
                 while (cursor.moveToNext()) {
@@ -539,13 +493,8 @@ class TtsAudioExportWorker(
         const val TAG = "TtsAudioExport"
         const val MIME_WAV = "audio/wav"
         const val MIME_JSON = "application/json"
-
-        /** Постоянная папка-обёртка для аудио внутри выбранного корня. */
         const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
-
-        /** Ключ прогресса (0..100) в WorkManager Data. */
         const val KEY_PROGRESS = "progress"
-
         const val KEY_JOB_ID = "job_id"
         const val KEY_NOVEL_TITLE = "novel_title"
         const val KEY_NOVEL_URL = "novel_url"
