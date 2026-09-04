@@ -33,6 +33,7 @@ import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.text_to_speech.AppTtsEngine
 import my.noveldokusha.text_to_speech.TextToSpeechManager
 import my.noveldokusha.text_to_speech.TtsTextPreparer
+import my.noveldokusha.text_to_speech.TtsAudioEnginePool
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -439,6 +440,15 @@ internal class ReaderTextToSpeech(
                             // background export synthesis. This prevents live TTS from starving
                             // the export workers when both use the same underlying engine.
                             if (manager.queueList.isEmpty()) {
+                                // Android's TTS engine service can serialize synthesis requests.
+                                // When an export is active, yield briefly between live utterances
+                                // so a queued synthesizeToFile() export can acquire the engine.
+                                if (TtsAudioEnginePool.hasActiveExports()) {
+                                    delay(150)
+                                    if (TtsAudioEnginePool.hasActiveExports()) {
+                                        Timber.v("TTS fairness: yielding engine to background export")
+                                    }
+                                }
                                 readChapterNextChunk(
                                     chapterIndex = finishedUtterance.itemPos.chapterIndex,
                                     chapterItemPosition = finishedUtterance.itemPos.chapterItemPosition,
