@@ -43,7 +43,6 @@ class TtsExportDiagnosticActivity : Activity() {
         output = TextView(this).apply {
             textSize = 14f
             setPadding(0, 16, 0, 0)
-            textIsSelectable = true
         }
         root.addView(title)
         root.addView(runButton, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
