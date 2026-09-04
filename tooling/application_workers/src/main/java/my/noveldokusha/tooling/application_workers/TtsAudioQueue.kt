@@ -77,24 +77,34 @@ object TtsAudioQueue {
     }
 
     /**
-     * Cancel one chapter export. The Worker handles cancellation cleanup for its temporary
-     * WAV and any partially-created SAF audio/timeline documents.
+     * Cancel one chapter export using the persisted WorkRequest ID. This avoids recomputing
+     * job identity from mutable settings such as the current translation language pair.
+     * The Worker handles deletion of temporary/partial files during coroutine cancellation.
      */
     fun cancel(
         context: Context,
         appPreferences: AppPreferences,
-        jobId: String,
         workRequestId: String,
     ) {
-        runCatching { UUID.fromString(workRequestId) }
+        val cancelled = runCatching { UUID.fromString(workRequestId) }
             .onSuccess { id -> WorkManager.getInstance(context).cancelWorkById(id) }
             .onFailure { Timber.w(it, "TtsAudio: invalid WorkRequest id for cancel: $workRequestId") }
+            .isSuccess
+        if (!cancelled) return
 
-        updateState(appPreferences, jobId) {
-            it?.copy(
-                status = TtsAudioJobStatus.CANCELLED,
-                message = "Cancelled",
-            )
+        synchronized(lock) {
+            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            var changed = false
+            for ((jobId, job) in current) {
+                if (job.workRequestId != workRequestId || !job.isActive) continue
+                current[jobId] = job.copy(
+                    status = TtsAudioJobStatus.CANCELLED,
+                    message = "Cancelled",
+                )
+                changed = true
+                break
+            }
+            if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
     }
 
