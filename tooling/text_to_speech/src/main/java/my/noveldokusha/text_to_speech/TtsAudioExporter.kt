@@ -45,19 +45,9 @@ class TtsAudioExporter(
             source = request.source.name,
         )
 
-        val lease = TtsAudioEnginePool.acquire(context, request.enginePackage)
-        val tts = lease.tts
         var finished = false
         try {
             val maxInputLength = TextToSpeech.getMaxSpeechInputLength()
-            val voices = tts.voices ?: emptyList()
-            val voice = voices.find { it.name == request.voiceId }
-                ?: throw TtsExportException(
-                    "Voice '${request.voiceId}' not found in engine '${request.enginePackage}'"
-                )
-            tts.voice = voice
-            tts.setSpeechRate(request.speed)
-            tts.setPitch(request.pitch)
 
             // Export order is deliberately: novel name -> chapter title -> chapter body.
             // The two metadata labels are synthesized as real audio paragraphs so their
@@ -88,15 +78,27 @@ class TtsAudioExporter(
             for ((_, slices) in paragraphPlans) {
                 timelineBuilder.beginParagraph()
                 for (chunk in slices) {
-                    timelineBuilder.registerSlice(chunk)
-                    synthesizeChunk(
-                        tts = tts,
-                        text = chunk,
-                        writer = writer,
-                        chapterTitle = request.chapterTitle,
-                        timelineBuilder = timelineBuilder,
-                        utteranceId = "tts_export_${request.jobId}_$chunkIndex",
-                    )
+                    // A lease is held only for the actual engine synthesis. This is important:
+                    // five long-running chapter exports must not permanently occupy all export
+                    // clients when live TTS starts. Once a chunk completes, another export can
+                    // immediately acquire the released client subject to the live-TTS limit.
+                    val lease = TtsAudioEnginePool.acquire(context, request.enginePackage)
+                    try {
+                        val tts = lease.tts
+                        configureTts(tts, request)
+                        timelineBuilder.registerSlice(chunk)
+                        synthesizeChunk(
+                            tts = tts,
+                            text = chunk,
+                            writer = writer,
+                            chapterTitle = request.chapterTitle,
+                            timelineBuilder = timelineBuilder,
+                            utteranceId = "tts_export_${request.jobId}_$chunkIndex",
+                        )
+                    } finally {
+                        lease.close()
+                    }
+
                     chunkIndex++
                     processedChars += chunk.length
                     if (writer.dataBytesWritten() > 0) synthesizedAny = true
@@ -149,8 +151,24 @@ class TtsAudioExporter(
             )
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
-            lease.close()
             if (!finished) runCatching { writer.close() }
+        }
+    }
+
+    private fun configureTts(tts: TextToSpeech, request: TtsAudioExportRequest) {
+        val voices = tts.voices ?: emptyList()
+        val voice = voices.find { it.name == request.voiceId }
+            ?: throw TtsExportException(
+                "Voice '${request.voiceId}' not found in engine '${request.enginePackage}'"
+            )
+        tts.voice = voice
+        val speedResult = tts.setSpeechRate(request.speed)
+        if (speedResult != TextToSpeech.SUCCESS) {
+            throw TtsExportException("Failed to set TTS speech rate for '${request.chapterTitle}'")
+        }
+        val pitchResult = tts.setPitch(request.pitch)
+        if (pitchResult != TextToSpeech.SUCCESS) {
+            throw TtsExportException("Failed to set TTS pitch for '${request.chapterTitle}'")
         }
     }
 
@@ -267,7 +285,12 @@ class TtsAudioExporter(
         try {
             done.await()
         } catch (e: CancellationException) {
+            // Do not release a pooled engine client while the engine may still be writing
+            // callbacks into this chapter's WAV writer. Keep the old behavior of waiting for
+            // the utterance to settle, but explicitly stop the export client's current queue
+            // first so cancellation can actually make progress.
             withContext(NonCancellable) {
+                runCatching { tts.stop() }
                 runCatching { done.await() }
             }
             throw e
