@@ -1,7 +1,7 @@
 name: Android CI - Build Debug APK
 
 # Builds the debug APK and runs the TTS unit-test suite for every supported
-a development branch. Demo is included so changes there cannot be merged without
+# development branch. Demo is included so changes there cannot be merged without
 # a green APK build and green TTS tests.
 on:
   push:
