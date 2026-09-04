@@ -1,0 +1,117 @@
+name: Apply Demo TTS fixes
+
+on:
+  push:
+    branches: [Demo]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !startsWith(github.event.head_commit.message, 'fix(tts-audio): apply performance') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Demo
+        uses: actions/checkout@v7
+        with:
+          ref: Demo
+          fetch-depth: 0
+
+      - name: Apply targeted fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def edit(path: str, replacements: list[tuple[str, str]]) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"Expected exactly one match in {path}, got {count}: {old[:120]!r}")
+                  text = text.replace(old, new)
+              p.write_text(text, encoding='utf-8')
+
+          vm = 'features/chaptersList/src/main/java/my/noveldokusha/features/chapterslist/ChaptersViewModel.kt'
+          edit(vm, [
+              (
+                  '''    init {\n        viewModelScope.launch {''',
+                  '''    init {\n        // Reconcile persisted exports once at screen initialization. Do not query\n        // WorkManager from the progress collector: progress changes every percent.\n        viewModelScope.launch(Dispatchers.IO) {\n            TtsAudioQueue.reconcile(context, appPreferences)\n        }\n\n        viewModelScope.launch {''',
+              ),
+              (
+                  '''                    // Сверяем «застрявшие» активные записи с реальным состоянием\n                    // WorkManager (после kill/force-stop воркер мог не донести статус).\n                    // Дёшево и безопасно вызывать при каждом значимом снимке: reconcile\n                    // трогает только записи, чей WorkRequest не выполняется.\n                    TtsAudioQueue.reconcile(context, appPreferences)\n                    val effective = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value''',
+                  '''                    val effective = jobs''',
+              ),
+          ])
+
+          worker = 'tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportWorker.kt'
+          edit(worker, [
+              (
+                  'import androidx.work.workDataOf\n',
+                  '',
+              ),
+              (
+                  'import kotlin.io.DEFAULT_BUFFER_SIZE\n',
+                  '',
+              ),
+              (
+                  'val notification = TtsAudioExportNotification(request.chapterTitle, context, notificationsCenter)',
+                  'val notification = TtsAudioExportNotification(\n            chapterTitle = request.chapterTitle,\n            workRequestId = id.toString(),\n            context = context,\n            notificationsCenter = notificationsCenter,\n        )',
+              ),
+              (
+                  '                    runCatching { setProgressAsync(workDataOf(KEY_PROGRESS to clamped)) }\n',
+                  '',
+              ),
+              (
+                  '                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)',
+                  '                        // Larger SAF copy buffer reduces I/O overhead without changing bytes.\n                        val buffer = ByteArray(64 * 1024)',
+              ),
+          ])
+
+          notification = 'tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportNotification.kt'
+          edit(notification, [
+              (
+                  '''class TtsAudioExportNotification(\n    private val chapterTitle: String,\n    private val context: Context,''',
+                  '''class TtsAudioExportNotification(\n    private val chapterTitle: String,\n    private val workRequestId: String,\n    private val context: Context,''',
+              ),
+              (
+                  '''                Intent(context, TtsAudioNotificationReceiver::class.java).apply {\n                    action = TtsAudioNotificationReceiver.ACTION_CANCEL\n                },''',
+                  '''                Intent(context, TtsAudioNotificationReceiver::class.java).apply {\n                    action = TtsAudioNotificationReceiver.ACTION_CANCEL\n                    putExtra(TtsAudioNotificationReceiver.EXTRA_WORK_REQUEST_ID, workRequestId)\n                },''',
+              ),
+              (
+                  '        const val MIME_TYPE = "audio/wav"\n',
+                  '        const val MIME_TYPE = "audio/wav"\n',
+              ),
+          ])
+
+          receiver = 'tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioNotificationReceiver.kt'
+          edit(receiver, [
+              (
+                  '            ACTION_CANCEL -> TtsAudioQueue.cancelAll(context, appPreferences)',
+                  '''            ACTION_CANCEL -> {\n                val workRequestId = intent.getStringExtra(EXTRA_WORK_REQUEST_ID)\n                if (workRequestId.isNullOrBlank()) {\n                    Timber.w("TtsAudio: cancel notification missing WorkRequest id; ignoring")\n                } else {\n                    TtsAudioQueue.cancel(context, appPreferences, workRequestId)\n                }\n            }''',
+              ),
+              (
+                  '        const val EXTRA_NOTIFICATION_ID = "extra_notification_id"\n',
+                  '        const val EXTRA_NOTIFICATION_ID = "extra_notification_id"\n        const val EXTRA_WORK_REQUEST_ID = "extra_work_request_id"\n',
+              ),
+          ])
+
+          # Remove this one-time migration workflow from the final Demo tree.
+          Path('.github/workflows/demo-tts-fix.yml').unlink()
+
+          print('Targeted Demo TTS fixes applied successfully.')
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add features/chaptersList/src/main/java/my/noveldokusha/features/chapterslist/ChaptersViewModel.kt \
+            tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportWorker.kt \
+            tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioExportNotification.kt \
+            tooling/application_workers/src/main/java/my/noveldokusha/tooling/application_workers/TtsAudioNotificationReceiver.kt \
+            .github/workflows/demo-tts-fix.yml
+          git diff --cached --check
+          git commit -m "fix(tts-audio): apply performance and cancellation fixes"
+          git push origin HEAD:Demo
