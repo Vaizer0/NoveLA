@@ -17,6 +17,8 @@ import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.core.utils.Extra_String
 import my.noveldokusha.navigation.NavigationRoutes
 import my.noveldokusha.feature.local_database.BookMetadata
+import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -37,6 +39,9 @@ class ChaptersActivity : BaseActivity() {
 
     @Inject
     internal lateinit var navigationRoutes: NavigationRoutes
+
+    @Inject
+    internal lateinit var appPreferences: AppPreferences
 
     private val viewModel by viewModels<ChaptersViewModel>()
 
@@ -76,7 +81,30 @@ class ChaptersActivity : BaseActivity() {
                     onSelectionModeChapterClick = viewModel::onSelectionModeChapterClick,
                     onSelectionModeChapterLongClick = viewModel::onSelectionModeChapterLongClick,
                     onChapterDownload = viewModel::onChapterDownload,
-                    onChapterAudio = viewModel::onChapterAudio,
+                    onChapterAudio = { chapter, source ->
+                        val key = AudioJobKey(chapter.chapter.url, source)
+                        val job = viewModel.state.audioJobs[key]
+                        if (job?.isActive == true && job.workRequestId.isNotBlank()) {
+                            TtsAudioQueue.cancel(
+                                context = this@ChaptersActivity,
+                                appPreferences = appPreferences,
+                                jobId = TtsAudioExportRequest.makeJobId(
+                                    viewModel.state.book.value.url,
+                                    chapter.chapter.url,
+                                    source,
+                                    if (source == my.noveldokusha.core.appPreferences.TtsAudioSource.TRANSLATED) {
+                                        appPreferences.translationPairForBook(viewModel.state.book.value.url).source
+                                    } else "",
+                                    if (source == my.noveldokusha.core.appPreferences.TtsAudioSource.TRANSLATED) {
+                                        appPreferences.translationPairForBook(viewModel.state.book.value.url).target
+                                    } else "",
+                                ),
+                                workRequestId = job.workRequestId,
+                            )
+                        } else {
+                            viewModel.onChapterAudio(chapter, source)
+                        }
+                    },
                     onAudioDirectorySaved = viewModel::onAudioDirectorySaved,
                     onAudioFolderCancel = viewModel::onAudioFolderCancel,
                     onPullRefresh = viewModel::onPullRefresh,
@@ -117,16 +145,12 @@ class ChaptersActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Файлы аудио могут быть удалены/перемещены вне приложения (SAF-провайдеры
-        // не шлют событий) — при возврате на экран ревалидируем существование.
         viewModel.refreshAudioFiles()
     }
 
     private fun onOpenLastActiveChapter() {
         lifecycleScope.launch {
-            // Bug1c: без lastRead не открываем главу 1 молча — остаёмся на списке глав.
             val lastReadChapter = viewModel.getLastReadChapter() ?: return@launch
-
             openBookAtChapter(chapterUrl = lastReadChapter)
         }
     }
