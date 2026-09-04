@@ -24,9 +24,9 @@ import java.util.UUID
  * and from the other export jobs. WorkManager persists each lane across process death
  * and app restarts; [reconcile] repairs stale persisted job records on startup.
  *
- * Each enqueue receives a unique internal generation ID derived from the WorkRequest
- * UUID. A cancelled generation can therefore never share persisted progress or the
- * temporary WAV path with a later regeneration of the same chapter.
+ * Each enqueue receives a unique internal generation ID derived from a UUID. A cancelled
+ * generation can therefore never share persisted progress or the temporary WAV path with
+ * a later regeneration of the same chapter.
  */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
@@ -37,13 +37,14 @@ object TtsAudioQueue {
 
     fun enqueue(context: Context, appPreferences: AppPreferences, request: TtsAudioExportRequest) {
         val logicalJobId = request.jobId
+        val generationJobId = "$logicalJobId::${UUID.randomUUID()}"
         val workRequest = OneTimeWorkRequestBuilder<TtsAudioExportWorker>()
             .setInputData(
                 workDataOf(
-                    // Keep the public/logical request identity for chapter/source UI mapping,
-                    // but give the Worker a unique generation ID. This ID is only internal:
-                    // final audio/timeline filenames remain based on chapter metadata.
-                    TtsAudioExportWorker.KEY_JOB_ID to "${logicalJobId}::${UUID.randomUUID()}",
+                    // Keep the logical request identity only for choosing the WorkManager
+                    // lane. The Worker gets a unique generation ID so all its persisted
+                    // progress and temporary files are generation-isolated.
+                    TtsAudioExportWorker.KEY_JOB_ID to generationJobId,
                     TtsAudioExportWorker.KEY_NOVEL_TITLE to request.novelTitle,
                     TtsAudioExportWorker.KEY_NOVEL_URL to request.novelUrl,
                     TtsAudioExportWorker.KEY_CHAPTER_URL to request.chapterUrl,
@@ -63,10 +64,8 @@ object TtsAudioQueue {
             .addTag(AUDIO_TAG)
             .build()
 
-        val generationJobId = workRequest.inputData.getString(TtsAudioExportWorker.KEY_JOB_ID)!!
-
-        // Persist the exact Worker generation ID. The WorkRequest UUID itself is also
-        // retained separately for cancellation/reconciliation.
+        // Persist the exact generation ID consumed by this WorkRequest. A new enqueue
+        // of the same chapter therefore creates a completely independent generation.
         updateState(appPreferences, generationJobId) {
             TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
@@ -96,8 +95,8 @@ object TtsAudioQueue {
      *
      * The active persisted generation is removed immediately, so the chapter row returns
      * to its normal download icon instead of displaying a sticky "Cancelled" state.
-     * Because the generation ID is unique, any late callback from the old Worker can only
-     * address the removed generation and therefore cannot overwrite a newly restarted job.
+     * Because the generation ID is unique, any late callback from the old Worker cannot
+     * address the newly created generation.
      */
     fun cancel(
         context: Context,
@@ -149,10 +148,7 @@ object TtsAudioQueue {
     fun observeJobs(appPreferences: AppPreferences): Flow<Map<String, TtsAudioJobState>> =
         appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow()
 
-    /**
-     * Repair persisted QUEUED/RUNNING records after process death or force-stop.
-     * Cancelled generations are removed rather than exposed as a sticky UI state.
-     */
+    /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
         val workInfos = runCatching {
             withContext(Dispatchers.IO) {
@@ -167,47 +163,52 @@ object TtsAudioQueue {
 
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            val iterator = current.iterator()
             var changed = false
-            for ((jobId, job) in current) {
+            while (iterator.hasNext()) {
+                val (jobId, job) = iterator.next()
                 if (!job.isActive) continue
 
-                val wid = job.workRequestId
-                val info = infoById[wid]
+                val info = infoById[job.workRequestId]
                 if (info == null) {
+                    iterator.remove()
                     changed = true
-                    current.remove(jobId)
                     continue
                 }
 
-                val repaired = when (info.state) {
+                when (info.state) {
                     WorkInfo.State.ENQUEUED,
                     WorkInfo.State.RUNNING,
                     WorkInfo.State.BLOCKED,
-                    -> null
+                    -> Unit
 
-                    WorkInfo.State.SUCCEEDED -> job.copy(
-                        status = TtsAudioJobStatus.SUCCESS,
-                        progress = 100,
-                        message = "",
-                    )
+                    WorkInfo.State.SUCCEEDED -> {
+                        val repaired = job.copy(
+                            status = TtsAudioJobStatus.SUCCESS,
+                            progress = 100,
+                            message = "",
+                        )
+                        if (repaired != job) {
+                            current[jobId] = repaired
+                            changed = true
+                        }
+                    }
 
-                    WorkInfo.State.CANCELLED -> null
+                    WorkInfo.State.CANCELLED -> {
+                        iterator.remove()
+                        changed = true
+                    }
 
-                    WorkInfo.State.FAILED -> job.copy(
-                        status = TtsAudioJobStatus.FAILED,
-                        message = if (job.message.isBlank()) "failed" else job.message,
-                    )
-                }
-
-                if (info.state == WorkInfo.State.CANCELLED) {
-                    changed = true
-                    current.remove(jobId)
-                    continue
-                }
-
-                if (repaired != null && repaired != job) {
-                    changed = true
-                    current[jobId] = repaired
+                    WorkInfo.State.FAILED -> {
+                        val repaired = job.copy(
+                            status = TtsAudioJobStatus.FAILED,
+                            message = if (job.message.isBlank()) "failed" else job.message,
+                        )
+                        if (repaired != job) {
+                            current[jobId] = repaired
+                            changed = true
+                        }
+                    }
                 }
             }
 
