@@ -59,13 +59,17 @@ class TtsAudioExporter(
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
 
-            // The chapter title is deliberately the first logical paragraph. It is
-            // therefore spoken before the chapter body and is also represented as
-            // paragraph 0 in timeline.json with real PCM/native timing.
-            val title = TtsTextPreparer.cleanForTts(request.chapterTitle).trim()
+            // Export order is deliberately: novel name -> chapter title -> chapter body.
+            // The two metadata labels are synthesized as real audio paragraphs so their
+            // PCM timing is represented exactly in timeline.json.
+            val novelTitle = TtsTextPreparer.cleanForTts(request.novelTitle).trim()
+            val chapterTitle = TtsTextPreparer.cleanForTts(request.chapterTitle).trim()
             val paragraphPlans = buildList {
-                if (title.isNotBlank() && !TtsTextPreparer.isOnlyDecorators(title)) {
-                    add(title to TtsTextPreparer.chunkIntoUtterances(title, maxInputLength))
+                if (novelTitle.isNotBlank() && !TtsTextPreparer.isOnlyDecorators(novelTitle)) {
+                    add(novelTitle to TtsTextPreparer.chunkIntoUtterances(novelTitle, maxInputLength))
+                }
+                if (chapterTitle.isNotBlank() && !TtsTextPreparer.isOnlyDecorators(chapterTitle)) {
+                    add(chapterTitle to TtsTextPreparer.chunkIntoUtterances(chapterTitle, maxInputLength))
                 }
                 for (paragraph in paragraphs) {
                     val cleaned = TtsTextPreparer.cleanForTts(paragraph)
@@ -74,7 +78,7 @@ class TtsAudioExporter(
                 }
             }
             if (paragraphPlans.isEmpty()) {
-                throw TtsExportException("Chapter has no text or title to synthesize")
+                throw TtsExportException("Chapter has no text, novel title, or chapter title to synthesize")
             }
             val totalChars = paragraphPlans.sumOf { it.first.length }
 
