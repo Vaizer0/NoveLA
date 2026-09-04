@@ -82,23 +82,11 @@ class ChaptersActivity : BaseActivity() {
                     onSelectionModeChapterLongClick = viewModel::onSelectionModeChapterLongClick,
                     onChapterDownload = viewModel::onChapterDownload,
                     onChapterAudio = { chapter, source ->
-                        val key = AudioJobKey(chapter.chapter.url, source)
-                        val job = viewModel.state.audioJobs[key]
+                        val job = viewModel.state.audioJobs[AudioJobKey(chapter.chapter.url, source)]
                         if (job?.isActive == true && job.workRequestId.isNotBlank()) {
                             TtsAudioQueue.cancel(
                                 context = this@ChaptersActivity,
                                 appPreferences = appPreferences,
-                                jobId = TtsAudioExportRequest.makeJobId(
-                                    viewModel.state.book.value.url,
-                                    chapter.chapter.url,
-                                    source,
-                                    if (source == my.noveldokusha.core.appPreferences.TtsAudioSource.TRANSLATED) {
-                                        appPreferences.translationPairForBook(viewModel.state.book.value.url).source
-                                    } else "",
-                                    if (source == my.noveldokusha.core.appPreferences.TtsAudioSource.TRANSLATED) {
-                                        appPreferences.translationPairForBook(viewModel.state.book.value.url).target
-                                    } else "",
-                                ),
                                 workRequestId = job.workRequestId,
                             )
                         } else {
