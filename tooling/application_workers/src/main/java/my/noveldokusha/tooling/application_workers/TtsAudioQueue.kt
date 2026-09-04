@@ -17,20 +17,19 @@ import timber.log.Timber
 import java.util.UUID
 
 /**
- * Persistent audio-export scheduler with five independent lanes.
+ * Persistent audio-export scheduler with five independent export-only TTS clients.
  *
- * Each lane corresponds to one export-only TTS slot. This allows up to five chapter
- * exports to run concurrently while keeping each TTS client isolated from the reader
- * and from the other export jobs. WorkManager persists each lane across process death
- * and app restarts; [reconcile] repairs stale persisted job records on startup.
+ * Each logical chapter/source gets its own WorkManager unique-work name, so different
+ * chapters never share a serialized chain. The TTS engine pool is the concurrency gate:
+ * at most [MAX_CONCURRENT_EXPORTS] exports can synthesize at once.
  *
- * Each enqueue receives a unique internal generation ID derived from a UUID. A cancelled
- * generation can therefore never share persisted progress or the temporary WAV path with
- * a later regeneration of the same chapter.
+ * Re-enqueueing the same logical chapter/source replaces only that chapter's previous
+ * generation. Every generation has a unique internal job ID, so late callbacks from an
+ * older cancellation cannot overwrite the replacement's progress or temporary WAV.
  */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
-    private const val CHAIN_PREFIX = "tts-audio-download"
+    private const val WORK_PREFIX = "tts-audio-download"
     const val AUDIO_TAG = "tts-audio-export"
 
     private val lock = Any()
@@ -41,9 +40,6 @@ object TtsAudioQueue {
         val workRequest = OneTimeWorkRequestBuilder<TtsAudioExportWorker>()
             .setInputData(
                 workDataOf(
-                    // Keep the logical request identity only for choosing the WorkManager
-                    // lane. The Worker gets a unique generation ID so all its persisted
-                    // progress and temporary files are generation-isolated.
                     TtsAudioExportWorker.KEY_JOB_ID to generationJobId,
                     TtsAudioExportWorker.KEY_NOVEL_TITLE to request.novelTitle,
                     TtsAudioExportWorker.KEY_NOVEL_URL to request.novelUrl,
@@ -64,8 +60,6 @@ object TtsAudioQueue {
             .addTag(AUDIO_TAG)
             .build()
 
-        // Persist the exact generation ID consumed by this WorkRequest. A new enqueue
-        // of the same chapter therefore creates a completely independent generation.
         updateState(appPreferences, generationJobId) {
             TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
@@ -81,23 +75,19 @@ object TtsAudioQueue {
             )
         }
 
+        // One chain per logical export, not one of five hash buckets. This preserves
+        // duplicate protection for the same chapter/source without serializing unrelated
+        // chapters that happen to hash to the same lane.
         WorkManager.getInstance(context)
             .beginUniqueWork(
-                laneName(logicalJobId),
-                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                workName(logicalJobId),
+                ExistingWorkPolicy.REPLACE,
                 workRequest,
             )
             .enqueue()
     }
 
-    /**
-     * Cancel one chapter export using its WorkRequest ID.
-     *
-     * The active persisted generation is removed immediately, so the chapter row returns
-     * to its normal download icon instead of displaying a sticky "Cancelled" state.
-     * Because the generation ID is unique, any late callback from the old Worker cannot
-     * address the newly created generation.
-     */
+    /** Cancel exactly one WorkRequest generation. */
     fun cancel(
         context: Context,
         appPreferences: AppPreferences,
@@ -108,7 +98,6 @@ object TtsAudioQueue {
             .getOrNull() ?: return
 
         WorkManager.getInstance(context).cancelWorkById(id)
-
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
             val iterator = current.iterator()
@@ -125,6 +114,7 @@ object TtsAudioQueue {
         }
     }
 
+    /** Cancel all current exports (kept for explicit queue-wide cancellation callers). */
     fun cancelAll(context: Context, appPreferences: AppPreferences) {
         WorkManager.getInstance(context).cancelAllWorkByTag(AUDIO_TAG)
         synchronized(lock) {
@@ -232,8 +222,5 @@ object TtsAudioQueue {
         }
     }
 
-    private fun laneName(jobId: String): String {
-        val lane = (jobId.hashCode() and Int.MAX_VALUE) % MAX_CONCURRENT_EXPORTS
-        return "$CHAIN_PREFIX-$lane"
-    }
+    private fun workName(logicalJobId: String): String = "$WORK_PREFIX-$logicalJobId"
 }
