@@ -36,13 +36,14 @@ class AppTtsEngine private constructor(context: Context) {
 
     /**
      * True only when the live reader is speaking through the same engine package
-     * requested by an export. This prevents unnecessarily reducing export
-     * concurrency when the reader uses a different engine.
+     * requested by an export. Default-engine clients are resolved to the actual
+     * system engine package so isolation also works when the preference stores
+     * the concrete default package name.
      */
     fun isSpeakingWithEngine(enginePackage: String): Boolean {
         if (!isSpeaking()) return false
         val requested = enginePackage.trim()
-        val liveEngine = boundEnginePackage?.trim().orEmpty()
+        val liveEngine = (boundEnginePackage ?: engine?.defaultEngine.orEmpty()).trim()
         return if (requested.isEmpty()) {
             liveEngine.isEmpty()
         } else {
