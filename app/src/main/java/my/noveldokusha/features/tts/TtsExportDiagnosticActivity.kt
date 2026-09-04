@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -20,17 +19,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 
 /**
- * Temporary diagnostic screen for device-specific TTS export benchmarking.
- * It deliberately creates its own TextToSpeech clients, so it never touches the reader TTS.
+ * Device-specific TTS export benchmark. It creates isolated TTS clients and never touches reader TTS.
  */
 class TtsExportDiagnosticActivity : Activity() {
-
     private lateinit var output: TextView
     private lateinit var runButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -50,28 +46,22 @@ class TtsExportDiagnosticActivity : Activity() {
             textIsSelectable = true
         }
         root.addView(title)
-        root.addView(
-            runButton,
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        )
+        root.addView(runButton, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val scroll = ScrollView(this).apply { addView(output) }
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
-        )
+        root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
     }
 
     private fun runDiagnostic() {
         runButton.isEnabled = false
-        output.text = "Running three isolated TTS tests...\\n\\n"
+        output.text = "Running three isolated TTS tests...\n\n"
         Thread {
             val report = runCatching { runAllTests() }
                 .getOrElse { "Diagnostic failed: ${it.stackTraceToString()}" }
-            val reportFile = File(cacheDir, "tts-export-diagnostic.txt")
+            val reportFile = File(filesDir, "tts-export-diagnostic.txt")
             runCatching { reportFile.writeText(report) }
             runOnUiThread {
-                output.text = "$report\\n\\nSaved report: ${reportFile.absolutePath}"
+                output.text = "$report\n\nSaved report: ${reportFile.absolutePath}"
                 runButton.isEnabled = true
             }
         }.start()
@@ -83,18 +73,14 @@ class TtsExportDiagnosticActivity : Activity() {
             appendLine("Android: ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
             appendLine("Build: ${Build.DISPLAY}")
         }
-
-        var probe: TextToSpeech? = null
         val initLatch = CountDownLatch(1)
-        probe = TextToSpeech(applicationContext, { initLatch.countDown() })
+        val probe = TextToSpeech(applicationContext) { initLatch.countDown() }
         if (!initLatch.await(20, TimeUnit.SECONDS)) {
-            runCatching { probe?.shutdown() }
+            runCatching { probe.shutdown() }
             return device + "TTS initialization timed out."
         }
-        val tts = probe ?: return device + "TTS initialization returned null."
-        val enginePackage = tts.defaultEngine.orEmpty()
-        val voice = tts.voices?.firstOrNull { it.locale?.language == Locale.US.language }
-            ?: tts.voice
+        val enginePackage = probe.defaultEngine.orEmpty()
+        val voice = probe.voices?.firstOrNull { it.locale?.language == Locale.US.language } ?: probe.voice
         val voiceId = voice?.name.orEmpty()
         val locale = voice?.locale?.toLanguageTag().orEmpty()
         val network = voice?.isNetworkConnectionRequired ?: false
@@ -108,14 +94,14 @@ class TtsExportDiagnosticActivity : Activity() {
             appendLine("Test text: \"Hello world. This is a TTS export timing test for word highlight ranges.\"")
             appendLine()
         }
-        runCatching { tts.shutdown() }
-
+        runCatching { probe.shutdown() }
         val results = listOf(
             runSingleTest("synthesizeToFile -> /dev/null", voiceId, enginePackage, Mode.DEV_NULL),
             runSingleTest("synthesizeToFile -> temp WAV", voiceId, enginePackage, Mode.TEMP_FILE),
             runSingleTest("speak(volume=0)", voiceId, enginePackage, Mode.MUTED_SPEAK),
         )
-        return header + results.joinToString("\\n") + "\\nInterpretation: the best candidate is the fastest method with audio callbacks and a non-zero native range count."
+        return header + results.joinToString("\n") +
+            "\nInterpretation: fastest method with audio callbacks and non-zero onRangeStart count is the preferred candidate."
     }
 
     private enum class Mode { DEV_NULL, TEMP_FILE, MUTED_SPEAK }
@@ -144,12 +130,7 @@ class TtsExportDiagnosticActivity : Activity() {
         }
     }
 
-    private fun runSingleTest(
-        name: String,
-        voiceId: String,
-        enginePackage: String,
-        mode: Mode,
-    ): TestResult {
+    private fun runSingleTest(name: String, voiceId: String, enginePackage: String, mode: Mode): TestResult {
         val text = "Hello world. This is a TTS export timing test for word highlight ranges."
         val audioCallbacks = AtomicInteger(0)
         var audioBytes = 0L
@@ -160,31 +141,24 @@ class TtsExportDiagnosticActivity : Activity() {
         var error: String? = null
         val done = CountDownLatch(1)
         val init = CountDownLatch(1)
-        var tts: TextToSpeech? = null
-        var tempFile: File? = null
-        var fd: ParcelFileDescriptor? = null
-
-        tts = TextToSpeech(applicationContext, { init.countDown() }, enginePackage.ifBlank { null })
+        val tts = if (enginePackage.isBlank()) {
+            TextToSpeech(applicationContext) { init.countDown() }
+        } else {
+            TextToSpeech(applicationContext, { init.countDown() }, enginePackage)
+        }
         if (!init.await(20, TimeUnit.SECONDS)) {
-            runCatching { tts?.shutdown() }
+            runCatching { tts.shutdown() }
             return TestResult(name, 0, 0, 0, 0, "none", "none", resultCode, "TTS initialization timed out")
         }
-        val engine = tts ?: return TestResult(name, 0, 0, 0, 0, "none", "none", resultCode, "TTS instance unavailable")
-        val voice = engine.voices?.firstOrNull { it.name == voiceId } ?: engine.voice
-        if (voice != null) engine.voice = voice
-        engine.setSpeechRate(1f)
-        engine.setPitch(1f)
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        val voice = tts.voices?.firstOrNull { it.name == voiceId } ?: tts.voice
+        if (voice != null) tts.voice = voice
+        tts.setSpeechRate(1f)
+        tts.setPitch(1f)
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
             override fun onDone(utteranceId: String?) { done.countDown() }
-            override fun onError(utteranceId: String?) {
-                error = "deprecated onError"
-                done.countDown()
-            }
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                error = "TTS error $errorCode"
-                done.countDown()
-            }
+            override fun onError(utteranceId: String?) { error = "deprecated onError"; done.countDown() }
+            override fun onError(utteranceId: String?, errorCode: Int) { error = "TTS error $errorCode"; done.countDown() }
             override fun onAudioAvailable(utteranceId: String?, audio: ByteArray) {
                 audioCallbacks.incrementAndGet()
                 synchronized(this) { audioBytes += audio.size }
@@ -197,9 +171,10 @@ class TtsExportDiagnosticActivity : Activity() {
                 }
             }
         })
-
         val id = "diag_${System.nanoTime()}"
         val started = System.nanoTime()
+        var tempFile: File? = null
+        var fd: ParcelFileDescriptor? = null
         try {
             resultCode = when (mode) {
                 Mode.DEV_NULL -> {
@@ -207,41 +182,35 @@ class TtsExportDiagnosticActivity : Activity() {
                         error = "ParcelFileDescriptor synthesizeToFile requires API 26+"
                         TextToSpeech.ERROR
                     } else {
-                        fd = ParcelFileDescriptor.open(
-                            File("/dev/null"),
-                            ParcelFileDescriptor.MODE_WRITE_ONLY,
-                        )
-                        engine.synthesizeToFile(text, Bundle(), fd!!, id)
+                        fd = ParcelFileDescriptor.open(File("/dev/null"), ParcelFileDescriptor.MODE_WRITE_ONLY)
+                        tts.synthesizeToFile(text, Bundle(), fd!!, id)
                     }
                 }
                 Mode.TEMP_FILE -> {
                     tempFile = File.createTempFile("tts_diag_", ".wav", cacheDir)
-                    engine.synthesizeToFile(text, Bundle(), tempFile!!, id)
+                    tts.synthesizeToFile(text, Bundle(), tempFile!!, id)
                 }
                 Mode.MUTED_SPEAK -> {
-                    val params = Bundle().apply {
-                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
-                    }
-                    engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
+                    val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f) }
+                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
                 }
             }
             if (resultCode != TextToSpeech.SUCCESS && error == null) {
                 error = "request rejected"
                 done.countDown()
             }
-            if (!done.await(90, TimeUnit.SECONDS)) {
+            if (resultCode == TextToSpeech.SUCCESS && !done.await(90, TimeUnit.SECONDS)) {
                 error = "timeout waiting for onDone"
             }
         } catch (t: Throwable) {
             error = t.toString()
             done.countDown()
         } finally {
-            runCatching { engine.stop() }
-            runCatching { engine.shutdown() }
+            runCatching { tts.stop() }
+            runCatching { tts.shutdown() }
             runCatching { fd?.close() }
             runCatching { tempFile?.delete() }
         }
-
         return TestResult(
             name = name,
             elapsedMs = max(0L, (System.nanoTime() - started) / 1_000_000L),
