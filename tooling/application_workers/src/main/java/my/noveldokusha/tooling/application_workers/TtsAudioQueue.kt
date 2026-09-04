@@ -24,9 +24,9 @@ import java.util.UUID
  * and from the other export jobs. WorkManager persists each lane across process death
  * and app restarts; [reconcile] repairs stale persisted job records on startup.
  *
- * A logical chapter/source can be regenerated after cancellation. Every WorkRequest
- * UUID is treated as a separate generation so an old cancelled worker can never update
- * the state/progress belonging to a newer generation.
+ * Each enqueue receives a unique internal generation ID derived from the WorkRequest
+ * UUID. A cancelled generation can therefore never share persisted progress or the
+ * temporary WAV path with a later regeneration of the same chapter.
  */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
@@ -36,11 +36,14 @@ object TtsAudioQueue {
     private val lock = Any()
 
     fun enqueue(context: Context, appPreferences: AppPreferences, request: TtsAudioExportRequest) {
-        val jobId = request.jobId
+        val logicalJobId = request.jobId
         val workRequest = OneTimeWorkRequestBuilder<TtsAudioExportWorker>()
             .setInputData(
                 workDataOf(
-                    TtsAudioExportWorker.KEY_JOB_ID to jobId,
+                    // Keep the public/logical request identity for chapter/source UI mapping,
+                    // but give the Worker a unique generation ID. This ID is only internal:
+                    // final audio/timeline filenames remain based on chapter metadata.
+                    TtsAudioExportWorker.KEY_JOB_ID to "${logicalJobId}::${UUID.randomUUID()}",
                     TtsAudioExportWorker.KEY_NOVEL_TITLE to request.novelTitle,
                     TtsAudioExportWorker.KEY_NOVEL_URL to request.novelUrl,
                     TtsAudioExportWorker.KEY_CHAPTER_URL to request.chapterUrl,
@@ -60,10 +63,11 @@ object TtsAudioQueue {
             .addTag(AUDIO_TAG)
             .build()
 
-        // The generated WorkRequest UUID is the generation identity. Re-enqueueing the
-        // same logical chapter therefore replaces the persisted generation before the
-        // new WorkManager request starts publishing progress.
-        updateState(appPreferences, jobId) {
+        val generationJobId = workRequest.inputData.getString(TtsAudioExportWorker.KEY_JOB_ID)!!
+
+        // Persist the exact Worker generation ID. The WorkRequest UUID itself is also
+        // retained separately for cancellation/reconciliation.
+        updateState(appPreferences, generationJobId) {
             TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
                 novelUrl = request.novelUrl,
@@ -80,7 +84,7 @@ object TtsAudioQueue {
 
         WorkManager.getInstance(context)
             .beginUniqueWork(
-                laneName(jobId),
+                laneName(logicalJobId),
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
                 workRequest,
             )
@@ -88,11 +92,12 @@ object TtsAudioQueue {
     }
 
     /**
-     * Cancel one chapter export using the persisted WorkRequest ID. The persisted
-     * generation is removed immediately, so the UI returns to its normal download
-     * state instead of displaying a user-visible CANCELLED state. The worker's
-     * cancellation cleanup is guarded by the same WorkRequest ID and therefore cannot
-     * resurrect the removed state.
+     * Cancel one chapter export using its WorkRequest ID.
+     *
+     * The active persisted generation is removed immediately, so the chapter row returns
+     * to its normal download icon instead of displaying a sticky "Cancelled" state.
+     * Because the generation ID is unique, any late callback from the old Worker can only
+     * address the removed generation and therefore cannot overwrite a newly restarted job.
      */
     fun cancel(
         context: Context,
@@ -110,7 +115,7 @@ object TtsAudioQueue {
             val iterator = current.iterator()
             var changed = false
             while (iterator.hasNext()) {
-                val (jobId, job) = iterator.next()
+                val (_, job) = iterator.next()
                 if (job.workRequestId == workRequestId && job.isActive) {
                     iterator.remove()
                     changed = true
@@ -145,25 +150,9 @@ object TtsAudioQueue {
         appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow()
 
     /**
-     * Update a job only when [workRequestId] is still the active generation stored for
-     * [jobId]. Old workers therefore become write-inert immediately after a restart.
+     * Repair persisted QUEUED/RUNNING records after process death or force-stop.
+     * Cancelled generations are removed rather than exposed as a sticky UI state.
      */
-    fun updateStateForWork(
-        appPreferences: AppPreferences,
-        jobId: String,
-        workRequestId: String,
-        transform: (TtsAudioJobState) -> TtsAudioJobState,
-    ) {
-        synchronized(lock) {
-            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            val existing = current[jobId] ?: return@synchronized
-            if (existing.workRequestId != workRequestId) return@synchronized
-            current[jobId] = transform(existing)
-            appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
-        }
-    }
-
-    /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
         val workInfos = runCatching {
             withContext(Dispatchers.IO) {
@@ -196,8 +185,6 @@ object TtsAudioQueue {
                     WorkInfo.State.BLOCKED,
                     -> null
 
-                    // Terminal state means the persisted active record can be resolved
-                    // here; cancellation is not exposed as a sticky UI state.
                     WorkInfo.State.SUCCEEDED -> job.copy(
                         status = TtsAudioJobStatus.SUCCESS,
                         progress = 100,
