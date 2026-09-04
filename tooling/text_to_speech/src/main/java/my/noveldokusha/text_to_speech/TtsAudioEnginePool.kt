@@ -26,13 +26,11 @@ object TtsAudioEnginePool {
         repeat(MAX_INSTANCES) { channel.trySend(it) }
     }
     private val slots = Array(MAX_INSTANCES) { Slot() }
+    private val activeExportCounter = AtomicInteger(0)
 
     /** Number of export jobs currently holding a TTS lease. */
-    @Volatile
-    var activeExportCount: Int = 0
-        private set
-
-    private val activeExportCounter = AtomicInteger(0)
+    val activeExportCount: Int
+        get() = activeExportCounter.get()
 
     fun hasActiveExports(): Boolean = activeExportCounter.get() > 0
 
@@ -50,7 +48,7 @@ object TtsAudioEnginePool {
                 slot.enginePackage = requestedPackage
                 previous?.let { runCatching { it.shutdown() } }
             }
-            activeExportCount = activeExportCounter.incrementAndGet()
+            activeExportCounter.incrementAndGet()
             return Lease(index, slot.tts!!)
         } catch (t: Throwable) {
             availableSlots.send(index)
@@ -67,7 +65,7 @@ object TtsAudioEnginePool {
         override fun close() {
             if (released) return
             released = true
-            activeExportCount = activeExportCounter.decrementAndGet().coerceAtLeast(0)
+            activeExportCounter.updateAndGet { it.coerceAtLeast(1) - 1 }
             availableSlots.trySend(index)
         }
     }
