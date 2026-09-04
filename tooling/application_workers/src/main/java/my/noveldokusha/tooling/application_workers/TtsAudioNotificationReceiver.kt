@@ -18,7 +18,14 @@ class TtsAudioNotificationReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            ACTION_CANCEL -> TtsAudioQueue.cancelAll(context, appPreferences)
+            ACTION_CANCEL -> {
+                val workRequestId = intent.getStringExtra(EXTRA_WORK_REQUEST_ID)
+                if (workRequestId.isNullOrBlank()) {
+                    Timber.w("TtsAudio: cancel notification missing WorkRequest id; ignoring")
+                } else {
+                    TtsAudioQueue.cancel(context, appPreferences, workRequestId)
+                }
+            }
             ACTION_DELETE -> {
                 intent.getStringExtra(EXTRA_URI)?.let { uriString ->
                     runCatching {
@@ -56,5 +63,6 @@ class TtsAudioNotificationReceiver : BroadcastReceiver() {
         const val ACTION_DELETE = "my.noveldokusha.action.DELETE_TTS_AUDIO"
         const val EXTRA_URI = "extra_uri"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
+        const val EXTRA_WORK_REQUEST_ID = "extra_work_request_id"
     }
 }
