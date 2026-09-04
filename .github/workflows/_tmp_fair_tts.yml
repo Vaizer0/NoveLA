@@ -1,0 +1,53 @@
+name: temporary TTS fairness patch
+
+on:
+  push:
+    branches: [Demo]
+    paths-ignore:
+      - .github/workflows/_tmp_fair_tts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Demo
+          fetch-depth: 0
+      - name: Patch and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt')
+          s = p.read_text()
+
+          imp = 'import my.noveldokusha.text_to_speech.TtsAudioEnginePool\n'
+          anchor = 'import my.noveldokusha.text_to_speech.TtsTextPreparer\n'
+          if imp not in s:
+              if anchor not in s:
+                  raise SystemExit('import anchor not found')
+              s = s.replace(anchor, anchor + imp, 1)
+
+          old = '''                            if (manager.queueList.isEmpty()) {\n                                readChapterNextChunk(\n                                    chapterIndex = finishedUtterance.itemPos.chapterIndex,\n                                    chapterItemPosition = finishedUtterance.itemPos.chapterItemPosition,\n                                    quantity = halfBuffer\n                                )\n                                onBufferLow?.invoke()\n'''
+          new = '''                            if (manager.queueList.isEmpty()) {\n                                // Android's TTS engine service can serialize synthesis requests.\n                                // When an export is active, yield briefly between live utterances\n                                // so a queued synthesizeToFile() export can acquire the engine.\n                                if (TtsAudioEnginePool.hasActiveExports()) {\n                                    delay(150)\n                                    if (TtsAudioEnginePool.hasActiveExports()) {\n                                        Timber.v("TTS fairness: yielding engine to background export")\n                                    }\n                                }\n                                readChapterNextChunk(\n                                    chapterIndex = finishedUtterance.itemPos.chapterIndex,\n                                    chapterItemPosition = finishedUtterance.itemPos.chapterItemPosition,\n                                    quantity = halfBuffer\n                                )\n                                onBufferLow?.invoke()\n'''
+          if old not in s:
+              raise SystemExit('live refill block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt
+          git commit -m 'fix(tts): yield live reader between export synthesis'
+          git push origin HEAD:Demo
+          git fetch origin Demo
+          git checkout Demo
+          git rm .github/workflows/_tmp_fair_tts.yml
+          git commit -m 'chore: remove temporary TTS fairness workflow'
+          git push origin HEAD:Demo
