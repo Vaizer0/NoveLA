@@ -22,10 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * Жизненный цикл: foregroundNotification (foreground) → updateProgress →
  * showComplete / showError → close. Каждый экземпляр изолирован (свой
  * notificationId); requestCode = notificationId. Foreground-уведомление несёт
- * кнопку Cancel (отмена всей очереди) сразу — как и у BookExport.
+ * кнопку Cancel только для своего WorkRequest.
  */
 class TtsAudioExportNotification(
     private val chapterTitle: String,
+    private val workRequestId: String,
     private val context: Context,
     private val notificationsCenter: NotificationsCenter,
 ) {
@@ -126,6 +127,7 @@ class TtsAudioExportNotification(
                 notificationId,
                 Intent(context, TtsAudioNotificationReceiver::class.java).apply {
                     action = TtsAudioNotificationReceiver.ACTION_CANCEL
+                    putExtra(TtsAudioNotificationReceiver.EXTRA_WORK_REQUEST_ID, workRequestId)
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
