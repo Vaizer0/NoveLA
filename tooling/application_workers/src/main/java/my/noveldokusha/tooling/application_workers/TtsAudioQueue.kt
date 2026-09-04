@@ -15,6 +15,7 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import timber.log.Timber
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Persistent audio-export scheduler with five independent export-only TTS clients.
@@ -31,8 +32,10 @@ object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
     private const val WORK_PREFIX = "tts-audio-download"
     const val AUDIO_TAG = "tts-audio-export"
+    private const val RECONCILE_MIN_INTERVAL_MS = 10_000L
 
     private val lock = Any()
+    private val lastReconcileAtMs = AtomicLong(0L)
 
     fun enqueue(context: Context, appPreferences: AppPreferences, request: TtsAudioExportRequest) {
         val logicalJobId = request.jobId
@@ -140,6 +143,11 @@ object TtsAudioQueue {
 
     /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val last = lastReconcileAtMs.get()
+        if (now - last < RECONCILE_MIN_INTERVAL_MS) return
+        if (!lastReconcileAtMs.compareAndSet(last, now)) return
+
         val workInfos = runCatching {
             withContext(Dispatchers.IO) {
                 WorkManager.getInstance(context).getWorkInfosByTag(AUDIO_TAG).get()
