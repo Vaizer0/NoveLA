@@ -31,6 +31,25 @@ class AppTtsEngine private constructor(context: Context) {
 
     fun getBoundEnginePackage(): String? = boundEnginePackage
 
+    /** Returns whether the reader/live TTS client is currently speaking. */
+    fun isSpeaking(): Boolean = engine?.isSpeaking == true
+
+    /**
+     * True only when the live reader is speaking through the same engine package
+     * requested by an export. This prevents unnecessarily reducing export
+     * concurrency when the reader uses a different engine.
+     */
+    fun isSpeakingWithEngine(enginePackage: String): Boolean {
+        if (!isSpeaking()) return false
+        val requested = enginePackage.trim()
+        val liveEngine = boundEnginePackage?.trim().orEmpty()
+        return if (requested.isEmpty()) {
+            liveEngine.isEmpty()
+        } else {
+            liveEngine == requested
+        }
+    }
+
     fun shutdown() {
         engine?.stop()
         engine?.shutdown()
