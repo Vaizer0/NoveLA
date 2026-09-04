@@ -12,6 +12,10 @@ import kotlin.coroutines.resumeWithException
  * Up to five chapter exports can synthesize concurrently, each with its own client.
  * Instances are kept alive and reused while the app process lives; WorkManager recreates
  * them automatically after a process restart when a persisted export resumes.
+ *
+ * IMPORTANT: pooled clients are never stopped or shut down during normal export lifecycle.
+ * Android scopes TTS queue control to the calling app, so stop/shutdown from an export path
+ * can interfere with the reader's live TTS even though the Java client objects differ.
  */
 object TtsAudioEnginePool {
     const val MAX_INSTANCES = 5
@@ -29,8 +33,9 @@ object TtsAudioEnginePool {
             val slot = slots[index]
             val requestedPackage = enginePackage.trim()
             if (slot.tts == null || slot.enginePackage != requestedPackage) {
-                runCatching { slot.tts?.stop() }
-                runCatching { slot.tts?.shutdown() }
+                // Do not stop/shutdown the previous export client: those lifecycle calls can
+                // affect the application's other TTS requests. The old client is simply
+                // retired by replacing the slot reference after the new client is ready.
                 slot.tts = createTts(context.applicationContext, requestedPackage)
                 slot.enginePackage = requestedPackage
             }
@@ -50,7 +55,8 @@ object TtsAudioEnginePool {
         override fun close() {
             if (released) return
             released = true
-            runCatching { tts.stop() }
+            // Deliberately do not call tts.stop()/shutdown(). The exporter waits for the
+            // current synthesis before releasing this lease, and the pool reuses the client.
             availableSlots.trySend(index)
         }
     }
