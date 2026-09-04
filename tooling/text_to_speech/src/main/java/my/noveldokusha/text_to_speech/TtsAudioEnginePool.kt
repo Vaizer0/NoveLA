@@ -2,7 +2,6 @@ package my.noveldokusha.text_to_speech
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicInteger
@@ -10,22 +9,16 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Owns export-only TTS clients. Reader TTS never enters this pool.
- * Up to five chapter exports can synthesize concurrently when the reader/live TTS is idle.
- * When live TTS is speaking through the same engine, one export slot is reserved for the
- * live client, so at most four export syntheses contend with it. This prevents the common
- * engine-service starvation seen when five background syntheses plus live playback are
- * active at the same time.
- *
+ * Owns export-only TTS clients. Reader/live TTS never enters this pool.
+ * Up to five chapter exports can synthesize concurrently, each with its own client.
  * Instances are kept alive and reused while the app process lives; WorkManager recreates
  * them automatically after a process restart when a persisted export resumes.
  *
- * IMPORTANT: pooled clients are never stopped or shut down during normal export lifecycle.
+ * IMPORTANT: this pool never calls stop()/shutdown() on a leased client during normal export
+ * lifecycle. Reader TTS has its own AppTtsEngine client and is not shared with these leases.
  */
 object TtsAudioEnginePool {
     const val MAX_INSTANCES = 5
-    private const val MAX_EXPORTS_WITH_LIVE_TTS = 4
-    private const val SLOT_RETRY_DELAY_MS = 50L
 
     private class Slot(var tts: TextToSpeech? = null, var enginePackage: String = "")
 
@@ -33,46 +26,34 @@ object TtsAudioEnginePool {
         repeat(MAX_INSTANCES) { channel.trySend(it) }
     }
     private val slots = Array(MAX_INSTANCES) { Slot() }
-    private val activeExportCount = AtomicInteger(0)
+
+    /** Number of export jobs currently holding a TTS lease. */
+    @Volatile
+    var activeExportCount: Int = 0
+        private set
+
+    private val activeExportCounter = AtomicInteger(0)
+
+    fun hasActiveExports(): Boolean = activeExportCounter.get() > 0
 
     suspend fun acquire(context: Context, enginePackage: String): Lease {
-        // Keep acquisition dynamic: if live TTS starts while exports are in progress,
-        // existing syntheses finish normally, but the next chunk waits until one export
-        // slot is free. This avoids creating a sixth active client against the same engine.
-        while (true) {
-            val limit = if (AppTtsEngine.getInstance(context).isSpeakingWithEngine(enginePackage)) {
-                MAX_EXPORTS_WITH_LIVE_TTS
-            } else {
-                MAX_INSTANCES
-            }
-            val current = activeExportCount.get()
-            if (current < limit && activeExportCount.compareAndSet(current, current + 1)) {
-                break
-            }
-            delay(SLOT_RETRY_DELAY_MS)
-        }
-
-        val index = try {
-            availableSlots.receive()
-        } catch (t: Throwable) {
-            activeExportCount.decrementAndGet()
-            throw t
-        }
-
+        val index = availableSlots.receive()
         try {
             val slot = slots[index]
             val requestedPackage = enginePackage.trim()
             if (slot.tts == null || slot.enginePackage != requestedPackage) {
-                // Do not stop/shutdown the previous export client: those lifecycle calls can
-                // affect the application's other TTS requests. The old client is simply
-                // retired by replacing the slot reference after the new client is ready.
-                slot.tts = createTts(context.applicationContext, requestedPackage)
+                // The slot is unleased at this point, so retire the old export-only client
+                // after the replacement is ready. Reader TTS is never stored in this pool.
+                val previous = slot.tts
+                val created = createTts(context.applicationContext, requestedPackage)
+                slot.tts = created
                 slot.enginePackage = requestedPackage
+                previous?.let { runCatching { it.shutdown() } }
             }
+            activeExportCount = activeExportCounter.incrementAndGet()
             return Lease(index, slot.tts!!)
         } catch (t: Throwable) {
             availableSlots.send(index)
-            activeExportCount.decrementAndGet()
             throw t
         }
     }
@@ -86,9 +67,7 @@ object TtsAudioEnginePool {
         override fun close() {
             if (released) return
             released = true
-            // Deliberately do not call tts.stop()/shutdown(). The exporter waits for the
-            // current synthesis before releasing this lease, and the pool reuses the client.
-            activeExportCount.decrementAndGet()
+            activeExportCount = activeExportCounter.decrementAndGet().coerceAtLeast(0)
             availableSlots.trySend(index)
         }
     }
