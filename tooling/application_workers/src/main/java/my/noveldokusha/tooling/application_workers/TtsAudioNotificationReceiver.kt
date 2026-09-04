@@ -5,13 +5,20 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import dagger.hilt.android.AndroidEntryPoint
+import my.noveldokusha.core.appPreferences.AppPreferences
 import timber.log.Timber
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class TtsAudioNotificationReceiver : BroadcastReceiver() {
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            ACTION_CANCEL -> TtsAudioQueue.cancelAllReactive(context)
+            ACTION_CANCEL -> TtsAudioQueue.cancelAll(context, appPreferences)
             ACTION_DELETE -> {
                 intent.getStringExtra(EXTRA_URI)?.let { uriString ->
                     runCatching {
