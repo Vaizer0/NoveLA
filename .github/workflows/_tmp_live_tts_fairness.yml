@@ -1,0 +1,102 @@
+name: temporary live TTS fairness fix
+
+on:
+  push:
+    branches:
+      - Demo
+    paths-ignore:
+      - .github/workflows/_tmp_live_tts_fairness.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Demo
+          fetch-depth: 0
+      - name: Patch reader TTS fairness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt')
+          s = p.read_text()
+
+          import_line = 'import my.noveldokusha.text_to_speech.TtsAudioEnginePool\n'
+          anchor_import = 'import my.noveldokusha.text_to_speech.TtsTextPreparer\n'
+          if import_line not in s:
+              if anchor_import not in s:
+                  raise SystemExit('TtsTextPreparer import anchor not found')
+              s = s.replace(anchor_import, anchor_import + import_line, 1)
+
+          old_buffer = '''    // Keep only one live utterance queued at a time. Android TTS engines may serialize\n    // synthesis internally, so a large live prebuffer can starve background file synthesis.\n    private val halfBuffer = 1\n'''
+          new_buffer = '''    // During background export, let the export synthesis get turns on the shared TTS\n    // engine instead of continuously keeping a reader utterance queued ahead. When no\n    // export is active we retain the normal one-item live look-ahead.\n    private val normalHalfBuffer = 1\n    private fun liveBufferHalf(): Int = if (TtsAudioEnginePool.hasActiveExports()) 0 else normalHalfBuffer\n'''
+          if old_buffer not in s:
+              raise SystemExit('expected live buffer declaration not found')
+          s = s.replace(old_buffer, new_buffer, 1)
+
+          old_initial = '            quantity = halfBuffer * 2\n'
+          new_initial = '            quantity = maxOf(1, liveBufferHalf() * 2)\n'
+          if old_initial not in s:
+              raise SystemExit('expected initial buffer quantity not found')
+          s = s.replace(old_initial, new_initial, 1)
+
+          pattern = re.compile(r'\n\s*when \(manager\.queueList\.size\) \{.*?\n\s*else -> Unit\n\s*\}', re.S)
+          replacement = '''
+                        val targetHalfBuffer = liveBufferHalf()
+                        when {
+                            targetHalfBuffer > 0 && manager.queueList.size == targetHalfBuffer -> {
+                                val lastUtterance = manager
+                                    .queueList
+                                    .asSequence()
+                                    .last().value
+                                Timber.d("TTS-JUMP halfBuffer: lastUtterance=(${lastUtterance.itemPos.chapterIndex},${lastUtterance.itemPos.chapterItemPosition}) readingNextChunk")
+                                readChapterNextChunk(
+                                    chapterIndex = lastUtterance.itemPos.chapterIndex,
+                                    chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
+                                    quantity = targetHalfBuffer
+                                )
+                                onBufferLow?.invoke()
+                            }
+                            manager.queueList.isEmpty() -> {
+                                // With an export active, deliberately leave the engine idle for
+                                // a short scheduling window before adding the next live item. This
+                                // lets a waiting synthesizeToFile() request run instead of being
+                                // perpetually queued behind reader speech.
+                                if (TtsAudioEnginePool.hasActiveExports()) {
+                                    delay(150)
+                                }
+                                readChapterNextChunk(
+                                    chapterIndex = it.itemPos.chapterIndex,
+                                    chapterItemPosition = it.itemPos.chapterItemPosition,
+                                    quantity = 1
+                                )
+                                if (manager.queueList.isEmpty()) {
+                                    Timber.w("TTS-JUMP queueSize==0 emit reachedChapterEnd: finished=(${it.itemPos.chapterIndex},${it.itemPos.chapterItemPosition})")
+                                    launch {
+                                        reachedChapterEndFlowChapterIndex.emit(it.itemPos.chapterIndex)
+                                    }
+                                }
+                            }
+                        }'''
+          s2, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit(f'expected TTS queue state machine block not found (matches={n})')
+          s = s2
+
+          p.write_text(s)
+          PY
+          git diff --check
+          rm -f .github/workflows/_tmp_live_tts_fairness.yml
+          git add features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt .github/workflows/_tmp_live_tts_fairness.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(tts): allow exports to interleave with live reader TTS'
+          git push origin HEAD:Demo
