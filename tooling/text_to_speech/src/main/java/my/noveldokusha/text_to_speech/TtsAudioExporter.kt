@@ -10,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Exports a chapter to WAV and captures synchronization metadata for that exact
@@ -48,10 +49,6 @@ class TtsAudioExporter(
         var finished = false
         try {
             val maxInputLength = TextToSpeech.getMaxSpeechInputLength()
-
-            // Export order is deliberately: novel name -> chapter title -> chapter body.
-            // The two metadata labels are synthesized as real audio paragraphs so their
-            // PCM timing is represented exactly in timeline.json.
             val novelTitle = TtsTextPreparer.cleanForTts(request.novelTitle).trim()
             val chapterTitle = TtsTextPreparer.cleanForTts(request.chapterTitle).trim()
             val paragraphPlans = buildList {
@@ -78,10 +75,9 @@ class TtsAudioExporter(
             for ((_, slices) in paragraphPlans) {
                 timelineBuilder.beginParagraph()
                 for (chunk in slices) {
-                    // A lease is held only for the actual engine synthesis. This is important:
-                    // five long-running chapter exports must not permanently occupy all export
-                    // clients when live TTS starts. Once a chunk completes, another export can
-                    // immediately acquire the released client subject to the live-TTS limit.
+                    // One export worker owns an engine client only while it is actually
+                    // synthesizing this chunk. This leaves clients available for other
+                    // chapters and lets live-TTS-aware admission take effect between chunks.
                     val lease = TtsAudioEnginePool.acquire(context, request.enginePackage)
                     try {
                         val tts = lease.tts
@@ -181,6 +177,7 @@ class TtsAudioExporter(
         utteranceId: String,
     ) {
         val done = CompletableDeferred<Unit>()
+        val cancelled = AtomicBoolean(false)
         val rangeNormalizer = TtsNativeRangeNormalizer(text.length)
         val scratchFile = File.createTempFile("tts_export_", ".wav", context.cacheDir)
 
@@ -192,20 +189,24 @@ class TtsAudioExporter(
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                done.complete(Unit)
+                if (!cancelled.get()) done.complete(Unit)
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                done.completeExceptionally(
-                    TtsExportException("Synthesis failed (error $errorCode) for '$chapterTitle'")
-                )
+                if (!cancelled.get()) {
+                    done.completeExceptionally(
+                        TtsExportException("Synthesis failed (error $errorCode) for '$chapterTitle'")
+                    )
+                }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                done.completeExceptionally(
-                    TtsExportException("Synthesis failed for '$chapterTitle'")
-                )
+                if (!cancelled.get()) {
+                    done.completeExceptionally(
+                        TtsExportException("Synthesis failed for '$chapterTitle'")
+                    )
+                }
             }
 
             override fun onBeginSynthesis(
@@ -214,6 +215,7 @@ class TtsAudioExporter(
                 audioFormat: Int,
                 channelCount: Int,
             ) {
+                if (cancelled.get()) return
                 if (sampleRateInHz <= 0 || channelCount <= 0) {
                     failOnce(
                         TtsExportException(
@@ -239,7 +241,7 @@ class TtsAudioExporter(
             }
 
             override fun onAudioAvailable(utteranceId: String?, audio: ByteArray) {
-                if (audio.isEmpty()) return
+                if (cancelled.get() || audio.isEmpty()) return
                 try {
                     timelineBuilder.onAudioAvailable(audio.size)
                     writer.writePcm(audio)
@@ -250,6 +252,7 @@ class TtsAudioExporter(
             }
 
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                if (cancelled.get()) return
                 try {
                     val normalized = rangeNormalizer.normalize(start, end, frame)
                         ?: throw TtsExportException(
@@ -269,9 +272,6 @@ class TtsAudioExporter(
         }
         tts.setOnUtteranceProgressListener(listener)
 
-        // synthesizeToFile() is the fast, silent export path. The final WAV is built
-        // from onAudioAvailable(); scratchFile only satisfies the engine's output
-        // contract and is deleted immediately after the utterance completes.
         val result = tts.synthesizeToFile(
             text,
             Bundle(),
@@ -285,14 +285,11 @@ class TtsAudioExporter(
         try {
             done.await()
         } catch (e: CancellationException) {
-            // Do not release a pooled engine client while the engine may still be writing
-            // callbacks into this chapter's WAV writer. Keep the old behavior of waiting for
-            // the utterance to settle, but explicitly stop the export client's current queue
-            // first so cancellation can actually make progress.
-            withContext(NonCancellable) {
-                runCatching { tts.stop() }
-                runCatching { done.await() }
-            }
+            // Cancellation must not use tts.stop(): on some engines stop is delivered to
+            // the service globally and can interrupt the reader's live utterance. Instead,
+            // mark this listener inert and let the current engine request settle naturally;
+            // no late callback can touch the export WAV after the lease is released.
+            cancelled.set(true)
             throw e
         } finally {
             runCatching { scratchFile.delete() }
