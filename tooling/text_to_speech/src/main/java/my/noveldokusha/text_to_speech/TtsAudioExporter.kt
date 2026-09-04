@@ -16,9 +16,10 @@ import java.io.File
  * PCM stream. Export TTS clients are obtained from [TtsAudioEnginePool] and are
  * completely separate from the reader's [TextToSpeechManager].
  *
- * Export uses TextToSpeech.synthesizeToFile(), never speak(). This keeps export
- * silent and prevents export work from flushing or playing through the reader's
- * live TTS playback queue. PCM is captured from onAudioAvailable().
+ * Export uses a muted TextToSpeech.speak() request instead of synthesizeToFile().
+ * Android TTS engines expose native onRangeStart() timing through the playback
+ * synthesis path; KEY_PARAM_VOLUME=0 keeps that path completely silent while
+ * onAudioAvailable() supplies the exact PCM written to the exported WAV.
  */
 class TtsAudioExporter(
     private val context: Context,
@@ -151,10 +152,6 @@ class TtsAudioExporter(
         utteranceId: String,
     ) {
         val done = CompletableDeferred<Unit>()
-        // Keep a real scratch file as the synthesizeToFile() destination. Although the
-        // PCM is captured from onAudioAvailable(), this destination is required for
-        // reliable native onRangeStart callbacks used by the word-level timeline.
-        val scratchFile = File.createTempFile("tts_export_", ".wav", context.cacheDir)
 
         fun failOnce(error: Throwable) {
             if (!done.isCompleted) done.completeExceptionally(error)
@@ -233,17 +230,22 @@ class TtsAudioExporter(
             }
             tts.setOnUtteranceProgressListener(listener)
 
-            // synthesizeToFile() keeps export silent. The exported WAV PCM itself is
-            // still sourced from onAudioAvailable(), while the scratch file preserves
-            // the native range-callback behavior required for word-level timing.
-            val result = tts.synthesizeToFile(
+            // Use the same TTS path as the reader's proven word-highlighting flow.
+            // Android's KEY_PARAM_VOLUME is explicitly defined as a 0..1 relative
+            // speech volume, where 0 is silence. The TTS engine still synthesizes the
+            // request, emits onAudioAvailable() PCM, and can emit native onRangeStart()
+            // markers, but nothing is audible to the user.
+            val params = Bundle().apply {
+                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f)
+            }
+            val result = tts.speak(
                 text,
-                Bundle(),
-                scratchFile,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
                 utteranceId,
             )
             if (result != TextToSpeech.SUCCESS) {
-                failOnce(TtsExportException("synthesizeToFile rejected input (result=$result)"))
+                failOnce(TtsExportException("speak rejected input (result=$result)"))
             }
 
             try {
@@ -259,7 +261,8 @@ class TtsAudioExporter(
                 throw e
             }
         } finally {
-            runCatching { scratchFile.delete() }
+            // No engine scratch file is needed: the exact PCM arrives through
+            // onAudioAvailable() and native word timing arrives through onRangeStart().
         }
     }
 }
