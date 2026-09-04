@@ -23,6 +23,10 @@ import java.util.UUID
  * exports to run concurrently while keeping each TTS client isolated from the reader
  * and from the other export jobs. WorkManager persists each lane across process death
  * and app restarts; [reconcile] repairs stale persisted job records on startup.
+ *
+ * A logical chapter/source can be regenerated after cancellation. Every WorkRequest
+ * UUID is treated as a separate generation so an old cancelled worker can never update
+ * the state/progress belonging to a newer generation.
  */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
@@ -56,6 +60,9 @@ object TtsAudioQueue {
             .addTag(AUDIO_TAG)
             .build()
 
+        // The generated WorkRequest UUID is the generation identity. Re-enqueueing the
+        // same logical chapter therefore replaces the persisted generation before the
+        // new WorkManager request starts publishing progress.
         updateState(appPreferences, jobId) {
             TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
@@ -63,6 +70,10 @@ object TtsAudioQueue {
                 chapterTitle = request.chapterTitle,
                 source = request.source,
                 status = TtsAudioJobStatus.QUEUED,
+                message = "",
+                displayName = "",
+                documentUri = "",
+                progress = 0,
                 workRequestId = workRequest.id.toString(),
             )
         }
@@ -77,32 +88,34 @@ object TtsAudioQueue {
     }
 
     /**
-     * Cancel one chapter export using the persisted WorkRequest ID. This avoids recomputing
-     * job identity from mutable settings such as the current translation language pair.
-     * The Worker handles deletion of temporary/partial files during coroutine cancellation.
+     * Cancel one chapter export using the persisted WorkRequest ID. The persisted
+     * generation is removed immediately, so the UI returns to its normal download
+     * state instead of displaying a user-visible CANCELLED state. The worker's
+     * cancellation cleanup is guarded by the same WorkRequest ID and therefore cannot
+     * resurrect the removed state.
      */
     fun cancel(
         context: Context,
         appPreferences: AppPreferences,
         workRequestId: String,
     ) {
-        val cancelled = runCatching { UUID.fromString(workRequestId) }
-            .onSuccess { id -> WorkManager.getInstance(context).cancelWorkById(id) }
+        val id = runCatching { UUID.fromString(workRequestId) }
             .onFailure { Timber.w(it, "TtsAudio: invalid WorkRequest id for cancel: $workRequestId") }
-            .isSuccess
-        if (!cancelled) return
+            .getOrNull() ?: return
+
+        WorkManager.getInstance(context).cancelWorkById(id)
 
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            val iterator = current.iterator()
             var changed = false
-            for ((jobId, job) in current) {
-                if (job.workRequestId != workRequestId || !job.isActive) continue
-                current[jobId] = job.copy(
-                    status = TtsAudioJobStatus.CANCELLED,
-                    message = "Cancelled",
-                )
-                changed = true
-                break
+            while (iterator.hasNext()) {
+                val (jobId, job) = iterator.next()
+                if (job.workRequestId == workRequestId && job.isActive) {
+                    iterator.remove()
+                    changed = true
+                    break
+                }
             }
             if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
@@ -112,13 +125,12 @@ object TtsAudioQueue {
         WorkManager.getInstance(context).cancelAllWorkByTag(AUDIO_TAG)
         synchronized(lock) {
             val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            val iterator = current.iterator()
             var changed = false
-            for ((jobId, job) in current) {
+            while (iterator.hasNext()) {
+                val (_, job) = iterator.next()
                 if (!job.isActive) continue
-                current[jobId] = job.copy(
-                    status = TtsAudioJobStatus.CANCELLED,
-                    message = "Cancelled",
-                )
+                iterator.remove()
                 changed = true
             }
             if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
@@ -131,6 +143,25 @@ object TtsAudioQueue {
 
     fun observeJobs(appPreferences: AppPreferences): Flow<Map<String, TtsAudioJobState>> =
         appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow()
+
+    /**
+     * Update a job only when [workRequestId] is still the active generation stored for
+     * [jobId]. Old workers therefore become write-inert immediately after a restart.
+     */
+    fun updateStateForWork(
+        appPreferences: AppPreferences,
+        jobId: String,
+        workRequestId: String,
+        transform: (TtsAudioJobState) -> TtsAudioJobState,
+    ) {
+        synchronized(lock) {
+            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            val existing = current[jobId] ?: return@synchronized
+            if (existing.workRequestId != workRequestId) return@synchronized
+            current[jobId] = transform(existing)
+            appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+        }
+    }
 
     /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
@@ -155,10 +186,7 @@ object TtsAudioQueue {
                 val info = infoById[wid]
                 if (info == null) {
                     changed = true
-                    current[jobId] = job.copy(
-                        status = TtsAudioJobStatus.FAILED,
-                        message = "interrupted",
-                    )
+                    current.remove(jobId)
                     continue
                 }
 
@@ -168,21 +196,26 @@ object TtsAudioQueue {
                     WorkInfo.State.BLOCKED,
                     -> null
 
+                    // Terminal state means the persisted active record can be resolved
+                    // here; cancellation is not exposed as a sticky UI state.
                     WorkInfo.State.SUCCEEDED -> job.copy(
                         status = TtsAudioJobStatus.SUCCESS,
                         progress = 100,
                         message = "",
                     )
 
-                    WorkInfo.State.CANCELLED -> job.copy(
-                        status = TtsAudioJobStatus.CANCELLED,
-                        message = "Cancelled",
-                    )
+                    WorkInfo.State.CANCELLED -> null
 
                     WorkInfo.State.FAILED -> job.copy(
                         status = TtsAudioJobStatus.FAILED,
                         message = if (job.message.isBlank()) "failed" else job.message,
                     )
+                }
+
+                if (info.state == WorkInfo.State.CANCELLED) {
+                    changed = true
+                    current.remove(jobId)
+                    continue
                 }
 
                 if (repaired != null && repaired != job) {
