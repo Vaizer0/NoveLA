@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.preference.PreferenceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -222,7 +221,9 @@ private fun VoicePickerDialog(
     onPick: (enginePackage: String, voiceId: String) -> Unit,
 ) {
     val context = LocalContext.current
-    val preferences = remember(context) { PreferenceManager.getDefaultSharedPreferences(context) }
+    val preferences = remember(context) {
+        context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
+    }
     var voices by remember { mutableStateOf<List<VoiceEntry>>(emptyList()) }
     var selected by remember { mutableStateOf(initialVoiceKey(initialVoiceEngine, initialVoiceId)) }
     var searchQuery by remember { mutableStateOf("") }
