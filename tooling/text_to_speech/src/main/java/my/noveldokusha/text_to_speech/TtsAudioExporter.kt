@@ -20,7 +20,7 @@ import java.io.File
  *
  * Export uses TextToSpeech.synthesizeToFile(), never speak(). This keeps export
  * silent and prevents export work from flushing or playing through the reader's
- * live TTS playback queue. PCM is captured from onAudioAvailable().
+ * live TTS playback queue. PCM is still captured from onAudioAvailable().
  */
 class TtsAudioExporter(
     private val context: Context,
@@ -59,12 +59,22 @@ class TtsAudioExporter(
             tts.setSpeechRate(request.speed)
             tts.setPitch(request.pitch)
 
+            // The chapter title is deliberately the first logical paragraph. It is
+            // therefore spoken before the chapter body and is also represented as
+            // paragraph 0 in timeline.json with real PCM/native timing.
+            val title = TtsTextPreparer.cleanForTts(request.chapterTitle).trim()
             val paragraphPlans = buildList {
+                if (title.isNotBlank() && !TtsTextPreparer.isOnlyDecorators(title)) {
+                    add(title to TtsTextPreparer.chunkIntoUtterances(title, maxInputLength))
+                }
                 for (paragraph in paragraphs) {
                     val cleaned = TtsTextPreparer.cleanForTts(paragraph)
                     if (TtsTextPreparer.isOnlyDecorators(cleaned)) continue
                     add(cleaned to TtsTextPreparer.chunkIntoUtterances(cleaned, maxInputLength))
                 }
+            }
+            if (paragraphPlans.isEmpty()) {
+                throw TtsExportException("Chapter has no text or title to synthesize")
             }
             val totalChars = paragraphPlans.sumOf { it.first.length }
 
