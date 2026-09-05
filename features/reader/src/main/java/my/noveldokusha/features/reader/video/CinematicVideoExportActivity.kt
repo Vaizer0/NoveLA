@@ -71,7 +71,7 @@ class CinematicVideoExportActivity : ComponentActivity() {
 
     private val pickWav = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            takeReadPermission(uri)
+            takePermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             wavUri = uri
             errorText = null
         }
@@ -79,7 +79,7 @@ class CinematicVideoExportActivity : ComponentActivity() {
 
     private val pickTimeline = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            takeReadPermission(uri)
+            takePermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             timelineUri = uri
             errorText = null
         }
@@ -87,15 +87,14 @@ class CinematicVideoExportActivity : ComponentActivity() {
 
     private val createOutput = registerForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
         if (uri != null) {
+            takePermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             outputUri = uri
             errorText = null
         }
     }
 
-    private fun takeReadPermission(uri: Uri) {
-        runCatching {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+    private fun takePermission(uri: Uri, mode: Int) {
+        runCatching { contentResolver.takePersistableUriPermission(uri, mode) }
     }
 
     private fun startExport() {
