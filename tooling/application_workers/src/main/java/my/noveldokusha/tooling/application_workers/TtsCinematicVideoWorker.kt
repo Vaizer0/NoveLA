@@ -36,13 +36,16 @@ class TtsCinematicVideoWorker(
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
+    interface CinematicVideoEntryPoint {
         fun appPreferences(): AppPreferences
         fun notificationsCenter(): NotificationsCenter
     }
 
     override suspend fun doWork(): Result {
-        val app = EntryPointAccessors.fromApplication(context.applicationContext, EntryPoint::class.java)
+        val app = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            CinematicVideoEntryPoint::class.java,
+        )
         val prefs = app.appPreferences()
         val notifications = app.notificationsCenter()
         val request = readRequest() ?: return Result.failure()
