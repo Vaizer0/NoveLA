@@ -30,6 +30,36 @@ class CinematicFfmpegAssetManager(
         return File(runtimeRoot, "bin")
     }
 
+    /** Executes the packaged launcher before the renderer starts, so loader/runtime failures are explicit. */
+    fun verify(ffmpegDirectory: File) {
+        val ffmpeg = File(ffmpegDirectory, "ffmpeg")
+        val libraryDir = ffmpegDirectory.parentFile?.resolve("lib")
+            ?: throw CinematicVideoException("FFmpeg runtime library directory is missing")
+        if (!libraryDir.isDirectory) {
+            throw CinematicVideoException("FFmpeg runtime library directory is missing")
+        }
+
+        val process = ProcessBuilder(ffmpeg.absolutePath, "-hide_banner", "-version")
+            .directory(ffmpegDirectory.parentFile)
+            .redirectErrorStream(true)
+            .apply {
+                environment()["LD_LIBRARY_PATH"] = buildLibraryPath(libraryDir)
+            }
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw CinematicVideoException(
+                "Bundled FFmpeg could not start (exit=$exitCode): ${output.takeLast(800)}"
+            )
+        }
+    }
+
+    private fun buildLibraryPath(libraryDir: File): String {
+        val existing = System.getenv("LD_LIBRARY_PATH").orEmpty()
+        return if (existing.isBlank()) libraryDir.absolutePath else libraryDir.absolutePath + File.pathSeparator + existing
+    }
+
     private fun copyAssetTree(assetPath: String, destination: File) {
         val entries = context.assets.list(assetPath).orEmpty()
         if (entries.isEmpty()) {
