@@ -15,15 +15,13 @@ foreach(PART 001.cpp.part 002.cpp.part 003.cpp.part 004.cpp.part)
     file(APPEND "${RENDERER_SOURCE}" "${PART_CONTENT}")
 endforeach()
 
-# The Pango Android Prefab package exposes modules using their pkg-config names,
-# e.g. pango-1.0 and pangocairo-1.0. The module names are defined by the
-# upstream ndkports package and are intentionally kept distinct from the
-# Android/Gradle artifact name.
+# Prefab exposes one CMake package per AAR dependency. For the ndkports
+# Pango artifact, the package name is the Maven artifact name while the
+# individual libraries are the Prefab module names.
+find_package(pango-ndk26-static CONFIG REQUIRED)
 find_package(cairo CONFIG REQUIRED)
-find_package(pango-1.0 CONFIG REQUIRED)
-find_package(pangocairo-1.0 CONFIG REQUIRED)
 
-add_library(novela_cinematic SHARED
+a d d_library(novela_cinematic SHARED
     renderer_jni.cpp
 )
 
@@ -42,8 +40,8 @@ target_include_directories(novela_cinematic PRIVATE
 )
 
 target_link_libraries(novela_cinematic PRIVATE
-    pangocairo-1.0::pangocairo-1.0
-    pango-1.0::pango-1.0
+    pango-ndk26-static::pangocairo-1.0
+    pango-ndk26-static::pango-1.0
     cairo::cairo
     log
     android
