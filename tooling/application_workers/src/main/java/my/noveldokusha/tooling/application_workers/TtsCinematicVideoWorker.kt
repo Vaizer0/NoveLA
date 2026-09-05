@@ -16,19 +16,19 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import my.noveldokusha.cinematic_video.CinematicFfmpegAssetManager
+import my.noveldokusha.cinematic_video.CinematicVideoException
+import my.noveldokusha.cinematic_video.CinematicVideoRenderRequest
+import my.noveldokusha.cinematic_video.CinematicVideoRenderer
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.strings.R as StringsR
-import my.noveldokusha.cinematic_video.CinematicVideoException
-import my.noveldokusha.cinematic_video.CinematicVideoRenderRequest
-import my.noveldokusha.cinematic_video.CinematicVideoRenderer
-import my.noveldokusha.text_to_speech.TtsAudioFormat
 import timber.log.Timber
 import java.io.File
 
-/** Renders the WAV + timeline produced by the immediately preceding audio worker. */
+/** Renders the exact WAV + timeline pair produced by the immediately preceding audio worker. */
 class TtsCinematicVideoWorker(
     private val context: Context,
     workerParameters: WorkerParameters,
@@ -60,7 +60,11 @@ class TtsCinematicVideoWorker(
         try {
             setForegroundSafely(notification)
             TtsAudioQueue.updateState(prefs, jobId) {
-                it?.copy(status = TtsAudioJobStatus.RUNNING, progress = 70, message = "Rendering cinematic video…")
+                it?.copy(
+                    status = TtsAudioJobStatus.RUNNING,
+                    progress = 70,
+                    message = "Rendering cinematic video…",
+                )
             }
             notification.updateProgress(70)
 
@@ -74,7 +78,7 @@ class TtsCinematicVideoWorker(
             }
             val baseName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
             val audioName = if (sourceSuffix.isBlank()) "$baseName.wav" else "$baseName $sourceSuffix.wav"
-            val timelineName = "$baseName" + if (sourceSuffix.isBlank()) ".timeline.json" else " $sourceSuffix.timeline.json"
+            val timelineName = if (sourceSuffix.isBlank()) "$baseName.timeline.json" else "$baseName $sourceSuffix.timeline.json"
             val videoName = if (sourceSuffix.isBlank()) "$baseName.mp4" else "$baseName $sourceSuffix.mp4"
 
             val audioUri = findChild(novelFolder, audioName)
@@ -87,24 +91,27 @@ class TtsCinematicVideoWorker(
             copyUriToFile(audioUri, stagedAudio)
             copyUriToFile(timelineUri, stagedTimeline)
 
-            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = 74, message = "Rendering cinematic video…") }
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(progress = 74, message = "Rendering cinematic video…")
+            }
             notification.updateProgress(74)
 
-            val renderer = CinematicRendererAssetManager(context).prepare(workDir)
+            val ffmpeg = CinematicFfmpegAssetManager(context).prepare(workDir)
             val stagedOutput = File(workDir, videoName)
-            CinematicVideoRenderer(
-                environment = mapOf("PATH" to renderer.parentFile.absolutePath + File.pathSeparator + System.getenv("PATH")),
-            ).render(
+
+            CinematicVideoRenderer().render(
                 request = CinematicVideoRenderRequest(
                     audioFile = stagedAudio,
                     timelineFile = stagedTimeline,
                     outputFile = stagedOutput,
-                    rendererExecutable = renderer,
                     workingDirectory = workDir,
+                    ffmpegDirectory = ffmpeg.parentFile ?: workDir,
                 ),
             ) { fraction ->
                 val percent = (74 + (fraction * 25f)).toInt().coerceIn(74, 99)
-                TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = percent, message = "Rendering cinematic video…") }
+                TtsAudioQueue.updateState(prefs, jobId) {
+                    it?.copy(progress = percent, message = "Rendering cinematic video…")
+                }
                 notification.updateProgress(percent)
             }
 
@@ -134,7 +141,9 @@ class TtsCinematicVideoWorker(
         } catch (e: CancellationException) {
             outputUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             workDir.deleteRecursively()
-            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled") }
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled")
+            }
             notification.close()
             throw e
         } catch (e: Exception) {
@@ -142,7 +151,10 @@ class TtsCinematicVideoWorker(
             outputUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             workDir.deleteRecursively()
             TtsAudioQueue.updateState(prefs, jobId) {
-                it?.copy(status = TtsAudioJobStatus.FAILED, message = e.message ?: "Video rendering failed")
+                it?.copy(
+                    status = TtsAudioJobStatus.FAILED,
+                    message = e.message ?: "Video rendering failed",
+                )
             }
             notification.showError(e.message ?: "Video rendering failed")
             return Result.failure()
@@ -170,10 +182,16 @@ class TtsCinematicVideoWorker(
             runCatching {
                 val treeUri = Uri.parse(outputDirectoryUri)
                 val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
-                val wrapperId = findOrCreateDirectoryDocId(treeUri, rootDocId, TtsAudioExportWorker.WRAPPER_FOLDER_NAME)
-                    ?: return@runCatching null
-                val novelId = findOrCreateDirectoryDocId(treeUri, wrapperId, sanitize(novelTitle, "novel"))
-                    ?: return@runCatching null
+                val wrapperId = findOrCreateDirectoryDocId(
+                    treeUri,
+                    rootDocId,
+                    TtsAudioExportWorker.WRAPPER_FOLDER_NAME,
+                ) ?: return@runCatching null
+                val novelId = findOrCreateDirectoryDocId(
+                    treeUri,
+                    wrapperId,
+                    sanitize(novelTitle, "novel"),
+                ) ?: return@runCatching null
                 DocumentsContract.buildDocumentUriUsingTree(treeUri, novelId)
             }.getOrNull()
         }
@@ -208,7 +226,10 @@ class TtsCinematicVideoWorker(
         )
         return context.contentResolver.query(
             children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            ),
             null,
             null,
             null,
@@ -217,7 +238,10 @@ class TtsCinematicVideoWorker(
             val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             while (cursor.moveToNext()) {
                 if (cursor.getString(nameIndex) == displayName) {
-                    return@use DocumentsContract.buildDocumentUriUsingTree(parent, cursor.getString(idIndex))
+                    return@use DocumentsContract.buildDocumentUriUsingTree(
+                        parent,
+                        cursor.getString(idIndex),
+                    )
                 }
             }
             null
@@ -225,7 +249,9 @@ class TtsCinematicVideoWorker(
     }
 
     private fun deleteChildIfPresent(parent: Uri, displayName: String) {
-        findChild(parent, displayName)?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+        findChild(parent, displayName)?.let {
+            runCatching { context.contentResolver.delete(it, null, null) }
+        }
     }
 
     private fun copyUriToFile(uri: Uri, file: File) {
@@ -248,7 +274,9 @@ class TtsCinematicVideoWorker(
             null,
             null,
         )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
+            if (cursor.moveToFirst()) {
+                cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+            } else null
         }
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
@@ -264,7 +292,14 @@ class TtsCinematicVideoWorker(
             TtsAudioSource.valueOf(inputData.getString(KEY_SOURCE) ?: return null)
         }.getOrNull() ?: return null
         val outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null
-        return VideoRequest(jobId, novelTitle, chapterTitle, chapterIndex, source, outputDirectoryUri)
+        return VideoRequest(
+            jobId = jobId,
+            novelTitle = novelTitle,
+            chapterTitle = chapterTitle,
+            chapterIndex = chapterIndex,
+            source = source,
+            outputDirectoryUri = outputDirectoryUri,
+        )
     }
 
     private data class VideoRequest(
@@ -285,30 +320,5 @@ class TtsCinematicVideoWorker(
         const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
         const val MIME_MP4 = "video/mp4"
         private const val DEFAULT_BUFFER = 128 * 1024
-    }
-}
-
-/** Copies the build-produced renderer + ffmpeg executables out of assets and marks them executable. */
-private class CinematicRendererAssetManager(private val context: Context) {
-    fun prepare(workDir: File): File {
-        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull()
-            ?: throw CinematicVideoException("No supported Android ABI found")
-        val renderer = File(workDir, "novela_cpp_renderer")
-        val ffmpeg = File(workDir, "ffmpeg")
-        copyAsset("cinematic/$abi/novela_cpp_renderer", renderer)
-        copyAsset("cinematic/$abi/ffmpeg", ffmpeg)
-        renderer.setExecutable(true, false)
-        ffmpeg.setExecutable(true, false)
-        return renderer
-    }
-
-    private fun copyAsset(name: String, dest: File) {
-        runCatching {
-            context.assets.open(name).use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
-            }
-        }.getOrElse {
-            throw CinematicVideoException("Cinematic renderer assets are missing for ${android.os.Build.SUPPORTED_ABIS.firstOrNull()}", it)
-        }
     }
 }
