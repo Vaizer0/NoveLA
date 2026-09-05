@@ -48,6 +48,7 @@ internal fun ChaptersScreenBody(
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
     onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
+    onChapterVideo: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit = { _, _ -> },
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -69,9 +70,7 @@ internal fun ChaptersScreenBody(
 
     val pullToRefreshState = rememberPullToRefreshState()
     val coroutineScope = rememberCoroutineScope()
-
     var highlightedChapterUrl by remember { mutableStateOf<String?>(null) }
-
     val scrollOffset = -350
 
     suspend fun smoothScrollToIndex(index: Int) {
@@ -90,7 +89,6 @@ internal fun ChaptersScreenBody(
         val idx = state.chapters.indexOfFirst { it.chapter.url == url }
         if (idx == -1) null else idx + 1
     }
-
     val readChapters by remember { derivedStateOf { state.chapters.count { it.chapter.read } } }
 
     val onScrollToLastRead: (() -> Unit)? = lastReadChapterIndex?.let { index ->
@@ -132,10 +130,7 @@ internal fun ChaptersScreenBody(
             state = lazyListState,
             contentPadding = PaddingValues(bottom = 300.dp),
         ) {
-            item(
-                key = "header",
-                contentType = { 0 },
-            ) {
+            item(key = "header", contentType = { 0 }) {
                 ChaptersScreenHeader(
                     bookState = state.book.value,
                     genres = state.genres.value,
@@ -170,24 +165,18 @@ internal fun ChaptersScreenBody(
             items(
                 items = state.chapters,
                 key = { "_" + it.chapter.url },
-                contentType = { 1 }
+                contentType = { 1 },
             ) {
+                val originalKey = AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
+                val translatedKey = AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
                 ChaptersScreenChapterItem(
                     chapterWithContext = it,
                     translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     chapterSize = state.chapterSizes.value[it.chapter.url],
-                    audioOriginalJob = state.audioJobs[
-                        AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
-                    ],
-                    audioOriginalFileExists = state.audioFilesExist[
-                        AudioJobKey(it.chapter.url, TtsAudioSource.ORIGINAL)
-                    ] ?: false,
-                    audioTranslatedJob = state.audioJobs[
-                        AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
-                    ],
-                    audioTranslatedFileExists = state.audioFilesExist[
-                        AudioJobKey(it.chapter.url, TtsAudioSource.TRANSLATED)
-                    ] ?: false,
+                    audioOriginalJob = state.audioJobs[originalKey],
+                    audioOriginalFileExists = state.audioFilesExist[originalKey] ?: false,
+                    audioTranslatedJob = state.audioJobs[translatedKey],
+                    audioTranslatedFileExists = state.audioFilesExist[translatedKey] ?: false,
                     selected = state.selectedChaptersUrl.containsKey(it.chapter.url),
                     isLocalSource = state.isLocalSource.value,
                     highlighted = it.chapter.url == highlightedChapterUrl,
@@ -196,15 +185,13 @@ internal fun ChaptersScreenBody(
                     onDownload = { onChapterDownload(it) },
                     onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
                     onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
-                    translatedAudioAvailable =
-                        state.translatedAudioAvailable.value[it.chapter.url] ?: false
+                    onVideoOriginal = { onChapterVideo(it, TtsAudioSource.ORIGINAL) },
+                    onVideoTranslated = { onChapterVideo(it, TtsAudioSource.TRANSLATED) },
+                    translatedAudioAvailable = state.translatedAudioAvailable.value[it.chapter.url] ?: false,
                 )
             }
 
-            if (state.error.value.isNotBlank()) item(
-                key = "error",
-                contentType = { 2 }
-            ) {
+            if (state.error.value.isNotBlank()) item(key = "error", contentType = { 2 }) {
                 ErrorView(error = state.error.value)
             }
         }
