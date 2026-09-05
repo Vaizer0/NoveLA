@@ -31,7 +31,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.compose.androidx.activity)
     implementation(libs.compose.androidx.lifecycle.viewmodel)
-    implementation(libs.compose.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.compose.material3.android)
