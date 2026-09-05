@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: android-debug-apk-${{ github.ref }}
@@ -48,6 +49,21 @@ jobs:
             app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      # buildRelease.yml is workflow_dispatch-only. On this feature branch,
+      # dispatch its exact test path after the normal PR APK build succeeds.
+      - name: Dispatch buildRelease test
+        if: github.event_name == 'pull_request' && github.head_ref == 'cinematic-video-integration'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/buildRelease.yml/dispatches" \
+            -d '{"ref":"cinematic-video-integration","inputs":{"build_type":"test"}}'
 
   unit-tests:
     name: Unit tests (all TTS)
