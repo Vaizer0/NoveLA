@@ -10,6 +10,7 @@ import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import java.io.File
 
 internal class CinematicVideoWorker(
@@ -32,7 +33,7 @@ internal class CinematicVideoWorker(
         val timelineFile = File(tempDir, "timeline.json")
         val encodedFile = File.createTempFile("noveLa_", ".mp4", tempDir)
 
-        try {
+        return try {
             applicationContext.contentResolver.openInputStream(wavUri).use { input ->
                 requireNotNull(input) { "Cannot open WAV URI" }
                 wavFile.outputStream().use { output -> input.copyTo(output, 128 * 1024) }
@@ -51,7 +52,7 @@ internal class CinematicVideoWorker(
                 val percent = (progress * 100f).toInt().coerceIn(0, 100)
                 if (percent != lastProgress) {
                     lastProgress = percent
-                    setProgress(workDataOf(KEY_PROGRESS to percent))
+                    setProgressAsync(workDataOf(KEY_PROGRESS to percent))
                 }
             }
 
@@ -59,8 +60,10 @@ internal class CinematicVideoWorker(
                 requireNotNull(output) { "Cannot open destination URI" }
                 encodedFile.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
             }
-            setProgress(workDataOf(KEY_PROGRESS to 100))
+            setProgressAsync(workDataOf(KEY_PROGRESS to 100))
             Result.success(workDataOf(KEY_OUTPUT_URI to outputUri.toString()))
+        } catch (t: CancellationException) {
+            throw t
         } catch (t: Throwable) {
             Result.failure(errorData(t.message ?: t.javaClass.simpleName))
         } finally {
