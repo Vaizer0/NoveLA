@@ -15,11 +15,10 @@ foreach(PART 001.cpp.part 002.cpp.part 003.cpp.part 004.cpp.part)
     file(APPEND "${RENDERER_SOURCE}" "${PART_CONTENT}")
 endforeach()
 
-# Prefab exposes one CMake package per AAR dependency. For ndkports, the
-# package name is the Maven artifact name; the individual Pango libraries are
-# Prefab modules within that package.
-find_package(pango-ndk26-static CONFIG REQUIRED)
-find_package(cairo-ndk26-static CONFIG REQUIRED)
+# The NDKPorts Prefab builder assigns packages the stable namespace
+# com.viliussutkus89.ndk.thirdparty.<port-name>. Pango exports the
+# pango-1.0 and pangocairo-1.0 modules from that package.
+find_package(com.viliussutkus89.ndk.thirdparty.pango CONFIG REQUIRED)
 
 add_library(novela_cinematic SHARED
     renderer_jni.cpp
@@ -40,9 +39,8 @@ target_include_directories(novela_cinematic PRIVATE
 )
 
 target_link_libraries(novela_cinematic PRIVATE
-    pango-ndk26-static::pangocairo-1.0
-    pango-ndk26-static::pango-1.0
-    cairo-ndk26-static::cairo
+    com.viliussutkus89.ndk.thirdparty.pango::pangocairo-1.0
+    com.viliussutkus89.ndk.thirdparty.pango::pango-1.0
     log
     android
 )
