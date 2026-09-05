@@ -50,21 +50,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # buildRelease.yml is workflow_dispatch-only. On this feature branch,
-      # dispatch its exact test path after the normal PR APK build succeeds.
-      - name: Dispatch buildRelease test
-        if: github.event_name == 'pull_request' && github.head_ref == 'cinematic-video-integration'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/buildRelease.yml/dispatches" \
-            -d '{"ref":"cinematic-video-integration","inputs":{"build_type":"test"}}'
-
   unit-tests:
     name: Unit tests (all TTS)
     runs-on: ubuntu-latest
@@ -97,3 +82,70 @@ jobs:
             tooling/text_to_speech/build/test-results/
           if-no-files-found: warn
           retention-days: 14
+
+  # buildRelease.yml is workflow_dispatch-only. This feature-branch bridge
+  # dispatches its exact test path and waits for the resulting release build.
+  dispatch-release-test:
+    name: Build & Publish (test)
+    if: github.event_name == 'pull_request' && github.head_ref == 'cinematic-video-integration'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch buildRelease test
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dispatch_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "dispatch_time=${dispatch_time}" >> "$GITHUB_OUTPUT"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/buildRelease.yml/dispatches" \
+            -d '{"ref":"cinematic-video-integration","inputs":{"build_type":"test"}}'
+
+      - name: Wait for buildRelease test result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_TIME: ${{ steps.dispatch.outputs.dispatch_time }}
+        run: |
+          set -euo pipefail
+          workflow_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/buildRelease.yml/runs"
+          run_id=""
+          for attempt in $(seq 1 40); do
+            runs=$(curl --fail-with-body --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${workflow_api}?branch=cinematic-video-integration&event=workflow_dispatch&per_page=20")
+            run_id=$(python3 -c 'import json,sys,datetime; d=json.load(sys.stdin); cutoff=datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")); rs=[r for r in d["workflow_runs"] if datetime.datetime.fromisoformat(r["created_at"].replace("Z","+00:00")) >= cutoff]; print(rs[0]["id"] if rs else "")' "$DISPATCH_TIME" <<<"$runs")
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          test -n "$run_id" || { echo "Unable to locate dispatched buildRelease workflow run"; exit 1; }
+          echo "buildRelease run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          echo "BUILD_RELEASE_RUN_ID=${run_id}" >> "$GITHUB_ENV"
+
+          for attempt in $(seq 1 80); do
+            run=$(curl --fail-with-body --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${workflow_api}/${run_id}")
+            status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$run")
+            conclusion=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["conclusion"] or "")' <<<"$run")
+            echo "attempt=${attempt} status=${status} conclusion=${conclusion}"
+            if [ "$status" = "completed" ]; then
+              test "$conclusion" = "success" || { echo "buildRelease failed: ${conclusion}"; exit 1; }
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "Timed out waiting for buildRelease test workflow"
+          exit 1
