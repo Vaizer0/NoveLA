@@ -22,8 +22,8 @@ file(READ "${RENDERER_SOURCE}" RENDERER_CONTENT)
 string(REPLACE
     "void cairo_arc(cairo_t*, double,double,double,double,double,double);"
     "void cairo_arc(cairo_t*, double,double,double,double,double);"
-    "${RENDERER_CONTENT}"
     RENDERER_CONTENT
+    "${RENDERER_CONTENT}"
 )
 file(WRITE "${RENDERER_SOURCE}" "${RENDERER_CONTENT}")
 
