@@ -25,22 +25,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.core.appPreferences.TranslationLangPair
 import my.noveldokusha.coreui.components.ErrorView
 import my.noveldokusha.chapterslist.R
-import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsAudioFormat
 import my.noveldokusha.text_to_speech.TtsExportMode
 import my.noveldokusha.tooling.application_workers.TtsCinematicVideoQueue
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+private interface ChaptersCinematicVideoEntryPoint {
+    fun appPreferences(): AppPreferences
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +80,7 @@ internal fun ChaptersScreenBody(
     val appPreferences = remember(context.applicationContext) {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
-            HiltAppEntryPoint::class.java,
+            ChaptersCinematicVideoEntryPoint::class.java,
         ).appPreferences()
     }
 
@@ -79,31 +88,19 @@ internal fun ChaptersScreenBody(
         if (source == TtsAudioSource.TRANSLATED &&
             !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false)
         ) {
-            Toast.makeText(
-                context,
-                "Translated chapter text is not available",
-                Toast.LENGTH_SHORT,
-            ).show()
+            Toast.makeText(context, "Translated chapter text is not available", Toast.LENGTH_SHORT).show()
             return
         }
 
         val voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value
         if (voiceId.isBlank()) {
-            Toast.makeText(
-                context,
-                "Select a TTS voice before creating a video",
-                Toast.LENGTH_SHORT,
-            ).show()
+            Toast.makeText(context, "Select a TTS voice before creating a video", Toast.LENGTH_SHORT).show()
             return
         }
 
         val outputDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
         if (outputDirectoryUri.isBlank()) {
-            Toast.makeText(
-                context,
-                "Choose the audio export folder first",
-                Toast.LENGTH_SHORT,
-            ).show()
+            Toast.makeText(context, "Choose the audio export folder first", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -113,14 +110,9 @@ internal fun ChaptersScreenBody(
             TranslationLangPair()
         }
         if (source == TtsAudioSource.TRANSLATED &&
-            (!appPreferences.translationEnabledForBook(state.book.value.url) ||
-                pair.source.isBlank() || pair.target.isBlank())
+            (pair.source.isBlank() || pair.target.isBlank())
         ) {
-            Toast.makeText(
-                context,
-                "Translation is not configured for this book",
-                Toast.LENGTH_SHORT,
-            ).show()
+            Toast.makeText(context, "Translation is not configured for this book", Toast.LENGTH_SHORT).show()
             return
         }
 
