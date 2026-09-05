@@ -19,20 +19,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -232,14 +232,37 @@ private fun ChapterVideoButton(
             TtsAudioSource.ASK_EVERY_TIME -> StringsR.string.tts_audio_chapter_action
         }
     )
-    IconButton(onClick = onVideo, enabled = enabled) {
-        Icon(
-            imageVector = if (enabled) Icons.Outlined.PlayArrow else Icons.Outlined.PlayArrow,
-            contentDescription = "$sourceLabel video",
-            tint = if (enabled) LocalContentColor.current
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-            modifier = Modifier.size(23.dp),
-        )
+    val videoIcon = when (source) {
+        TtsAudioSource.ORIGINAL -> Icons.Outlined.VideoFile
+        TtsAudioSource.TRANSLATED -> Icons.Outlined.Translate
+        TtsAudioSource.ASK_EVERY_TIME -> Icons.Outlined.VideoFile
+    }
+    val tint = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        source == TtsAudioSource.ORIGINAL -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.tertiary
+    }
+
+    IconButton(
+        onClick = onVideo,
+        enabled = enabled,
+    ) {
+        Box {
+            Icon(
+                imageVector = videoIcon,
+                contentDescription = "$sourceLabel video",
+                tint = tint,
+                modifier = Modifier.size(23.dp),
+            )
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(11.dp),
+            )
+        }
     }
 }
 
