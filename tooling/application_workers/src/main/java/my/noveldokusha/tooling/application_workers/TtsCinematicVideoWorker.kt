@@ -164,7 +164,7 @@ class TtsCinematicVideoWorker(
         }
     }
 
-    private fun setForegroundSafely(notification: TtsAudioExportNotification) {
+    private suspend fun setForegroundSafely(notification: TtsAudioExportNotification) {
         try {
             val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
