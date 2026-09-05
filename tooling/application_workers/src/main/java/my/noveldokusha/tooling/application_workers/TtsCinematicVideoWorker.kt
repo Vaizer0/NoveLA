@@ -24,11 +24,16 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
+import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.text_to_speech.TtsAudioFormat
+import my.noveldokusha.text_to_speech.TtsTextPreparer
 import timber.log.Timber
 import java.io.File
+import org.json.JSONArray
 
-/** Renders the exact WAV + timeline pair produced by the immediately preceding audio worker. */
+/** Renders an existing downloaded audio file, generating a sidecar timeline only when needed. */
 class TtsCinematicVideoWorker(
     private val context: Context,
     workerParameters: WorkerParameters,
@@ -38,6 +43,7 @@ class TtsCinematicVideoWorker(
     @InstallIn(SingletonComponent::class)
     interface CinematicVideoEntryPoint {
         fun appPreferences(): AppPreferences
+        fun appDatabase(): AppDatabase
         fun notificationsCenter(): NotificationsCenter
     }
 
@@ -47,6 +53,7 @@ class TtsCinematicVideoWorker(
             CinematicVideoEntryPoint::class.java,
         )
         val prefs = app.appPreferences()
+        val database = app.appDatabase()
         val notifications = app.notificationsCenter()
         val request = readRequest() ?: return Result.failure()
         val notification = TtsAudioExportNotification(
@@ -65,11 +72,11 @@ class TtsCinematicVideoWorker(
             TtsAudioQueue.updateState(prefs, jobId) {
                 it?.copy(
                     status = TtsAudioJobStatus.RUNNING,
-                    progress = 70,
-                    message = "Rendering cinematic video…",
+                    progress = 5,
+                    message = "Preparing cinematic video…",
                 )
             }
-            notification.updateProgress(70)
+            notification.updateProgress(5)
 
             val novelFolder = resolveNovelFolder(request.outputDirectoryUri, request.novelTitle)
                 ?: throw CinematicVideoException("NoveLA output folder could not be resolved")
@@ -80,43 +87,84 @@ class TtsCinematicVideoWorker(
                 TtsAudioSource.ASK_EVERY_TIME -> ""
             }
             val baseName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
-            val audioName = if (sourceSuffix.isBlank()) "$baseName.wav" else "$baseName $sourceSuffix.wav"
-            val timelineName = if (sourceSuffix.isBlank()) "$baseName.timeline.json" else "$baseName $sourceSuffix.timeline.json"
-            val videoName = if (sourceSuffix.isBlank()) "$baseName.mp4" else "$baseName $sourceSuffix.mp4"
+            val prefix = if (sourceSuffix.isBlank()) baseName else "$baseName $sourceSuffix"
+            val expectedTimelineName = "$prefix.timeline.json"
+            val videoName = "$prefix.mp4"
 
-            val audioUri = findChild(novelFolder, audioName)
-                ?: throw CinematicVideoException("Generated WAV was not found: $audioName")
-            val timelineUri = findChild(novelFolder, timelineName)
-                ?: throw CinematicVideoException("Generated timeline JSON was not found: $timelineName")
+            val audio = findExistingAudio(novelFolder, prefix)
+                ?: throw CinematicVideoException("Downloaded audio was not found for this chapter. Generate the audio once, then create the video.")
+            val actualAudioName = queryDisplayName(audio) ?: "$prefix.${request.preferredAudioExtension}"
+            val timeline = findChild(novelFolder, expectedTimelineName)
 
-            val stagedAudio = File(workDir, audioName)
-            val stagedTimeline = File(workDir, timelineName)
-            copyUriToFile(audioUri, stagedAudio)
-            copyUriToFile(timelineUri, stagedTimeline)
+            val stagedAudio = File(workDir, actualAudioName)
+            copyUriToFile(audio, stagedAudio)
+
+            val stagedTimeline = File(workDir, expectedTimelineName)
+            if (timeline != null) {
+                copyUriToFile(timeline, stagedTimeline)
+            } else {
+                if (request.source == TtsAudioSource.TRANSLATED && !hasTranslation(database, prefs, request)) {
+                    throw CinematicVideoException(
+                        "This translated audio predates cinematic timing data. Re-export the translated audio once to create its timing map. No TTS synthesis is performed by the video action."
+                    )
+                }
+                val chapterText = fetchChapterText(database, prefs, request)
+                    ?: throw CinematicVideoException("Chapter text is unavailable, so a timing map cannot be generated for the downloaded audio.")
+                val regexRules = prefs.effectiveRegexRules(request.novelUrl)
+                TtsAudioQueue.updateState(prefs, jobId) {
+                    it?.copy(progress = 12, message = "Using downloaded audio; preparing timing map…")
+                }
+                notification.updateProgress(12)
+                CinematicExistingAudioTimeline.writeApproximateTimeline(
+                    context = context,
+                    request = request.toExportRequest(),
+                    audioUri = audio,
+                    audioFileName = actualAudioName,
+                    chapterText = chapterText,
+                    regexRules = regexRules,
+                    outputFile = stagedTimeline,
+                )
+            }
 
             TtsAudioQueue.updateState(prefs, jobId) {
-                it?.copy(progress = 74, message = "Rendering cinematic video…")
+                it?.copy(progress = 18, message = "Checking video renderer…")
             }
-            notification.updateProgress(74)
+            notification.updateProgress(18)
 
-            val ffmpeg = CinematicFfmpegAssetManager(context).prepare(workDir)
+            val ffmpegManager = CinematicFfmpegAssetManager(context)
+            val ffmpegDir = ffmpegManager.prepare(workDir)
+            ffmpegManager.verify(ffmpegDir)
+
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(progress = 22, message = "Rendering cinematic video…")
+            }
+            notification.updateProgress(22)
+
             val stagedOutput = File(workDir, videoName)
-
             CinematicVideoRenderer().render(
                 request = CinematicVideoRenderRequest(
                     audioFile = stagedAudio,
                     timelineFile = stagedTimeline,
                     outputFile = stagedOutput,
                     workingDirectory = workDir,
-                    ffmpegDirectory = ffmpeg.parentFile ?: workDir,
+                    ffmpegDirectory = ffmpegDir,
                 ),
             ) { fraction ->
-                val percent = (74 + (fraction * 25f)).toInt().coerceIn(74, 99)
+                val percent = (22 + (fraction * 73f)).toInt().coerceIn(22, 95)
                 TtsAudioQueue.updateState(prefs, jobId) {
                     it?.copy(progress = percent, message = "Rendering cinematic video…")
                 }
                 notification.updateProgress(percent)
             }
+
+            if (!stagedOutput.isFile || stagedOutput.length() < 1024L) {
+                throw CinematicVideoException("FFmpeg finished without creating a valid MP4 output")
+            }
+
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(progress = 97, message = "Saving video…")
+            }
+            notification.updateProgress(97)
 
             deleteChildIfPresent(novelFolder, videoName)
             outputUri = DocumentsContract.createDocument(
@@ -222,6 +270,13 @@ class TtsCinematicVideoWorker(
         }.getOrNull()
     }
 
+    private fun findExistingAudio(parent: Uri, prefix: String): Uri? {
+        val extensions = arrayOf("wav", "m4a", "mp3", "aac", "ogg", "opus")
+        return extensions.firstNotNullOfOrNull { extension ->
+            findChild(parent, "$prefix.$extension")
+        }
+    }
+
     private fun findChild(parent: Uri, displayName: String): Uri? {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(
             parent,
@@ -252,21 +307,20 @@ class TtsCinematicVideoWorker(
     }
 
     private fun deleteChildIfPresent(parent: Uri, displayName: String) {
-        findChild(parent, displayName)?.let {
-            runCatching { context.contentResolver.delete(it, null, null) }
-        }
+        findChild(parent, displayName)?.let { runCatching { context.contentResolver.delete(it, null, null) } }
     }
 
     private fun copyUriToFile(uri: Uri, file: File) {
         context.contentResolver.openInputStream(uri)?.use { input ->
+            file.parentFile?.mkdirs()
             file.outputStream().use { output -> input.copyTo(output, DEFAULT_BUFFER) }
-        } ?: throw CinematicVideoException("Unable to read $uri")
+        } ?: throw CinematicVideoException("Unable to read downloaded audio/timeline")
     }
 
     private fun copyFileToUri(file: File, uri: Uri) {
         context.contentResolver.openOutputStream(uri)?.use { output ->
             file.inputStream().use { input -> input.copyTo(output, DEFAULT_BUFFER) }
-        } ?: throw CinematicVideoException("Unable to write $uri")
+        } ?: throw CinematicVideoException("Unable to write generated MP4")
     }
 
     private fun queryDisplayName(uri: Uri): String? = runCatching {
@@ -277,50 +331,108 @@ class TtsCinematicVideoWorker(
             null,
             null,
         )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-            } else null
+            if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
         }
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
     private fun sanitize(name: String, fallback: String = "chapter"): String =
         name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
 
+    private fun fetchChapterText(
+        database: AppDatabase,
+        prefs: AppPreferences,
+        request: VideoRequest,
+    ): String? {
+        return if (request.source == TtsAudioSource.TRANSLATED) {
+            val sourceLang = request.translationSourceLang.ifBlank { prefs.translationPairForBook(request.novelUrl).source }
+            val targetLang = request.translationTargetLang.ifBlank { prefs.translationPairForBook(request.novelUrl).target }
+            if (sourceLang.isBlank() || targetLang.isBlank()) return null
+            val translation = database.chapterTranslationDao()
+                .getTranslations(request.chapterUrl, sourceLang, targetLang)
+                ?: return null
+            if (translation.translatedParagraphs.isBlank()) return null
+            runCatching {
+                val paragraphs = JSONArray(translation.translatedParagraphs)
+                if (paragraphs.length() == 0) null
+                else (0 until paragraphs.length()).joinToString("\n\n") { paragraphs.getString(it) }
+            }.getOrNull()
+        } else {
+            database.chapterBodyDao().get(request.chapterUrl)?.body?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    private fun hasTranslation(database: AppDatabase, prefs: AppPreferences, request: VideoRequest): Boolean =
+        fetchChapterText(database, prefs, request)?.isNotBlank() == true
+
     private fun readRequest(): VideoRequest? {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return null
         val novelTitle = inputData.getString(KEY_NOVEL_TITLE) ?: return null
+        val novelUrl = inputData.getString(KEY_NOVEL_URL) ?: return null
+        val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return null
         val chapterTitle = inputData.getString(KEY_CHAPTER_TITLE) ?: return null
         val chapterIndex = inputData.getInt(KEY_CHAPTER_INDEX, 0)
-        val source = runCatching {
-            TtsAudioSource.valueOf(inputData.getString(KEY_SOURCE) ?: return null)
-        }.getOrNull() ?: return null
+        val source = runCatching { TtsAudioSource.valueOf(inputData.getString(KEY_SOURCE) ?: return null) }.getOrNull() ?: return null
         val outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null
+        val sourceLang = inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: ""
+        val targetLang = inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: ""
         return VideoRequest(
             jobId = jobId,
             novelTitle = novelTitle,
+            novelUrl = novelUrl,
+            chapterUrl = chapterUrl,
             chapterTitle = chapterTitle,
             chapterIndex = chapterIndex,
             source = source,
             outputDirectoryUri = outputDirectoryUri,
+            translationSourceLang = sourceLang,
+            translationTargetLang = targetLang,
         )
     }
 
     private data class VideoRequest(
         val jobId: String,
         val novelTitle: String,
+        val novelUrl: String,
+        val chapterUrl: String,
         val chapterTitle: String,
         val chapterIndex: Int,
         val source: TtsAudioSource,
         val outputDirectoryUri: String,
-    )
+        val translationSourceLang: String,
+        val translationTargetLang: String,
+    ) {
+        val preferredAudioExtension: String get() = TtsAudioFormat.WAV
+
+        fun toExportRequest(): TtsAudioExportRequest = TtsAudioExportRequest(
+            jobId = jobId,
+            novelTitle = novelTitle,
+            novelUrl = novelUrl,
+            chapterUrl = chapterUrl,
+            chapterTitle = chapterTitle,
+            chapterIndex = chapterIndex,
+            source = source,
+            enginePackage = "",
+            voiceId = "",
+            speed = 1f,
+            pitch = 1f,
+            outputDirectoryUri = outputDirectoryUri,
+            format = TtsAudioFormat.WAV,
+            translationSourceLang = translationSourceLang,
+            translationTargetLang = translationTargetLang,
+        )
+    }
 
     companion object {
         const val KEY_JOB_ID = "job_id"
         const val KEY_NOVEL_TITLE = "novel_title"
+        const val KEY_NOVEL_URL = "novel_url"
+        const val KEY_CHAPTER_URL = "chapter_url"
         const val KEY_CHAPTER_TITLE = "chapter_title"
         const val KEY_CHAPTER_INDEX = "chapter_index"
         const val KEY_SOURCE = "source"
         const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
+        const val KEY_TRANSLATION_SOURCE_LANG = "translation_source_lang"
+        const val KEY_TRANSLATION_TARGET_LANG = "translation_target_lang"
         const val MIME_MP4 = "video/mp4"
         private const val DEFAULT_BUFFER = 128 * 1024
     }
