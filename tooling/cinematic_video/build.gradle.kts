@@ -9,7 +9,9 @@ import org.gradle.api.tasks.TaskAction
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
     @get:Input
@@ -75,7 +77,7 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
 
         val process = ProcessBuilder(
             "tar", "-xJf", tarball.absolutePath,
-            "-C", tarExtractRoot.absolutePath
+            "-C", tarExtractRoot.absolutePath,
         )
             .redirectErrorStream(true)
             .start()
@@ -90,27 +92,17 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         }
         require(ffmpegBinary != null) { "FFmpeg CLI binary was not found inside ffmpeg.tar.xz" }
 
-        val destinationRoot = outputRoot.resolve("cinematic/$abi")
-        val destinationBinDir = destinationRoot.resolve("bin")
-        val destinationBinary = destinationBinDir.resolve("ffmpeg.bin")
-        val launcher = destinationBinDir.resolve("ffmpeg")
-        destinationBinDir.mkdirs()
-        ffmpegBinary.copyTo(destinationBinary, overwrite = true)
-        destinationBinary.setExecutable(true, false)
-
-        launcher.writeText(
-            "#!/system/bin/sh\n" +
-                "HERE=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\n" +
-                "export LD_LIBRARY_PATH=\"$HERE/../lib${'$'}{LD_LIBRARY_PATH:+:${'$'}LD_LIBRARY_PATH}\"\n" +
-                "exec \"${'$'}HERE/ffmpeg.bin\" \"${'$'}@\"\n",
-            Charsets.UTF_8,
-        )
-        launcher.setExecutable(true, false)
-
         val sourceLibDir = locate(tarExtractRoot) { it.isDirectory && it.name == "lib64" }
             ?: locate(tarExtractRoot) { it.isDirectory && it.name == "lib" }
-        var librariesCopied = 0
-        if (sourceLibDir != null) {
+        require(sourceLibDir != null) { "FFmpeg shared-library directory was not found" }
+
+        val destinationRoot = outputRoot.resolve("cinematic/$abi")
+        destinationRoot.mkdirs()
+        val runtimeArchive = destinationRoot.resolve("ffmpeg-runtime.zip")
+
+        ZipOutputStream(runtimeArchive.outputStream().buffered()).use { output ->
+            output.setLevel(9)
+            addZipFile(output, ffmpegBinary, "bin/ffmpeg.bin")
             sourceLibDir.listFiles().orEmpty()
                 .filter { file ->
                     file.isFile && (
@@ -118,15 +110,19 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
                             ".so." in file.name.lowercase()
                         )
                 }
-                .forEach { file ->
-                    val target = destinationRoot.resolve("lib/${file.name}")
-                    target.parentFile.mkdirs()
-                    file.copyTo(target, overwrite = true)
-                    librariesCopied++
-                }
+                .sortedBy { it.name }
+                .forEach { file -> addZipFile(output, file, "lib/${file.name}") }
         }
 
-        logger.lifecycle("Prepared FFmpeg CLI runtime for $abi ($librariesCopied shared libraries)")
+        logger.lifecycle(
+            "Prepared compressed FFmpeg runtime for $abi (${runtimeArchive.length() / (1024 * 1024)} MiB APK asset)",
+        )
+    }
+
+    private fun addZipFile(output: ZipOutputStream, file: File, entryName: String) {
+        output.putNextEntry(ZipEntry(entryName))
+        file.inputStream().use { input -> input.copyTo(output, 256 * 1024) }
+        output.closeEntry()
     }
 
     private fun locate(root: File, predicate: (File) -> Boolean): File? {
@@ -183,7 +179,7 @@ android {
 androidComponents {
     onVariants(selector().all()) { variant ->
         variant.sources.assets?.addStaticSourceDirectory(
-            cinematicAssetsDir.get().asFile.absolutePath
+            cinematicAssetsDir.get().asFile.absolutePath,
         )
     }
 }
@@ -196,7 +192,7 @@ dependencies {
 val prepareCinematicFfmpegAssets = tasks.register<PrepareCinematicFfmpegAssetsTask>("prepareCinematicFfmpegAssets") {
     downloadUrl.set(
         "https://github.com/rhythmcache/ffmpeg-android/releases/download/build-264/" +
-            "ffmpeg-8.0-ee2eb6c-Dynamic-android-arm64-v8a.zip"
+            "ffmpeg-8.0-ee2eb6c-Dynamic-android-arm64-v8a.zip",
     )
     expectedSha256.set("62b9ac127b75ee73873d2a953f23f31813e763695915b07c8ac0b3fcb0b6a70d")
     archiveFile.set(ffmpegArchive)
