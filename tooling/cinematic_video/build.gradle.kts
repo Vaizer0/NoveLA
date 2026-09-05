@@ -8,6 +8,7 @@ import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import java.io.File
 import java.net.URI
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -49,43 +50,86 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         outputRoot.mkdirs()
 
         val abi = "arm64-v8a"
-        var ffmpegCopied = false
-        var librariesCopied = 0
+        val zipExtractRoot = File(temporaryDir, "ffmpeg-zip")
+        zipExtractRoot.deleteRecursively()
+        zipExtractRoot.mkdirs()
 
+        var nestedArchive: File? = null
         ZipFile(archive).use { zip ->
             val entries = zip.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
                 if (entry.isDirectory) continue
-                val normalized = entry.name.replace('\\', '/').trimStart('/')
-                val lower = normalized.lowercase()
-                val fileName = normalized.substringAfterLast('/')
-
-                val destination = when {
-                    lower.endsWith("/bin/ffmpeg") || lower == "bin/ffmpeg" -> {
-                        ffmpegCopied = true
-                        outputRoot.resolve("cinematic/$abi/bin/ffmpeg")
+                val name = entry.name.replace('\\', '/').trimStart('/')
+                if (name.substringAfterLast('/').equals("ffmpeg.tar.xz", ignoreCase = true)) {
+                    nestedArchive = File(zipExtractRoot, "ffmpeg.tar.xz")
+                    nestedArchive!!.outputStream().use { output ->
+                        zip.getInputStream(entry).use { input -> input.copyTo(output, 256 * 1024) }
                     }
-                    fileName.lowercase().endsWith(".so") || ".so." in fileName.lowercase() -> {
-                        librariesCopied++
-                        outputRoot.resolve("cinematic/$abi/lib/$fileName")
-                    }
-                    else -> null
-                } ?: continue
-
-                destination.parentFile.mkdirs()
-                zip.getInputStream(entry).use { input ->
-                    destination.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
+                    break
                 }
-                if (destination.name == "ffmpeg") destination.setExecutable(true, false)
             }
         }
 
-        require(ffmpegCopied) { "FFmpeg CLI binary was not found in the pinned Android build archive" }
+        val tarball = requireNotNull(nestedArchive) {
+            "FFmpeg release archive does not contain ffmpeg.tar.xz"
+        }
+        val tarExtractRoot = File(temporaryDir, "ffmpeg-tar")
+        tarExtractRoot.deleteRecursively()
+        tarExtractRoot.mkdirs()
+
+        val process = ProcessBuilder(
+            "tar", "-xJf", tarball.absolutePath,
+            "-C", tarExtractRoot.absolutePath
+        )
+            .redirectErrorStream(true)
+            .start()
+        val tarOutput = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        require(exitCode == 0) {
+            "Failed to unpack ffmpeg.tar.xz (exit=$exitCode): ${tarOutput.takeLast(2000)}"
+        }
+
+        val ffmpegBinary = locate(tarExtractRoot) { it.isFile && it.name == "ffmpeg" && it.parentFile?.name == "bin" }
+        require(ffmpegBinary != null) { "FFmpeg CLI binary was not found inside ffmpeg.tar.xz" }
+
+        val destinationRoot = outputRoot.resolve("cinematic/$abi")
+        val destinationBinary = destinationRoot.resolve("bin/ffmpeg")
+        destinationBinary.parentFile.mkdirs()
+        ffmpegBinary.copyTo(destinationBinary, overwrite = true)
+        destinationBinary.setExecutable(true, false)
+
+        val sourceLibDir = locate(tarExtractRoot) { it.isDirectory && it.name == "lib64" }
+            ?: locate(tarExtractRoot) { it.isDirectory && it.name == "lib" }
+        var librariesCopied = 0
+        if (sourceLibDir != null) {
+            sourceLibDir.listFiles().orEmpty()
+                .filter { file ->
+                    file.isFile && (
+                        file.name.endsWith(".so", ignoreCase = true) ||
+                            ".so." in file.name.lowercase()
+                        )
+                }
+                .forEach { file ->
+                    val target = destinationRoot.resolve("lib/${file.name}")
+                    target.parentFile.mkdirs()
+                    file.copyTo(target, overwrite = true)
+                    librariesCopied++
+                }
+        }
+
         logger.lifecycle("Prepared FFmpeg CLI runtime for $abi ($librariesCopied shared libraries)")
     }
 
-    private fun sha256(file: java.io.File): String {
+    private fun locate(root: File, predicate: (File) -> Boolean): File? {
+        if (predicate(root)) return root
+        root.listFiles().orEmpty().forEach { child ->
+            locate(child, predicate)?.let { return it }
+        }
+        return null
+    }
+
+    private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
             val buffer = ByteArray(256 * 1024)
