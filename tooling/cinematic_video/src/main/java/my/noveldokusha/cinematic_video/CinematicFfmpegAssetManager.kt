@@ -4,29 +4,50 @@ import android.content.Context
 import android.os.Build
 import java.io.File
 
-/** Extracts the ABI-specific FFmpeg executable from packaged assets once per cache directory. */
+/** Extracts the ABI-specific FFmpeg CLI and its shared libraries from packaged assets. */
 class CinematicFfmpegAssetManager(
     private val context: Context,
 ) {
     fun prepare(workDir: File): File {
         val abi = Build.SUPPORTED_ABIS.firstOrNull { it in SUPPORTED_ABIS }
-            ?: throw CinematicVideoException("No supported FFmpeg ABI is available")
-        val destination = File(workDir, "ffmpeg")
-        if (!destination.isFile || destination.length() == 0L) {
-            destination.parentFile?.mkdirs()
-            val assetPath = "cinematic/$abi/ffmpeg"
+            ?: throw CinematicVideoException("Video export is currently supported on arm64-v8a devices only")
+
+        val runtimeRoot = File(workDir, "ffmpeg-runtime")
+        val ffmpeg = File(runtimeRoot, "bin/ffmpeg")
+
+        if (!ffmpeg.isFile || ffmpeg.length() == 0L) {
+            runtimeRoot.deleteRecursively()
+            copyAssetTree("cinematic/$abi", runtimeRoot)
+        }
+
+        require(ffmpeg.isFile && ffmpeg.length() > 0L) {
+            "Packaged FFmpeg CLI is missing for $abi"
+        }
+        ffmpeg.setExecutable(true, false)
+        if (!ffmpeg.canExecute()) {
+            throw CinematicVideoException("Cannot execute bundled FFmpeg")
+        }
+        return File(runtimeRoot, "bin")
+    }
+
+    private fun copyAssetTree(assetPath: String, destination: File) {
+        val entries = context.assets.list(assetPath).orEmpty()
+        if (entries.isEmpty()) {
             context.assets.open(assetPath).use { input ->
+                destination.parentFile?.mkdirs()
                 destination.outputStream().use { output -> input.copyTo(output, COPY_BUFFER) }
             }
+            return
         }
-        if (!destination.setExecutable(true, false) && !destination.canExecute()) {
-            throw CinematicVideoException("Cannot mark FFmpeg executable")
+
+        destination.mkdirs()
+        entries.forEach { name ->
+            copyAssetTree("$assetPath/$name", File(destination, name))
         }
-        return destination
     }
 
     companion object {
-        private const val COPY_BUFFER = 128 * 1024
-        private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        private const val COPY_BUFFER = 256 * 1024
+        private val SUPPORTED_ABIS = setOf("arm64-v8a")
     }
 }
