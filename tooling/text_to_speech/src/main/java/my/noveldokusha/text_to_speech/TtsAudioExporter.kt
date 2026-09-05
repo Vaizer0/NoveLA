@@ -46,11 +46,35 @@ class TtsAudioExporter(
             source = request.source.name,
         )
 
+        val liveEnginePackage = AppTtsEngine.getInstance(context).getBoundEnginePackage().orEmpty()
+        val resolvedEngine = TtsEngineCatalog.resolveForExport(
+            context = context,
+            requestedEnginePackage = request.enginePackage,
+            requestedVoiceId = request.voiceId,
+            liveEnginePackage = liveEnginePackage,
+        )
+        val effectiveRequest = request.copy(
+            enginePackage = resolvedEngine.enginePackage,
+            voiceId = resolvedEngine.voiceId,
+        )
+        if (resolvedEngine.changedEngine || resolvedEngine.changedVoice) {
+            Timber.w(
+                "ttsExport isolated from live engine=$liveEnginePackage " +
+                    "requested=${request.enginePackage}/${request.voiceId} " +
+                    "effective=${effectiveRequest.enginePackage}/${effectiveRequest.voiceId} " +
+                    "changedVoice=${resolvedEngine.changedVoice}"
+            )
+        }
+
+        // Hold one export slot for the whole chapter rather than reacquiring the pool
+        // for every slice. This keeps the five-export limit meaningful and avoids repeated
+        // engine-client churn while preserving independent clients for different chapters.
+        val lease = TtsAudioEnginePool.acquire(context, effectiveRequest.enginePackage)
         var finished = false
         try {
             val maxInputLength = TextToSpeech.getMaxSpeechInputLength()
-            val novelTitle = TtsTextPreparer.cleanForTts(request.novelTitle).trim()
-            val chapterTitle = TtsTextPreparer.cleanForTts(request.chapterTitle).trim()
+            val novelTitle = TtsTextPreparer.cleanForTts(effectiveRequest.novelTitle).trim()
+            val chapterTitle = TtsTextPreparer.cleanForTts(effectiveRequest.chapterTitle).trim()
             val paragraphPlans = buildList {
                 if (novelTitle.isNotBlank() && !TtsTextPreparer.isOnlyDecorators(novelTitle)) {
                     add(novelTitle to TtsTextPreparer.chunkIntoUtterances(novelTitle, maxInputLength))
@@ -75,25 +99,18 @@ class TtsAudioExporter(
             for ((_, slices) in paragraphPlans) {
                 timelineBuilder.beginParagraph()
                 for (chunk in slices) {
-                    // One export worker owns an engine client only while it is actually
-                    // synthesizing this chunk. This leaves clients available for other
-                    // chapters and lets live-TTS-aware admission take effect between chunks.
-                    val lease = TtsAudioEnginePool.acquire(context, request.enginePackage)
-                    try {
-                        val tts = lease.tts
-                        configureTts(tts, request)
-                        timelineBuilder.registerSlice(chunk)
-                        synthesizeChunk(
-                            tts = tts,
-                            text = chunk,
-                            writer = writer,
-                            chapterTitle = request.chapterTitle,
-                            timelineBuilder = timelineBuilder,
-                            utteranceId = "tts_export_${request.jobId}_$chunkIndex",
-                        )
-                    } finally {
-                        lease.close()
-                    }
+                    val tts = lease.tts
+                    configureTts(tts, effectiveRequest)
+                    timelineBuilder.registerSlice(chunk)
+                    synthesizeChunk(
+                        tts = tts,
+                        text = chunk,
+                        writer = writer,
+                        chapterTitle = effectiveRequest.chapterTitle,
+                        timelineBuilder = timelineBuilder,
+                        utteranceId = "tts_export_${effectiveRequest.jobId}_$chunkIndex",
+                        stopOnCancellation = effectiveRequest.enginePackage != liveEnginePackage,
+                    )
 
                     chunkIndex++
                     processedChars += chunk.length
@@ -107,13 +124,12 @@ class TtsAudioExporter(
 
             if (!synthesizedAny) {
                 throw TtsExportException(
-                    "No audio was produced for chapter '${request.chapterTitle}'. " +
+                    "No audio was produced for chapter '${effectiveRequest.chapterTitle}'. " +
                         "The TTS engine produced an empty result."
                 )
             }
 
             writer.finish()
-            finished = true
 
             val sampleRate = writer.sampleRate()
             val channels = writer.channels()
@@ -124,7 +140,7 @@ class TtsAudioExporter(
                 0
             }
             if (sampleRate <= 0 || channels <= 0) {
-                throw TtsExportException("Chapter '${request.chapterTitle}' has no valid audio format")
+                throw TtsExportException("Chapter '${effectiveRequest.chapterTitle}' has no valid audio format")
             }
 
             val timeline = timelineBuilder.build(
@@ -136,17 +152,19 @@ class TtsAudioExporter(
             val rangeCount = timeline.paragraphs.sumOf { it.ranges.size }
             if (rangeCount == 0) {
                 throw TtsExportException(
-                    "TTS engine '${request.enginePackage}' produced audio but no native " +
-                        "range timing data for chapter '${request.chapterTitle}'. " +
+                    "TTS engine '${effectiveRequest.enginePackage}' produced audio but no native " +
+                        "range timing data for chapter '${effectiveRequest.chapterTitle}'. " +
                         "The exported JSON would not contain word-highlight timing."
                 )
             }
             Timber.d(
-                "ttsExport timeline ready: chapter=${request.chapterTitle}, " +
-                    "ranges=$rangeCount, durationMs=$durationMs"
+                "ttsExport timeline ready: chapter=${effectiveRequest.chapterTitle}, " +
+                    "engine=${effectiveRequest.enginePackage}, ranges=$rangeCount, durationMs=$durationMs"
             )
+            finished = true
             return TtsAudioExportResult(audioFile = destFile, timeline = timeline)
         } finally {
+            lease.close()
             if (!finished) runCatching { writer.close() }
         }
     }
@@ -175,6 +193,7 @@ class TtsAudioExporter(
         chapterTitle: String,
         timelineBuilder: TtsTimelineBuilder,
         utteranceId: String,
+        stopOnCancellation: Boolean,
     ) {
         val done = CompletableDeferred<Unit>()
         val cancelled = AtomicBoolean(false)
@@ -285,10 +304,17 @@ class TtsAudioExporter(
         try {
             done.await()
         } catch (e: CancellationException) {
-            // Do not call tts.stop() here: on some engines stop is delivered at service
-            // scope and can interrupt the reader's live TTS. Mark callbacks inert and wait
-            // for the current request to settle before releasing the pooled client.
             cancelled.set(true)
+            if (stopOnCancellation) {
+                // Export is using an engine service different from the live reader, so stop
+                // is safe here and makes cancellation responsive instead of waiting forever.
+                runCatching { tts.stop() }
+                throw e
+            }
+
+            // If the device has only one engine, preserve the old safety behavior: stopping
+            // the shared engine can also interrupt the live reader. Mark callbacks inert and
+            // wait for the in-flight request to settle before releasing the shared client.
             withContext(NonCancellable) {
                 runCatching { done.await() }
             }
