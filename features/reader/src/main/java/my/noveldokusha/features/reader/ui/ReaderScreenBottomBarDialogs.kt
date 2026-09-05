@@ -1,6 +1,5 @@
 package my.noveldokusha.features.reader.ui
 
-import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,12 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -23,7 +18,6 @@ import my.noveldokusha.features.reader.ui.settingDialogs.MoreSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.StyleSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.TranslatorSettingDialog
 import my.noveldokusha.features.reader.ui.settingDialogs.VoiceReaderSettingDialog
-import my.noveldokusha.features.reader.video.CinematicVideoExportActivity
 import my.noveldokusha.settings.RegexCleanupSettingsScreen
 import my.noveldokusha.settings.RegexCleanupSettingsViewModel
 
@@ -49,7 +43,6 @@ internal fun ReaderScreenBottomBarDialogs(
     onManualHighlightEnabledChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier.fillMaxWidth()
@@ -61,23 +54,11 @@ internal fun ReaderScreenBottomBarDialogs(
                         state = settings.liveTranslation
                     )
                     ReaderScreenState.Settings.Type.TextToSpeech -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            VoiceReaderSettingDialog(
-                                state = settings.textToSpeech,
-                                floatingTtsState = settings.floatingTts,
-                                parallelEnabled = settings.liveTranslation.parallelEnabled,
-                            )
-                            Button(
-                                onClick = {
-                                    context.startActivity(
-                                        Intent(context, CinematicVideoExportActivity::class.java)
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Create cinematic video")
-                            }
-                        }
+                        VoiceReaderSettingDialog(
+                            state = settings.textToSpeech,
+                            floatingTtsState = settings.floatingTts,
+                            parallelEnabled = settings.liveTranslation.parallelEnabled,
+                        )
                     }
                     ReaderScreenState.Settings.Type.Style -> {
                         StyleSettingDialog(
