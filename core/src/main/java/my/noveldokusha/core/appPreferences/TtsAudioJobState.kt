@@ -23,45 +23,24 @@ enum class TtsAudioJobStatus {
     CANCELLED,
 }
 
-/**
- * Запись одной задачи загрузки аудио главы (persisted между перезапусками).
- *
- * Хранится в SharedPreferences (TTS_AUDIO_DOWNLOAD_JOBS) как Map<jobId, TtsAudioJobState>.
- * jobId детерминирован (см. TtsAudioExportRequest.makeJobId), поэтому повторный
- * запуск того же (книга, глава, источник) обновляет ту же запись, а UI может
- * показывать «файл уже создан / идёт загрузка / ошибка» для конкретной главы.
- */
 @Immutable
 @Serializable
 data class TtsAudioJobState(
     val chapterUrl: String,
     val novelUrl: String,
     val chapterTitle: String = "",
-    /**
-     * Источник текста ЭТОЙ задачи (ORIGINAL/TRANSLATED). Не глобальная настройка
-     * TTS_AUDIO_DOWNLOAD_SOURCE: задаётся при постановке в очередь и сохраняется
-     * сквозь life-cycle задачи, чтобы UI показывал прогресс именно того экспорта,
-     * который реально выполняется, а не «дефолтного» источника по настройке.
-     */
     val source: TtsAudioSource = TtsAudioSource.ORIGINAL,
     val status: TtsAudioJobStatus,
-    /** Причину ошибки (локальная строка) для UI/уведомления. */
     val message: String = "",
-    /** Имя созданного файла на успех (из SAF) или null. */
     val displayName: String = "",
-    /** content:// URI созданного файла на успех (для «открыть/прослушать»). */
     val documentUri: String = "",
-    /** Прогресс 0..100 (персистится воркером для восстановления после перезапуска). */
     val progress: Int = 0,
-    /**
-     * WorkRequest UUID (WorkManager), выполняющий эту задачу. Позволяет на старте
-     * сверять персистентное состояние с реальным состоянием WorkManager и чинить
-     * «застрявшие» записи (QUEUED/RUNNING) после kill/force-stop процесса, когда
-     * воркер не успел донести свой финальный статус.
-     */
+    /** Current export phase: AUDIO while creating WAV/JSON, VIDEO while rendering MP4. */
+    val phase: String = "AUDIO",
+    /** Current temporary/generated MP4 byte size during VIDEO phase. */
+    val videoSizeBytes: Long = 0L,
     val workRequestId: String = "",
 ) {
     val isActive: Boolean
-        get() = status == TtsAudioJobStatus.QUEUED ||
-            status == TtsAudioJobStatus.RUNNING
+        get() = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
 }
