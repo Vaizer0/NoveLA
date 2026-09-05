@@ -42,13 +42,17 @@ internal class CinematicVideoWorker(
                 timelineFile.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
             }
 
+            var lastProgress = -1
             CinematicVideoExporter(applicationContext).export(
                 wavFile = wavFile,
                 timelineFile = timelineFile,
                 outputFile = encodedFile,
             ) { progress ->
                 val percent = (progress * 100f).toInt().coerceIn(0, 100)
-                setProgress(workDataOf(KEY_PROGRESS to percent))
+                if (percent != lastProgress) {
+                    lastProgress = percent
+                    setProgress(workDataOf(KEY_PROGRESS to percent))
+                }
             }
 
             applicationContext.contentResolver.openOutputStream(outputUri, "w").use { output ->
