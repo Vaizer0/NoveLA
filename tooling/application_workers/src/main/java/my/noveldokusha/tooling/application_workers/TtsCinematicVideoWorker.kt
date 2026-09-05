@@ -103,13 +103,15 @@ class TtsCinematicVideoWorker(
             if (timeline != null) {
                 copyUriToFile(timeline, stagedTimeline)
             } else {
-                if (request.source == TtsAudioSource.TRANSLATED && !hasTranslation(database, prefs, request)) {
+                val chapterText = fetchChapterText(database, prefs, request)
+                if (request.source == TtsAudioSource.TRANSLATED && chapterText.isNullOrBlank()) {
                     throw CinematicVideoException(
-                        "This translated audio predates cinematic timing data. Re-export the translated audio once to create its timing map. No TTS synthesis is performed by the video action."
+                        "This translated audio predates cinematic timing data and its translated text is unavailable. Re-export the translated audio once to create timing data. No TTS synthesis is performed by the video action."
                     )
                 }
-                val chapterText = fetchChapterText(database, prefs, request)
-                    ?: throw CinematicVideoException("Chapter text is unavailable, so a timing map cannot be generated for the downloaded audio.")
+                if (chapterText.isNullOrBlank()) {
+                    throw CinematicVideoException("Chapter text is unavailable, so a timing map cannot be generated for the downloaded audio.")
+                }
                 val regexRules = prefs.effectiveRegexRules(request.novelUrl)
                 TtsAudioQueue.updateState(prefs, jobId) {
                     it?.copy(progress = 12, message = "Using downloaded audio; preparing timing map…")
@@ -338,19 +340,19 @@ class TtsCinematicVideoWorker(
     private fun sanitize(name: String, fallback: String = "chapter"): String =
         name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
 
-    private fun fetchChapterText(
+    private suspend fun fetchChapterText(
         database: AppDatabase,
         prefs: AppPreferences,
         request: VideoRequest,
-    ): String? {
-        return if (request.source == TtsAudioSource.TRANSLATED) {
+    ): String? = withContext(Dispatchers.IO) {
+        if (request.source == TtsAudioSource.TRANSLATED) {
             val sourceLang = request.translationSourceLang.ifBlank { prefs.translationPairForBook(request.novelUrl).source }
             val targetLang = request.translationTargetLang.ifBlank { prefs.translationPairForBook(request.novelUrl).target }
-            if (sourceLang.isBlank() || targetLang.isBlank()) return null
+            if (sourceLang.isBlank() || targetLang.isBlank()) return@withContext null
             val translation = database.chapterTranslationDao()
                 .getTranslations(request.chapterUrl, sourceLang, targetLang)
-                ?: return null
-            if (translation.translatedParagraphs.isBlank()) return null
+                ?: return@withContext null
+            if (translation.translatedParagraphs.isBlank()) return@withContext null
             runCatching {
                 val paragraphs = JSONArray(translation.translatedParagraphs)
                 if (paragraphs.length() == 0) null
@@ -360,9 +362,6 @@ class TtsCinematicVideoWorker(
             database.chapterBodyDao().get(request.chapterUrl)?.body?.takeIf { it.isNotBlank() }
         }
     }
-
-    private fun hasTranslation(database: AppDatabase, prefs: AppPreferences, request: VideoRequest): Boolean =
-        fetchChapterText(database, prefs, request)?.isNotBlank() == true
 
     private fun readRequest(): VideoRequest? {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return null
@@ -419,6 +418,7 @@ class TtsCinematicVideoWorker(
             format = TtsAudioFormat.WAV,
             translationSourceLang = translationSourceLang,
             translationTargetLang = translationTargetLang,
+            exportMode = TtsExportMode.CINEMATIC_VIDEO,
         )
     }
 
