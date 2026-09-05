@@ -1,0 +1,100 @@
+void pango_layout_set_text(PangoLayout*, const char*, int);
+void pango_layout_set_font_description(PangoLayout*, const PangoFontDescription*);
+void pango_layout_get_pixel_size(PangoLayout*, int*, int*);
+void g_object_unref(void*);
+PangoFontDescription* pango_font_description_from_string(const char*);
+void pango_font_description_free(PangoFontDescription*);
+void pango_layout_set_single_paragraph_mode(PangoLayout*, int);
+void pango_layout_get_pixel_extents(PangoLayout*, PangoRectangle*, PangoRectangle*);
+}
+
+using JsonValue = std::variant<std::nullptr_t, bool, double, std::string,
+                               std::vector<struct JsonNode>, std::map<std::string, struct JsonNode>>;
+struct JsonNode { JsonValue v; };
+
+class JsonParser {
+    const std::string& s; size_t i = 0;
+    void ws(){ while(i<s.size() && std::isspace((unsigned char)s[i])) ++i; }
+    static void append_cp(std::string& o, unsigned cp){
+        if(cp<=0x7F) o.push_back((char)cp);
+        else if(cp<=0x7FF){ o.push_back((char)(0xC0|(cp>>6))); o.push_back((char)(0x80|(cp&63))); }
+        else if(cp<=0xFFFF){ o.push_back((char)(0xE0|(cp>>12))); o.push_back((char)(0x80|((cp>>6)&63))); o.push_back((char)(0x80|(cp&63))); }
+        else { o.push_back((char)(0xF0|(cp>>18))); o.push_back((char)(0x80|((cp>>12)&63))); o.push_back((char)(0x80|((cp>>6)&63))); o.push_back((char)(0x80|(cp&63))); }
+    }
+    std::string str(){
+        if(s[i++]!='"') throw std::runtime_error("JSON string expected");
+        std::string o;
+        while(i<s.size()){
+            char c=s[i++];
+            if(c=='"') return o;
+            if(c!='\\'){ o.push_back(c); continue; }
+            if(i>=s.size()) break;
+            char e=s[i++];
+            switch(e){
+                case '"':o+='"';break; case '\\':o+='\\';break; case '/':o+='/';break;
+                case 'b':o+='\b';break; case 'f':o+='\f';break; case 'n':o+='\n';break; case 'r':o+='\r';break; case 't':o+='\t';break;
+                case 'u':{
+                    if(i+4>s.size()) throw std::runtime_error("bad unicode escape");
+                    unsigned cp=0; for(int k=0;k<4;k++){ char h=s[i++]; cp<<=4; cp += (h>='0'&&h<='9')?h-'0':(h>='a'&&h<='f')?h-'a'+10:h-'A'+10; }
+                    append_cp(o,cp); break;
+                }
+                default: throw std::runtime_error("bad JSON escape");
+            }
+        }
+        throw std::runtime_error("unterminated JSON string");
+    }
+    double num(){ size_t st=i; if(s[i]=='-')++i; while(i<s.size()&&std::isdigit((unsigned char)s[i]))++i; if(i<s.size()&&s[i]=='.'){++i;while(i<s.size()&&std::isdigit((unsigned char)s[i]))++i;} if(i<s.size()&&(s[i]=='e'||s[i]=='E')){++i;if(i<s.size()&&(s[i]=='+'||s[i]=='-'))++i;while(i<s.size()&&std::isdigit((unsigned char)s[i]))++i;} return std::stod(s.substr(st,i-st)); }
+    JsonNode val(){
+        ws(); if(i>=s.size()) throw std::runtime_error("unexpected EOF");
+        if(s[i]=='"') return {str()};
+        if(s[i]=='{') return obj();
+        if(s[i]=='[') return arr();
+        if(s.compare(i,4,"true")==0){i+=4;return {true};}
+        if(s.compare(i,5,"false")==0){i+=5;return {false};}
+        if(s.compare(i,4,"null")==0){i+=4;return {nullptr};}
+        return {num()};
+    }
+    JsonNode obj(){
+        std::map<std::string,JsonNode> m; ++i; ws(); if(i<s.size()&&s[i]=='}'){++i;return {m};}
+        while(true){ ws(); std::string k=str(); ws(); if(s[i++]!=':')throw std::runtime_error("expected :"); m.emplace(std::move(k),val()); ws(); if(s[i]=='}'){++i;break;} if(s[i++]!=',')throw std::runtime_error("expected ,"); }
+        return {m};
+    }
+    JsonNode arr(){
+        std::vector<JsonNode> a; ++i; ws(); if(i<s.size()&&s[i]==']'){++i;return {a};}
+        while(true){ a.push_back(val()); ws(); if(s[i]==']'){++i;break;} if(s[i++]!=',')throw std::runtime_error("expected ,"); }
+        return {a};
+    }
+public: explicit JsonParser(const std::string& x):s(x){} JsonNode parse(){return val();}
+};
+
+template<class T> const T& as(const JsonNode& n){ return std::get<T>(n.v); }
+double number(const std::map<std::string,JsonNode>& o,const char* k){return as<double>(o.at(k));}
+std::string stringv(const std::map<std::string,JsonNode>& o,const char* k){return as<std::string>(o.at(k));}
+
+struct Range { int startChar,endChar; double startMs,endMs; bool hasEnd; };
+struct Para { int index,startChar,endChar; double startMs,endMs; std::string text; std::vector<Range> ranges; };
+
+static uint32_t next_cp(const std::string& s,size_t& p){
+    uint8_t c=(uint8_t)s[p++]; if(c<0x80)return c; if((c>>5)==6){uint32_t r=c&31; r=(r<<6)|((uint8_t)s[p++]&63);return r;} if((c>>4)==14){uint32_t r=c&15;r=(r<<6)|((uint8_t)s[p++]&63);r=(r<<6)|((uint8_t)s[p++]&63);return r;} uint32_t r=c&7;r=(r<<6)|((uint8_t)s[p++]&63);r=(r<<6)|((uint8_t)s[p++]&63);r=(r<<6)|((uint8_t)s[p++]&63);return r; }
+static int cp_count(const std::string& s){int n=0;size_t p=0;while(p<s.size()){next_cp(s,p);++n;}return n;}
+static bool is_dev(uint32_t cp){return (cp>=0x0900&&cp<=0x097F)||(cp>=0xA8E0&&cp<=0xA8FF);}
+
+struct Token { std::string text; int byteStart,byteEnd,charStart,charEnd; double width=0; };
+
+static double clampd(double v,double a,double b){return std::max(a,std::min(b,v));}
+static double ease(double v){v=clampd(v,0,1);return v*v*(3-2*v);}
+
+struct Canvas {
+    static constexpr int W=1920,H=1080;
+    int stride;
+    std::vector<unsigned char> px;
+    cairo_surface_t* surf{}; cairo_t* cr{};
+    Canvas():stride(cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32,W)),px((size_t)stride*H){ surf=cairo_image_surface_create_for_data(px.data(),CAIRO_FORMAT_ARGB32,W,H,stride); cr=cairo_create(surf); }
+    ~Canvas(){cairo_destroy(cr);cairo_surface_destroy(surf);} void clear(){cairo_set_source_rgba(cr,0,0,0,0);cairo_set_operator(cr,CAIRO_OPERATOR_OVER);cairo_paint(cr);} 
+};
+
+static std::string shell_quote(const std::string& s){ std::string o="'"; for(char c:s){ if(c=='\'')o+="'\\''"; else o+=c; } return o+"'"; }
+
+struct Renderer {
+    static constexpr int W=1920,H=1080,FPS=24,CARD_W=1545,CARD_MIN_H=345,CARD_MAX_H=593,CARD_X=(W-CARD_W)/2,PAD_X=93,PAD_Y=63,CONTENT_TOP=262,CONTENT_BOTTOM=952;
+    std::array<unsigned char, sizeof(unsigned char)*1> dummy{};
