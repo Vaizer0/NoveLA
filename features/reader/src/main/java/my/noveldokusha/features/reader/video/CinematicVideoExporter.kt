@@ -1,6 +1,7 @@
 package my.noveldokusha.features.reader.video
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -280,8 +281,13 @@ internal class CinematicVideoExporter(
         private val program: Int
         private val texture: Int
         private val bitmapBuffer = ByteBuffer.allocateDirect(CinematicFrameRenderer.WIDTH * CinematicFrameRenderer.HEIGHT * 4)
-        private val vertexBuffer = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-            put(floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 1f, 1f, -1f, 1f, 0f, 0f, 1f, 1f, 1f, 0f)).position(0)
+        private val vertexBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+            put(floatArrayOf(
+                -1f, -1f, 0f, 1f,
+                 1f, -1f, 1f, 1f,
+                -1f,  1f, 0f, 0f,
+                 1f,  1f, 1f, 0f
+            )).position(0)
         }
 
         init {
@@ -316,11 +322,15 @@ internal class CinematicVideoExporter(
             bitmap.copyPixelsToBuffer(bitmapBuffer)
             bitmapBuffer.position(0)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, bitmap.width, bitmap.height, 0,
-                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, bitmapBuffer)
+            GLES20.glTexImage2D(
+                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
+                bitmap.width, bitmap.height, 0,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, bitmapBuffer
+            )
             GLES20.glViewport(0, 0, bitmap.width, bitmap.height)
             GLES20.glUseProgram(program)
             GlProgram.draw(texture, program, vertexBuffer)
+            check(GLES20.glGetError() == GLES20.GL_NO_ERROR)
         }
 
         fun setPresentationTime(nanoseconds: Long) {
@@ -454,19 +464,23 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
                     dataStart = file.filePointer
                     dataEnd = dataStart + size
                     totalDataBytes = size
-                    dataFound = true
                 }
             }
+            require(chunkStart + size + (size and 1L) <= file.length()) { "Invalid WAV chunk size" }
             file.seek(chunkStart + size + (size and 1L))
             if (fmtFound && dataFound) break
+            dataFound = dataFound || id == "data"
         }
         require(fmtFound && dataFound) { "WAV fmt/data chunks are missing" }
         require(sampleRate > 0 && channels > 0) { "Invalid WAV format" }
         file.seek(dataStart)
         durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels * 2L)
     }
+
     private fun readAscii(n: Int): String {
-        val bytes = ByteArray(n); file.readFully(bytes); return bytes.toString(Charsets.US_ASCII)
+        val bytes = ByteArray(n)
+        file.readFully(bytes)
+        return bytes.toString(Charsets.US_ASCII)
     }
     private fun readUInt16(): Int = java.lang.Short.toUnsignedInt(java.lang.Short.reverseBytes(file.readShort()))
     private fun readUInt32(): Long = java.lang.Integer.toUnsignedLong(Integer.reverseBytes(file.readInt()))
