@@ -16,7 +16,7 @@ import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsExportMode
 import java.util.UUID
 
-/** Single-click cinematic export: reuse a valid WAV+timeline, otherwise synthesize them then render MP4. */
+/** Single-click cinematic export: reuse existing downloaded audio whenever possible. */
 object TtsCinematicVideoQueue {
     private const val WORK_PREFIX = "tts-cinematic-video"
     const val VIDEO_TAG = "tts-cinematic-video"
@@ -38,9 +38,13 @@ object TtsCinematicVideoQueue {
                     TtsCinematicVideoWorker.KEY_JOB_ID to generationJobId,
                     TtsCinematicVideoWorker.KEY_NOVEL_TITLE to request.novelTitle,
                     TtsCinematicVideoWorker.KEY_CHAPTER_TITLE to request.chapterTitle,
+                    TtsCinematicVideoWorker.KEY_NOVEL_URL to request.novelUrl,
+                    TtsCinematicVideoWorker.KEY_CHAPTER_URL to request.chapterUrl,
                     TtsCinematicVideoWorker.KEY_CHAPTER_INDEX to request.chapterIndex,
                     TtsCinematicVideoWorker.KEY_SOURCE to request.source.name,
                     TtsCinematicVideoWorker.KEY_OUTPUT_DIRECTORY_URI to request.outputDirectoryUri,
+                    TtsCinematicVideoWorker.KEY_TRANSLATION_SOURCE_LANG to request.translationSourceLang,
+                    TtsCinematicVideoWorker.KEY_TRANSLATION_TARGET_LANG to request.translationTargetLang,
                 )
             )
             .addTag(VIDEO_TAG)
@@ -62,7 +66,7 @@ object TtsCinematicVideoQueue {
         }
 
         val work = WorkManager.getInstance(context)
-        if (hasReusableAudioAndTimeline(context, request)) {
+        if (hasReusableAudio(context, request)) {
             work.beginUniqueWork(
                 uniqueWorkName(request.jobId),
                 ExistingWorkPolicy.REPLACE,
@@ -111,37 +115,28 @@ object TtsCinematicVideoQueue {
 
     private fun uniqueWorkName(logicalJobId: String): String = "$WORK_PREFIX-$logicalJobId"
 
-    /** Only skip synthesis when both expected artifacts exist and are minimally sane. */
-    private fun hasReusableAudioAndTimeline(
+    /** Reuse any valid downloaded audio; a missing timeline is reconstructed without TTS synthesis. */
+    private fun hasReusableAudio(
         context: Context,
         request: TtsAudioExportRequest,
     ): Boolean = runCatching {
         val treeUri = Uri.parse(request.outputDirectoryUri)
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
-        val wrapperUri = findChild(
-            context,
-            DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId),
-            WRAPPER_FOLDER_NAME,
-        ) ?: return false
+        val rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId)
+        val wrapperUri = findChild(context, rootUri, WRAPPER_FOLDER_NAME) ?: return false
         val novelUri = findChild(context, wrapperUri, sanitize(request.novelTitle, "novel")) ?: return false
+        val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle, "chapter")}"
         val suffix = when (request.source) {
             TtsAudioSource.ORIGINAL -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_original)
             TtsAudioSource.TRANSLATED -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_translated)
             TtsAudioSource.ASK_EVERY_TIME -> ""
         }
-        val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle, "chapter")}"
-        val audioName = if (suffix.isBlank()) "$base.wav" else "$base $suffix.wav"
-        val timelineName = if (suffix.isBlank()) "$base.timeline.json" else "$base $suffix.timeline.json"
-        val audio = findChild(context, novelUri, audioName) ?: return false
-        val timeline = findChild(context, novelUri, timelineName) ?: return false
-        val audioLength = context.contentResolver.openAssetFileDescriptor(audio, "r")?.use { it.length } ?: -1L
-        if (audioLength <= 44L) return false
-        val json = context.contentResolver.openInputStream(timeline)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-            ?: return false
-        val root = org.json.JSONObject(json)
-        val audioDuration = root.optJSONObject("audio")?.optLong("durationMs", 0L) ?: 0L
-        val paragraphs = root.optJSONArray("paragraphs")?.length() ?: 0
-        audioDuration > 0L && paragraphs > 0
+        val prefix = if (suffix.isBlank()) base else "$base $suffix"
+        listOf("wav", "m4a", "mp3", "aac", "ogg", "opus").any { extension ->
+            val uri = findChild(context, novelUri, "$prefix.$extension") ?: return@any false
+            val length = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+            length > 44L
+        }
     }.getOrDefault(false)
 
     private fun findChild(context: Context, parent: Uri, name: String): Uri? {
