@@ -78,7 +78,7 @@ object TtsEngineCatalog {
      * The configured engine/voice are preserved whenever possible. If the configured engine
      * is the live engine, an alternate installed engine is preferred when it exposes either
      * the exact voice or a voice with the same locale. With only one installed engine, the
-     * requested engine is retained and the live-reader fairness fallback remains necessary.
+     * requested engine is retained and the live-reader fallback remains necessary.
      */
     suspend fun resolveForExport(
         context: Context,
@@ -93,59 +93,83 @@ object TtsEngineCatalog {
 
         val requestedEngine = requestedEnginePackage.trim()
         val liveEngine = liveEnginePackage.trim()
-        val direct = findVoice(engines, requestedEngine, requestedVoiceId)
-            ?: findVoiceById(engines, requestedVoiceId)
 
-        if (requestedEngine.isNotEmpty() && requestedEngine != liveEngine) {
-            return@withContext direct?.takeIf { it.enginePackage == requestedEngine }
+        if (requestedEngine.isNotEmpty()) {
+            val requestedVoice = findVoice(engines, requestedEngine, requestedVoiceId)
                 ?: throw TtsExportException(
                     "Voice '$requestedVoiceId' not found in engine '$requestedEngine'"
                 )
-        }
 
-        val requestedVoice = direct
-            ?: throw TtsExportException(
-                "Voice '$requestedVoiceId' is not available in the installed TTS engines"
-            )
-
-        val alternateEngines = engines.filter { it.packageName != liveEngine }
-        if (liveEngine.isNotEmpty() && alternateEngines.isNotEmpty()) {
-            val exactMatch = alternateEngines
-                .asSequence()
-                .flatMap { it.voices.asSequence() }
-                .firstOrNull { it.id == requestedVoice.id }
-            if (exactMatch != null) {
+            if (requestedEngine != liveEngine) {
                 return@withContext ResolvedVoice(
-                    enginePackage = exactMatch.enginePackage,
-                    voiceId = exactMatch.id,
-                    changedEngine = true,
+                    enginePackage = requestedVoice.enginePackage,
+                    voiceId = requestedVoice.id,
+                    changedEngine = false,
                     changedVoice = false,
                 )
             }
 
-            val localeMatch = alternateEngines
-                .asSequence()
-                .flatMap { it.voices.asSequence() }
-                .filter { it.locale == requestedVoice.locale }
-                .sortedWith(
-                    compareByDescending<Voice> { !it.needsInternet }
-                        .thenByDescending { it.quality }
-                        .thenBy { it.id },
-                )
-                .firstOrNull()
-            if (localeMatch != null) {
-                return@withContext ResolvedVoice(
-                    enginePackage = localeMatch.enginePackage,
-                    voiceId = localeMatch.id,
-                    changedEngine = true,
-                    changedVoice = true,
-                )
+            val alternateEngines = engines.filter { it.packageName != liveEngine }
+            if (alternateEngines.isNotEmpty()) {
+                val exactMatch = alternateEngines
+                    .asSequence()
+                    .flatMap { it.voices.asSequence() }
+                    .firstOrNull {
+                        it.id == requestedVoice.id && it.locale == requestedVoice.locale
+                    }
+                if (exactMatch != null) {
+                    return@withContext ResolvedVoice(
+                        enginePackage = exactMatch.enginePackage,
+                        voiceId = exactMatch.id,
+                        changedEngine = true,
+                        changedVoice = false,
+                    )
+                }
+
+                val localeMatch = alternateEngines
+                    .asSequence()
+                    .flatMap { it.voices.asSequence() }
+                    .filter { it.locale == requestedVoice.locale }
+                    .sortedWith(
+                        compareByDescending<Voice> { !it.needsInternet }
+                            .thenByDescending { it.quality }
+                            .thenBy { it.id },
+                    )
+                    .firstOrNull()
+                if (localeMatch != null) {
+                    return@withContext ResolvedVoice(
+                        enginePackage = localeMatch.enginePackage,
+                        voiceId = localeMatch.id,
+                        changedEngine = true,
+                        changedVoice = true,
+                    )
+                }
             }
+
+            return@withContext ResolvedVoice(
+                enginePackage = requestedVoice.enginePackage,
+                voiceId = requestedVoice.id,
+                changedEngine = false,
+                changedVoice = false,
+            )
+        }
+
+        val fallbackVoice = findVoiceById(engines, requestedVoiceId)
+            ?: throw TtsExportException(
+                "Voice '$requestedVoiceId' is not available in the installed TTS engines"
+            )
+        if (fallbackVoice.enginePackage != liveEngine) {
+            return@withContext ResolvedVoice(
+                enginePackage = fallbackVoice.enginePackage,
+                voiceId = fallbackVoice.id,
+                changedEngine = true,
+                changedVoice = false,
+            )
         }
 
         ResolvedVoice(
-            enginePackage = requestedVoice.enginePackage,
-            voiceId = requestedVoice.id,
+            enginePackage = fallbackVoice.enginePackage,
+            voiceId = fallbackVoice.id,
             changedEngine = false,
             changedVoice = false,
         )
@@ -163,7 +187,6 @@ object TtsEngineCatalog {
         enginePackage: String,
         voiceId: String,
     ): Voice? {
-        if (enginePackage.isBlank()) return null
         return engines
             .firstOrNull { it.packageName == enginePackage }
             ?.voices
