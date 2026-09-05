@@ -18,7 +18,7 @@ class CinematicVideoRenderer {
             audioFile = request.audioFile,
             timelineFile = request.timelineFile,
             outputFile = request.outputFile,
-            ffmpegDirectory = request.workingDirectory,
+            ffmpegDirectory = request.ffmpegDirectory,
         )
 
         onProgress(1f)
@@ -34,6 +34,9 @@ class CinematicVideoRenderer {
         }
         if (!request.timelineFile.isFile || request.timelineFile.length() <= 0L) {
             throw CinematicVideoException("Cannot render video: timeline JSON is missing or empty")
+        }
+        if (!request.ffmpegDirectory.isDirectory) {
+            throw CinematicVideoException("Cannot render video: ffmpeg directory is missing")
         }
     }
 
