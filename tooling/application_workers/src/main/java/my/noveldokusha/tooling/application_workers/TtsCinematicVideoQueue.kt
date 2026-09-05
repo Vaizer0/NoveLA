@@ -14,10 +14,7 @@ import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsExportMode
 import java.util.UUID
 
-/**
- * Single-click cinematic export: synthesize WAV + timeline first, then render MP4
- * from that exact pair. Audio is never synthesized twice.
- */
+/** Single-click cinematic export: synthesize/reuse WAV + timeline, then render MP4. */
 object TtsCinematicVideoQueue {
     private const val WORK_PREFIX = "tts-cinematic-video"
     const val VIDEO_TAG = "tts-cinematic-video"
@@ -52,6 +49,7 @@ object TtsCinematicVideoQueue {
                     TtsAudioExportWorker.KEY_FORMAT to request.format,
                     TtsAudioExportWorker.KEY_TRANSLATION_SOURCE_LANG to request.translationSourceLang,
                     TtsAudioExportWorker.KEY_TRANSLATION_TARGET_LANG to request.translationTargetLang,
+                    TtsAudioExportWorker.KEY_EXPORT_MODE to request.exportMode.name,
                 )
             )
             .addTag(TtsAudioQueue.AUDIO_TAG)
@@ -71,6 +69,8 @@ object TtsCinematicVideoQueue {
             .addTag(VIDEO_TAG)
             .build()
 
+        // Store the VIDEO WorkRequest id, not the intermediate audio WorkRequest id.
+        // This makes cancellation/reconciliation track the actual long-running export.
         TtsAudioQueue.updateState(appPreferences, generationJobId) {
             TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
@@ -78,11 +78,12 @@ object TtsCinematicVideoQueue {
                 chapterTitle = request.chapterTitle,
                 source = request.source,
                 status = TtsAudioJobStatus.QUEUED,
+                cinematicVideo = true,
                 message = "Preparing cinematic video…",
                 displayName = "",
                 documentUri = "",
                 progress = 0,
-                workRequestId = audioRequest.id.toString(),
+                workRequestId = videoRequest.id.toString(),
             )
         }
 
@@ -95,11 +96,13 @@ object TtsCinematicVideoQueue {
             .then(videoRequest)
             .enqueue()
 
-        return audioRequest.id
+        return videoRequest.id
     }
 
-    fun cancel(context: Context, logicalJobId: String) {
-        WorkManager.getInstance(context).cancelUniqueWork("$WORK_PREFIX-$logicalJobId")
+    fun cancel(context: Context, workRequestId: String) {
+        runCatching {
+            WorkManager.getInstance(context).cancelWorkById(UUID.fromString(workRequestId))
+        }
     }
 
     suspend fun findWorkInfo(context: Context, logicalJobId: String): List<WorkInfo> =
