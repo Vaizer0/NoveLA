@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
 	<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
 	<application>
 		<activity
@@ -11,12 +15,15 @@
 			android:name="my.noveldokusha.features.reader.manga.MangaReaderActivity"
 			android:exported="false"
 			android:configChanges="orientation|screenSize|keyboardHidden" />
+		<activity
+			android:name="my.noveldokusha.features.reader.video.CinematicVideoExportActivity"
+			android:exported="false"
+			android:screenOrientation="portrait" />
 
 		<service
 			android:name="my.noveldokusha.features.reader.services.NarratorMediaControlsService"
 			android:exported="false"
-			android:foregroundServiceType="mediaPlayback"
-			>
+			android:foregroundServiceType="mediaPlayback">
 			<intent-filter>
 				<action android:name="android.intent.action.MEDIA_BUTTON" />
 			</intent-filter>
@@ -25,17 +32,21 @@
 		<service
 			android:name="my.noveldokusha.features.reader.services.FloatingTtsService"
 			android:exported="false"
-			android:foregroundServiceType="specialUse"
-			>
+			android:foregroundServiceType="specialUse">
 			<property
 				android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
 				android:value="floating_tts_overlay" />
 		</service>
 
+		<service
+			android:name="androidx.work.impl.foreground.SystemForegroundService"
+			android:foregroundServiceType="dataSync"
+			android:exported="false"
+			tools:node="merge" />
+
 		<receiver
 			android:name="androidx.media.session.MediaButtonReceiver"
-			android:exported="true"
-			>
+			android:exported="true">
 			<intent-filter>
 				<action android:name="android.intent.action.MEDIA_BUTTON" />
 			</intent-filter>
