@@ -5,9 +5,9 @@ name: Android CI - Build Debug APK
 # a green APK build and green TTS tests.
 on:
   push:
-    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
+    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix, feature/native-cinematic-renderer-demo ]
   pull_request:
-    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix ]
+    branches: [ main, default, Demo, feat/tts-audio-download-chapters, feat/tts-audio-info, feat/tts-audio-info-fix, feature/native-cinematic-renderer-demo ]
   workflow_dispatch:
 
 permissions:
