@@ -1,18 +1,19 @@
 package my.noveldokusha.features.reader.video
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLExt
-import android.opengl.EGLSurface
 import android.opengl.GLES20
+import android.opengl.GLUtils
 import android.view.Surface
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -22,9 +23,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-internal class CinematicVideoExporter(
-    private val context: Context,
-) {
+class CinematicVideoExporter(private val context: Context) {
     data class Result(val outputFile: File, val durationMs: Long)
 
     suspend fun export(
@@ -32,24 +31,33 @@ internal class CinematicVideoExporter(
         timelineFile: File,
         outputFile: File,
         onProgress: (Float) -> Unit = {},
+        onSizeBytes: (Long) -> Unit = {},
     ): Result = withContext(Dispatchers.Default) {
-        require(wavFile.isFile) { "WAV file does not exist" }
+        require(wavFile.isFile && wavFile.length() > 44L) { "WAV file does not exist or is empty" }
         require(timelineFile.isFile) { "Timeline JSON does not exist" }
-        val timelineDurationMs = JSONObject(timelineFile.readText())
+        val durationMs = JSONObject(timelineFile.readText())
             .getJSONObject("audio").getLong("durationMs")
-        require(timelineDurationMs > 0) { "Timeline contains no audio duration" }
+        require(durationMs > 0L) { "Timeline contains no audio duration" }
 
+        outputFile.parentFile?.mkdirs()
+        if (outputFile.exists()) outputFile.delete()
         val tempDir = File(context.cacheDir, "cinematic-export").apply { mkdirs() }
         val videoOnly = File.createTempFile("video_", ".mp4", tempDir)
         val audioOnly = File.createTempFile("audio_", ".mp4", tempDir)
         try {
-            renderVideo(timelineFile, timelineDurationMs, videoOnly) { onProgress(it * 0.82f) }
+            renderVideo(timelineFile, durationMs, videoOnly) { fraction ->
+                onProgress(fraction * 0.82f)
+                onSizeBytes(videoOnly.length())
+            }
             ensureActive()
-            encodeWavToAacMp4(wavFile, timelineDurationMs, audioOnly) { onProgress(0.82f + it * 0.13f) }
+            encodeWavToAacMp4(wavFile, durationMs, audioOnly) { fraction ->
+                onProgress(0.82f + fraction * 0.13f)
+            }
             ensureActive()
-            muxTracks(videoOnly, audioOnly, outputFile)
+            muxTracks(videoOnly, audioOnly, outputFile) { onSizeBytes(outputFile.length()) }
+            onSizeBytes(outputFile.length())
             onProgress(1f)
-            Result(outputFile, timelineDurationMs)
+            Result(outputFile, durationMs)
         } finally {
             videoOnly.delete()
             audioOnly.delete()
@@ -63,16 +71,14 @@ internal class CinematicVideoExporter(
         onProgress: (Float) -> Unit,
     ) {
         val renderer = CinematicFrameRenderer(timelineFile)
-        val format = MediaFormat.createVideoFormat(
-            VIDEO_MIME, CinematicFrameRenderer.WIDTH, CinematicFrameRenderer.HEIGHT
-        ).apply {
+        val format = MediaFormat.createVideoFormat(VIDEO_MIME, CinematicFrameRenderer.WIDTH, CinematicFrameRenderer.HEIGHT).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BITRATE)
             setInteger(MediaFormat.KEY_FRAME_RATE, CinematicFrameRenderer.FPS)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
         }
         val codec = MediaCodec.createEncoderByType(VIDEO_MIME)
-        var surface: Surface? = null
+        var inputSurface: Surface? = null
         var egl: EglSurfaceRenderer? = null
         var muxer: MediaMuxer? = null
         var muxerStarted = false
@@ -80,24 +86,26 @@ internal class CinematicVideoExporter(
         var eosSeen = false
         val info = MediaCodec.BufferInfo()
 
-        fun drain(waitForOutput: Boolean) {
+        fun drain(timeoutUs: Long) {
             while (!eosSeen) {
-                val index = codec.dequeueOutputBuffer(info, if (waitForOutput) 10_000L else 0L)
+                val index = codec.dequeueOutputBuffer(info, timeoutUs)
                 when {
                     index == MediaCodec.INFO_TRY_AGAIN_LATER -> return
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         check(!muxerStarted) { "Video output format changed twice" }
-                        trackIndex = checkNotNull(muxer).addTrack(codec.outputFormat)
-                        checkNotNull(muxer).start()
+                        trackIndex = requireNotNull(muxer).addTrack(codec.outputFormat)
+                        requireNotNull(muxer).start()
                         muxerStarted = true
                     }
                     index >= 0 -> {
-                        if (info.size > 0) {
-                            check(muxerStarted) { "Video buffer arrived before output format" }
-                            val buffer = codec.getOutputBuffer(index) ?: error("Missing video output buffer")
+                        if (info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
+                            check(muxerStarted) { "Video data arrived before output format" }
+                            val buffer = requireNotNull(codec.getOutputBuffer(index)) { "Missing video output buffer" }
+                            val end = info.offset + info.size
+                            require(info.offset >= 0 && end <= buffer.capacity()) { "Invalid video buffer range" }
                             buffer.position(info.offset)
-                            buffer.limit(info.offset + info.size)
-                            checkNotNull(muxer).writeSampleData(trackIndex, buffer, info)
+                            buffer.limit(end)
+                            requireNotNull(muxer).writeSampleData(trackIndex, buffer, info)
                         }
                         eosSeen = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         codec.releaseOutputBuffer(index, false)
@@ -108,29 +116,32 @@ internal class CinematicVideoExporter(
 
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            surface = codec.createInputSurface()
+            inputSurface = codec.createInputSurface()
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            egl = EglSurfaceRenderer(surface)
+            egl = EglSurfaceRenderer(inputSurface)
             codec.start()
 
             val totalFrames = ((durationMs * CinematicFrameRenderer.FPS) + 999L) / 1000L
+            check(totalFrames > 0L) { "No video frames to render" }
             for (frameIndex in 0 until totalFrames) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val bitmap = renderer.frameAt(frameIndex)
-                checkNotNull(egl).drawBitmap(bitmap)
-                checkNotNull(egl).setPresentationTime(
-                    frameIndex * 1_000_000_000L / CinematicFrameRenderer.FPS
-                )
-                checkNotNull(egl).swapBuffers()
-                drain(waitForOutput = false)
+                requireNotNull(egl).drawBitmap(bitmap)
+                requireNotNull(egl).setPresentationTime(frameIndex * 1_000_000_000L / CinematicFrameRenderer.FPS)
+                requireNotNull(egl).swapBuffers()
+                drain(0L)
                 onProgress((frameIndex + 1).toFloat() / totalFrames.toFloat())
             }
             codec.signalEndOfInputStream()
-            while (!eosSeen) drain(waitForOutput = true)
+            while (!eosSeen) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                drain(10_000L)
+            }
             check(muxerStarted) { "Video encoder produced no output" }
         } finally {
             runCatching { codec.stop() }
             runCatching { egl?.release() }
-            runCatching { surface?.release() }
+            runCatching { inputSurface?.release() }
             if (muxerStarted) runCatching { muxer?.stop() }
             runCatching { muxer?.release() }
             runCatching { codec.release() }
@@ -145,7 +156,7 @@ internal class CinematicVideoExporter(
     ) {
         WavPcmReader(RandomAccessFile(wavFile, "r")).use { wav ->
             require(wav.bitsPerSample == 16) { "Only PCM16 WAV is supported" }
-            val audioFormat = MediaFormat.createAudioFormat(AUDIO_MIME, wav.sampleRate, wav.channels).apply {
+            val format = MediaFormat.createAudioFormat(AUDIO_MIME, wav.sampleRate, wav.channels).apply {
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
                 setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BITRATE)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16_384)
@@ -154,35 +165,33 @@ internal class CinematicVideoExporter(
             val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             var muxerStarted = false
             var trackIndex = -1
-            val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
-            val bytesPerSecond = wav.sampleRate.toLong() * wav.channels * 2L
+            val info = MediaCodec.BufferInfo()
+            val bytesPerSecond = wav.sampleRate.toLong() * wav.channels.toLong() * 2L
             var consumed = 0L
             try {
-                codec.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 codec.start()
                 while (!outputDone) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     if (!inputDone) {
                         val inputIndex = codec.dequeueInputBuffer(10_000L)
                         if (inputIndex >= 0) {
-                            val input = codec.getInputBuffer(inputIndex) ?: error("Missing AAC input buffer")
+                            val input = requireNotNull(codec.getInputBuffer(inputIndex)) { "Missing AAC input buffer" }
                             input.clear()
                             val remaining = wav.remainingDataBytes()
                             if (remaining <= 0L) {
-                                codec.queueInputBuffer(inputIndex, 0, 0, consumed * 1_000_000L / bytesPerSecond,
-                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                codec.queueInputBuffer(inputIndex, 0, 0, consumed * 1_000_000L / bytesPerSecond, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                                 inputDone = true
                             } else {
-                                val toRead = minOf(input.remaining(), remaining.toInt())
-                                val read = wav.read(input, toRead)
+                                val count = minOf(input.remaining().toLong(), remaining).toInt()
+                                val read = wav.read(input, count)
                                 if (read <= 0) {
-                                    codec.queueInputBuffer(inputIndex, 0, 0, consumed * 1_000_000L / bytesPerSecond,
-                                        MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                    codec.queueInputBuffer(inputIndex, 0, 0, consumed * 1_000_000L / bytesPerSecond, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                                     inputDone = true
                                 } else {
-                                    val ptsUs = consumed * 1_000_000L / bytesPerSecond
-                                    codec.queueInputBuffer(inputIndex, 0, read, ptsUs, 0)
+                                    codec.queueInputBuffer(inputIndex, 0, read, consumed * 1_000_000L / bytesPerSecond, 0)
                                     consumed += read
                                     onProgress((consumed.toDouble() / wav.totalDataBytes.coerceAtLeast(1L)).toFloat())
                                 }
@@ -201,11 +210,11 @@ internal class CinematicVideoExporter(
                             }
                             outIndex >= 0 -> {
                                 val buffer = codec.getOutputBuffer(outIndex)
-                                if (buffer != null && info.size > 0 && muxerStarted &&
-                                    info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
-                                ) {
+                                if (buffer != null && info.size > 0 && muxerStarted && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
+                                    val end = info.offset + info.size
+                                    require(info.offset >= 0 && end <= buffer.capacity()) { "Invalid AAC buffer range" }
                                     buffer.position(info.offset)
-                                    buffer.limit(info.offset + info.size)
+                                    buffer.limit(end)
                                     muxer.writeSampleData(trackIndex, buffer, info)
                                 }
                                 outputDone = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
@@ -214,6 +223,7 @@ internal class CinematicVideoExporter(
                         }
                     }
                 }
+                check(muxerStarted) { "AAC encoder produced no output" }
             } finally {
                 runCatching { codec.stop() }
                 runCatching { codec.release() }
@@ -226,9 +236,9 @@ internal class CinematicVideoExporter(
         }
     }
 
-    private fun muxTracks(videoFile: File, audioFile: File, outputFile: File) {
-        val videoExtractor = android.media.MediaExtractor().apply { setDataSource(videoFile.absolutePath) }
-        val audioExtractor = android.media.MediaExtractor().apply { setDataSource(audioFile.absolutePath) }
+    private fun muxTracks(videoFile: File, audioFile: File, outputFile: File, onSize: () -> Unit) {
+        val videoExtractor = MediaExtractor().apply { setDataSource(videoFile.absolutePath) }
+        val audioExtractor = MediaExtractor().apply { setDataSource(audioFile.absolutePath) }
         val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         try {
             val videoTrack = selectTrack(videoExtractor, "video/")
@@ -236,8 +246,8 @@ internal class CinematicVideoExporter(
             val outVideo = muxer.addTrack(videoExtractor.getTrackFormat(videoTrack))
             val outAudio = muxer.addTrack(audioExtractor.getTrackFormat(audioTrack))
             muxer.start()
-            copyTrack(videoExtractor, videoTrack, muxer, outVideo)
-            copyTrack(audioExtractor, audioTrack, muxer, outAudio)
+            copyTrack(videoExtractor, videoTrack, muxer, outVideo, onSize)
+            copyTrack(audioExtractor, audioTrack, muxer, outAudio, onSize)
             muxer.stop()
         } finally {
             videoExtractor.release()
@@ -246,14 +256,14 @@ internal class CinematicVideoExporter(
         }
     }
 
-    private fun selectTrack(extractor: android.media.MediaExtractor, prefix: String): Int {
+    private fun selectTrack(extractor: MediaExtractor, prefix: String): Int {
         for (i in 0 until extractor.trackCount) {
             if (extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith(prefix) == true) return i
         }
         error("No $prefix track found")
     }
 
-    private fun copyTrack(extractor: android.media.MediaExtractor, track: Int, muxer: MediaMuxer, outTrack: Int) {
+    private fun copyTrack(extractor: MediaExtractor, track: Int, muxer: MediaMuxer, outTrack: Int, onSize: () -> Unit) {
         extractor.selectTrack(track)
         val buffer = ByteBuffer.allocateDirect(1_048_576)
         val info = MediaCodec.BufferInfo()
@@ -262,6 +272,7 @@ internal class CinematicVideoExporter(
             if (size < 0) break
             info.set(0, size, extractor.sampleTime, extractor.sampleFlags)
             muxer.writeSampleData(outTrack, buffer, info)
+            onSize()
             extractor.advance()
             buffer.clear()
         }
@@ -272,80 +283,71 @@ internal class CinematicVideoExporter(
         const val AUDIO_MIME = "audio/mp4a-latm"
         const val VIDEO_BITRATE = 10_000_000
         const val AUDIO_BITRATE = 128_000
+        const val EGL_RECORDABLE_ANDROID = 0x3142
     }
 
     private class EglSurfaceRenderer(surface: Surface) {
-        private val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+        private val display: android.opengl.EGLDisplay
         private val eglContext: EGLContext
-        private val eglSurface: EGLSurface
+        private val eglSurface: android.opengl.EGLSurface
         private val program: Int
         private val texture: Int
-        private val bitmapBuffer = ByteBuffer.allocateDirect(CinematicFrameRenderer.WIDTH * CinematicFrameRenderer.HEIGHT * 4)
-        private val vertexBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-            put(floatArrayOf(
-                -1f, -1f, 0f, 1f,
-                 1f, -1f, 1f, 1f,
-                -1f,  1f, 0f, 0f,
-                 1f,  1f, 1f, 0f
-            )).position(0)
-        }
 
         init {
-            check(display != EGL14.EGL_NO_DISPLAY)
-            check(EGL14.eglInitialize(display, null, 0, null, 0))
+            display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+            check(display != EGL14.EGL_NO_DISPLAY) { "No EGL display" }
+            val version = IntArray(2)
+            check(EGL14.eglInitialize(display, version, 0, version, 1)) { "eglInitialize failed" }
             val configs = arrayOfNulls<EGLConfig>(1)
-            val num = IntArray(1)
-            check(EGL14.eglChooseConfig(
-                display,
-                intArrayOf(
-                    EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-                    EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8,
-                    EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_ALPHA_SIZE, 8,
-                    EGL14.EGL_NONE
-                ), 0, configs, 0, 1, num, 0
-            ))
-            val config = configs[0] ?: error("No EGL config")
-            eglContext = EGL14.eglCreateContext(
-                display, config, EGL14.EGL_NO_CONTEXT,
-                intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE), 0
+            val count = IntArray(1)
+            val attrs = intArrayOf(
+                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
+                EGL14.EGL_RED_SIZE, 8,
+                EGL14.EGL_GREEN_SIZE, 8,
+                EGL14.EGL_BLUE_SIZE, 8,
+                EGL14.EGL_ALPHA_SIZE, 8,
+                EGL_RECORDABLE_ANDROID, 1,
+                EGL14.EGL_NONE,
             )
-            check(eglContext != EGL14.EGL_NO_CONTEXT)
+            check(EGL14.eglChooseConfig(display, attrs, 0, configs, 0, 1, count, 0) && count[0] > 0) { "No recordable EGL config" }
+            val config = requireNotNull(configs[0]) { "No EGL config" }
+            eglContext = EGL14.eglCreateContext(display, config, EGL14.EGL_NO_CONTEXT, intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE), 0)
+            check(eglContext != EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
             eglSurface = EGL14.eglCreateWindowSurface(display, config, surface, intArrayOf(EGL14.EGL_NONE), 0)
-            check(eglSurface != EGL14.EGL_NO_SURFACE)
-            check(EGL14.eglMakeCurrent(display, eglSurface, eglSurface, eglContext))
+            check(eglSurface != EGL14.EGL_NO_SURFACE) { "eglCreateWindowSurface failed: ${EGL14.eglGetError()}" }
+            check(EGL14.eglMakeCurrent(display, eglSurface, eglSurface, eglContext)) { "eglMakeCurrent failed" }
             program = GlProgram.create()
             texture = GlProgram.createTexture()
+            check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "GL init failed" }
         }
 
         fun drawBitmap(bitmap: Bitmap) {
-            bitmapBuffer.position(0)
-            bitmap.copyPixelsToBuffer(bitmapBuffer)
-            bitmapBuffer.position(0)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-            GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                bitmap.width, bitmap.height, 0,
-                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, bitmapBuffer
-            )
-            GLES20.glViewport(0, 0, bitmap.width, bitmap.height)
+            check(bitmap.config == Bitmap.Config.ARGB_8888) { "Unsupported bitmap config: ${bitmap.config}" }
             GLES20.glUseProgram(program)
-            GlProgram.draw(texture, program, vertexBuffer)
-            check(GLES20.glGetError() == GLES20.GL_NO_ERROR)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "Bitmap upload failed" }
+            GLES20.glViewport(0, 0, bitmap.width, bitmap.height)
+            GlProgram.draw(texture, program)
+            check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "GL draw failed" }
         }
 
         fun setPresentationTime(nanoseconds: Long) {
-            check(EGLExt.eglPresentationTimeANDROID(display, eglSurface, nanoseconds))
+            check(EGLExt.eglPresentationTimeANDROID(display, eglSurface, nanoseconds)) { "eglPresentationTimeANDROID failed" }
         }
 
-        fun swapBuffers() = check(EGL14.eglSwapBuffers(display, eglSurface))
+        fun swapBuffers() {
+            check(EGL14.eglSwapBuffers(display, eglSurface)) { "eglSwapBuffers failed: ${EGL14.eglGetError()}" }
+        }
 
         fun release() {
-            GLES20.glDeleteTextures(1, intArrayOf(texture), 0)
-            GLES20.glDeleteProgram(program)
-            EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-            EGL14.eglDestroySurface(display, eglSurface)
-            EGL14.eglDestroyContext(display, eglContext)
-            EGL14.eglTerminate(display)
+            runCatching { GLES20.glDeleteTextures(1, intArrayOf(texture), 0) }
+            runCatching { GLES20.glDeleteProgram(program) }
+            runCatching { EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
+            runCatching { EGL14.eglDestroySurface(display, eglSurface) }
+            runCatching { EGL14.eglDestroyContext(display, eglContext) }
+            runCatching { EGL14.eglTerminate(display) }
         }
     }
 
@@ -367,20 +369,22 @@ internal class CinematicVideoExporter(
             val vertex = compile(GLES20.GL_VERTEX_SHADER, VERTEX)
             val fragment = compile(GLES20.GL_FRAGMENT_SHADER, FRAGMENT)
             val program = GLES20.glCreateProgram()
+            check(program != 0) { "glCreateProgram failed" }
             GLES20.glAttachShader(program, vertex)
             GLES20.glAttachShader(program, fragment)
             GLES20.glLinkProgram(program)
             val status = IntArray(1)
             GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0)
-            check(status[0] != 0) { "Could not link texture program" }
             GLES20.glDeleteShader(vertex)
             GLES20.glDeleteShader(fragment)
+            check(status[0] != 0) { "Could not link texture program" }
             return program
         }
 
         fun createTexture(): Int {
             val textures = IntArray(1)
             GLES20.glGenTextures(1, textures, 0)
+            check(textures[0] != 0) { "glGenTextures failed" }
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[0])
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
@@ -389,14 +393,24 @@ internal class CinematicVideoExporter(
             return textures[0]
         }
 
-        fun draw(texture: Int, program: Int, vertices: java.nio.FloatBuffer) {
+        fun draw(texture: Int, program: Int) {
+            val vertices = floatArrayOf(
+                -1f, -1f, 0f, 1f,
+                 1f, -1f, 1f, 1f,
+                -1f,  1f, 0f, 0f,
+                 1f,  1f, 1f, 0f,
+            )
+            val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+                put(vertices).position(0)
+            }
             val position = GLES20.glGetAttribLocation(program, "aPosition")
             val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
             val sampler = GLES20.glGetUniformLocation(program, "uTexture")
-            vertices.position(0)
-            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, vertices)
-            vertices.position(2)
-            GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 16, vertices)
+            check(position >= 0 && texCoord >= 0 && sampler >= 0) { "Texture shader locations missing" }
+            buffer.position(0)
+            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, buffer)
+            buffer.position(2)
+            GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 16, buffer)
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -409,6 +423,7 @@ internal class CinematicVideoExporter(
 
         private fun compile(type: Int, source: String): Int {
             val shader = GLES20.glCreateShader(type)
+            check(shader != 0) { "glCreateShader failed" }
             GLES20.glShaderSource(shader, source)
             GLES20.glCompileShader(shader)
             val status = IntArray(1)
@@ -429,8 +444,9 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
     private var dataEnd = 0L
 
     init { parse() }
-    fun remainingDataBytes(): Long = dataEnd - file.filePointer
+    fun remainingDataBytes(): Long = (dataEnd - file.filePointer).coerceAtLeast(0L)
     fun read(target: ByteBuffer, count: Int): Int {
+        if (count <= 0) return 0
         val temp = ByteArray(minOf(count, 64 * 1024))
         val read = file.read(temp)
         if (read > 0) target.put(temp, 0, read)
@@ -448,9 +464,11 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
         while (file.filePointer + 8 <= file.length()) {
             val id = readAscii(4)
             val size = readUInt32()
-            val chunkStart = file.filePointer
+            val start = file.filePointer
+            require(size <= file.length() - start) { "Invalid WAV chunk size" }
             when (id) {
                 "fmt " -> {
+                    require(size >= 16L) { "Invalid WAV fmt chunk" }
                     val format = readUInt16()
                     channels = readUInt16()
                     sampleRate = readUInt32().toInt()
@@ -461,20 +479,19 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
                     fmtFound = true
                 }
                 "data" -> {
-                    dataStart = file.filePointer
-                    dataEnd = dataStart + size
+                    dataStart = start
+                    dataEnd = start + size
                     totalDataBytes = size
+                    dataFound = true
                 }
             }
-            require(chunkStart + size + (size and 1L) <= file.length()) { "Invalid WAV chunk size" }
-            file.seek(chunkStart + size + (size and 1L))
+            file.seek(start + size + (size and 1L))
             if (fmtFound && dataFound) break
-            dataFound = dataFound || id == "data"
         }
         require(fmtFound && dataFound) { "WAV fmt/data chunks are missing" }
         require(sampleRate > 0 && channels > 0) { "Invalid WAV format" }
         file.seek(dataStart)
-        durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels * 2L)
+        durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels.toLong() * 2L)
     }
 
     private fun readAscii(n: Int): String {
