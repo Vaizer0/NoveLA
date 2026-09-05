@@ -115,7 +115,7 @@ class TtsAudioExportWorker(
             val timelineFileName = "${fileName.removeSuffix(".${request.format}")}.timeline.json"
             val reportAudio = progressReporter(appPreferences, jobId, notification)
 
-            TtsAudioExporter(context).exportAudio(
+            val exportResult = TtsAudioExporter(context).exportAudio(
                 request = request,
                 paragraphs = paragraphs,
                 destFile = tempWav,
@@ -131,11 +131,12 @@ class TtsAudioExportWorker(
             timelineUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelineFileName)
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            writeTextToUri(timelineToJson(TtsAudioExporter.lastExportTimeline(context)), timelineUri!!)
+            writeTextToUri(timelineToJson(exportResult.timeline), timelineUri!!)
 
             val renderWav = File(tempDir, "$jobId-render.wav")
             val renderJson = File(tempDir, "$jobId-render.timeline.json")
             try {
+                // Render from the exact documents that were persisted to the user's SAF directory.
                 copyUriToFile(createdUri!!, renderWav)
                 copyUriToFile(timelineUri!!, renderJson)
                 TtsAudioQueue.updateState(appPreferences, jobId) {
@@ -160,7 +161,14 @@ class TtsAudioExportWorker(
                 } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
                 copyFileToUri(tempVideo, videoUri!!)
                 TtsAudioQueue.updateState(appPreferences, jobId) {
-                    it?.copy(status = TtsAudioJobStatus.SUCCESS, displayName = videoFileName, documentUri = videoUri.toString(), progress = 100, phase = "VIDEO", videoSizeBytes = tempVideo.length())
+                    it?.copy(
+                        status = TtsAudioJobStatus.SUCCESS,
+                        displayName = videoFileName,
+                        documentUri = videoUri.toString(),
+                        progress = 100,
+                        phase = "VIDEO",
+                        videoSizeBytes = tempVideo.length(),
+                    )
                 }
                 notification.updateProgress(100)
                 notification.showComplete(videoFileName, videoUri)
@@ -183,6 +191,7 @@ class TtsAudioExportWorker(
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: export/video FAILED for $jobId")
+            // Preserve the already-saved WAV + timeline if the cinematic stage fails.
             cleanupUri(context, videoUri)
             tempWav.delete()
             tempVideo.delete()
