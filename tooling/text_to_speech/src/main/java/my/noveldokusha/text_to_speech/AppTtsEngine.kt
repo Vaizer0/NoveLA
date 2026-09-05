@@ -11,13 +11,22 @@ class AppTtsEngine private constructor(context: Context) {
 
     private val appContext = context.applicationContext
     private var engine: TextToSpeech? = null
-    // null means the system default engine.
+    // null means the system default engine until the live client resolves it.
     private var boundEnginePackage: String? = null
 
     fun getOrCreate(onReady: (() -> Unit)? = null): TextToSpeech {
         if (engine == null) {
-            boundEnginePackage = null
-            engine = TextToSpeech(appContext) { if (it == TextToSpeech.SUCCESS) onReady?.invoke() }
+            engine = TextToSpeech(appContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    if (boundEnginePackage == null) {
+                        boundEnginePackage = engine?.defaultEngine
+                    }
+                    onReady?.invoke()
+                }
+            }
+        }
+        if (boundEnginePackage == null) {
+            boundEnginePackage = engine?.defaultEngine
         }
         return engine!!
     }
@@ -27,13 +36,22 @@ class AppTtsEngine private constructor(context: Context) {
         engine?.shutdown()
         boundEnginePackage = enginePackage?.takeIf { it.isNotEmpty() }
         engine = if (enginePackage.isNullOrEmpty()) {
-            TextToSpeech(appContext) { if (it == TextToSpeech.SUCCESS) onReady() }
+            TextToSpeech(appContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    boundEnginePackage = engine?.defaultEngine
+                    onReady()
+                }
+            }
         } else {
-            TextToSpeech(appContext, { if (it == TextToSpeech.SUCCESS) onReady() }, enginePackage)
+            TextToSpeech(appContext, { status ->
+                if (status == TextToSpeech.SUCCESS) onReady()
+            }, enginePackage)
         }
     }
 
-    fun getBoundEnginePackage(): String? = boundEnginePackage
+    /** Returns the concrete package currently serving live reader TTS. */
+    fun getBoundEnginePackage(): String? =
+        boundEnginePackage ?: engine?.defaultEngine
 
     fun shutdown() {
         engine?.stop()
