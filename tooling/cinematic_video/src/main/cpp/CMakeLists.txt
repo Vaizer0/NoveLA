@@ -23,46 +23,45 @@ string(REPLACE
     "void cairo_arc(cairo_t*, double,double,double,double,double,double);"
     "void cairo_arc(cairo_t*, double,double,double,double,double);"
     RENDERER_CONTENT
+    "${RENDERER_CONTENT}"
 )
 file(WRITE "${RENDERER_SOURCE}" "${RENDERER_CONTENT}")
 
-# ndkports publishes Pango as a Prefab package without a package-level
-# Config.cmake. Import its ABI-specific Prefab modules directly.
-set(PREFAB_ROOT "${CMAKE_FIND_ROOT_PATH}")
-set(PREFAB_ABI_DIR "${PREFAB_ROOT}/modules")
+# AGP passes a CMake list in CMAKE_FIND_ROOT_PATH. The first entry is the
+# Prefab-generated root for this ABI; later entries (such as the NDK root)
+# must not be mixed into Prefab filesystem paths.
+list(GET CMAKE_FIND_ROOT_PATH 0 PREFAB_ROOT)
 
-function(prefab_module_library OUT_VAR MODULE)
-    find_library(_LIB
-        NAMES "${MODULE}"
-        PATHS "${PREFAB_ABI_DIR}/${MODULE}/libs/android.${ANDROID_ABI}"
-        NO_DEFAULT_PATH
-    )
-    if(NOT _LIB)
-        message(FATAL_ERROR
-            "Prefab module '${MODULE}' was not found for ABI '${ANDROID_ABI}' under ${PREFAB_ABI_DIR}")
+# Resolve the Pango dependency closure from the generated Prefab tree rather
+# than relying on a package-level Config.cmake. This is robust to Prefab's
+# generated directory layout and keeps the supplied renderer unchanged.
+file(GLOB_RECURSE PREFAB_INCLUDE_DIRS LIST_DIRECTORIES true
+    "${PREFAB_ROOT}/*/include")
+file(GLOB_RECURSE PREFAB_STATIC_LIBS
+    "${PREFAB_ROOT}/*.a")
+
+list(FILTER PREFAB_INCLUDE_DIRS EXCLUDE REGEX ".*/include/.*\\.a$")
+
+if(NOT PREFAB_STATIC_LIBS)
+    message(FATAL_ERROR
+        "No Prefab static libraries were found under ${PREFAB_ROOT}; Pango/GLib/Cairo dependencies are unavailable")
+endif()
+
+set(HAVE_PANGO FALSE)
+set(HAVE_PANGOCAIRO FALSE)
+foreach(LIB IN LISTS PREFAB_STATIC_LIBS)
+    get_filename_component(LIB_NAME "${LIB}" NAME)
+    if(LIB_NAME STREQUAL "libpango-1.0.a")
+        set(HAVE_PANGO TRUE)
+    elseif(LIB_NAME STREQUAL "libpangocairo-1.0.a")
+        set(HAVE_PANGOCAIRO TRUE)
     endif()
-    set(${OUT_VAR} "${_LIB}" PARENT_SCOPE)
-endfunction()
+endforeach()
 
-function(prefab_module_include OUT_VAR MODULE)
-    set(_DIR "${PREFAB_ABI_DIR}/${MODULE}/include")
-    if(NOT IS_DIRECTORY "${_DIR}")
-        set(_DIR "${PREFAB_ABI_DIR}/${MODULE}/include/${MODULE}")
-    endif()
-    if(NOT IS_DIRECTORY "${_DIR}")
-        message(FATAL_ERROR
-            "Prefab module '${MODULE}' headers were not found under ${PREFAB_ABI_DIR}")
-    endif()
-    set(${OUT_VAR} "${_DIR}" PARENT_SCOPE)
-endfunction()
-
-prefab_module_library(PANGO_LIB pango-1.0)
-prefab_module_library(PANGOCAIRO_LIB pangocairo-1.0)
-prefab_module_include(PANGO_INCLUDE pango-1.0)
-prefab_module_include(PANGOCAIRO_INCLUDE pangocairo-1.0)
-
-file(GLOB PREFAB_MODULE_INCLUDE_DIRS LIST_DIRECTORIES true
-    "${PREFAB_ABI_DIR}/*/include")
+if(NOT HAVE_PANGO OR NOT HAVE_PANGOCAIRO)
+    message(FATAL_ERROR
+        "Required Pango static libraries were not found under ${PREFAB_ROOT} (pango=${HAVE_PANGO}, pangocairo=${HAVE_PANGOCAIRO})")
+endif()
 
 add_library(novela_cinematic SHARED
     renderer_jni.cpp
@@ -76,18 +75,22 @@ target_compile_options(novela_cinematic PRIVATE
 
 target_link_options(novela_cinematic PRIVATE
     -Wl,--gc-sections
+    -Wl,--start-group
+    -Wl,--end-group
 )
 
 target_include_directories(novela_cinematic PRIVATE
     "${RENDERER_DIR}"
-    "${PANGO_INCLUDE}"
-    "${PANGOCAIRO_INCLUDE}"
-    ${PREFAB_MODULE_INCLUDE_DIRS}
+    ${PREFAB_INCLUDE_DIRS}
 )
 
+# Static ndkports packages ship their dependency closure as individual
+# archives. Link the complete generated Prefab set inside a linker group so
+# circular static dependencies resolve deterministically.
 target_link_libraries(novela_cinematic PRIVATE
-    "${PANGOCAIRO_LIB}"
-    "${PANGO_LIB}"
+    ${PREFAB_STATIC_LIBS}
     log
     android
+    dl
+    m
 )
