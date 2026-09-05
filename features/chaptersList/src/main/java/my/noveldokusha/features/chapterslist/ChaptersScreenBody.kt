@@ -92,12 +92,6 @@ internal fun ChaptersScreenBody(
             return
         }
 
-        val voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value
-        if (voiceId.isBlank()) {
-            Toast.makeText(context, "Select a TTS voice before creating a video", Toast.LENGTH_SHORT).show()
-            return
-        }
-
         val outputDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
         if (outputDirectoryUri.isBlank()) {
             Toast.makeText(context, "Choose the audio export folder first", Toast.LENGTH_SHORT).show()
@@ -136,7 +130,7 @@ internal fun ChaptersScreenBody(
             chapterIndex = chapterIndex,
             source = source,
             enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
-            voiceId = voiceId,
+            voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value,
             speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
             pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
             outputDirectoryUri = outputDirectoryUri,
