@@ -35,9 +35,9 @@ data class TtsAudioJobState(
     val displayName: String = "",
     val documentUri: String = "",
     val progress: Int = 0,
-    /** Current export phase: AUDIO while creating WAV/JSON, VIDEO while rendering MP4. */
+    /** AUDIO = WAV/timeline generation; VIDEO = cinematic MP4 rendering. */
     val phase: String = "AUDIO",
-    /** Current temporary/generated MP4 byte size during VIDEO phase. */
+    /** Current generated MP4 byte size while the VIDEO phase is running. */
     val videoSizeBytes: Long = 0L,
     val workRequestId: String = "",
 ) {
