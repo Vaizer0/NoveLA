@@ -91,8 +91,8 @@ class CinematicFfmpegAssetManager(
         launcher.parentFile?.mkdirs()
         launcher.writeText(
             "#!/system/bin/sh\n" +
-                "HERE=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\n" +
-                "export LD_LIBRARY_PATH=\"$HERE/../lib${'$'}{LD_LIBRARY_PATH:+:${'$'}LD_LIBRARY_PATH}\"\n" +
+                "HERE=\"$(CDPATH= cd -- \"$(dirname -- \"${'$'}0\")\" && pwd)\"\n" +
+                "export LD_LIBRARY_PATH=\"${'$'}HERE/../lib${'$'}{LD_LIBRARY_PATH:+:${'$'}LD_LIBRARY_PATH}\"\n" +
                 "exec /system/bin/linker64 \"${'$'}HERE/ffmpeg.bin\" \"${'$'}@\"\n",
             Charsets.UTF_8,
         )
