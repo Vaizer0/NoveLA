@@ -2,84 +2,67 @@ package my.noveldokusha.text_to_speech
 
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 
+/** Output pipeline requested for a chapter export. */
+enum class TtsExportMode {
+    AUDIO,
+    CINEMATIC_VIDEO,
+}
+
 /**
- * Неизменяемый снимок параметров одного экспорта аудио главы.
+ * Immutable snapshot of one chapter export request.
  *
- * Формируется один раз в момент запуска загрузки из текущего профиля
- * «Загрузка аудио» (TTS_AUDIO_DOWNLOAD_*) и не меняется в ходе выполнения:
- * последующее изменение настроек не влияет на уже поставленный в очередь экспорт.
- *
- * Заметьте: здесь НЕ хранится тело главы — текст берётся воркером из БД
- * (ChapterBody/ChapterTranslation) по [chapterUrl] в момент выполнения.
- * Класс не аннотирован @Serializable: воркер маршалит его в плоские
- * WorkManager Data-ключи (как BookExportWorker).
+ * The same request parameters are used by both audio and cinematic-video exports;
+ * video generation reuses the exact WAV + timeline pair before invoking the native renderer.
  */
 data class TtsAudioExportRequest(
-    /** Уникальный id задачи (детерминированный для повторных запросов). */
+    /** Unique logical id for duplicate protection. */
     val jobId: String,
     val novelTitle: String,
     val novelUrl: String,
     val chapterUrl: String,
     val chapterTitle: String,
-    /** Позиция главы в списке (для имени файла "Chapter N ..."). */
+    /** Position of the chapter in the book list. */
     val chapterIndex: Int,
     val source: TtsAudioSource,
     val enginePackage: String,
     val voiceId: String,
     val speed: Float,
     val pitch: Float,
-    /** SAF tree URI папки назначения. */
+    /** SAF tree URI of the destination folder. */
     val outputDirectoryUri: String,
-    /** Формат аудио ("wav" для V1). */
+    /** WAV for the current exporter implementation. */
     val format: String = TtsAudioFormat.WAV,
-    /**
-     * Снимок пары языков перевода НА МОМЕНТ ПОСТАНОВКИ В ОЧЕРЕДЬ (актуальны только
-     * для [TtsAudioSource.TRANSLATED]; для ORIGINAL пусты). Позволяет воркеру брать
-     * перевод той же пары, что видела UI при запуске, и включается в [jobId]:
-     * смена языка перевода порождает НОВЫЙ идентификатор, а не перезаписывает старый.
-     */
+    /** Snapshot of the translation language pair when this request was created. */
     val translationSourceLang: String = "",
     val translationTargetLang: String = "",
+    /** Final artifact requested by the caller. */
+    val exportMode: TtsExportMode = TtsExportMode.AUDIO,
 ) {
-    /**
-     * Детерминированный идентификатор экспорта для дедупликации/перезаписи:
-     * один и тот же (книга, глава, источник, пара языков перевода) → один jobId.
-     */
     companion object {
+        /**
+         * Deterministic id for one logical artifact. Mode is included so audio and
+         * cinematic video can coexist for the same chapter/source/language pair.
+         */
         fun makeJobId(
             novelUrl: String,
             chapterUrl: String,
             source: TtsAudioSource,
             translationSourceLang: String = "",
             translationTargetLang: String = "",
+            exportMode: TtsExportMode = TtsExportMode.AUDIO,
         ): String {
             val raw = "$novelUrl::$chapterUrl::${source.name}" +
-                "::${translationSourceLang}::${translationTargetLang}"
+                "::${translationSourceLang}::${translationTargetLang}::${exportMode.name}"
             val sha = java.security.MessageDigest.getInstance("SHA-256")
                 .digest(raw.toByteArray(Charsets.UTF_8))
                 .take(8)
                 .joinToString("") { "%02x".format(it) }
-            return "tts_audio_$sha"
+            return "tts_${exportMode.name.lowercase()}_$sha"
         }
     }
 }
 
-/**
- * Поддерживаемые форматы аудиофайлов.
- *
- * V1 (TtsAudioExporter/WavWriter) умеет генерировать ТОЛЬКО WAV/PCM. Расширение
- * файла и MIME строго соответствуют этому формату. Любой другой формат ДОЛЖЕН
- * отсекаться либо на этапе постановки в очередь (принудительный WAV), либо явно
- * отклоняться воркером перед экспортом — никогда не создаётся файл с чужим
- * расширением (.m4a), содержащий WAV-данные.
- *
- * [M4A] зарезервирован для V2 (реальный MediaCodec/MediaMuxer AAC/M4A-экспортёр)
- * и в V1 не производится: попытка использовать его завершится отказом.
- */
 object TtsAudioFormat {
-    /** Единственный формат V1: WAV/PCM. */
     const val WAV = "wav"
-
-    /** Будущий (V2) формат AAC/M4A. НЕ используется в V1. */
     const val M4A = "m4a"
 }
