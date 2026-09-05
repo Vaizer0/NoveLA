@@ -1,5 +1,6 @@
 package my.noveldokusha.features.chapterslist
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -21,17 +22,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.TranslationLangPair
 import my.noveldokusha.coreui.components.ErrorView
 import my.noveldokusha.chapterslist.R
+import my.noveldokusha.di.HiltAppEntryPoint
 import my.noveldokusha.feature.local_database.ChapterWithContext
 import my.noveldokusha.scraper.Scraper
+import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.text_to_speech.TtsAudioFormat
+import my.noveldokusha.text_to_speech.TtsExportMode
+import my.noveldokusha.tooling.application_workers.TtsCinematicVideoQueue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +57,7 @@ internal fun ChaptersScreenBody(
     onChapterLongClick: (chapter: ChapterWithContext) -> Unit,
     onChapterDownload: (chapter: ChapterWithContext) -> Unit,
     onChapterAudio: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit,
-    onChapterVideo: (chapter: ChapterWithContext, source: TtsAudioSource) -> Unit = { _, _ -> },
+    onChapterVideo: ((chapter: ChapterWithContext, source: TtsAudioSource) -> Unit)? = null,
     onPullRefresh: () -> Unit,
     onCoverLongClick: () -> Unit,
     onGlobalSearchClick: (input: String) -> Unit,
@@ -58,6 +67,110 @@ internal fun ChaptersScreenBody(
     scraper: Scraper,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val appPreferences = remember(context.applicationContext) {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            HiltAppEntryPoint::class.java,
+        ).appPreferences()
+    }
+
+    fun enqueueDefaultVideo(chapter: ChapterWithContext, source: TtsAudioSource) {
+        if (source == TtsAudioSource.TRANSLATED &&
+            !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false)
+        ) {
+            Toast.makeText(
+                context,
+                "Translated chapter text is not available",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        val voiceId = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ID.value
+        if (voiceId.isBlank()) {
+            Toast.makeText(
+                context,
+                "Select a TTS voice before creating a video",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        val outputDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+        if (outputDirectoryUri.isBlank()) {
+            Toast.makeText(
+                context,
+                "Choose the audio export folder first",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        val pair = if (source == TtsAudioSource.TRANSLATED) {
+            appPreferences.translationPairForBook(state.book.value.url)
+        } else {
+            TranslationLangPair()
+        }
+        if (source == TtsAudioSource.TRANSLATED &&
+            (!appPreferences.translationEnabledForBook(state.book.value.url) ||
+                pair.source.isBlank() || pair.target.isBlank())
+        ) {
+            Toast.makeText(
+                context,
+                "Translation is not configured for this book",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        val chapterIndex = state.chapters.indexOfFirst { it.chapter.url == chapter.chapter.url }
+            .takeIf { it >= 0 }
+            ?: chapter.chapter.position
+
+        val request = TtsAudioExportRequest(
+            jobId = TtsAudioExportRequest.makeJobId(
+                state.book.value.url,
+                chapter.chapter.url,
+                source,
+                pair.source,
+                pair.target,
+                TtsExportMode.CINEMATIC_VIDEO,
+            ),
+            novelTitle = state.book.value.title,
+            novelUrl = state.book.value.url,
+            chapterUrl = chapter.chapter.url,
+            chapterTitle = chapter.chapter.title,
+            chapterIndex = chapterIndex,
+            source = source,
+            enginePackage = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_ENGINE.value,
+            voiceId = voiceId,
+            speed = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_SPEED.value,
+            pitch = appPreferences.TTS_AUDIO_DOWNLOAD_VOICE_PITCH.value,
+            outputDirectoryUri = outputDirectoryUri,
+            format = TtsAudioFormat.WAV,
+            translationSourceLang = pair.source,
+            translationTargetLang = pair.target,
+            exportMode = TtsExportMode.CINEMATIC_VIDEO,
+        )
+
+        runCatching {
+            TtsCinematicVideoQueue.enqueue(
+                context = context.applicationContext,
+                appPreferences = appPreferences,
+                request = request,
+            )
+        }.onFailure { error ->
+            Toast.makeText(
+                context,
+                error.message ?: "Could not start cinematic video export",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    val videoAction = onChapterVideo ?: ::enqueueDefaultVideo
+
     var isRefreshingDelayed by remember { mutableStateOf(state.isRefreshing.value) }
     LaunchedEffect(Unit) {
         snapshotFlow { state.isRefreshing.value }
@@ -116,7 +229,7 @@ internal fun ChaptersScreenBody(
                     highlightedChapterUrl = null
                 }
             },
-            onDismiss = { showGoToChapterDialog = false }
+            onDismiss = { showGoToChapterDialog = false },
         )
     }
 
@@ -185,8 +298,8 @@ internal fun ChaptersScreenBody(
                     onDownload = { onChapterDownload(it) },
                     onAudioOriginal = { onChapterAudio(it, TtsAudioSource.ORIGINAL) },
                     onAudioTranslated = { onChapterAudio(it, TtsAudioSource.TRANSLATED) },
-                    onVideoOriginal = { onChapterVideo(it, TtsAudioSource.ORIGINAL) },
-                    onVideoTranslated = { onChapterVideo(it, TtsAudioSource.TRANSLATED) },
+                    onVideoOriginal = { videoAction(it, TtsAudioSource.ORIGINAL) },
+                    onVideoTranslated = { videoAction(it, TtsAudioSource.TRANSLATED) },
                     translatedAudioAvailable = state.translatedAudioAvailable.value[it.chapter.url] ?: false,
                 )
             }
