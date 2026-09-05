@@ -28,7 +28,7 @@ import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsAudioFormat
-import my.noveldokusha.text_to_speech.TtsTextPreparer
+import my.noveldokusha.text_to_speech.TtsExportMode
 import timber.log.Timber
 import java.io.File
 import org.json.JSONArray
@@ -96,8 +96,8 @@ class TtsCinematicVideoWorker(
             val actualAudioName = queryDisplayName(audio) ?: "$prefix.${request.preferredAudioExtension}"
             val timeline = findChild(novelFolder, expectedTimelineName)
 
-            val stagedAudio = File(workDir, actualAudioName)
-            copyUriToFile(audio, stagedAudio)
+            val stagedSourceAudio = File(workDir, actualAudioName)
+            copyUriToFile(audio, stagedSourceAudio)
 
             val stagedTimeline = File(workDir, expectedTimelineName)
             if (timeline != null) {
@@ -137,6 +137,22 @@ class TtsCinematicVideoWorker(
             val ffmpegDir = ffmpegManager.prepare(workDir)
             ffmpegManager.verify(ffmpegDir)
 
+            val rendererAudio = if (actualAudioName.substringAfterLast('.', "").equals("wav", ignoreCase = true)) {
+                stagedSourceAudio
+            } else {
+                val normalized = File(workDir, "renderer-input.wav")
+                TtsAudioQueue.updateState(prefs, jobId) {
+                    it?.copy(progress = 20, message = "Preparing downloaded audio for video…")
+                }
+                notification.updateProgress(20)
+                ffmpegManager.normalizeToWav(
+                    ffmpegDirectory = ffmpegDir,
+                    inputFile = stagedSourceAudio,
+                    outputFile = normalized,
+                )
+                normalized
+            }
+
             TtsAudioQueue.updateState(prefs, jobId) {
                 it?.copy(progress = 22, message = "Rendering cinematic video…")
             }
@@ -145,7 +161,7 @@ class TtsCinematicVideoWorker(
             val stagedOutput = File(workDir, videoName)
             CinematicVideoRenderer().render(
                 request = CinematicVideoRenderRequest(
-                    audioFile = stagedAudio,
+                    audioFile = rendererAudio,
                     timelineFile = stagedTimeline,
                     outputFile = stagedOutput,
                     workingDirectory = workDir,
