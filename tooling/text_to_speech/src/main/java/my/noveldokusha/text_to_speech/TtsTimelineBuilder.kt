@@ -47,7 +47,6 @@ class TtsTimelineBuilder {
         }
     }
 
-    /** Start a logical paragraph before synthesizing its slices. */
     fun beginParagraph() {
         synchronized(lock) {
             currentParagraph = MutableParagraph(
@@ -57,7 +56,6 @@ class TtsTimelineBuilder {
         }
     }
 
-    /** Register a TTS slice before synthesis starts. */
     fun registerSlice(sliceText: String) {
         synchronized(lock) {
             val para = currentParagraph ?: throw IllegalStateException("No open paragraph")
@@ -68,14 +66,12 @@ class TtsTimelineBuilder {
         }
     }
 
-    /** Format from onBeginSynthesis for the current slice. */
     fun setSliceFormat(sampleRate: Int, channels: Int) {
         synchronized(lock) {
             currentParagraph?.setSliceFormat(sampleRate, channels)
         }
     }
 
-    /** Actual PCM bytes received for the current slice. */
     fun onAudioAvailable(byteCount: Int) {
         synchronized(lock) {
             if (byteCount <= 0) return
@@ -84,20 +80,17 @@ class TtsTimelineBuilder {
             chapterAudioDurationMs = para.currentAudioEndMs(chapterAudioDurationMs)
                 .coerceAtLeast(chapterAudioDurationMs)
             if (addedDurationMs <= 0.0) {
-                // Keep the cursor unchanged when format information is missing.
                 Timber.w("ttsTimeline audio callback received without a valid PCM format")
             }
         }
     }
 
-    /** Native timing event supplied by the TTS engine. */
     fun onRangeStart(start: Int, end: Int, frame: Int) {
         synchronized(lock) {
             currentParagraph?.addRange(start, end, frame)
         }
     }
 
-    /** Finish a paragraph after all of its slices have completed. */
     fun endParagraph() {
         synchronized(lock) {
             val para = currentParagraph ?: return
@@ -132,16 +125,25 @@ class TtsTimelineBuilder {
                 }
             }
 
-            // A range ends at the next native range. The final range ends at the
-            // actual WAV duration. Paragraph endMs is independent of this.
+            // A range ends at the next native range only when that next range
+            // belongs to the same paragraph and slice. The final range of every
+            // slice ends at that slice's actual PCM boundary. This is critical:
+            // using the whole chapter duration here makes the final word of a
+            // slice remain highlighted through the rest of the rendered video.
             val rangeEndMs = LongArray(flat.size) { i ->
-                if (i + 1 < flat.size) flat[i + 1].second.startMs
-                else audioDurationMs.toLong()
+                val (p0, r0) = flat[i]
+                if (i + 1 < flat.size) {
+                    val (p1, r1) = flat[i + 1]
+                    if (p0 == p1 && r0.sliceIndex == r1.sliceIndex) {
+                        r1.startMs
+                    } else {
+                        paragraphs[p0].sliceEndMs(r0.sliceIndex)
+                    }
+                } else {
+                    paragraphs[p0].sliceEndMs(r0.sliceIndex)
+                }
             }
 
-            // frameEnd is meaningful only for two adjacent ranges from the same
-            // paragraph and the same slice. sliceIndex is intentionally local to
-            // a paragraph, so compare the paragraph index as well.
             val frameEnd = LongArray(flat.size) { -1L }
             for (i in 0 until flat.size - 1) {
                 val (p0, r0) = flat[i]
@@ -180,9 +182,6 @@ class TtsTimelineBuilder {
                     )
                 }
 
-                // IMPORTANT: paragraph timing is derived from the real PCM byte
-                // boundaries, not from native ranges. This remains valid when the
-                // engine supplies no onRangeStart callbacks.
                 val paragraphStartMs = p.startMs.coerceIn(0L, audioDurationMs.toLong().coerceAtLeast(0L))
                 val paragraphEndMs = p.endMs
                     .coerceIn(paragraphStartMs, audioDurationMs.toLong().coerceAtLeast(paragraphStartMs))
@@ -297,6 +296,11 @@ class TtsTimelineBuilder {
         fun currentAudioEndMs(previousChapterEndMs: Long): Long {
             val last = slices.lastOrNull() ?: return previousChapterEndMs
             return (last.startMsAcc + last.durationMs).toLong()
+        }
+
+        fun sliceEndMs(sliceIndex: Int): Long {
+            val slice = slices.getOrNull(sliceIndex) ?: return startMs
+            return (slice.startMsAcc + slice.durationMs).toLong()
         }
 
         fun addRange(start: Int, end: Int, frame: Int) {
