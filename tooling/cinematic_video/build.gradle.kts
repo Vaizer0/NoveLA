@@ -20,6 +20,7 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         outputRoot.mkdirs()
 
         require(ffmpegArtifacts.files.isNotEmpty()) { "ffmpeg-android AAR was not resolved" }
+        val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         var copied = 0
 
         ffmpegArtifacts.files.forEach { aar ->
@@ -27,13 +28,17 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
                 val entries = zip.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
-                    if (entry.isDirectory || !entry.name.endsWith("/ffmpeg")) continue
-                    val abi = Regex("(?:^|/)(arm64-v8a|armeabi-v7a|x86_64|x86)/ffmpeg$")
-                        .find(entry.name)
-                        ?.groupValues
-                        ?.getOrNull(1)
+                    if (entry.isDirectory) continue
+
+                    val path = entry.name.lowercase()
+                    val fileName = path.substringAfterLast('/')
+                    if (!fileName.startsWith("ffmpeg") || fileName.endsWith(".so")) continue
+
+                    val abi = supportedAbis.firstOrNull { "/$it/" in "/${path.trimStart('/')}" }
                         ?: continue
                     val destination = outputRoot.resolve("cinematic/$abi/ffmpeg")
+                    if (destination.exists()) continue
+
                     destination.parentFile.mkdirs()
                     zip.getInputStream(entry).use { input ->
                         destination.outputStream().use { output -> input.copyTo(output) }
@@ -45,7 +50,7 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         }
 
         require(copied > 0) {
-            "ffmpeg-android AAR does not contain ABI-specific ffmpeg executables"
+            "ffmpeg-android AAR does not contain extractable ABI-specific ffmpeg binaries"
         }
     }
 }
@@ -73,14 +78,10 @@ android {
     }
 
     externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
+        cmake { path = file("src/main/cpp/CMakeLists.txt") }
     }
 
-    packaging {
-        jniLibs.useLegacyPackaging = false
-    }
+    packaging { jniLibs.useLegacyPackaging = false }
 }
 
 androidComponents {
@@ -93,12 +94,7 @@ androidComponents {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-
-    // Cairo/Pango/HarfBuzz are statically linked into libnovela_cinematic.
     implementation("com.viliussutkus89.ndk.thirdparty:pango-ndk26-static:1.51.0-beta-9")
-
-    // The C++ renderer invokes an ffmpeg executable by name. Extract only the
-    // ABI-specific executable from this AAR; its wrapper library is not needed.
     add(ffmpegArtifact.name, "io.github.rbaucells:ffmpeg-android:1.22")
 }
 
