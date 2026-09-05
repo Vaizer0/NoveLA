@@ -7,7 +7,7 @@
 // renamed only in this translation unit so the JNI shared library can invoke
 // the exact same renderer entry point.
 #define main novela_renderer_main
-#include "renderer/novela_cinematic_renderer.cpp"
+#include "novela_cinematic_renderer.cpp"
 #undef main
 
 extern "C" JNIEXPORT jint JNICALL
