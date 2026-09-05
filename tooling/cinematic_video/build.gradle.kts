@@ -193,12 +193,14 @@ val prepareCinematicFfmpegAssets = tasks.register<PrepareCinematicFfmpegAssetsTa
 }
 
 tasks.configureEach {
-    // Generated FFmpeg files are registered as Android asset sources, so lint-model
-    // generation must not read that directory before the preparation task has run.
-    if (name.endsWith("LintModel", ignoreCase = true)) {
-        dependsOn(prepareCinematicFfmpegAssets)
-    }
-    if (name.contains("merge", ignoreCase = true) && name.contains("Assets", ignoreCase = true)) {
+    // Generated FFmpeg files are registered as Android asset sources. Every
+    // task that can consume that source tree must explicitly depend on the
+    // preparation task; Gradle 9.5 validates these task relationships.
+    if (
+        name.endsWith("LintModel", ignoreCase = true) ||
+        name.contains("lintVital", ignoreCase = true) ||
+        (name.contains("merge", ignoreCase = true) && name.contains("Assets", ignoreCase = true))
+    ) {
         dependsOn(prepareCinematicFfmpegAssets)
     }
 }
