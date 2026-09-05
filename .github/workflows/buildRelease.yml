@@ -11,11 +11,10 @@ on:
         options:
           - test      # Upload artifact only, no release
           - release   # Create a draft GitHub Release
-  # Temporary branch-only trigger so the release/test path can be validated
-  # automatically on cinematic-video-integration without touching Demo.
-  push:
+  # Temporary branch-only validation trigger for the existing PR.
+  pull_request:
     branches:
-      - cinematic-video-integration
+      - Demo
 
 env:
   BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'test' }}
