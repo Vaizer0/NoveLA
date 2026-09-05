@@ -44,8 +44,6 @@ object TtsCinematicVideoQueue {
                 )
             )
             .addTag(VIDEO_TAG)
-            // Existing TTS reconciliation also tracks this job model. Tagging the renderer
-            // worker makes its terminal state visible after process restart.
             .addTag(TtsAudioQueue.AUDIO_TAG)
             .build()
 
@@ -131,7 +129,7 @@ object TtsCinematicVideoQueue {
             TtsAudioSource.TRANSLATED -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_translated)
             TtsAudioSource.ASK_EVERY_TIME -> ""
         }
-        val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
+        val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle, "chapter")}"
         val audioName = if (suffix.isBlank()) "$base.wav" else "$base $suffix.wav"
         val timelineName = if (suffix.isBlank()) "$base.timeline.json" else "$base $suffix.timeline.json"
         val audio = findChild(context, novelUri, audioName) ?: return false
