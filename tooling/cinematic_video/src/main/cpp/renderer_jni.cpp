@@ -46,6 +46,23 @@ Java_my_noveldokusha_cinematic_1video_CinematicVideoNative_renderNative(
         (oldPath && *oldPath ? std::string(":") + oldPath : std::string());
     setenv("PATH", path.c_str(), 1);
 
+    const std::string ffmpegBinDir(ffmpegDir);
+    const std::size_t slash = ffmpegBinDir.find_last_of('/');
+    const std::string runtimeRoot = slash == std::string::npos
+        ? std::string()
+        : ffmpegBinDir.substr(0, slash);
+    const std::string libraryDir = runtimeRoot.empty()
+        ? std::string()
+        : runtimeRoot + "/lib";
+    const char* oldLdLibraryPath = std::getenv("LD_LIBRARY_PATH");
+    if (!libraryDir.empty()) {
+        const std::string ldLibraryPath = libraryDir +
+            (oldLdLibraryPath && *oldLdLibraryPath
+                ? std::string(":") + oldLdLibraryPath
+                : std::string());
+        setenv("LD_LIBRARY_PATH", ldLibraryPath.c_str(), 1);
+    }
+
     std::vector<std::string> args;
     args.emplace_back("novela_cpp_renderer");
     args.emplace_back("--audio");
