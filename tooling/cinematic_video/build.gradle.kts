@@ -1,10 +1,8 @@
 import org.gradle.api.DefaultTask
-import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
@@ -14,9 +12,6 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
-    @get:InputFiles
-    abstract val sourceFiles: ConfigurableFileCollection
-
     @get:Input
     abstract val downloadUrl: Property<String>
 
@@ -90,7 +85,9 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
             "Failed to unpack ffmpeg.tar.xz (exit=$exitCode): ${tarOutput.takeLast(2000)}"
         }
 
-        val ffmpegBinary = locate(tarExtractRoot) { it.isFile && it.name == "ffmpeg" && it.parentFile?.name == "bin" }
+        val ffmpegBinary = locate(tarExtractRoot) {
+            it.isFile && it.name == "ffmpeg" && it.parentFile?.name == "bin"
+        }
         require(ffmpegBinary != null) { "FFmpeg CLI binary was not found inside ffmpeg.tar.xz" }
 
         val destinationRoot = outputRoot.resolve("cinematic/$abi")
@@ -156,6 +153,10 @@ android {
     buildFeatures { prefab = true }
 
     defaultConfig {
+        ndk {
+            // The bundled cinematic FFmpeg runtime is arm64-v8a only.
+            abiFilters += "arm64-v8a"
+        }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++17", "-O3") }
         }
