@@ -26,11 +26,12 @@ dependencies {
 
     implementation(libs.material)
     implementation(libs.androidx.media)
+    implementation(libs.androidx.workmanager)
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.compose.androidx.activity)
     implementation(libs.compose.androidx.lifecycle.viewmodel)
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.compose.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.compose.material3.android)
