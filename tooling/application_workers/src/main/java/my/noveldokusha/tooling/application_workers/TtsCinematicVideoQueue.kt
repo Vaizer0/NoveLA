@@ -3,14 +3,15 @@ package my.noveldokusha.tooling.application_workers
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsExportMode
 import java.util.UUID
@@ -20,8 +21,6 @@ object TtsCinematicVideoQueue {
     private const val WORK_PREFIX = "tts-cinematic-video"
     const val VIDEO_TAG = "tts-cinematic-video"
     private const val WRAPPER_FOLDER_NAME = "NoveLA Exports"
-    private const val MIME_WAV = "audio/wav"
-    private const val MIME_JSON = "application/json"
 
     fun enqueue(
         context: Context,
@@ -45,23 +44,24 @@ object TtsCinematicVideoQueue {
                 )
             )
             .addTag(VIDEO_TAG)
-            // Existing TtsAudioQueue reconciliation already knows this persistent job model;
-            // keep the video worker visible to that reconciler as well.
+            // Existing TTS reconciliation also tracks this job model. Tagging the renderer
+            // worker makes its terminal state visible after process restart.
             .addTag(TtsAudioQueue.AUDIO_TAG)
             .build()
 
-        val state = TtsAudioJobState(
-            chapterUrl = request.chapterUrl,
-            novelUrl = request.novelUrl,
-            chapterTitle = request.chapterTitle,
-            source = request.source,
-            status = TtsAudioJobStatus.QUEUED,
-            cinematicVideo = true,
-            message = "Preparing cinematic video…",
-            progress = 0,
-            workRequestId = videoRequest.id.toString(),
-        )
-        TtsAudioQueue.updateState(appPreferences, generationJobId) { state }
+        TtsAudioQueue.updateState(appPreferences, generationJobId) {
+            TtsAudioJobState(
+                chapterUrl = request.chapterUrl,
+                novelUrl = request.novelUrl,
+                chapterTitle = request.chapterTitle,
+                source = request.source,
+                status = TtsAudioJobStatus.QUEUED,
+                cinematicVideo = true,
+                message = "Preparing cinematic video…",
+                progress = 0,
+                workRequestId = videoRequest.id.toString(),
+            )
+        }
 
         val work = WorkManager.getInstance(context)
         if (hasReusableAudioAndTimeline(context, request)) {
@@ -71,11 +71,10 @@ object TtsCinematicVideoQueue {
                 videoRequest,
             ).enqueue()
         } else {
-            val audioRequest = TtsAudioExportWorker.createWorkRequest(request, generationJobId)
             work.beginUniqueWork(
                 uniqueWorkName(request.jobId),
                 ExistingWorkPolicy.REPLACE,
-                audioRequest,
+                createAudioRequest(request, generationJobId),
             ).then(videoRequest).enqueue()
         }
 
@@ -88,54 +87,76 @@ object TtsCinematicVideoQueue {
         }
     }
 
+    private fun createAudioRequest(request: TtsAudioExportRequest, generationJobId: String): OneTimeWorkRequest =
+        OneTimeWorkRequestBuilder<TtsAudioExportWorker>()
+            .setInputData(
+                workDataOf(
+                    TtsAudioExportWorker.KEY_JOB_ID to generationJobId,
+                    TtsAudioExportWorker.KEY_NOVEL_TITLE to request.novelTitle,
+                    TtsAudioExportWorker.KEY_NOVEL_URL to request.novelUrl,
+                    TtsAudioExportWorker.KEY_CHAPTER_URL to request.chapterUrl,
+                    TtsAudioExportWorker.KEY_CHAPTER_TITLE to request.chapterTitle,
+                    TtsAudioExportWorker.KEY_CHAPTER_INDEX to request.chapterIndex,
+                    TtsAudioExportWorker.KEY_SOURCE to request.source.name,
+                    TtsAudioExportWorker.KEY_ENGINE_PACKAGE to request.enginePackage,
+                    TtsAudioExportWorker.KEY_VOICE_ID to request.voiceId,
+                    TtsAudioExportWorker.KEY_SPEED to request.speed,
+                    TtsAudioExportWorker.KEY_PITCH to request.pitch,
+                    TtsAudioExportWorker.KEY_OUTPUT_DIRECTORY_URI to request.outputDirectoryUri,
+                    TtsAudioExportWorker.KEY_FORMAT to request.format,
+                    TtsAudioExportWorker.KEY_TRANSLATION_SOURCE_LANG to request.translationSourceLang,
+                    TtsAudioExportWorker.KEY_TRANSLATION_TARGET_LANG to request.translationTargetLang,
+                )
+            )
+            .addTag(TtsAudioQueue.AUDIO_TAG)
+            .build()
+
     private fun uniqueWorkName(logicalJobId: String): String = "$WORK_PREFIX-$logicalJobId"
 
-    /**
-     * Only skips synthesis when both expected artifacts exist and are minimally sane.
-     * Invalid/empty artifacts intentionally go through the normal TTS export worker.
-     */
+    /** Only skip synthesis when both expected artifacts exist and are minimally sane. */
     private fun hasReusableAudioAndTimeline(
         context: Context,
         request: TtsAudioExportRequest,
     ): Boolean = runCatching {
         val treeUri = Uri.parse(request.outputDirectoryUri)
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
-        val wrapperId = findChildDirectory(context, treeUri, rootId, WRAPPER_FOLDER_NAME) ?: return false
-        val novelId = findChildDirectory(context, treeUri, wrapperId, sanitize(request.novelTitle, "novel")) ?: return false
-        val parent = DocumentsContract.buildDocumentUriUsingTree(treeUri, novelId)
+        val wrapperUri = findChild(
+            context,
+            DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId),
+            WRAPPER_FOLDER_NAME,
+        ) ?: return false
+        val novelUri = findChild(context, wrapperUri, sanitize(request.novelTitle, "novel")) ?: return false
         val suffix = when (request.source) {
-            my.noveldokusha.core.appPreferences.TtsAudioSource.ORIGINAL -> "original"
-            my.noveldokusha.core.appPreferences.TtsAudioSource.TRANSLATED -> "translated"
-            else -> ""
+            TtsAudioSource.ORIGINAL -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_original)
+            TtsAudioSource.TRANSLATED -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_translated)
+            TtsAudioSource.ASK_EVERY_TIME -> ""
         }
         val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
         val audioName = if (suffix.isBlank()) "$base.wav" else "$base $suffix.wav"
-        val timelineName = "$base${if (suffix.isBlank()) "" else " $suffix"}.timeline.json"
-        val audio = findChild(context, parent, audioName) ?: return false
-        val timeline = findChild(context, parent, timelineName) ?: return false
+        val timelineName = if (suffix.isBlank()) "$base.timeline.json" else "$base $suffix.timeline.json"
+        val audio = findChild(context, novelUri, audioName) ?: return false
+        val timeline = findChild(context, novelUri, timelineName) ?: return false
         val audioLength = context.contentResolver.openAssetFileDescriptor(audio, "r")?.use { it.length } ?: -1L
         if (audioLength <= 44L) return false
         val json = context.contentResolver.openInputStream(timeline)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
             ?: return false
         val root = org.json.JSONObject(json)
-        root.optJSONObject("audio")?.optLong("durationMs", 0L)?.let { duration -> duration > 0L } == true &&
-            root.optJSONArray("paragraphs")?.length()?.let { it > 0 } == true
+        val audioDuration = root.optJSONObject("audio")?.optLong("durationMs", 0L) ?: 0L
+        val paragraphs = root.optJSONArray("paragraphs")?.length() ?: 0
+        audioDuration > 0L && paragraphs > 0
     }.getOrDefault(false)
 
-    private fun findChildDirectory(
-        context: Context,
-        treeUri: Uri,
-        parentId: String,
-        name: String,
-    ): String? = findChild(context, DocumentsContract.buildDocumentUriUsingTree(treeUri, parentId), name)
-        ?.let(DocumentsContract::getDocumentId)
-
     private fun findChild(context: Context, parent: Uri, name: String): Uri? {
-        val parentId = DocumentsContract.getDocumentId(parent)
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(parent, parentId)
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+            parent,
+            DocumentsContract.getDocumentId(parent),
+        )
         return context.contentResolver.query(
             children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            ),
             null,
             null,
             null,
