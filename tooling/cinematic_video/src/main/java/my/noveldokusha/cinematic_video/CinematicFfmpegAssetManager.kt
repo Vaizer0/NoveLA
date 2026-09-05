@@ -3,8 +3,9 @@ package my.noveldokusha.cinematic_video
 import android.content.Context
 import android.os.Build
 import java.io.File
+import java.util.zip.ZipInputStream
 
-/** Extracts the ABI-specific FFmpeg CLI and its shared libraries from packaged assets. */
+/** Extracts the ABI-specific compressed FFmpeg CLI runtime only when video export starts. */
 class CinematicFfmpegAssetManager(
     private val context: Context,
 ) {
@@ -14,10 +15,12 @@ class CinematicFfmpegAssetManager(
 
         val runtimeRoot = File(workDir, "ffmpeg-runtime")
         val ffmpeg = File(runtimeRoot, "bin/ffmpeg")
+        val runtimeArchive = "cinematic/$abi/ffmpeg-runtime.zip"
 
         if (!ffmpeg.isFile || ffmpeg.length() == 0L) {
             runtimeRoot.deleteRecursively()
-            copyAssetTree("cinematic/$abi", runtimeRoot)
+            extractRuntimeArchive(runtimeArchive, runtimeRoot)
+            createLauncher(runtimeRoot)
         }
 
         require(ffmpeg.isFile && ffmpeg.length() > 0L) {
@@ -25,21 +28,21 @@ class CinematicFfmpegAssetManager(
         }
         ffmpeg.setExecutable(true, false)
         if (!ffmpeg.canExecute()) {
-            throw CinematicVideoException("Cannot execute bundled FFmpeg")
+            throw CinematicVideoException("Cannot prepare bundled FFmpeg launcher")
         }
         return File(runtimeRoot, "bin")
     }
 
     /** Executes the packaged launcher before the renderer starts, so loader/runtime failures are explicit. */
     fun verify(ffmpegDirectory: File) {
-        val ffmpeg = File(ffmpegDirectory, "ffmpeg")
+        val launcher = File(ffmpegDirectory, "ffmpeg")
         val libraryDir = ffmpegDirectory.parentFile?.resolve("lib")
             ?: throw CinematicVideoException("FFmpeg runtime library directory is missing")
         if (!libraryDir.isDirectory) {
             throw CinematicVideoException("FFmpeg runtime library directory is missing")
         }
 
-        val process = ProcessBuilder(ffmpeg.absolutePath, "-hide_banner", "-version")
+        val process = ProcessBuilder(launcher.absolutePath, "-hide_banner", "-version")
             .directory(ffmpegDirectory.parentFile)
             .redirectErrorStream(true)
             .apply {
@@ -55,25 +58,50 @@ class CinematicFfmpegAssetManager(
         }
     }
 
+    private fun extractRuntimeArchive(assetPath: String, destinationRoot: File) {
+        context.assets.open(assetPath).use { raw ->
+            ZipInputStream(raw.buffered()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val entryName = entry.name.replace('\\', '/').trimStart('/')
+                    if (entryName.isBlank() || entryName.contains("..")) {
+                        zip.closeEntry()
+                        throw CinematicVideoException("Invalid FFmpeg runtime archive entry")
+                    }
+                    val target = File(destinationRoot, entryName)
+                    val canonicalRoot = destinationRoot.canonicalFile
+                    val canonicalTarget = target.canonicalFile
+                    require(canonicalTarget.path.startsWith(canonicalRoot.path + File.separator)) {
+                        throw CinematicVideoException("Invalid FFmpeg runtime archive path")
+                    }
+                    if (entry.isDirectory) {
+                        target.mkdirs()
+                    } else {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { output -> zip.copyTo(output, COPY_BUFFER) }
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+    }
+
+    private fun createLauncher(runtimeRoot: File) {
+        val launcher = File(runtimeRoot, "bin/ffmpeg")
+        launcher.parentFile?.mkdirs()
+        launcher.writeText(
+            "#!/system/bin/sh\n" +
+                "HERE=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\n" +
+                "export LD_LIBRARY_PATH=\"$HERE/../lib${'$'}{LD_LIBRARY_PATH:+:${'$'}LD_LIBRARY_PATH}\"\n" +
+                "exec /system/bin/linker64 \"${'$'}HERE/ffmpeg.bin\" \"${'$'}@\"\n",
+            Charsets.UTF_8,
+        )
+        launcher.setExecutable(true, false)
+    }
+
     private fun buildLibraryPath(libraryDir: File): String {
         val existing = System.getenv("LD_LIBRARY_PATH").orEmpty()
         return if (existing.isBlank()) libraryDir.absolutePath else libraryDir.absolutePath + File.pathSeparator + existing
-    }
-
-    private fun copyAssetTree(assetPath: String, destination: File) {
-        val entries = context.assets.list(assetPath).orEmpty()
-        if (entries.isEmpty()) {
-            context.assets.open(assetPath).use { input ->
-                destination.parentFile?.mkdirs()
-                destination.outputStream().use { output -> input.copyTo(output, COPY_BUFFER) }
-            }
-            return
-        }
-
-        destination.mkdirs()
-        entries.forEach { name ->
-            copyAssetTree("$assetPath/$name", File(destination, name))
-        }
     }
 
     companion object {
