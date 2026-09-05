@@ -22,7 +22,6 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.feature.local_database.AppDatabase
-import my.noveldokusha.features.reader.video.CinematicVideoExporter
 import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.text_to_speech.TtsAudioFormat
@@ -30,6 +29,7 @@ import my.noveldokusha.text_to_speech.TtsAudioExporter
 import my.noveldokusha.text_to_speech.TtsExportException
 import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.text_to_speech.timelineToJson
+import my.noveldokusha.tooling.application_workers.video.CinematicVideoExporter
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
@@ -90,7 +90,9 @@ class TtsAudioExportWorker(
                 setForeground(ForegroundInfo(notification.notificationId, notification.foregroundNotification(), foregroundType))
             }.onFailure { Timber.w(it, "TtsAudio: setForeground failed") }
 
-            TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", videoSizeBytes = 0L) }
+            TtsAudioQueue.updateState(appPreferences, jobId) {
+                it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", videoSizeBytes = 0L, progress = 0)
+            }
             val chapterText = withContext(Dispatchers.IO) { fetchChapterText(appDatabase, appPreferences, request) }
             if (chapterText == null) {
                 val msg = context.getString(
@@ -111,29 +113,26 @@ class TtsAudioExportWorker(
             val baseName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
             val fileName = if (sourceSuffix.isBlank()) "$baseName.${request.format}" else "$baseName $sourceSuffix.${request.format}"
             val timelineFileName = "${fileName.removeSuffix(".${request.format}")}.timeline.json"
-            val report = progressReporter(appPreferences, jobId, notification)
+            val reportAudio = progressReporter(appPreferences, jobId, notification)
 
-            val exportResult = TtsAudioExporter(context).exportAudio(
+            TtsAudioExporter(context).exportAudio(
                 request = request,
                 paragraphs = paragraphs,
                 destFile = tempWav,
                 audioFileName = fileName,
-            ) { fraction -> report((fraction * 82f).toInt().coerceIn(0, 82)) }
-            val wavSize = tempWav.length()
-            require(wavSize > 44L) { "Generated WAV is empty for '${request.chapterTitle}'" }
+            ) { fraction -> reportAudio((fraction * 82f).toInt().coerceIn(0, 82)) }
+            require(tempWav.length() > 44L) { "Generated WAV is empty for '${request.chapterTitle}'" }
 
             createdUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName)
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
             copyFileToUri(tempWav, createdUri!!)
 
-            val timelineJson = timelineToJson(exportResult.timeline)
             timelineUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelineFileName)
             } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            writeTextToUri(timelineJson, timelineUri!!)
+            writeTextToUri(timelineToJson(TtsAudioExporter.lastExportTimeline(context)), timelineUri!!)
 
-            // The WAV and JSON are now persisted. Read those exact saved bytes back before rendering.
             val renderWav = File(tempDir, "$jobId-render.wav")
             val renderJson = File(tempDir, "$jobId-render.timeline.json")
             try {
@@ -142,21 +141,16 @@ class TtsAudioExportWorker(
                 TtsAudioQueue.updateState(appPreferences, jobId) {
                     it?.copy(phase = "VIDEO", progress = 82, videoSizeBytes = 0L)
                 }
-                val videoExporter = CinematicVideoExporter(context)
-                videoExporter.export(
+                CinematicVideoExporter(context).export(
                     wavFile = renderWav,
                     timelineFile = renderJson,
                     outputFile = tempVideo,
                     onProgress = { fraction ->
                         val percent = (82f + fraction * 17f).toInt().coerceIn(82, 99)
-                        TtsAudioQueue.updateState(appPreferences, jobId) {
-                            it?.copy(phase = "VIDEO", progress = percent)
-                        }
+                        TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "VIDEO") }
                     },
                     onSizeBytes = { bytes ->
-                        TtsAudioQueue.updateState(appPreferences, jobId) {
-                            it?.copy(phase = "VIDEO", videoSizeBytes = bytes)
-                        }
+                        TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
                     },
                 )
 
@@ -166,21 +160,16 @@ class TtsAudioExportWorker(
                 } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
                 copyFileToUri(tempVideo, videoUri!!)
                 TtsAudioQueue.updateState(appPreferences, jobId) {
-                    it?.copy(phase = "VIDEO", progress = 100, videoSizeBytes = tempVideo.length())
+                    it?.copy(status = TtsAudioJobStatus.SUCCESS, displayName = videoFileName, documentUri = videoUri.toString(), progress = 100, phase = "VIDEO", videoSizeBytes = tempVideo.length())
                 }
-                report(100)
+                notification.updateProgress(100)
+                notification.showComplete(videoFileName, videoUri)
             } finally {
                 renderWav.delete()
                 renderJson.delete()
                 tempVideo.delete()
             }
 
-            val displayName = queryDisplayName(createdUri!!) ?: fileName
-            notification.updateProgress(100)
-            notification.showComplete(displayName, createdUri)
-            TtsAudioQueue.updateState(appPreferences, jobId) {
-                it?.copy(status = TtsAudioJobStatus.SUCCESS, displayName = displayName, documentUri = createdUri.toString(), progress = 100, phase = "VIDEO")
-            }
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
@@ -194,7 +183,6 @@ class TtsAudioExportWorker(
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: export/video FAILED for $jobId")
-            // WAV + timeline are intentionally preserved when the cinematic stage fails.
             cleanupUri(context, videoUri)
             tempWav.delete()
             tempVideo.delete()
@@ -215,11 +203,11 @@ class TtsAudioExportWorker(
     private fun progressReporter(appPreferences: AppPreferences, jobId: String, notification: TtsAudioExportNotification): (Int) -> Unit {
         var lastReported = -1
         var lastNotifyMs = 0L
-        return report@{ value ->
+        return { value ->
             val percent = value.coerceIn(0, 100)
             if (percent != lastReported) {
                 lastReported = percent
-                TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = if (percent < 82) "AUDIO" else it.phase) }
+                TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastNotifyMs >= 1000L || percent == 100) {
                     notification.updateProgress(percent)
@@ -246,7 +234,6 @@ class TtsAudioExportWorker(
     }
 
     private fun readRequest(): TtsAudioExportRequest? {
-        val jobId = inputData.getString(KEY_JOB_ID) ?: return null
         val novelTitle = inputData.getString(KEY_NOVEL_TITLE) ?: return null
         val novelUrl = inputData.getString(KEY_NOVEL_URL) ?: return null
         val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return null
@@ -255,7 +242,7 @@ class TtsAudioExportWorker(
         val source = runCatching { TtsAudioSource.valueOf(inputData.getString(KEY_SOURCE) ?: return null) }.getOrNull() ?: return null
         if (source == TtsAudioSource.ASK_EVERY_TIME) return null
         return TtsAudioExportRequest(
-            jobId = jobId,
+            jobId = inputData.getString(KEY_JOB_ID) ?: return null,
             novelTitle = novelTitle,
             novelUrl = novelUrl,
             chapterUrl = chapterUrl,
