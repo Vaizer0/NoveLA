@@ -5,18 +5,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Неизменяемая модель «временной шкалы синхронизации» экспортированной аудио-главы.
+ * Immutable synchronization timeline for an exported WAV chapter.
  *
- * Рождается В ТОТ ЖЕ сеанс синтеза, который порождает WAV (native
- * [android.speech.tts.UtteranceProgressListener.onRangeStart] /
- * [android.speech.tts.UtteranceProgressListener.onBeginSynthesis] во время
- * [TtsAudioExporter.exportAudio]), поэтому описывает ровно тот аудиофайл, который
- * создан рядом. Не зависит от UI/Compа: готова к потреблению внешним рендерером
- * «audio + timeline.json → синхронизированное видео».
+ * The timeline is produced by the same TTS synthesis session that creates the WAV,
+ * so it describes that exact audio stream and can be consumed by the cinematic
+ * renderer.
  *
- * Все строки/смещения используют индексацию Kotlin/Java String (char offset).
- * Все времена — абсолютные целые миллисекунды относительно начала аудиофайла,
- * монотонные, без wall-clock/uptime.
+ * Character offsets in the interchange format are Unicode code-point offsets,
+ * matching the native cinematic renderer. Android/Kotlin TTS callbacks may use
+ * UTF-16 String indices internally; conversion is performed before serialization.
+ * Times are absolute integer milliseconds from the beginning of the WAV.
  */
 @Serializable
 data class TtsTimeline(
@@ -32,12 +30,11 @@ data class TtsTimeline(
     val paragraphs: List<TtsTimelineParagraph>,
 ) {
     companion object {
-        /** Версия формата обмена (не версия приложения). */
+        /** Version of the exchange format, not the application version. */
         const val CURRENT_SCHEMA_VERSION = 1
     }
 }
 
-/** Метаданные главы/книги в timeline. */
 @Serializable
 data class TtsTimelineChapter(
     @SerialName("novelTitle")
@@ -52,7 +49,6 @@ data class TtsTimelineChapter(
     val audioFile: String,
 )
 
-/** Сведения о сгенерированном аудио (WAV). */
 @Serializable
 data class TtsTimelineAudio(
     @SerialName("format")
@@ -65,7 +61,7 @@ data class TtsTimelineAudio(
     val durationMs: Int,
 )
 
-/** Полный текст, подготовленный к синтезу (тот, что реально был синтезирован). */
+/** Exact prepared text displayed by the cinematic renderer. */
 @Serializable
 data class TtsTimelineText(
     @SerialName("preparedText")
@@ -74,15 +70,17 @@ data class TtsTimelineText(
     val characterCount: Int,
 )
 
-/** Один абзац с его native-ranges. */
+/** One paragraph with native timing ranges. */
 @Serializable
 data class TtsTimelineParagraph(
     @SerialName("index")
     val index: Int,
     @SerialName("text")
     val text: String,
+    /** Unicode code-point offset in [TtsTimelineText.preparedText]. */
     @SerialName("startChar")
     val startChar: Int,
+    /** Exclusive Unicode code-point offset in [TtsTimelineText.preparedText]. */
     @SerialName("endChar")
     val endChar: Int,
     @SerialName("startMs")
@@ -93,21 +91,19 @@ data class TtsTimelineParagraph(
     val ranges: List<TtsTimelineRange>,
 )
 
-/**
- * Авторитетный native синхронизационный юнит: один [android.speech.tts.UtteranceProgressListener.onRangeStart].
- * Диапазон [startChar, endChar) — в [TtsTimeline.text.preparedText].
- */
+/** One native TTS synchronization unit. */
 @Serializable
 data class TtsTimelineRange(
+    /** Inclusive Unicode code-point offset. */
     @SerialName("startChar")
     val startChar: Int,
+    /** Exclusive Unicode code-point offset. */
     @SerialName("endChar")
     val endChar: Int,
     @SerialName("startMs")
     val startMs: Int,
     @SerialName("endMs")
     val endMs: Int,
-    @SerialName("text")
     val text: String,
     @SerialName("frameStart")
     val frameStart: Int? = null,
@@ -115,25 +111,15 @@ data class TtsTimelineRange(
     val frameEnd: Int? = null,
 )
 
-// ── Сериализация consumable внешним рендерером ──────────────────────────────
-
-/**
- * Общий детерминированный JSON-кодек для [TtsTimeline].
- * - UTF-8, без wall-clock/случайных id/путей — только стабильные поля схемы.
- * - Порядок полей/массивов строго как в схеme (не зависит от порядка хранения в памяти).
- */
+/** Stable JSON codec for the external cinematic renderer. */
 val TIMELINE_JSON: Json = Json {
     prettyPrint = false
     encodeDefaults = true
-    // Поля схемы обязательны: frameEnd пишется как null, когда native колбэк не даёт
-    // «конечный» frame (последний range куска), а не опускается.
     explicitNulls = true
 }
 
-/** Сериализация timeline в детерминированный JSON-текст. */
 fun timelineToJson(timeline: TtsTimeline): String =
     TIMELINE_JSON.encodeToString(TtsTimeline.serializer(), timeline)
 
-/** Десериализация timeline из JSON (round-trip и внешние потребители). */
 fun timelineFromJson(json: String): TtsTimeline =
     TIMELINE_JSON.decodeFromString(TtsTimeline.serializer(), json)

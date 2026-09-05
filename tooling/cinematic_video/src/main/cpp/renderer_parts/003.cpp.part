@@ -1,0 +1,100 @@
+    std::vector<unsigned char> base640;
+    cairo_surface_t* baseSurf=nullptr;
+    cairo_surface_t* vignetteSurf=nullptr;
+    std::vector<unsigned char> vignette;
+    struct Star{double x,y,vx,vy,r,a,phase;};
+    struct Fast{double x,y,vx,vy,length,width,alpha,phase;};
+    struct Rock{std::vector<std::pair<double,double>> pts; int seed; int radius; double x,y,vx,vy,rot;};
+    std::vector<Star> slow,medium; std::vector<Fast> fast; std::vector<Rock> rocks;
+    struct PR{Para p; int cardH,cardY; struct Box{double x,y,w,h; int sc,ec;}; std::vector<Box> boxes; cairo_surface_t* layer=nullptr; cairo_surface_t* textLayer=nullptr; cairo_surface_t* shadow=nullptr; ~PR(){if(layer)cairo_surface_destroy(layer);if(textLayer)cairo_surface_destroy(textLayer);if(shadow)cairo_surface_destroy(shadow);}};
+    std::vector<std::unique_ptr<PR>> prepared;
+    cairo_surface_t* header=nullptr;
+    std::string latinFont="DejaVu Serif"; std::string devFont="Noto Serif Devanagari";
+    std::string titleFont="DejaVu Sans Bold", chapterFont="DejaVu Sans", metaFont="DejaVu Sans";
+
+    Renderer(){ buildBase(); buildStars(); buildVignette(); }
+    ~Renderer(){if(header)cairo_surface_destroy(header); if(baseSurf)cairo_surface_destroy(baseSurf); if(vignetteSurf)cairo_surface_destroy(vignetteSurf);} 
+
+    void buildBase(){
+        const int bw=640,bh=360;
+        base640.resize((size_t)bw*bh*4);
+        auto at=[&](int x,int y)->unsigned char*{return &base640[((size_t)y*bw+x)*4];};
+        struct NP{double cx,cy,sx,sy,r,g,b,strength;};
+        const NP np[] = {
+            {0.18,0.34,0.44,0.72,20,10,58,1.0},
+            {0.80,0.58,0.46,0.62,8,24,70,1.0},
+            {0.47,0.18,0.26,0.34,43,12,50,0.75},
+            {0.60,0.88,0.34,0.33,8,16,43,0.55},
+        };
+        for(int y=0;y<bh;y++){
+            double ny=(double)y/bh;
+            for(int x=0;x<bw;x++){
+                double nx=(double)x/bw;
+                double r=3,g=4,b=11;
+                for(const auto&q:np){
+                    double ds=std::pow((nx-q.cx)/q.sx,2)+std::pow((ny-q.cy)/q.sy,2);
+                    double ga=std::exp(-ds*2.8)*q.strength;
+                    r += ga*q.r; g += ga*q.g; b += ga*q.b;
+                }
+                double bandDist=ny-(0.57-0.30*(nx-0.5));
+                double band=std::exp(-std::pow(bandDist/0.18,2));
+                r += band*3; g += band*4; b += band*11;
+                auto*q=at(x,y);
+                // Cairo ARGB32 on little-endian hosts is BGRA bytes.
+                q[0]=(unsigned char)clampd(b,0,255);
+                q[1]=(unsigned char)clampd(g,0,255);
+                q[2]=(unsigned char)clampd(r,0,255);
+                q[3]=255;
+            }
+        }
+        int stride=cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32,bw);
+        auto*mem=(unsigned char*)std::malloc((size_t)stride*bh);
+        for(int y=0;y<bh;y++) std::memcpy(mem+(size_t)stride*y, base640.data()+(size_t)bw*4*y,(size_t)bw*4);
+        baseSurf=cairo_image_surface_create_for_data(mem,CAIRO_FORMAT_ARGB32,bw,bh,stride);
+    }
+    void buildStars(){
+        std::mt19937 gen(20260903); std::uniform_real_distribution<double> u(0,1);
+        auto ur=[&](double a,double b){return a+(b-a)*u(gen);};
+        for(int i=0;i<230;i++){double d=ur(.2,.6);slow.push_back({ur(0,W),ur(0,H),ur(-1.4,1.4)*d,ur(-.8,.8)*d,ur(.55,1.35)*d,ur(35,110),ur(0,2*M_PI)});}
+        for(int i=0;i<115;i++){double d=ur(.6,1);medium.push_back({ur(0,W),ur(0,H),ur(-5.5,5.5)*d,ur(-2.3,2.3)*d,ur(.8,1.9)*d,ur(75,180),ur(0,2*M_PI)});}
+        for(int i=0;i<7;i++){double a=ur(0,2*M_PI),sp=ur(150,320);fast.push_back({ur(0,W),ur(0,H),std::cos(a)*sp,std::sin(a)*sp,ur(12,38),(double)(1+(int)(u(gen)*3)==0),ur(65,125),ur(0,25)});}
+        auto mk=[&](int seed,int radius,double x,double y,double vx,double vy,double rot){std::mt19937 rg(seed);std::uniform_real_distribution<double>rr(.74,1.04);Rock r; r.seed=seed;r.radius=radius;r.x=x;r.y=y;r.vx=vx;r.vy=vy;r.rot=rot; for(int i=0;i<10;i++){double a=i*2*M_PI/10,rad=radius*rr(rg);r.pts.push_back({std::cos(a)*rad,std::sin(a)*rad});}return r;};
+        rocks.push_back(mk(1,18,1060,90,-7.5,1.1,11));rocks.push_back(mk(2,12,180,580,6,-.7,-9));rocks.push_back(mk(3,9,1160,505,-4,.5,7));
+    }
+    void buildVignette(){
+        Canvas c;
+        cairo_surface_flush(c.surf);
+        for(int y=0;y<H;y++) for(int x=0;x<W;x++){
+            double dx=(x-W/2.0)/(W/2.0), dy=(y-H/2.0)/(H/2.0);
+            double dist=std::sqrt(dx*dx+dy*dy);
+            int a=(int)clampd((dist-0.18)/0.82*150,0,255);
+            auto* p=&c.px[(size_t)y*c.stride+x*4];
+            p[0]=p[1]=p[2]=0; p[3]=(unsigned char)a;
+        }
+        vignette=std::move(c.px);
+        int stride=c.stride;
+        auto*mem=(unsigned char*)std::malloc(vignette.size());
+        std::memcpy(mem,vignette.data(),vignette.size());
+        vignetteSurf=cairo_image_surface_create_for_data(mem,CAIRO_FORMAT_ARGB32,W,H,stride);
+    }
+    static std::vector<Token> tokens(const std::string& s){
+        std::vector<Token> out; size_t p=0;int chars=0; while(p<s.size()){while(p<s.size() && std::isspace((unsigned char)s[p])){size_t q=p; while(q<s.size()&&std::isspace((unsigned char)s[q])){next_cp(s,q);++chars;} p=q;} if(p>=s.size())break; size_t bs=p;int cs=chars; while(p<s.size()&&!std::isspace((unsigned char)s[p])){next_cp(s,p);++chars;} out.push_back({s.substr(bs,p-bs),(int)bs,(int)p,cs,chars});} return out;
+    }
+    PangoFontDescription* fontFor(const std::string& family,int size){std::ostringstream os;os<<family<<" "<<size;return pango_font_description_from_string(os.str().c_str());}
+    int textWidth(const std::string& text,const std::string& family,int size){ Canvas c;PangoLayout*l=pango_cairo_create_layout(c.cr);auto*f=fontFor(family,size);pango_layout_set_font_description(l,f);pango_layout_set_single_paragraph_mode(l,1);pango_layout_set_text(l,text.c_str(),(int)text.size());int w=0,h=0;pango_layout_get_pixel_size(l,&w,&h);pango_font_description_free(f);g_object_unref(l);return w; }
+    double mixedWidth(const std::string& token,int size){size_t p=0;double w=0;bool cur=false;size_t run=0;while(p<token.size()){size_t q=p;uint32_t cp=next_cp(token,q);bool d=is_dev(cp);if(p==0){cur=d;run=0;} if(d!=cur){w+=textWidth(token.substr(run,p-run),cur?devFont:latinFont,size);run=p;cur=d;}p=q;} if(run<token.size())w+=textWidth(token.substr(run),cur?devFont:latinFont,size);return w; }
+    int findSize(const Para&p,std::vector<std::vector<Token>>&lines,int&lineH){
+        for(int size=37;size>=31;--size){auto ts=tokens(p.text);lines.clear();std::vector<Token>line;double width=0;double space=textWidth(" ",latinFont,size)*1.08;for(auto&t:ts){t.width=mixedWidth(t.text,size);double add=line.empty()?t.width:space+t.width;if(!line.empty()&&width+add>CARD_W-2*PAD_X){lines.push_back(line);line.clear();width=0;add=t.width;}line.push_back(t);width+=add;}if(!line.empty())lines.push_back(line);lineH=(int)(size*1.72);if(lineH*(int)lines.size()<=CARD_MAX_H-2*PAD_Y)return size;}lineH=28;return 20;
+    }
+    void drawMixed(cairo_t*cr,double x,double y,const std::string& token,int size){size_t p=0,run=0;bool cur=false;while(p<token.size()){size_t q=p;uint32_t cp=next_cp(token,q);bool d=is_dev(cp);if(p==0){cur=d;run=0;}if(d!=cur){drawRun(cr,x,y,token.substr(run,p-run),size,cur);x+=textWidth(token.substr(run,p-run),cur?devFont:latinFont,size);run=p;cur=d;}p=q;}if(run<token.size())drawRun(cr,x,y,token.substr(run),size,cur);}
+    void drawRun(cairo_t*cr,double x,double y,const std::string&s,int size,bool dev){auto*l=pango_cairo_create_layout(cr);auto*f=fontFor(dev?devFont:latinFont,size);pango_layout_set_font_description(l,f);pango_layout_set_single_paragraph_mode(l,1);pango_layout_set_text(l,s.c_str(),(int)s.size());cairo_move_to(cr,x,y);pango_cairo_show_layout(cr,l);pango_font_description_free(f);g_object_unref(l);}
+    void runInkExtents(const std::string&s,int size,bool dev,int&ix,int&iy,int&iw,int&ih){
+        Canvas c; auto*l=pango_cairo_create_layout(c.cr); auto*f=fontFor(dev?devFont:latinFont,size);
+        pango_layout_set_font_description(l,f); pango_layout_set_single_paragraph_mode(l,1);
+        pango_layout_set_text(l,s.c_str(),(int)s.size());
+        PangoRectangle ink{},logical{}; pango_layout_get_pixel_extents(l,&ink,&logical);
+        ix=ink.x; iy=ink.y; iw=ink.width; ih=ink.height;
+        pango_font_description_free(f); g_object_unref(l);
+    }
+    cairo_surface_t* makeSurface(int w,int h){int st=cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32,w);auto*data=(unsigned char*)std::calloc((size_t)st*h,1);return cairo_image_surface_create_for_data(data,CAIRO_FORMAT_ARGB32,w,h,st);}
+    void makeHeader(const std::string&title,const std::string&chapter){header=makeSurface(W,H);cairo_t*cr=cairo_create(header);cairo_set_source_rgba(cr,0,0,0,0);cairo_paint(cr);auto drawCentered=[&](const std::string&s,const std::string&fam,int sz,double yy,double r,double g,double b,double a){auto*l=pango_cairo_create_layout(cr);auto*f=fontFor(fam,sz);pango_layout_set_font_description(l,f);pango_layout_set_text(l,s.c_str(),(int)s.size());int w=0,h=0;pango_layout_get_pixel_size(l,&w,&h);cairo_move_to(cr,(W-w)/2.0,yy);cairo_set_source_rgba(cr,r,g,b,a);pango_cairo_show_layout(cr,l);pango_font_description_free(f);g_object_unref(l);};drawCentered(title,titleFont,45,57,247/255.,248/255.,255/255.,1);drawCentered(chapter,chapterFont,32,126,176/255.,184/255.,224/255.,242/255.);cairo_set_source_rgba(cr,129/255.,118/255.,233/255.,185/255.);cairo_set_line_width(cr,3);cairo_move_to(cr,W/2-90,189);cairo_line_to(cr,W/2+90,189);cairo_stroke(cr);cairo_arc(cr,W/2,189,5,0,2*M_PI);cairo_set_source_rgba(cr,219/255.,221/255.,255/255.,230/255.);cairo_fill(cr);cairo_destroy(cr);}

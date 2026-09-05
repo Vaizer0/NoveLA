@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: android-debug-apk-${{ github.ref }}
@@ -81,3 +82,25 @@ jobs:
             tooling/text_to_speech/build/test-results/
           if-no-files-found: warn
           retention-days: 14
+
+  # buildRelease.yml is workflow_dispatch-only. This feature-branch bridge
+  # dispatches its exact test path. The dispatched workflow reports its own
+  # build status, so this job intentionally does not poll the Actions API.
+  dispatch-release-test:
+    name: Build & Publish (test)
+    if: github.event_name == 'pull_request' && github.head_ref == 'cinematic-video-integration'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch buildRelease test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/buildRelease.yml/dispatches" \
+            -d '{"ref":"cinematic-video-integration","inputs":{"build_type":"test"}}'
+          echo "buildRelease test dispatched successfully for cinematic-video-integration"

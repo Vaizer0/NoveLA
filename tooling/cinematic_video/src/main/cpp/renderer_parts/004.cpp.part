@@ -1,0 +1,101 @@
+    void buildParagraph(Para p, PR&pr){
+        std::vector<std::vector<Token>> lines; int lineH=0;int size=findSize(p,lines,lineH);int textH=lineH*(int)lines.size();pr.cardH=(int)clampd(textH+PAD_Y*2,CARD_MIN_H,CARD_MAX_H);pr.cardY=(int)(CONTENT_TOP+(CONTENT_BOTTOM-CONTENT_TOP-pr.cardH)/2.0);pr.layer=makeSurface(CARD_W,pr.cardH);cairo_t*cr=cairo_create(pr.layer);cairo_set_source_rgba(cr,7/255.,10/255.,21/255.,230/255.); // card
+        // rounded rectangle
+        auto roundRect=[&](cairo_t*d,double x,double y,double w,double h,double rad){const double k=.5522847498; cairo_move_to(d,x+rad,y);cairo_line_to(d,x+w-rad,y);cairo_curve_to(d,x+w-rad+k*rad,y,x+w,y+rad-k*rad,x+w,y+rad);cairo_line_to(d,x+w,y+h-rad);cairo_curve_to(d,x+w,y+h-rad+k*rad,x+w-rad+k*rad,y+h,x+w-rad,y+h);cairo_line_to(d,x+rad,y+h);cairo_curve_to(d,x+rad-k*rad,y+h,x,y+h-rad+k*rad,x,y+h-rad);cairo_line_to(d,x,y+rad);cairo_curve_to(d,x,y+rad-k*rad,x+rad-k*rad,y,x+rad,y);cairo_close_path(d);};
+        roundRect(cr,0,0,CARD_W,pr.cardH,29);cairo_fill(cr);cairo_set_source_rgba(cr,134/255.,147/255.,226/255.,205/255.);cairo_set_line_width(cr,2);roundRect(cr,1,1,CARD_W-2,pr.cardH-2,29);cairo_stroke(cr);cairo_set_source_rgba(cr,1,1,1,22/255.);cairo_set_line_width(cr,1);roundRect(cr,10,10,CARD_W-20,pr.cardH-20,22);cairo_stroke(cr);
+        cairo_destroy(cr);
+        pr.textLayer=makeSurface(CARD_W,pr.cardH);cairo_t*tr=cairo_create(pr.textLayer);cairo_set_source_rgba(tr,229/255.,231/255.,241/255.,242/255.);
+        double totalH=lineH*lines.size(), y0=(pr.cardH-totalH)/2.0; double space=textWidth(" ",latinFont,size)*1.08;
+        int lineIndex=0;
+        for(auto&line:lines){
+            double lineW=0; for(auto&t:line) lineW+=t.width;
+            lineW+=space*std::max(0,(int)line.size()-1);
+            double x=(CARD_W-lineW)/2.0;
+            double y=y0+lineIndex*lineH;
+            for(auto&t:line){
+                drawMixed(tr,x,y,t.text,size);
+                int ay=p.startChar+t.charStart, by=p.startChar+t.charEnd;
+                // Build the highlight rectangle from the actual shaped glyph ink bounds.
+                double minX=0,minY=0,maxX=0,maxY=0; bool haveInk=false;
+                double runX=x; size_t rp=0,rr=0; bool curDev=false;
+                while(rp<t.text.size()){
+                    size_t q=rp; uint32_t cp=next_cp(t.text,q); bool d=is_dev(cp);
+                    if(rp==0){curDev=d;rr=0;}
+                    if(d!=curDev){
+                        std::string rs=t.text.substr(rr,rp-rr); int ix=0,iy=0,iw=0,ih=0;
+                        runInkExtents(rs,size,curDev,ix,iy,iw,ih);
+                        if(iw>0&&ih>0){ double rx=runX+ix, ry=y+iy;
+                            if(!haveInk){minX=rx;minY=ry;maxX=rx+iw;maxY=ry+ih;haveInk=true;}
+                            else{minX=std::min(minX,rx);minY=std::min(minY,ry);maxX=std::max(maxX,rx+iw);maxY=std::max(maxY,ry+ih);}
+                        }
+                        runX+=mixedWidth(rs,size); rr=rp; curDev=d;
+                    }
+                    rp=q;
+                }
+                if(rr<t.text.size()){
+                    std::string rs=t.text.substr(rr); int ix=0,iy=0,iw=0,ih=0;
+                    runInkExtents(rs,size,curDev,ix,iy,iw,ih);
+                    if(iw>0&&ih>0){double rx=runX+ix, ry=y+iy;
+                        if(!haveInk){minX=rx;minY=ry;maxX=rx+iw;maxY=ry+ih;haveInk=true;}
+                        else{minX=std::min(minX,rx);minY=std::min(minY,ry);maxX=std::max(maxX,rx+iw);maxY=std::max(maxY,ry+ih);}
+                    }
+                }
+                if(haveInk){ const double HX=5.0, HY_TOP=2.0, HY_BOTTOM=3.0; pr.boxes.push_back({minX-HX,minY-HY_TOP,(maxX-minX)+2*HX,(maxY-minY)+HY_TOP+HY_BOTTOM,ay,by}); }
+                x+=t.width+space;
+            }
+            ++lineIndex;
+        }
+        cairo_destroy(tr);
+        pr.shadow=makeSurface(CARD_W+40,pr.cardH+40);cairo_t*sd=cairo_create(pr.shadow);
+        for(int k=12;k>=1;--k){ double pad=20.0+k*1.4; double a=(140.0/255.0)*(0.06+0.94*(13-k)/12.0); cairo_set_source_rgba(sd,0,0,0,a); roundRect(sd,pad,pad,CARD_W+40-2*pad,pr.cardH+40-2*pad,30+k); cairo_fill(sd); }
+        cairo_destroy(sd);
+    }
+
+    void prepare(const std::vector<Para>&ps,const std::string&title,const std::string&chapter){makeHeader(title,chapter);prepared.clear();for(auto&p:ps){auto q=std::make_unique<PR>();q->p=p;buildParagraph(p,*q);prepared.push_back(std::move(q));}}
+
+    void drawBackground(Canvas&c,double t){
+        cairo_t*cr=c.cr;
+        // Exact low-resolution nebula source from the Python renderer, scaled 3x.
+        cairo_save(cr);
+        cairo_scale(cr,3.0,3.0);
+        cairo_set_source_surface(cr,baseSurf,0,0);
+        cairo_paint(cr);
+        cairo_restore(cr);
+        // Draw starfield exactly in the same three populations.
+        for(auto&s:slow){double sx=std::fmod(s.x+s.vx*t,W);if(sx<0)sx+=W;double sy=std::fmod(s.y+s.vy*t,H);if(sy<0)sy+=H;double aa=s.a*(.82+.18*std::sin(t*.45+s.phase))/255.;cairo_set_source_rgba(cr,205/255.,215/255.,245/255.,aa);cairo_arc(cr,sx,sy,s.r,0,2*M_PI);cairo_fill(cr);}
+        for(auto&s:medium){double sx=std::fmod(s.x+s.vx*t,W);if(sx<0)sx+=W;double sy=std::fmod(s.y+s.vy*t,H);if(sy<0)sy+=H;double aa=s.a*(.76+.24*std::sin(t*.8+s.phase))/255.;cairo_set_source_rgba(cr,222/255.,230/255.,255/255.,aa);cairo_arc(cr,sx,sy,s.r,0,2*M_PI);cairo_fill(cr);}
+        for(auto&s:fast){double cyc=std::fmod(t+s.phase,11.0);double sx=std::fmod(s.x+s.vx*cyc,W+140)-70;double sy=std::fmod(s.y+s.vy*cyc,H+140)-70;double mag=std::hypot(s.vx,s.vy);double ux=s.vx/mag,uy=s.vy/mag;double tx=sx-ux*s.length,ty=sy-uy*s.length;double aa=s.alpha*(.65+.35*std::sin(t*.6+s.phase))/255.;cairo_set_source_rgba(cr,225/255.,235/255.,255/255.,aa);cairo_set_line_width(cr,s.width);cairo_move_to(cr,tx,ty);cairo_line_to(cr,sx,sy);cairo_stroke(cr);double rr=1.2+.6*s.width;cairo_set_source_rgba(cr,242/255.,246/255.,255/255.,std::min(1.0,aa+40/255.));cairo_arc(cr,sx,sy,rr,0,2*M_PI);cairo_fill(cr);}
+        // rocks
+        for(auto&r:rocks){double sx=std::fmod(r.x+r.vx*t,W+100)-50,sy=r.y+r.vy*t;cairo_save(cr);cairo_translate(cr,sx,sy);cairo_rotate(cr,r.rot*t*M_PI/180.0);cairo_set_source_rgba(cr,62/255.,65/255.,77/255.,232/255.);cairo_move_to(cr,r.pts[0].first,r.pts[0].second);for(size_t i=1;i<r.pts.size();++i)cairo_line_to(cr,r.pts[i].first,r.pts[i].second);cairo_close_path(cr);cairo_fill(cr);cairo_set_source_rgba(cr,145/255.,145/255.,157/255.,125/255.);cairo_set_line_width(cr,1);cairo_move_to(cr,r.pts[0].first,r.pts[0].second);for(size_t i=1;i<r.pts.size();++i)cairo_line_to(cr,r.pts[i].first,r.pts[i].second);cairo_close_path(cr);cairo_stroke(cr);cairo_restore(cr);}
+        if(t>=6.8&&t<=7.32){double p=ease((t-6.8)/.52),sx=1040-260*p,sy=165+125*p;int alpha=(int)(190*(1-p));cairo_set_source_rgba(cr,236/255.,242/255.,255/255.,alpha/255.);cairo_set_line_width(cr,2);cairo_move_to(cr,sx,sy);cairo_line_to(cr,sx+52,sy-25);cairo_stroke(cr);}
+        cairo_set_source_surface(cr,vignetteSurf,0,0); cairo_paint(cr);
+    }
+    void compositeSurface(cairo_t*cr,cairo_surface_t*s,double x,double y){cairo_set_source_surface(cr,s,x,y);cairo_paint(cr);}
+
+    const Range* active(const Para&p,double tms) const { if(p.ranges.empty())return nullptr; int lo=0,hi=(int)p.ranges.size();while(lo<hi){int m=(lo+hi)/2;if(p.ranges[m].startMs<=tms)lo=m+1;else hi=m;}int i=lo-1;if(i<0)return nullptr;double end=p.ranges[i].hasEnd?p.ranges[i].endMs:(i+1<(int)p.ranges.size()?p.ranges[i+1].startMs:p.endMs);return (tms>=p.ranges[i].startMs&&tms<end)?&p.ranges[i]:nullptr; }
+    
+    void render(const std::string&audio,const std::string&json,const std::string&out,double dur,const std::string&encoder,const std::string&preset){
+        std::ifstream f(json);std::string txt((std::istreambuf_iterator<char>(f)),{});auto root=JsonParser(txt).parse();auto&rm=as<std::map<std::string,JsonNode>>(root);auto&ch=as<std::map<std::string,JsonNode>>(rm.at("chapter"));auto&au=as<std::map<std::string,JsonNode>>(rm.at("audio"));double total=number(au,"durationMs")/1000.;auto&arr=as<std::vector<JsonNode>>(rm.at("paragraphs"));std::vector<Para>ps;for(auto&pn:arr){auto&o=as<std::map<std::string,JsonNode>>(pn);Para p{(int)number(o,"index"),(int)number(o,"startChar"),(int)number(o,"endChar"),number(o,"startMs"),number(o,"endMs"),stringv(o,"text"),{}};auto it=o.find("ranges");if(it!=o.end()){for(auto&rn:as<std::vector<JsonNode>>(it->second)){auto&ro=as<std::map<std::string,JsonNode>>(rn);Range r{(int)number(ro,"startChar"),(int)number(ro,"endChar"),number(ro,"startMs"),0,false};auto e=ro.find("endMs");if(e!=ro.end()&&!std::holds_alternative<std::nullptr_t>(e->second.v)){r.endMs=number(ro,"endMs");r.hasEnd=true;}p.ranges.push_back(r);}}ps.push_back(std::move(p));}
+        std::sort(ps.begin(),ps.end(),[](auto&a,auto&b){return a.startMs<b.startMs;});prepare(ps,stringv(ch,"novelTitle"),stringv(ch,"chapterTitle"));dur=dur<=0?total:std::min(dur,total);
+        std::string enc=encoder; if(enc=="auto"){std::string cmd="ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_mediacodec";enc=(std::system(cmd.c_str())==0)?"h264_mediacodec":"libx264";}
+        std::ostringstream cmd;cmd<<"ffmpeg -loglevel error -y -f rawvideo -pixel_format rgb24 -video_size "<<W<<"x"<<H<<" -framerate "<<FPS<<" -i - -i "<<shell_quote(audio)<<" -t "<<dur<<" -map 0:v:0 -map 1:a:0 ";if(enc=="h264_mediacodec")cmd<<"-c:v h264_mediacodec -b:v 12M ";else cmd<<"-c:v libx264 -preset "<<preset<<" -crf 22 -tune zerolatency ";cmd<<"-pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart -shortest "<<shell_quote(out);FILE*pipe=popen(cmd.str().c_str(),"w");if(!pipe)throw std::runtime_error("failed to start ffmpeg");
+        Canvas c;auto starts=std::vector<double>();for(auto&p:ps)starts.push_back(p.startMs);auto t0=std::chrono::steady_clock::now();size_t frames=(size_t)std::ceil(dur*FPS);
+        auto findp=[&](double t){int lo=0,hi=(int)ps.size();while(lo<hi){int m=(lo+hi)/2;if(ps[m].startMs<=t)lo=m+1;else hi=m;}return std::max(0,std::min((int)ps.size()-1,lo-1));};
+        for(size_t n=0;n<frames;++n){double t=n/(double)FPS,tms=t*1000;int idx=findp(tms);auto&pr=*prepared[idx];drawBackground(c,t);compositeSurface(c.cr,header,0,0);compositeSurface(c.cr,pr.shadow,CARD_X-20,pr.cardY-7);compositeSurface(c.cr,pr.layer,CARD_X,pr.cardY);
+            // Draw the highlight BEFORE the text so the orange accent stays behind clean glyphs.
+            auto*r=active(pr.p,tms);if(r){for(auto&b:pr.boxes){if(r->startChar == b.sc || (r->startChar < b.ec && r->endChar > b.sc)){cairo_set_source_rgba(c.cr,230/255.,132/255.,28/255.,92/255.);
+                        double x=CARD_X+b.x,y=pr.cardY+b.y,w=b.w,h=b.h;double rad=9; cairo_new_path(c.cr); cairo_move_to(c.cr,x+rad,y);cairo_line_to(c.cr,x+w-rad,y);cairo_arc(c.cr,x+w-rad,y+rad,rad,-M_PI/2,0);cairo_line_to(c.cr,x+w,y+h-rad);cairo_arc(c.cr,x+w-rad,y+h-rad,rad,0,M_PI/2);cairo_line_to(c.cr,x+rad,y+h);cairo_arc(c.cr,x+rad,y+h-rad,rad,M_PI/2,M_PI);cairo_line_to(c.cr,x,y+rad);cairo_arc(c.cr,x+rad,y+rad,rad,M_PI,1.5*M_PI);cairo_close_path(c.cr);cairo_fill_preserve(c.cr);cairo_set_source_rgba(c.cr,255/255.,205/255.,125/255.,190/255.);cairo_set_line_width(c.cr,1);cairo_stroke(c.cr);break;}}
+            }
+            compositeSurface(c.cr,pr.textLayer,CARD_X,pr.cardY);
+            // footer
+            std::ostringstream lab;lab<<"PARAGRAPH "<<std::setw(2)<<std::setfill('0')<<(idx+1)<<" / "<<std::setw(2)<<ps.size();auto*l=pango_cairo_create_layout(c.cr);auto*fnt=fontFor(metaFont,23);pango_layout_set_font_description(l,fnt);pango_layout_set_text(l,lab.str().c_str(),-1);cairo_move_to(c.cr,90,987);cairo_set_source_rgba(c.cr,144/255.,151/255.,182/255.,190/255.);pango_cairo_show_layout(c.cr,l);pango_font_description_free(fnt);g_object_unref(l);
+            double bx=W-477,by=996,bw=383;cairo_set_source_rgba(c.cr,55/255.,61/255.,88/255.,155/255.);cairo_rectangle(c.cr,bx,by,bw,4);cairo_fill(c.cr);double prog=clampd(pr.p.endMs/(total*1000),0,1);cairo_set_source_rgba(c.cr,142/255.,125/255.,238/255.,220/255.);cairo_rectangle(c.cr,bx,by,bw*prog,4);cairo_fill(c.cr);
+            cairo_surface_flush(c.surf); // ARGB32 native endian -> RGB
+            std::vector<unsigned char> rgb((size_t)W*H*3);for(int y=0;y<H;y++){auto*src=&c.px[(size_t)y*c.stride];auto*dst=&rgb[(size_t)y*W*3];for(int x=0;x<W;x++){dst[x*3+0]=src[x*4+2];dst[x*3+1]=src[x*4+1];dst[x*3+2]=src[x*4+0];}} if(fwrite(rgb.data(),1,rgb.size(),pipe)!=rgb.size())throw std::runtime_error("ffmpeg pipe write failed");
+        }
+        int rc=pclose(pipe);auto t1=std::chrono::steady_clock::now();double sec=std::chrono::duration<double>(t1-t0).count();if(rc!=0)throw std::runtime_error("ffmpeg failed");std::cerr<<"Rendered "<<dur<<"s in "<<sec<<"s ("<<(dur/std::max(sec,.001))<<"x realtime) using "<<enc<<"\n";
+    }
+};
+
+int main(int argc,char**argv){try{if(argc<5){std::cerr<<"Usage: "<<argv[0]<<" --audio WAV --timeline JSON --output MP4 [--duration sec] [--encoder auto|libx264|h264_mediacodec] [--preset ultrafast]\n";return 2;}std::string audio,json,out,enc="auto",preset="ultrafast";double dur=0;for(int i=1;i<argc;i++){std::string a=argv[i];auto val=[&](){if(i+1>=argc)throw std::runtime_error("missing value for "+a);return std::string(argv[++i]);};if(a=="--audio")audio=val();else if(a=="--timeline")json=val();else if(a=="--output")out=val();else if(a=="--duration")dur=std::stod(val());else if(a=="--encoder")enc=val();else if(a=="--preset")preset=val();}
+        if(audio.empty()||json.empty()||out.empty())throw std::runtime_error("--audio, --timeline and --output are required");Renderer r;r.render(audio,json,out,dur,enc,preset);return 0;}catch(const std::exception&e){std::cerr<<"ERROR: "<<e.what()<<"\n";return 1;}}

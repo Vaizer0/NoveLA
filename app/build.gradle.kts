@@ -92,6 +92,7 @@ dependencies {
     implementation(projects.tooling.epubParser)
     implementation(projects.tooling.textTranslator.domain)
     implementation(projects.tooling.textToSpeech)
+    implementation(projects.tooling.cinematicVideo)
     implementation(projects.tooling.epubImporter)
     implementation(projects.tooling.applicationWorkers)
     implementation(projects.tooling.localSource)
@@ -150,7 +151,6 @@ dependencies {
     // e2e test
     androidTestImplementation(libs.test.androidx.core.ktx)
     androidTestImplementation(libs.test.androidx.junit.ktx)
-    androidTestImplementation(libs.test.androidx.espresso.core)
     androidTestImplementation(libs.compose.androidx.ui.test.junit4)
     androidTestImplementation(libs.test.androidx.rules)
     androidTestImplementation(libs.test.androidx.runner)
@@ -186,7 +186,6 @@ dependencies {
     // Logging
     implementation(libs.timber)
 
-    // Force concurrent-futures to 1.2.0 for consistent resolution with test deps
     implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
 }
 

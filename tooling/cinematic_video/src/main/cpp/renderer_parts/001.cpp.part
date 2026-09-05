@@ -1,0 +1,100 @@
+// Native C++17 port of novela_cinematic_fast_renderer_orange_numpyfree_devanagari_fixed.py
+// Visual intent preserved: 1920x1080/24fps, same nebula, star populations,
+// rocks, shooting star, vignette, card, header, footer and orange highlight.
+// Text is rendered with Pango/HarfBuzz-backed shaping so Devanagari clusters are
+// kept intact; mixed Hindi+English words use separate script runs without
+// splitting Devanagari grapheme clusters.
+//
+// Build (Debian-like systems):
+//   g++ -O3 -std=c++17 novela_cinematic_fast_renderer_orange_numpyfree_devanagari_fixed.cpp \
+//     -o novela_cpp_renderer -lcairo -lpangocairo-1.0 -lpango-1.0 -lglib-2.0 -lm
+//
+// Termux: the same library set is expected from Cairo/Pango development packages.
+// The program only requires the ffmpeg executable at runtime.
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <random>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <variant>
+#include <vector>
+#include <sys/wait.h>
+#include <memory>
+#include <iomanip>
+#include <cctype>
+
+// Minimal ABI declarations so the source can build even when the development
+// headers are not packaged. These match the installed Cairo/Pango APIs.
+extern "C" {
+typedef struct _cairo cairo_t;
+typedef struct _cairo_surface cairo_surface_t;
+typedef struct _PangoLayout PangoLayout;
+typedef struct _PangoFontDescription PangoFontDescription;
+typedef struct _PangoContext PangoContext;
+typedef int cairo_format_t;
+typedef int cairo_filter_t;
+typedef int cairo_operator_t;
+
+typedef struct { double x, y, width, height; } cairo_rectangle_t;
+
+typedef struct { int x, y, width, height; } PangoRectangle;
+
+typedef int PangoEllipsizeMode;
+
+typedef struct _PangoFontMap PangoFontMap;
+
+typedef enum { CAIRO_FORMAT_ARGB32 = 0 } CairoFormatDummy;
+
+typedef enum { CAIRO_FILTER_FAST = 0, CAIRO_FILTER_GOOD = 1, CAIRO_FILTER_BEST = 2 } CairoFilterDummy;
+
+typedef enum { CAIRO_OPERATOR_OVER = 2 } CairoOperatorDummy;
+
+cairo_surface_t* cairo_image_surface_create_for_data(unsigned char*, cairo_format_t, int, int, int);
+void cairo_surface_destroy(cairo_surface_t*);
+void cairo_surface_flush(cairo_surface_t*);
+void cairo_surface_mark_dirty(cairo_surface_t*);
+int cairo_format_stride_for_width(cairo_format_t, int);
+
+cairo_t* cairo_create(cairo_surface_t*);
+void cairo_destroy(cairo_t*);
+void cairo_set_source_rgba(cairo_t*, double,double,double,double);
+void cairo_set_source_rgb(cairo_t*, double,double,double);
+void cairo_set_source_surface(cairo_t*, cairo_surface_t*, double,double);
+void cairo_paint(cairo_t*);
+void cairo_paint_with_alpha(cairo_t*, double);
+void cairo_rectangle(cairo_t*, double,double,double,double);
+void cairo_fill(cairo_t*);
+void cairo_stroke(cairo_t*);
+void cairo_set_line_width(cairo_t*, double);
+void cairo_move_to(cairo_t*, double,double);
+void cairo_line_to(cairo_t*, double,double);
+void cairo_close_path(cairo_t*);
+void cairo_new_path(cairo_t*);
+void cairo_fill_preserve(cairo_t*);
+void cairo_curve_to(cairo_t*, double,double,double,double,double,double);
+void cairo_arc(cairo_t*, double,double,double,double,double,double);
+void cairo_save(cairo_t*);
+void cairo_restore(cairo_t*);
+void cairo_translate(cairo_t*, double,double);
+void cairo_rotate(cairo_t*, double);
+void cairo_scale(cairo_t*, double,double);
+void cairo_set_operator(cairo_t*, cairo_operator_t);
+cairo_surface_t* cairo_get_target(cairo_t*);
+void cairo_push_group(cairo_t*);
+void cairo_pop_group_to_source(cairo_t*);
+void cairo_set_source(cairo_t*, void*);
+
+PangoLayout* pango_cairo_create_layout(cairo_t*);
+void pango_cairo_show_layout(cairo_t*, PangoLayout*);
