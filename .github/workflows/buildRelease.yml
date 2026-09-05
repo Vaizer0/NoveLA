@@ -11,20 +11,13 @@ on:
         options:
           - test      # Upload artifact only, no release
           - release   # Create a draft GitHub Release
-  # Temporary branch-only validation trigger for the existing PR.
-  pull_request:
-    branches:
-      - Demo
-
-env:
-  BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'test' }}
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build APK (${{ env.BUILD_TYPE }})
+    name: Build APK (${{ inputs.build_type }})
     runs-on: ubuntu-latest
     steps:
       - name: Clone repo
@@ -66,7 +59,7 @@ jobs:
 
       # ── Test build: upload as workflow artifact (no release) ────────────────
       - name: Upload APK artifact (test build)
-        if: env.BUILD_TYPE == 'test'
+        if: inputs.build_type == 'test'
         uses: actions/upload-artifact@v7
         with:
           name: NoveLA-v${{ env.APP_VERSION }}-test
@@ -75,7 +68,7 @@ jobs:
 
       # ── Release build: create a draft GitHub Release ─────────────────────────
       - name: Create draft release
-        if: env.BUILD_TYPE == 'release'
+        if: inputs.build_type == 'release'
         uses: softprops/action-gh-release@v3
         with:
           name: NoveLA v${{ env.APP_VERSION }}
