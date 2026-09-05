@@ -1,7 +1,6 @@
 package my.noveldokusha.settings.sections
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +36,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.components.PillSlider
@@ -45,7 +43,7 @@ import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.coreui.theme.textPadding
 import my.noveldokusha.strings.R as StringsR
-import kotlin.coroutines.resume
+import my.noveldokusha.text_to_speech.TtsEngineCatalog
 
 private const val FAVORITE_VOICE_PREF_KEY = "TTS_AUDIO_DOWNLOAD_FAVORITE_VOICES"
 
@@ -53,8 +51,9 @@ private const val FAVORITE_VOICE_PREF_KEY = "TTS_AUDIO_DOWNLOAD_FAVORITE_VOICES"
  * Настройки «Загрузка аудио»: голос (выделенный TTS-инстанс, независимый от
  * живой озвучки), скорость/высота, источник текста и папка назначения (SAF).
  *
- * Голоса перечисляются ВЫДЕЛЕННЫМ probe-инстансом TextToSpeech (не общим
- * AppTtsEngine), поэтому настройка никогда не трогает озвучку читалки.
+ * Голоса перечисляются через [TtsEngineCatalog], который открывает отдельные
+ * probe-инстансы для каждого установленного TTS-движка. Это позволяет явно
+ * выбрать экспортный движок, отличный от движка читалки, когда он доступен.
  */
 @Composable
 internal fun SettingsTtsAudioDownload(
@@ -232,7 +231,18 @@ private fun VoicePickerDialog(
     }
 
     LaunchedEffect(Unit) {
-        voices = withContext(Dispatchers.Default) { probeVoices(context) }
+        voices = withContext(Dispatchers.Default) {
+            TtsEngineCatalog.discover(context).flatMap { engine ->
+                engine.voices.map { voice ->
+                    VoiceEntry(
+                        engineLabel = engine.label,
+                        enginePackage = voice.enginePackage,
+                        id = voice.id,
+                        language = voice.locale.displayLanguage,
+                    )
+                }
+            }
+        }
     }
 
     val normalizedQuery = searchQuery.trim().lowercase()
@@ -242,13 +252,14 @@ private fun VoicePickerDialog(
                 normalizedQuery.isBlank() ||
                     voice.id.lowercase().contains(normalizedQuery) ||
                     voice.language.lowercase().contains(normalizedQuery) ||
+                    voice.engineLabel.lowercase().contains(normalizedQuery) ||
                     voice.enginePackage.lowercase().contains(normalizedQuery)
             }
             .sortedWith(
                 compareByDescending<VoiceEntry> { favorites.contains(voiceKey(it)) }
+                    .thenBy { it.engineLabel.lowercase() }
                     .thenBy { it.language.lowercase() }
                     .thenBy { it.id.lowercase() }
-                    .thenBy { it.enginePackage.lowercase() }
             )
     }
 
@@ -314,7 +325,11 @@ private fun VoicePickerDialog(
                             supportingContent = {
                                 Text(
                                     text = buildString {
-                                        append(voice.language)
+                                        append(voice.engineLabel)
+                                        if (voice.language.isNotBlank()) {
+                                            append(" • ")
+                                            append(voice.language)
+                                        }
                                         if (voice.enginePackage.isNotBlank()) {
                                             append(" • ")
                                             append(voice.enginePackage)
@@ -357,6 +372,7 @@ private fun VoicePickerDialog(
 }
 
 private data class VoiceEntry(
+    val engineLabel: String,
     val enginePackage: String,
     val id: String,
     val language: String,
@@ -368,31 +384,3 @@ private fun voiceKey(voice: VoiceEntry): String = voiceKey(voice.enginePackage, 
 
 private fun initialVoiceKey(enginePackage: String, voiceId: String): String =
     voiceKey(enginePackage, voiceId)
-
-private suspend fun probeVoices(context: Context): List<VoiceEntry> {
-    var engine: TextToSpeech? = null
-    suspendCancellableCoroutine<Unit> { cont ->
-        engine = TextToSpeech(context.applicationContext) {
-            if (cont.isActive) {
-                cont.resume(Unit)
-            }
-        }
-        cont.invokeOnCancellation {
-            runCatching { engine?.stop() }
-            runCatching { engine?.shutdown() }
-        }
-    }
-    val tts = engine ?: return emptyList()
-    val enginePackage = tts.defaultEngine ?: ""
-    val result = runCatching {
-        (tts.voices ?: emptyList()).map { voice ->
-            VoiceEntry(
-                enginePackage = enginePackage,
-                id = voice.name,
-                language = voice.locale?.displayLanguage ?: "",
-            )
-        }
-    }.getOrDefault(emptyList())
-    runCatching { tts.shutdown() }
-    return result
-}
