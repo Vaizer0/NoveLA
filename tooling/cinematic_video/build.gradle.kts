@@ -28,10 +28,16 @@ android {
         }
     }
 
-    sourceSets["main"].assets.srcDir(cinematicAssetsDir)
-
     packaging {
         jniLibs.useLegacyPackaging = false
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets.addStaticSourceDirectory(
+            cinematicAssetsDir.get().asFile.absolutePath
+        )
     }
 }
 
