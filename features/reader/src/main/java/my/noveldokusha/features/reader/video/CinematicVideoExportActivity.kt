@@ -40,7 +40,7 @@ class CinematicVideoExportActivity : ComponentActivity() {
     private var wavUri by mutableStateOf<Uri?>(null)
     private var timelineUri by mutableStateOf<Uri?>(null)
     private var outputUri by mutableStateOf<Uri?>(null)
-    private var progress by mutableStateOf(0)
+    private var exportProgress by mutableStateOf(0)
     private var running by mutableStateOf(false)
     private var errorText by mutableStateOf<String?>(null)
 
@@ -55,7 +55,7 @@ class CinematicVideoExportActivity : ComponentActivity() {
                         wavUri = wavUri,
                         timelineUri = timelineUri,
                         outputUri = outputUri,
-                        progress = progress,
+                        progress = exportProgress,
                         running = running,
                         errorText = errorText,
                         onPickWav = { pickWav.launch(arrayOf("audio/wav", "audio/x-wav", "audio/*")) },
@@ -102,7 +102,7 @@ class CinematicVideoExportActivity : ComponentActivity() {
         val timeline = timelineUri ?: return
         val output = outputUri ?: return
         running = true
-        progress = 0
+        exportProgress = 0
         errorText = null
 
         val request = OneTimeWorkRequestBuilder<CinematicVideoWorker>()
@@ -124,12 +124,12 @@ class CinematicVideoExportActivity : ComponentActivity() {
         lifecycleScope.launch {
             workManager.getWorkInfoByIdFlow(request.id).collectLatest { info ->
                 if (info == null) return@collectLatest
-                progress = info.progress.getInt(CinematicVideoWorker.KEY_PROGRESS, progress)
+                exportProgress = info.progress.getInt(CinematicVideoWorker.KEY_PROGRESS, exportProgress)
                 when (info.state) {
                     WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> running = true
                     WorkInfo.State.SUCCEEDED -> {
                         running = false
-                        progress = 100
+                        exportProgress = 100
                         Toast.makeText(this@CinematicVideoExportActivity, "Video created successfully", Toast.LENGTH_LONG).show()
                     }
                     WorkInfo.State.FAILED -> {
