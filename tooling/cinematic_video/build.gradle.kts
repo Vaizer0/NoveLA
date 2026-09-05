@@ -91,10 +91,21 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         require(ffmpegBinary != null) { "FFmpeg CLI binary was not found inside ffmpeg.tar.xz" }
 
         val destinationRoot = outputRoot.resolve("cinematic/$abi")
-        val destinationBinary = destinationRoot.resolve("bin/ffmpeg")
-        destinationBinary.parentFile.mkdirs()
+        val destinationBinDir = destinationRoot.resolve("bin")
+        val destinationBinary = destinationBinDir.resolve("ffmpeg.bin")
+        val launcher = destinationBinDir.resolve("ffmpeg")
+        destinationBinDir.mkdirs()
         ffmpegBinary.copyTo(destinationBinary, overwrite = true)
         destinationBinary.setExecutable(true, false)
+
+        launcher.writeText(
+            "#!/system/bin/sh\n" +
+                "HERE=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\n" +
+                "export LD_LIBRARY_PATH=\"$HERE/../lib${'$'}{LD_LIBRARY_PATH:+:${'$'}LD_LIBRARY_PATH}\"\n" +
+                "exec \"${'$'}HERE/ffmpeg.bin\" \"${'$'}@\"\n",
+            Charsets.UTF_8,
+        )
+        launcher.setExecutable(true, false)
 
         val sourceLibDir = locate(tarExtractRoot) { it.isDirectory && it.name == "lib64" }
             ?: locate(tarExtractRoot) { it.isDirectory && it.name == "lib" }
