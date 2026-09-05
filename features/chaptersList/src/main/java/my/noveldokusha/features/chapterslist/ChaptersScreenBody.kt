@@ -85,13 +85,6 @@ internal fun ChaptersScreenBody(
     }
 
     fun enqueueDefaultVideo(chapter: ChapterWithContext, source: TtsAudioSource) {
-        if (source == TtsAudioSource.TRANSLATED &&
-            !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false)
-        ) {
-            Toast.makeText(context, "Translated chapter text is not available", Toast.LENGTH_SHORT).show()
-            return
-        }
-
         val outputDirectoryUri = appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
         if (outputDirectoryUri.isBlank()) {
             Toast.makeText(context, "Choose the audio export folder first", Toast.LENGTH_SHORT).show()
@@ -102,12 +95,6 @@ internal fun ChaptersScreenBody(
             appPreferences.translationPairForBook(state.book.value.url)
         } else {
             TranslationLangPair()
-        }
-        if (source == TtsAudioSource.TRANSLATED &&
-            (pair.source.isBlank() || pair.target.isBlank())
-        ) {
-            Toast.makeText(context, "Translation is not configured for this book", Toast.LENGTH_SHORT).show()
-            return
         }
 
         val chapterIndex = state.chapters.indexOfFirst { it.chapter.url == chapter.chapter.url }
