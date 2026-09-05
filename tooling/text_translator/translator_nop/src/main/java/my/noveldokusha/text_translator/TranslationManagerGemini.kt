@@ -81,24 +81,18 @@ class TranslationManagerGemini(
         return models.firstOrNull { it.language == language }
     }
 
-    override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
+    override fun getTranslator(
+        source: String,
+        target: String,
+        systemPromptOverride: String?,
+        provider: String?
+    ): TranslatorState {
         Timber.d( "getTranslator: source=$source, target=$target, apiKeysConfigured=${apiKeys.size}, override=${systemPromptOverride != null}")
         return TranslatorState(
             source = source,
             target = target,
             translate = { input -> translateWithGemini(input, source, target, systemPromptOverride = systemPromptOverride) }
         )
-    }
-
-    private fun resolveTemplatePrompt(systemPromptOverride: String?): String {
-        if (systemPromptOverride != null && systemPromptOverride.isNotBlank()) {
-            Timber.d( "resolveTemplatePrompt: using override '${systemPromptOverride.take(200)}'")
-            return systemPromptOverride
-        }
-        val fallback = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
-            .ifBlank { DEFAULT_TRANSLATION_PROMPT }
-        Timber.d( "resolveTemplatePrompt: no override, using fallback '${fallback.take(200)}'")
-        return fallback
     }
 
     private suspend fun translateWithGemini(
@@ -112,7 +106,7 @@ class TranslationManagerGemini(
         if (keys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
-        val templatePrompt = resolveTemplatePrompt(systemPromptOverride)
+        val templatePrompt = resolveTemplatePrompt(appPreferences, systemPromptOverride)
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
         val builtFallbackPrompt = buildSystemPrompt(fallbackSystemPrompt, sourceLanguage, targetLanguage, useEnglish)
 
@@ -196,6 +190,7 @@ class TranslationManagerGemini(
         sourceLanguage: String,
         targetLanguage: String,
         systemPromptOverride: String?,
+        provider: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
@@ -215,7 +210,7 @@ class TranslationManagerGemini(
         if (availableKeys.isEmpty()) throw IllegalStateException("Gemini: No API keys configured.")
 
         val useEnglish = appPreferences.TRANSLATION_PROMPT_USE_ENGLISH_LOCALE.value
-        val templatePrompt = resolveTemplatePrompt(systemPromptOverride)
+        val templatePrompt = resolveTemplatePrompt(appPreferences, systemPromptOverride)
         val systemPrompt = buildSystemPrompt(templatePrompt, sourceLanguage, targetLanguage, useEnglish)
         Timber.d( "translateBatch: systemPrompt='${systemPrompt.take(200)}'")
 
@@ -464,47 +459,6 @@ class TranslationManagerGemini(
         Timber.d( "parseGeminiResponse: returning raw trimmed, length=${trimmed.length}, preview=${trimmed.take(200)}")
         return trimmed
     }
-
-    private val numberPattern = Regex("""^\*{0,2}[№#]?\s*(\d+)\s*[.)]\*{0,2}\s*""")
-
-    private fun parseNumberedTranslations(translatedText: String, originalTexts: List<String>): Map<String, String> {
-        val byIndex = mutableMapOf<Int, String>()
-        val lines = translatedText.split("\n")
-        var currentIndex = -1
-        var currentText = StringBuilder()
-
-        fun flush() {
-            if (currentIndex >= 0 && currentText.isNotBlank()) {
-                byIndex[currentIndex] = currentText.toString().trim()
-            }
-            currentText.clear()
-        }
-
-        for (line in lines) {
-            val match = numberPattern.find(line)
-            if (match != null) {
-                flush()
-                val num = match.groupValues[1].toIntOrNull() ?: continue
-                currentIndex = num - 1
-                val rest = line.substring(match.value.length)
-                if (rest.isNotBlank()) currentText.append(rest)
-            } else {
-                if (currentIndex == -1) continue
-                if (currentText.isNotEmpty()) currentText.append("\n")
-                currentText.append(line.trim())
-            }
-        }
-        flush()
-
-        return originalTexts.mapIndexedNotNull { index, originalText ->
-            byIndex[index]?.let { originalText to it }
-        }.toMap().also {
-            Timber.d( "parseNumberedTranslations: ${it.size}/${originalTexts.size} parsed")
-        }
-    }
-
-    override fun downloadModel(language: String) {}
-    override fun removeModel(language: String) {}
 
     class ContentBlockedException(message: String) : IOException(message)
 

@@ -37,7 +37,12 @@ class TranslationManagerGoogleFree(
         return models.firstOrNull { it.language == language }
     }
 
-    override fun getTranslator(source: String, target: String, systemPromptOverride: String?): TranslatorState {
+    override fun getTranslator(
+        source: String,
+        target: String,
+        systemPromptOverride: String?,
+        provider: String?
+    ): TranslatorState {
         Timber.d( "getTranslator: source=$source, target=$target")
         return TranslatorState(
             source = source,
@@ -182,6 +187,7 @@ class TranslationManagerGoogleFree(
         sourceLanguage: String,
         targetLanguage: String,
         systemPromptOverride: String?,
+        provider: String?,
     ): Map<String, String> = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyMap()
 
@@ -287,9 +293,6 @@ class TranslationManagerGoogleFree(
 
         return result
     }
-
-    override fun downloadModel(language: String) {}
-    override fun removeModel(language: String) {}
 
     companion object {
         private const val TAG = "TranslationGoogleFree"
