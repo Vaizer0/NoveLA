@@ -24,10 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
 
-/**
- * Worker-local audio+timeline -> cinematic MP4 exporter.
- * It deliberately lives with TtsAudioExportWorker so the worker module does not depend on reader.
- */
+/** Worker-local cinematic exporter used by the existing TTS download pipeline. */
 class CinematicVideoExporter(private val context: Context) {
     data class Result(val outputFile: File, val durationMs: Long)
 
@@ -40,7 +37,8 @@ class CinematicVideoExporter(private val context: Context) {
     ): Result = withContext(Dispatchers.Default) {
         require(wavFile.isFile && wavFile.length() > 44L) { "WAV file does not exist or is empty" }
         require(timelineFile.isFile) { "Timeline JSON does not exist" }
-        val durationMs = JSONObject(timelineFile.readText()).getJSONObject("audio").getLong("durationMs")
+        val timeline = JSONObject(timelineFile.readText())
+        val durationMs = timeline.getJSONObject("audio").getLong("durationMs")
         require(durationMs > 0L) { "Timeline contains no audio duration" }
 
         outputFile.parentFile?.mkdirs()
@@ -56,10 +54,12 @@ class CinematicVideoExporter(private val context: Context) {
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             encodeWavToAacMp4(wavFile, durationMs, audioOnly) { fraction ->
                 onProgress(0.82f + fraction * 0.13f)
-                onSizeBytes(videoOnly.length() + audioOnly.length())
+                onSizeBytes(videoOnly.length())
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            muxTracks(videoOnly, audioOnly, outputFile) { onSizeBytes(outputFile.length()) }
+            muxTracks(videoOnly, audioOnly, outputFile) {
+                onSizeBytes(outputFile.length())
+            }
             onSizeBytes(outputFile.length())
             onProgress(1f)
             Result(outputFile, durationMs)
@@ -130,7 +130,7 @@ class CinematicVideoExporter(private val context: Context) {
             check(totalFrames > 0L) { "No video frames to render" }
             for (frameIndex in 0 until totalFrames) {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                val bitmap = renderer.frameAt(frameIndex)
+                val bitmap = renderer.frameAt(frameIndex.toInt())
                 requireNotNull(egl).drawBitmap(bitmap)
                 requireNotNull(egl).setPresentationTime(frameIndex * 1_000_000_000L / CinematicFrameRenderer.FPS)
                 requireNotNull(egl).swapBuffers()
@@ -153,7 +153,7 @@ class CinematicVideoExporter(private val context: Context) {
         }
     }
 
-    private fun encodeWavToAacMp4(
+    private suspend fun encodeWavToAacMp4(
         wavFile: File,
         expectedDurationMs: Long,
         outputFile: File,
@@ -317,13 +317,7 @@ class CinematicVideoExporter(private val context: Context) {
             )
             check(EGL14.eglChooseConfig(display, attrs, 0, configs, 0, 1, count, 0) && count[0] > 0) { "No recordable EGL config" }
             val config = requireNotNull(configs[0]) { "No EGL config" }
-            eglContext = EGL14.eglCreateContext(
-                display,
-                config,
-                EGL14.EGL_NO_CONTEXT,
-                intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE),
-                0,
-            )
+            eglContext = EGL14.eglCreateContext(display, config, EGL14.EGL_NO_CONTEXT, intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE), 0)
             check(eglContext != EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
             eglSurface = EGL14.eglCreateWindowSurface(display, config, surface, intArrayOf(EGL14.EGL_NONE), 0)
             check(eglSurface != EGL14.EGL_NO_SURFACE) { "eglCreateWindowSurface failed: ${EGL14.eglGetError()}" }
@@ -405,15 +399,8 @@ class CinematicVideoExporter(private val context: Context) {
         }
 
         fun draw(texture: Int, program: Int) {
-            val vertices = floatArrayOf(
-                -1f, -1f, 0f, 1f,
-                 1f, -1f, 1f, 1f,
-                -1f,  1f, 0f, 0f,
-                 1f,  1f, 1f, 0f,
-            )
-            val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-                put(vertices).position(0)
-            }
+            val vertices = floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 1f, 1f, -1f, 1f, 0f, 0f, 1f, 1f, 1f, 0f)
+            val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(vertices).position(0) }
             val position = GLES20.glGetAttribLocation(program, "aPosition")
             val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
             val sampler = GLES20.glGetUniformLocation(program, "uTexture")
@@ -455,9 +442,7 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
     private var dataEnd = 0L
 
     init { parse() }
-
     fun remainingDataBytes(): Long = (dataEnd - file.filePointer).coerceAtLeast(0L)
-
     fun read(target: ByteBuffer, count: Int): Int {
         if (count <= 0) return 0
         val temp = ByteArray(minOf(count, 64 * 1024))
@@ -465,7 +450,6 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
         if (read > 0) target.put(temp, 0, read)
         return read
     }
-
     override fun close() = file.close()
 
     private fun parse() {
@@ -507,13 +491,7 @@ private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
         file.seek(dataStart)
         durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels.toLong() * 2L)
     }
-
-    private fun readAscii(n: Int): String {
-        val bytes = ByteArray(n)
-        file.readFully(bytes)
-        return bytes.toString(Charsets.US_ASCII)
-    }
-
+    private fun readAscii(n: Int): String { val bytes = ByteArray(n); file.readFully(bytes); return bytes.toString(Charsets.US_ASCII) }
     private fun readUInt16(): Int = java.lang.Short.toUnsignedInt(java.lang.Short.reverseBytes(file.readShort()))
     private fun readUInt32(): Long = java.lang.Integer.toUnsignedLong(Integer.reverseBytes(file.readInt()))
 }
