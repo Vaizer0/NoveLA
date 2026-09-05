@@ -7,8 +7,8 @@ data class CinematicVideoRenderRequest(
     val audioFile: File,
     val timelineFile: File,
     val outputFile: File,
-    val rendererExecutable: File,
     val workingDirectory: File,
+    val ffmpegDirectory: File,
 )
 
 data class CinematicVideoRenderResult(
