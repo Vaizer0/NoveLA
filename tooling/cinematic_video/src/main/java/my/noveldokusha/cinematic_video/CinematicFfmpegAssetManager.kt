@@ -35,6 +35,44 @@ class CinematicFfmpegAssetManager(
 
     /** Executes the packaged launcher before the renderer starts, so loader/runtime failures are explicit. */
     fun verify(ffmpegDirectory: File) {
+        runFfmpeg(
+            ffmpegDirectory,
+            listOf("-hide_banner", "-version"),
+        )
+    }
+
+    /** Converts an existing downloaded audio file to the WAV format required by the supplied renderer. */
+    fun normalizeToWav(
+        ffmpegDirectory: File,
+        inputFile: File,
+        outputFile: File,
+    ) {
+        outputFile.parentFile?.mkdirs()
+        val result = runFfmpeg(
+            ffmpegDirectory,
+            listOf(
+                "-hide_banner",
+                "-loglevel", "error",
+                "-y",
+                "-i", inputFile.absolutePath,
+                "-vn",
+                "-ac", "1",
+                "-ar", "48000",
+                "-c:a", "pcm_s16le",
+                outputFile.absolutePath,
+            ),
+        )
+        if (!outputFile.isFile || outputFile.length() <= 44L) {
+            throw CinematicVideoException(
+                "FFmpeg could not convert existing audio to WAV: ${result.takeLast(800)}",
+            )
+        }
+    }
+
+    private fun runFfmpeg(
+        ffmpegDirectory: File,
+        args: List<String>,
+    ): String {
         val launcher = File(ffmpegDirectory, "ffmpeg")
         val libraryDir = ffmpegDirectory.parentFile?.resolve("lib")
             ?: throw CinematicVideoException("FFmpeg runtime library directory is missing")
@@ -42,7 +80,7 @@ class CinematicFfmpegAssetManager(
             throw CinematicVideoException("FFmpeg runtime library directory is missing")
         }
 
-        val process = ProcessBuilder(launcher.absolutePath, "-hide_banner", "-version")
+        val process = ProcessBuilder(listOf(launcher.absolutePath) + args)
             .directory(ffmpegDirectory.parentFile)
             .redirectErrorStream(true)
             .apply {
@@ -53,9 +91,10 @@ class CinematicFfmpegAssetManager(
         val exitCode = process.waitFor()
         if (exitCode != 0) {
             throw CinematicVideoException(
-                "Bundled FFmpeg could not start (exit=$exitCode): ${output.takeLast(800)}"
+                "Bundled FFmpeg failed (exit=$exitCode): ${output.takeLast(1000)}",
             )
         }
+        return output
     }
 
     private fun extractRuntimeArchive(assetPath: String, destinationRoot: File) {
