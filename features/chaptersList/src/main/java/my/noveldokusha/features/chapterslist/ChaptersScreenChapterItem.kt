@@ -19,13 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,7 +86,6 @@ internal fun ChaptersScreenChapterItem(
 ) {
     val chapter = chapterWithContext.chapter
     val sizeLabel = chapterSize?.sizeBytes?.let { formatBytes(it) }
-
     val targetContainerColor = when {
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         highlighted -> MaterialTheme.colorScheme.secondaryContainer
@@ -96,7 +96,6 @@ internal fun ChaptersScreenChapterItem(
         animationSpec = tween(durationMillis = 200),
         label = "chapterItemBackground"
     )
-
     val stableOnClick = remember(onClick) { onClick }
     val stableOnLongClick = remember(onLongClick) { onLongClick }
     val stableOnDownload = remember(onDownload) { onDownload }
@@ -207,9 +206,13 @@ internal fun ChaptersScreenChapterItem(
                             source = TtsAudioSource.ORIGINAL,
                             onVideo = stableOnVideoOriginal,
                         )
+                        // Keep this clickable even when translation state has not
+                        // been restored into the current chapter-list snapshot.
+                        // The worker will use the already-downloaded translated
+                        // audio or provide a precise missing-data error.
                         ChapterVideoButton(
                             source = TtsAudioSource.TRANSLATED,
-                            enabled = translatedAudioAvailable,
+                            enabled = true,
                             onVideo = stableOnVideoTranslated,
                         )
                     }
@@ -242,7 +245,6 @@ private fun ChapterVideoButton(
         source == TtsAudioSource.ORIGINAL -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.tertiary
     }
-
     IconButton(
         onClick = onVideo,
         enabled = enabled,
@@ -296,7 +298,6 @@ private fun ChapterAudioButton(
         )
         if (sourceLabel.isNotBlank()) "$sourceLabel: $statusDesc" else statusDesc
     }
-
     when {
         running -> {
             val percent = (audioJob!!.progress).coerceIn(0, 100)
