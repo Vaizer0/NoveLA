@@ -19,29 +19,28 @@ find_package(cairo CONFIG REQUIRED)
 find_package(pango CONFIG REQUIRED)
 find_package(pangocairo CONFIG REQUIRED)
 
-add_executable(novela_cpp_renderer "${RENDERER_SOURCE}")
+add_library(novela_cinematic SHARED
+    renderer_jni.cpp
+)
 
-target_compile_options(novela_cpp_renderer PRIVATE
+target_compile_options(novela_cinematic PRIVATE
     -O3
     -ffunction-sections
     -fdata-sections
 )
 
-target_link_options(novela_cpp_renderer PRIVATE
+target_link_options(novela_cinematic PRIVATE
     -Wl,--gc-sections
 )
 
-target_link_libraries(novela_cpp_renderer PRIVATE
+target_include_directories(novela_cinematic PRIVATE
+    "${RENDERER_DIR}"
+)
+
+target_link_libraries(novela_cinematic PRIVATE
     pangocairo::pangocairo
     pango::pango
     cairo::cairo
     log
     android
-)
-
-# ExternalNativeBuild normally packages shared libraries. The renderer is intentionally
-# an executable because the supplied C++ source owns main() and invokes ffmpeg itself.
-# Emit the executable into the native intermediate tree; Gradle copies it into APK assets.
-set_target_properties(novela_cpp_renderer PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/renderer-bin/${ANDROID_ABI}"
 )
