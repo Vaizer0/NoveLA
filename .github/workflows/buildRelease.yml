@@ -11,13 +11,21 @@ on:
         options:
           - test      # Upload artifact only, no release
           - release   # Create a draft GitHub Release
+  # Temporary branch-only trigger so the release/test path can be validated
+  # automatically on cinematic-video-integration without touching Demo.
+  push:
+    branches:
+      - cinematic-video-integration
+
+env:
+  BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'test' }}
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build APK (${{ inputs.build_type }})
+    name: Build APK (${{ env.BUILD_TYPE }})
     runs-on: ubuntu-latest
     steps:
       - name: Clone repo
@@ -59,7 +67,7 @@ jobs:
 
       # ── Test build: upload as workflow artifact (no release) ────────────────
       - name: Upload APK artifact (test build)
-        if: inputs.build_type == 'test'
+        if: env.BUILD_TYPE == 'test'
         uses: actions/upload-artifact@v7
         with:
           name: NoveLA-v${{ env.APP_VERSION }}-test
@@ -68,7 +76,7 @@ jobs:
 
       # ── Release build: create a draft GitHub Release ─────────────────────────
       - name: Create draft release
-        if: inputs.build_type == 'release'
+        if: env.BUILD_TYPE == 'release'
         uses: softprops/action-gh-release@v3
         with:
           name: NoveLA v${{ env.APP_VERSION }}
