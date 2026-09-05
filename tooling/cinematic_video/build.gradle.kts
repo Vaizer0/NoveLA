@@ -21,6 +21,7 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
 
         require(ffmpegArtifacts.files.isNotEmpty()) { "ffmpeg-android AAR was not resolved" }
         val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        val candidates = mutableListOf<String>()
         var copied = 0
 
         ffmpegArtifacts.files.forEach { aar ->
@@ -31,6 +32,8 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
                     if (entry.isDirectory) continue
 
                     val path = entry.name.lowercase()
+                    if ("ffmpeg" in path) candidates += entry.name
+
                     val fileName = path.substringAfterLast('/')
                     if (!fileName.startsWith("ffmpeg") || fileName.endsWith(".so")) continue
 
@@ -50,7 +53,9 @@ abstract class PrepareCinematicFfmpegAssetsTask : DefaultTask() {
         }
 
         require(copied > 0) {
-            "ffmpeg-android AAR does not contain extractable ABI-specific ffmpeg binaries"
+            val details = candidates.distinct().take(60).joinToString(separator = ", ")
+            "ffmpeg-android AAR does not contain extractable ABI-specific ffmpeg binaries. " +
+                "FFmpeg-related entries: $details"
         }
     }
 }
