@@ -1,6 +1,8 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -107,6 +109,24 @@ object TtsAudioQueue {
         var changed = false
 
         for ((jobId, job) in current.toList()) {
+            // A completed AUDIO checkpoint is durable independently of the original
+            // TTS WorkRequest. The VIDEO worker intentionally clears workRequestId,
+            // and WorkManager may later prune the old request. Never delete the job
+            // while the WAV + timeline artifacts still exist; they are exactly what
+            // the UI needs to offer direct VIDEO generation without rerunning TTS.
+            if (job.status == TtsAudioJobStatus.SUCCESS &&
+                job.phase.equals("AUDIO", true) &&
+                job.audioUri.isNotBlank() &&
+                job.timelineUri.isNotBlank() &&
+                audioArtifactsExist(context, job.audioUri, job.timelineUri)
+            ) {
+                if (job.workRequestId.isNotBlank()) {
+                    current[jobId] = job.copy(workRequestId = "")
+                    changed = true
+                }
+                continue
+            }
+
             if (job.phase.equals("VIDEO", true)) continue
             val info = byId[job.workRequestId]
             when (info?.state) {
@@ -140,6 +160,21 @@ object TtsAudioQueue {
             appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
     }
+
+    private suspend fun audioArtifactsExist(context: Context, audioUri: String, timelineUri: String): Boolean =
+        withContext(Dispatchers.IO) {
+            documentExists(context, audioUri) && documentExists(context, timelineUri)
+        }
+
+    private fun documentExists(context: Context, uriString: String): Boolean = runCatching {
+        context.contentResolver.query(
+            Uri.parse(uriString),
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { it.moveToFirst() } ?: false
+    }.getOrDefault(false)
 
     private fun deleteLocalAudioTemp(context: Context, jobId: String) {
         runCatching { java.io.File(context.cacheDir, "tts_audio/$jobId.wav").delete() }
