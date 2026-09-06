@@ -54,8 +54,15 @@ object TtsVideoExportQueue {
             .addTag(VIDEO_TAG)
             .build()
         TtsAudioQueue.updateState(prefs, jobId) {
-            it?.copy(status = TtsAudioJobStatus.QUEUED, phase = "VIDEO", progress = 0, documentUri = job.audioUri,
-                workRequestId = request.id.toString(), videoSizeBytes = 0L, message = "")
+            it?.copy(
+                status = TtsAudioJobStatus.QUEUED,
+                phase = "VIDEO",
+                progress = 0,
+                documentUri = "",
+                workRequestId = request.id.toString(),
+                videoSizeBytes = 0L,
+                message = "",
+            )
         }
         WorkManager.getInstance(context).beginUniqueWork(workName(jobId), ExistingWorkPolicy.REPLACE, request).enqueue()
     }
@@ -70,12 +77,19 @@ object TtsVideoExportQueue {
             when (byId[job.workRequestId]?.state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> Unit
                 WorkInfo.State.SUCCEEDED -> {
-                    val u = job.copy(status = TtsAudioJobStatus.SUCCESS, phase = "VIDEO", progress = 100, workRequestId = "")
+                    val u = job.copy(status = TtsAudioJobStatus.SUCCESS, phase = "VIDEO", progress = 100, documentUri = job.documentUri, workRequestId = "")
                     if (u != job) { current[jobId] = u; changed = true }
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED, null -> {
-                    val u = job.copy(status = TtsAudioJobStatus.SUCCESS, phase = "AUDIO", progress = 100,
-                        documentUri = job.audioUri, workRequestId = "", videoSizeBytes = 0L, message = "")
+                    val u = job.copy(
+                        status = TtsAudioJobStatus.SUCCESS,
+                        phase = "AUDIO",
+                        progress = 100,
+                        documentUri = "",
+                        workRequestId = "",
+                        videoSizeBytes = 0L,
+                        message = "",
+                    )
                     if (u != job) { current[jobId] = u; changed = true }
                 }
             }
