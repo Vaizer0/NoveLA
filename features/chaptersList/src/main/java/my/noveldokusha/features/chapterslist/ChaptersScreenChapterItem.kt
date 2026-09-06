@@ -3,6 +3,7 @@ package my.noveldokusha.features.chapterslist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -32,7 +33,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,19 +46,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import my.noveldokusha.chapterslist.R
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
+import my.noveldokusha.core.appPreferences.TranslationLangPair
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.feature.local_database.ChapterWithContext
+import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.text_to_speech.TtsAudioExportRequest
+import my.noveldokusha.tooling.application_workers.TtsAudioQueue
+import my.noveldokusha.tooling.application_workers.TtsVideoExportQueue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalAnimationApi::class)
 @Composable
 internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
+    novelTitle: String,
     translatedTitle: String? = null,
     chapterSize: ChapterSize? = null,
     audioOriginalJob: TtsAudioJobState? = null,
@@ -102,18 +117,22 @@ internal fun ChaptersScreenChapterItem(
                             }
                         }
                         ChapterAudioButton(
-                            TtsAudioSource.ORIGINAL,
-                            audioOriginalJob,
-                            audioOriginalFileExists,
-                            true,
-                            onAudioOriginal,
+                            source = TtsAudioSource.ORIGINAL,
+                            audioJob = audioOriginalJob,
+                            audioFileExists = audioOriginalFileExists,
+                            enabled = true,
+                            novelTitle = novelTitle,
+                            chapter = chapter,
+                            onAudio = onAudioOriginal,
                         )
                         ChapterAudioButton(
-                            TtsAudioSource.TRANSLATED,
-                            audioTranslatedJob,
-                            audioTranslatedFileExists,
-                            translatedAudioAvailable || audioTranslatedJob != null,
-                            onAudioTranslated,
+                            source = TtsAudioSource.TRANSLATED,
+                            audioJob = audioTranslatedJob,
+                            audioFileExists = audioTranslatedFileExists,
+                            enabled = translatedAudioAvailable || audioTranslatedJob != null,
+                            novelTitle = novelTitle,
+                            chapter = chapter,
+                            onAudio = onAudioTranslated,
                         )
                     }
                 },
@@ -128,28 +147,66 @@ private fun ChapterAudioButton(
     audioJob: TtsAudioJobState?,
     audioFileExists: Boolean,
     enabled: Boolean,
+    novelTitle: String,
+    chapter: Chapter,
     onAudio: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val status = audioJob?.status
-    val phase = audioJob?.phase?.uppercase()
-    val running = audioJob != null && audioJob.isActive
+    var discoveredAudio by remember(chapter.url, source) { mutableStateOf<DiscoveredAudioCheckpoint?>(null) }
+    val audioLocation = AppPreferences(context).TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+
+    LaunchedEffect(chapter.url, source, novelTitle, audioLocation, audioJob?.audioUri, audioJob?.timelineUri) {
+        if (audioJob != null || discoveredAudio != null) return@LaunchedEffect
+        val discovered = withContext(Dispatchers.IO) {
+            discoverExistingAudio(context, chapter, novelTitle, source)
+        }
+        if (discovered != null) {
+            discoveredAudio = discovered
+            val prefs = AppPreferences(context)
+            TtsAudioQueue.updateState(prefs, discovered.jobId) { existing ->
+                existing ?: discovered.job
+            }
+        }
+    }
+
+    val effectiveJob = audioJob ?: discoveredAudio?.job
+    val effectiveAudioFileExists = audioFileExists || discoveredAudio != null
+    val status = effectiveJob?.status
+    val phase = effectiveJob?.phase?.uppercase()
+    val running = effectiveJob != null && effectiveJob.isActive
     val audioReady = status == TtsAudioJobStatus.SUCCESS &&
         phase == "AUDIO" &&
-        audioJob.audioUri.isNotBlank() &&
-        audioFileExists &&
-        audioJob.timelineUri.isNotBlank() &&
-        documentExists(context, audioJob.timelineUri)
+        effectiveJob.audioUri.isNotBlank() &&
+        effectiveAudioFileExists &&
+        effectiveJob.timelineUri.isNotBlank() &&
+        documentExists(context, effectiveJob.timelineUri)
     val videoReady = status == TtsAudioJobStatus.SUCCESS &&
         phase == "VIDEO" &&
-        audioFileExists &&
-        audioJob.documentUri.isNotBlank()
-    val clickable = enabled || audioJob != null
+        effectiveAudioFileExists &&
+        effectiveJob.documentUri.isNotBlank()
+    val clickable = enabled || effectiveJob != null
+
+    fun startExistingVideo() {
+        val discovered = discoveredAudio ?: return
+        coroutineScope.launch {
+            val prefs = AppPreferences(context)
+            TtsAudioQueue.updateState(prefs, discovered.jobId) { existing ->
+                existing ?: discovered.job
+            }
+            TtsVideoExportQueue.enqueue(
+                context = context,
+                prefs = prefs,
+                jobId = discovered.jobId,
+                job = discovered.job,
+                parentDirectoryUri = discovered.parentDirectoryUri,
+            )
+        }
+    }
 
     when {
         running -> {
-            val p = audioJob!!.progress.coerceIn(0, 100)
+            val p = effectiveJob!!.progress.coerceIn(0, 100)
             val c = if (phase == "VIDEO") Color(0xFFFF9800) else MaterialTheme.colorScheme.tertiary
             IconButton(onClick = {}) {
                 Box {
@@ -170,7 +227,9 @@ private fun ChapterAudioButton(
             }
         }
         videoReady -> {
-            IconButton(onClick = { openDocument(context, audioJob!!.documentUri, "video/mp4") }) {
+            IconButton(onClick = {
+                openDocument(context, effectiveJob!!.documentUri, "video/mp4")
+            }) {
                 Box {
                     Icon(sourceFilledIcon(source), null, tint = Color(0xFFFF9800))
                     Icon(
@@ -186,11 +245,10 @@ private fun ChapterAudioButton(
             val blue = Color(0xFF2196F3)
             IconButton(
                 onClick = {
-                    coroutineScope.launch {
-                        my.noveldokusha.tooling.application_workers.TtsVideoExportQueue.enqueueFromJob(
-                            context,
-                            audioJob!!,
-                        )
+                    if (discoveredAudio != null && audioJob == null) {
+                        startExistingVideo()
+                    } else {
+                        onAudio()
                     }
                 },
             ) {
@@ -234,6 +292,128 @@ private fun ChapterAudioButton(
     }
 }
 
+private data class DiscoveredAudioCheckpoint(
+    val jobId: String,
+    val job: TtsAudioJobState,
+    val parentDirectoryUri: String,
+)
+
+private fun discoverExistingAudio(
+    context: Context,
+    chapter: Chapter,
+    novelTitle: String,
+    source: TtsAudioSource,
+): DiscoveredAudioCheckpoint? = runCatching {
+    val prefs = AppPreferences(context)
+    val location = prefs.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
+    if (location.isBlank()) return null
+
+    val treeUri = Uri.parse(location)
+    val rootId = DocumentsContract.getTreeDocumentId(treeUri)
+    val audioRootId = findChildDirectoryId(context, treeUri, rootId, "NoveLA Audio") ?: return null
+    val novelDirId = findChildDirectoryId(context, treeUri, audioRootId, sanitize(novelTitle, "novel")) ?: return null
+    val novelDirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, novelDirId)
+
+    val base = "${chapter.position + 1} - ${sanitize(chapter.title)}"
+    val suffix = when (source) {
+        TtsAudioSource.ORIGINAL -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_original)
+        TtsAudioSource.TRANSLATED -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_translated)
+        TtsAudioSource.ASK_EVERY_TIME -> return null
+    }
+    val audioName = "$base${if (suffix.isBlank()) "" else " $suffix"}.wav"
+    val timelineName = "$base${if (suffix.isBlank()) "" else " $suffix"}.timeline.json"
+
+    val files = queryChildren(context, treeUri, novelDirId)
+    val audioId = files[audioName] ?: return null
+    val timelineId = files[timelineName] ?: return null
+    val audioUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, audioId).toString()
+    val timelineUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, timelineId).toString()
+    val pair = if (source == TtsAudioSource.TRANSLATED) {
+        prefs.translationPairForBook(chapter.bookUrl)
+    } else {
+        TranslationLangPair()
+    }
+    val jobId = TtsAudioExportRequest.makeJobId(
+        chapter.bookUrl,
+        chapter.url,
+        source,
+        pair.source,
+        pair.target,
+    )
+    val job = TtsAudioJobState(
+        chapterUrl = chapter.url,
+        novelUrl = chapter.bookUrl,
+        chapterTitle = chapter.title,
+        source = source,
+        status = TtsAudioJobStatus.SUCCESS,
+        message = "",
+        documentUri = "",
+        displayName = audioName,
+        progress = 100,
+        phase = "AUDIO",
+        audioUri = audioUri,
+        timelineUri = timelineUri,
+        outputDirectoryUri = treeUri.toString(),
+        videoSizeBytes = 0L,
+        workRequestId = "",
+    )
+    DiscoveredAudioCheckpoint(jobId, job, novelDirUri.toString())
+}.getOrNull()
+
+private fun findChildDirectoryId(
+    context: Context,
+    treeUri: Uri,
+    parentId: String,
+    name: String,
+): String? {
+    val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+    context.contentResolver.query(
+        children,
+        arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        ),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+        val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+        val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        while (cursor.moveToNext()) {
+            if (cursor.getString(mimeCol) == DocumentsContract.Document.MIME_TYPE_DIR &&
+                cursor.getString(nameCol).equals(name, ignoreCase = true)
+            ) return cursor.getString(idCol)
+        }
+    }
+    return null
+}
+
+private fun queryChildren(
+    context: Context,
+    treeUri: Uri,
+    parentId: String,
+): Map<String, String> {
+    val result = mutableMapOf<String, String>()
+    val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+    context.contentResolver.query(
+        children,
+        arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        ),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+        val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        while (cursor.moveToNext()) result[cursor.getString(nameCol)] = cursor.getString(idCol)
+    }
+    return result
+}
+
 private fun documentExists(context: Context, uriString: String): Boolean = runCatching {
     context.contentResolver.query(
         Uri.parse(uriString),
@@ -264,3 +444,9 @@ private fun sourceFilledIcon(source: TtsAudioSource): ImageVector = when (source
     TtsAudioSource.TRANSLATED -> Icons.Filled.Translate
     TtsAudioSource.ASK_EVERY_TIME -> Icons.Filled.GraphicEq
 }
+
+private fun sanitize(name: String, fallback: String = "chapter") =
+    name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
+        .trim()
+        .take(80)
+        .ifBlank { fallback }
