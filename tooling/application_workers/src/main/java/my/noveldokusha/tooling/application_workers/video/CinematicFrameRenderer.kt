@@ -34,6 +34,9 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         private const val PAD_Y = 63f
         private const val CONTENT_TOP = 262f
         private const val CONTENT_BOTTOM = 952f
+        private const val BODY_TEXT_MAX = 46f
+        private const val BODY_TEXT_MIN = 36f
+        private const val BODY_LINE_SPACING = 1.52f
     }
 
     private data class Range(
@@ -73,10 +76,9 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     private val frameBitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
     private val canvas = Canvas(frameBitmap)
 
-    // Match the target renderer: serif body text with proper Devanagari fallback/shaping.
     private val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
         color = Color.rgb(229, 231, 241)
-        textSize = 40f
+        textSize = BODY_TEXT_MAX
         typeface = Typeface.create("serif", Typeface.NORMAL)
     }
 
@@ -104,11 +106,11 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val starPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(92, 230, 132, 28)
+        color = Color.argb(102, 230, 132, 28)
         style = Paint.Style.FILL
     }
     private val highlightStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(190, 255, 205, 125)
+        color = Color.argb(205, 255, 205, 125)
         style = Paint.Style.STROKE
         strokeWidth = 1f
     }
@@ -148,7 +150,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setIncludePad(false)
-                .setLineSpacing(0f, 1.72f)
+                .setLineSpacing(0f, BODY_LINE_SPACING)
                 .build()
 
             val textH = layout.height.toFloat()
@@ -162,7 +164,11 @@ internal class CinematicFrameRenderer(timelineFile: File) {
                         val start = raw.optInt("startChar", 0)
                         val end = raw.optInt("endChar", start)
                         val startMs = raw.optInt("startMs", 0)
-                        val endMs = if (raw.has("endMs") && !raw.isNull("endMs")) raw.optInt("endMs") else null
+                        val endMs = if (raw.has("endMs") && !raw.isNull("endMs")) {
+                            raw.optInt("endMs")
+                        } else {
+                            null
+                        }
                         if (end > start) add(Range(start, end, startMs, endMs))
                     }
                 }
@@ -204,7 +210,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
 
     private fun findTextSize(text: String): Float {
-        for (size in 40 downTo 34) {
+        for (size in BODY_TEXT_MAX.toInt() downTo BODY_TEXT_MIN.toInt()) {
             val paint = TextPaint(bodyPaint).apply { textSize = size.toFloat() }
             val layout = StaticLayout.Builder.obtain(
                 text,
@@ -215,11 +221,13 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setIncludePad(false)
-                .setLineSpacing(0f, 1.72f)
+                .setLineSpacing(0f, BODY_LINE_SPACING)
                 .build()
-            if (layout.height <= (CARD_MAX_H - 2f * PAD_Y).toInt()) return size.toFloat()
+            if (layout.height <= (CARD_MAX_H - 2f * PAD_Y).toInt()) {
+                return size.toFloat()
+            }
         }
-        return 24f
+        return 32f
     }
 
     private fun makeStars(
@@ -415,37 +423,32 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         shapePaint.style = Paint.Style.FILL
 
         val textTop = rect.top + (p.cardH - p.layout.height) / 2f
+        val contentLeft = CARD_X + PAD_X
+        canvas.save()
+        canvas.translate(contentLeft, textTop)
+
         val active = activeRange(p, tMs)
         if (active != null) {
             val start = (active.startChar - p.startChar).coerceIn(0, p.text.length)
             val end = (active.endChar - p.startChar).coerceIn(start, p.text.length)
             if (end > start) {
+                // Draw the highlight in the exact same coordinate system as StaticLayout.
+                // This prevents alignment drift and keeps the box on the currently spoken word.
                 selectionPath.reset()
                 p.layout.getSelectionPath(start, end, selectionPath)
                 selectionPath.computeBounds(selectionBounds, true)
                 if (!selectionBounds.isEmpty) {
-                    val left = CARD_X + selectionBounds.left - 5f
-                    val top = textTop + selectionBounds.top - 2f
-                    val right = CARD_X + selectionBounds.right + 5f
-                    val bottom = textTop + selectionBounds.bottom + 3f
-                    canvas.drawRoundRect(
-                        RectF(left, top, right, bottom),
-                        9f,
-                        9f,
-                        highlightPaint,
-                    )
-                    canvas.drawRoundRect(
-                        RectF(left, top, right, bottom),
-                        9f,
-                        9f,
-                        highlightStrokePaint,
-                    )
+                    val left = selectionBounds.left - 5f
+                    val top = selectionBounds.top - 3f
+                    val right = selectionBounds.right + 5f
+                    val bottom = selectionBounds.bottom + 3f
+                    val highlightRect = RectF(left, top, right, bottom)
+                    canvas.drawRoundRect(highlightRect, 9f, 9f, highlightPaint)
+                    canvas.drawRoundRect(highlightRect, 9f, 9f, highlightStrokePaint)
                 }
             }
         }
 
-        canvas.save()
-        canvas.translate(CARD_X + PAD_X, textTop)
         p.layout.draw(canvas)
         canvas.restore()
     }
@@ -462,7 +465,11 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         if (index < 0) return null
         val range = p.ranges[index]
         val end = range.endMs ?: p.ranges.getOrNull(index + 1)?.startMs ?: p.endMs
-        return if (tMs >= range.startMs && tMs < max(end, range.startMs + 1)) range else null
+        return if (tMs >= range.startMs && tMs < max(end, range.startMs + 1)) {
+            range
+        } else {
+            null
+        }
     }
 
     private fun drawFooter(p: Paragraph, tMs: Int) {
@@ -473,7 +480,11 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         val bw = 383f
         shapePaint.color = Color.argb(155, 55, 61, 88)
         canvas.drawRect(bx, by, bx + bw, by + 4f, shapePaint)
-        val progress = if (durationMs > 0) (tMs.toDouble() / durationMs).coerceIn(0.0, 1.0) else 0.0
+        val progress = if (durationMs > 0) {
+            (tMs.toDouble() / durationMs).coerceIn(0.0, 1.0)
+        } else {
+            0.0
+        }
         shapePaint.color = Color.argb(220, 142, 125, 238)
         canvas.drawRect(bx, by, bx + bw * progress.toFloat(), by + 4f, shapePaint)
     }
