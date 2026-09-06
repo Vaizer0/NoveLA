@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import my.noveldokusha.tooling.application_workers.video.SafMp4Stager
 import java.util.concurrent.TimeUnit
 
 object TtsVideoExportQueue {
@@ -29,6 +30,7 @@ object TtsVideoExportQueue {
     private const val NORMAL_RECOVERY_DELAY_MS = 30_000L
     private const val QUOTA_RECOVERY_DELAY_MS = 5 * 60_000L
     private const val FGS_TIMEOUT_RECOVERY_DELAY_MS = 15 * 60_000L
+    private const val MIME_MP4 = "video/mp4"
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -46,7 +48,10 @@ object TtsVideoExportQueue {
         enqueue(context, prefs, entry.key, entry.value, parentDirectoryUri.toString(), initialDelayMs)
     }
 
-    /** Enqueue one logical chapter/source using replace semantics; the worker serializes actual VIDEO rendering. */
+    /**
+     * Enqueue only when there is no live unique work for this chapter. A live request is never
+     * replaced and its persisted progress is never reset to zero.
+     */
     suspend fun enqueue(
         context: Context,
         prefs: AppPreferences,
@@ -59,16 +64,31 @@ object TtsVideoExportQueue {
         if (!job.phase.equals("AUDIO", true) && !job.phase.equals("VIDEO", true)) return@withContext
         if (job.audioUri.isBlank() || job.timelineUri.isBlank() || job.outputDirectoryUri.isBlank() || parentDirectoryUri.isBlank()) return@withContext
 
-        val requestBuilder = OneTimeWorkRequestBuilder<TtsVideoExportWorker>()
-            .setInputData(workDataOf(
-                TtsVideoExportWorker.KEY_JOB_ID to jobId,
-                TtsVideoExportWorker.KEY_AUDIO_URI to job.audioUri,
-                TtsVideoExportWorker.KEY_TIMELINE_URI to job.timelineUri,
-                TtsVideoExportWorker.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
-                TtsVideoExportWorker.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
-                TtsVideoExportWorker.KEY_CHAPTER_TITLE to job.chapterTitle,
-                TtsVideoExportWorker.KEY_DISPLAY_NAME to job.displayName,
-            ))
+        val workManager = WorkManager.getInstance(context)
+        val uniqueName = workName(jobId)
+        val existing = runCatching { workManager.getWorkInfosForUniqueWork(uniqueName).get() }.getOrNull().orEmpty()
+        val active = existing.firstOrNull {
+            it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
+        }
+        if (active != null) {
+            if (job.workRequestId != active.id.toString()) {
+                TtsAudioQueue.updateState(prefs, jobId) { current -> current?.copy(workRequestId = active.id.toString(), phase = "VIDEO") }
+            }
+            return@withContext
+        }
+
+        val requestBuilder = OneTimeWorkRequestBuilder<TtsVideoExportWorkerV2>()
+            .setInputData(
+                workDataOf(
+                    TtsVideoExportWorkerV2.KEY_JOB_ID to jobId,
+                    TtsVideoExportWorkerV2.KEY_AUDIO_URI to job.audioUri,
+                    TtsVideoExportWorkerV2.KEY_TIMELINE_URI to job.timelineUri,
+                    TtsVideoExportWorkerV2.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
+                    TtsVideoExportWorkerV2.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
+                    TtsVideoExportWorkerV2.KEY_CHAPTER_TITLE to job.chapterTitle,
+                    TtsVideoExportWorkerV2.KEY_DISPLAY_NAME to job.displayName,
+                ),
+            )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
         if (initialDelayMs > 0L) requestBuilder.setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
         val request = requestBuilder.addTag(VIDEO_TAG).build()
@@ -77,18 +97,21 @@ object TtsVideoExportQueue {
             it?.copy(
                 status = TtsAudioJobStatus.QUEUED,
                 phase = "VIDEO",
-                progress = 0,
+                progress = if (job.videoStagingUri.isNotBlank()) job.progress.coerceIn(0, 99) else 0,
                 documentUri = "",
                 workRequestId = request.id.toString(),
-                videoSizeBytes = 0L,
+                videoSizeBytes = job.videoSizeBytes,
                 message = if (initialDelayMs > 0L) "Video recovery scheduled…" else "",
             )
         }
-        WorkManager.getInstance(context).beginUniqueWork(workName(jobId), ExistingWorkPolicy.REPLACE, request).enqueue()
+        // All existing work is terminal here, so REPLACE is safe and cannot discard a running export.
+        workManager.beginUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, request).enqueue()
     }
 
     suspend fun reconcile(context: Context, prefs: AppPreferences) {
-        val infos = runCatching { withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfosByTag(VIDEO_TAG).get() } }.getOrNull() ?: return
+        val infos = runCatching {
+            withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfosByTag(VIDEO_TAG).get() }
+        }.getOrNull() ?: emptyList()
         val byId = infos.associateBy { it.id.toString() }
         val current = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
         var changed = false
@@ -97,41 +120,75 @@ object TtsVideoExportQueue {
         for ((jobId, job) in current.toList()) {
             if (!job.phase.equals("VIDEO", true)) continue
 
-            // A successfully checkpointed MP4 is authoritative even when WorkManager reports a stop
-            // immediately after the checkpoint. Validate the document before touching the state.
-            if (job.status == TtsAudioJobStatus.SUCCESS && job.documentUri.isNotBlank()) {
-                val sizeBytes = queryDocumentSize(context, Uri.parse(job.documentUri))
-                if (sizeBytes > 0L) {
-                    if (job.workRequestId.isNotBlank() || job.progress != 100 || job.videoSizeBytes != sizeBytes) {
-                        current[jobId] = job.copy(workRequestId = "", progress = 100, videoSizeBytes = sizeBytes, message = "")
-                        changed = true
+            // Filesystem/SАF evidence is authoritative over stale preference or WorkManager state.
+            // Never delete a valid final MP4 just because its work record is missing.
+            val parentUri = if (job.outputDirectoryUri.isNotBlank() && job.audioUri.isNotBlank()) {
+                findParentDirectoryUri(context, Uri.parse(job.outputDirectoryUri), Uri.parse(job.audioUri))
+            } else null
+            if (parentUri != null) {
+                val videoName = job.displayName.removeSuffix(".wav") + ".mp4"
+                val finalUri = findChildDocument(context, parentUri, videoName)
+                if (finalUri != null && SafMp4Stager.isValidMp4(context, finalUri)) {
+                    val size = SafMp4Stager.querySize(context, finalUri)
+                    current[jobId] = job.copy(
+                        status = TtsAudioJobStatus.SUCCESS,
+                        phase = "VIDEO",
+                        progress = 100,
+                        documentUri = finalUri.toString(),
+                        workRequestId = "",
+                        videoSizeBytes = size,
+                        videoStagingUri = "",
+                        videoStagingComplete = false,
+                        videoRecoveryAttempts = 0,
+                        message = "",
+                    )
+                    changed = true
+                    continue
+                }
+
+                // A valid .part is itself a completed checkpoint. Leave it in place and let V2 publish
+                // it; this handles process death between mux completion and state publication.
+                if (job.videoStagingUri.isNotBlank() && SafMp4Stager.isValidMp4(context, Uri.parse(job.videoStagingUri))) {
+                    val noWork = job.workRequestId.isBlank() || byId[job.workRequestId] == null
+                    if (noWork) {
+                        restartJobs += job to 0L
                     }
                     continue
                 }
             }
 
-            // A blank request id means this job is intentionally waiting to be restarted. Do not
-            // increment its recovery count just because WorkManager has not created the next request yet.
-            if (job.workRequestId.isBlank() && job.status == TtsAudioJobStatus.QUEUED) {
-                restartJobs += job to 0L
+            if (job.workRequestId.isBlank()) {
+                if (job.status == TtsAudioJobStatus.QUEUED) restartJobs += job to 0L
                 continue
             }
 
             val info = byId[job.workRequestId]
+            val actualUnique = runCatching {
+                withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfosForUniqueWork(workName(jobId)).get() }
+            }.getOrNull().orEmpty()
+            val activeUnique = actualUnique.firstOrNull {
+                it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
+            }
+            if (activeUnique != null) {
+                if (job.workRequestId != activeUnique.id.toString()) {
+                    current[jobId] = job.copy(workRequestId = activeUnique.id.toString())
+                    changed = true
+                }
+                continue
+            }
+
             when (info?.state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> Unit
                 WorkInfo.State.SUCCEEDED -> {
-                    // A successful worker normally checkpoints the final MP4 before returning. A
-                    // missing checkpoint is still recoverable without rerunning AUDIO/TTS.
                     val attempts = job.videoRecoveryAttempts + 1
                     if (attempts <= MAX_VIDEO_RECOVERY_ATTEMPTS) {
                         val updated = job.copy(
                             status = TtsAudioJobStatus.QUEUED,
                             phase = "VIDEO",
-                            progress = 0,
+                            progress = job.progress.coerceIn(0, 99),
                             documentUri = "",
                             workRequestId = "",
-                            videoSizeBytes = 0L,
+                            videoSizeBytes = job.videoSizeBytes,
                             videoRecoveryAttempts = attempts,
                             message = "Video checkpoint missing; recovery queued ($attempts/$MAX_VIDEO_RECOVERY_ATTEMPTS).",
                         )
@@ -146,8 +203,6 @@ object TtsVideoExportQueue {
                             documentUri = "",
                             workRequestId = "",
                             videoSizeBytes = 0L,
-                            videoStagingUri = "",
-                            videoStagingComplete = false,
                             videoRecoveryAttempts = attempts,
                             message = "Video checkpoint could not be recovered; WAV + timeline are preserved.",
                         )
@@ -169,45 +224,47 @@ object TtsVideoExportQueue {
                         stopReason == WorkInfo.STOP_REASON_BACKGROUND_RESTRICTION ||
                         stopReason == WorkInfo.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED
                     val attempts = job.videoRecoveryAttempts + 1
-
                     if (canRecover && attempts <= MAX_VIDEO_RECOVERY_ATTEMPTS && job.audioUri.isNotBlank() && job.timelineUri.isNotBlank()) {
-                        val delay = recoveryDelayMs(stopReason, attempts)
                         val updated = job.copy(
                             status = TtsAudioJobStatus.QUEUED,
                             phase = "VIDEO",
-                            progress = 0,
+                            progress = job.progress.coerceIn(0, 99),
                             documentUri = "",
                             workRequestId = "",
-                            videoSizeBytes = 0L,
+                            videoSizeBytes = job.videoSizeBytes,
                             videoStopReason = reasonName,
                             videoRecoveryAttempts = attempts,
                             message = "Video interrupted ($reasonName); recovery queued (${attempts}/$MAX_VIDEO_RECOVERY_ATTEMPTS).",
                         )
                         current[jobId] = updated
                         changed = true
-                        restartJobs += updated to delay
+                        restartJobs += updated to recoveryDelayMs(stopReason, attempts)
                     } else {
-                        val u = job.copy(
+                        val updated = job.copy(
                             status = TtsAudioJobStatus.SUCCESS,
                             phase = "AUDIO",
                             progress = 100,
                             documentUri = "",
                             workRequestId = "",
                             videoSizeBytes = 0L,
-                            videoStagingUri = "",
-                            videoStagingComplete = false,
                             videoStopReason = reasonName,
                             videoRecoveryAttempts = attempts,
                             message = "Video export stopped after recovery limit; WAV + timeline are preserved.",
                         )
-                        if (u != job) { current[jobId] = u; changed = true }
+                        current[jobId] = updated
+                        changed = true
                     }
                 }
             }
         }
-        if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
 
-        for ((job, delay) in restartJobs) enqueueFromJob(context, job, delay)
+        if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+        // De-duplicate requests produced by the two reconciliation checks above.
+        val seen = HashSet<String>()
+        for ((job, delay) in restartJobs) {
+            val key = "${job.novelUrl}\u0000${job.chapterUrl}\u0000${job.source}\u0000${job.audioUri}\u0000${job.timelineUri}"
+            if (seen.add(key)) enqueueFromJob(context, job, delay)
+        }
     }
 
     private fun readStopReason(info: WorkInfo?): Int {
@@ -252,13 +309,25 @@ object TtsVideoExportQueue {
         else -> "reason_$stopReason"
     }
 
-    private suspend fun queryDocumentSize(context: Context, uri: Uri): Long = withContext(Dispatchers.IO) {
+    private suspend fun findChildDocument(context: Context, parentUri: Uri, displayName: String): Uri? = withContext(Dispatchers.IO) {
         runCatching {
-            context.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null)?.use { cursor ->
-                val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                if (sizeCol >= 0 && cursor.moveToFirst() && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
-            } ?: 0L
-        }.getOrDefault(0L)
+            context.contentResolver.query(
+                DocumentsContract.buildChildDocumentsUriUsingTree(parentUri, DocumentsContract.getDocumentId(parentUri)),
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),
+                "${DocumentsContract.Document.COLUMN_DISPLAY_NAME} = ?",
+                arrayOf(displayName),
+                null,
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(mimeCol) == MIME_MP4) {
+                        return@runCatching DocumentsContract.buildDocumentUriUsingTree(parentUri, cursor.getString(idCol))
+                    }
+                }
+            }
+            null
+        }.getOrNull()
     }
 
     private suspend fun findParentDirectoryUri(context: Context, treeUri: Uri, targetUri: Uri): Uri? = withContext(Dispatchers.IO) {
@@ -272,7 +341,13 @@ object TtsVideoExportQueue {
                 val (parentId, depth) = stack.removeLast()
                 if (depth > 8 || !visited.add(parentId)) continue
                 val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
-                context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)?.use { cursor ->
+                context.contentResolver.query(
+                    children,
+                    arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_MIME_TYPE),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
                     val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                     val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                     while (cursor.moveToNext()) {
