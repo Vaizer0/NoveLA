@@ -61,6 +61,7 @@ import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import my.noveldokusha.tooling.application_workers.TtsAudioQueue
 import my.noveldokusha.tooling.application_workers.TtsVideoExportQueue
+import my.noveldokusha.tooling.application_workers.video.TtsVideoArtifactManifest
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalAnimationApi::class)
 @Composable
@@ -155,12 +156,12 @@ private fun ChapterAudioButton(
     var discoveredCheckpoint by remember(chapter.url, source) { mutableStateOf<DiscoveredAudioCheckpoint?>(null) }
     val audioLocation = AppPreferences(context).TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
 
-    LaunchedEffect(chapter.url, source, novelTitle, audioLocation, audioJob?.audioUri, audioJob?.timelineUri, audioJob?.documentUri) {
+    LaunchedEffect(chapter.url, source, novelTitle, audioLocation, audioJob?.audioUri, audioJob?.timelineUri, audioJob?.documentUri, audioJob?.phase) {
         val discovered = withContext(Dispatchers.IO) {
             discoverExistingArtifacts(context, chapter, novelTitle, source)
         }
+        discoveredCheckpoint = discovered
         if (discovered != null) {
-            discoveredCheckpoint = discovered
             val prefs = AppPreferences(context)
             TtsAudioQueue.updateState(prefs, discovered.jobId) { existing ->
                 when {
@@ -189,9 +190,10 @@ private fun ChapterAudioButton(
         }
     }
 
-    val effectiveJob = run {
-        val discoveredVideo = discoveredCheckpoint?.job?.takeIf { it.documentUri.isNotBlank() }
-        if (discoveredVideo != null) {
+    val discoveredVideo = discoveredCheckpoint?.job?.takeIf { it.documentUri.isNotBlank() }
+    val audioCandidate = audioJob ?: discoveredCheckpoint?.job?.takeIf { it.documentUri.isBlank() }
+    val effectiveJob = when {
+        discoveredVideo != null -> {
             (audioJob ?: discoveredVideo).copy(
                 status = TtsAudioJobStatus.SUCCESS,
                 phase = "VIDEO",
@@ -200,9 +202,16 @@ private fun ChapterAudioButton(
                 audioUri = audioJob?.audioUri?.ifBlank { discoveredVideo.audioUri } ?: discoveredVideo.audioUri,
                 timelineUri = audioJob?.timelineUri?.ifBlank { discoveredVideo.timelineUri } ?: discoveredVideo.timelineUri,
             )
-        } else {
-            audioJob ?: discoveredCheckpoint?.job
         }
+        audioJob?.isActive == true -> audioJob
+        audioCandidate?.audioUri?.isNotBlank() == true && audioCandidate.timelineUri.isNotBlank() ->
+            audioCandidate.copy(
+                status = TtsAudioJobStatus.SUCCESS,
+                phase = "AUDIO",
+                progress = 100,
+                documentUri = "",
+            )
+        else -> audioJob ?: discoveredCheckpoint?.job
     }
     val status = effectiveJob?.status
     val phase = effectiveJob?.phase?.uppercase()
@@ -211,8 +220,6 @@ private fun ChapterAudioButton(
         (effectiveJob?.audioUri?.isNotBlank() == true && documentExists(context, effectiveJob.audioUri))
     val timelineExists = effectiveJob?.timelineUri?.isNotBlank() == true &&
         documentExists(context, effectiveJob.timelineUri)
-    val videoExists = effectiveJob?.documentUri?.isNotBlank() == true &&
-        documentExists(context, effectiveJob.documentUri)
     val audioReady = status == TtsAudioJobStatus.SUCCESS &&
         phase == "AUDIO" &&
         effectiveJob!!.audioUri.isNotBlank() &&
@@ -221,8 +228,8 @@ private fun ChapterAudioButton(
         timelineExists
     val videoReady = status == TtsAudioJobStatus.SUCCESS &&
         phase == "VIDEO" &&
-        effectiveJob!!.documentUri.isNotBlank() &&
-        videoExists
+        discoveredVideo != null &&
+        documentExists(context, discoveredVideo.documentUri)
     val clickable = enabled || effectiveJob != null
 
     fun startVideoGeneration() {
@@ -230,15 +237,16 @@ private fun ChapterAudioButton(
         coroutineScope.launch {
             val prefs = AppPreferences(context)
             val discovered = discoveredCheckpoint
-            if (discovered != null && discovered.jobId == makeDiscoveredJobId(context, chapter, source)) {
+            if (discovered != null) {
                 TtsAudioQueue.updateState(prefs, discovered.jobId) { existing ->
-                    existing ?: job
+                    existing ?: job.copy(documentUri = "", phase = "AUDIO", status = TtsAudioJobStatus.SUCCESS)
                 }
+                val latest = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[discovered.jobId] ?: job
                 TtsVideoExportQueue.enqueue(
                     context = context,
                     prefs = prefs,
                     jobId = discovered.jobId,
-                    job = job,
+                    job = latest.copy(documentUri = "", phase = "AUDIO", status = TtsAudioJobStatus.SUCCESS),
                     parentDirectoryUri = discovered.parentDirectoryUri,
                 )
             } else {
@@ -357,7 +365,7 @@ private fun makeDiscoveredJobId(
     }.getOrNull()
 }
 
-private fun discoverExistingArtifacts(
+private suspend fun discoverExistingArtifacts(
     context: Context,
     chapter: Chapter,
     novelTitle: String,
@@ -365,19 +373,19 @@ private fun discoverExistingArtifacts(
 ): DiscoveredAudioCheckpoint? = runCatching {
     val prefs = AppPreferences(context)
     val location = prefs.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value
-    if (location.isBlank()) return null
+    if (location.isBlank()) return@runCatching null
 
     val treeUri = Uri.parse(location)
     val rootId = DocumentsContract.getTreeDocumentId(treeUri)
-    val audioRootId = findChildDirectoryId(context, treeUri, rootId, "NoveLA Audio") ?: return null
-    val novelDirId = findChildDirectoryId(context, treeUri, audioRootId, sanitize(novelTitle, "novel")) ?: return null
+    val audioRootId = findChildDirectoryId(context, treeUri, rootId, "NoveLA Audio") ?: return@runCatching null
+    val novelDirId = findChildDirectoryId(context, treeUri, audioRootId, sanitize(novelTitle, "novel")) ?: return@runCatching null
     val novelDirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, novelDirId)
 
     val base = "${chapter.position + 1} - ${sanitize(chapter.title)}"
     val suffix = when (source) {
         TtsAudioSource.ORIGINAL -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_original)
         TtsAudioSource.TRANSLATED -> context.getString(my.noveldokusha.strings.R.string.tts_audio_file_suffix_translated)
-        TtsAudioSource.ASK_EVERY_TIME -> return null
+        TtsAudioSource.ASK_EVERY_TIME -> return@runCatching null
     }
     val suffixPart = if (suffix.isBlank()) "" else " $suffix"
     val audioName = "$base$suffixPart.wav"
@@ -397,38 +405,82 @@ private fun discoverExistingArtifacts(
 
     val hasAudioCheckpoint = audioUri.isNotBlank() && timelineUri.isNotBlank() &&
         documentExists(context, audioUri) && documentExists(context, timelineUri)
-    val hasVideoCheckpoint = videoUri.isNotBlank() && documentExists(context, videoUri)
-    if (!hasAudioCheckpoint && !hasVideoCheckpoint) return null
+
+    val manifestUri = if (videoUri.isNotBlank()) {
+        TtsVideoArtifactManifest.findInDirectory(context, novelDirUri, TtsVideoArtifactManifest.finalName(videoName))
+    } else null
+    val hasVideoCheckpoint = videoUri.isNotBlank() &&
+        TtsVideoArtifactManifest.isDocumentPresent(context, Uri.parse(videoUri)) &&
+        manifestUri != null &&
+        TtsVideoArtifactManifest.matches(
+            context,
+            manifestUri,
+            chapter.bookUrl,
+            chapter.url,
+            source,
+            audioUri,
+            timelineUri,
+            audioName,
+        )
+    if (!hasAudioCheckpoint && !hasVideoCheckpoint) return@runCatching null
 
     val pair = if (source == TtsAudioSource.TRANSLATED) {
         prefs.translationPairForBook(chapter.bookUrl)
     } else {
         TranslationLangPair()
     }
-    val jobId = TtsAudioExportRequest.makeJobId(
+    val matchingEntry = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.entries.firstOrNull { (_, job) ->
+        job.chapterUrl == chapter.url &&
+            job.novelUrl == chapter.bookUrl &&
+            job.source == source &&
+            (audioUri.isBlank() || job.audioUri == audioUri) &&
+            (timelineUri.isBlank() || job.timelineUri == timelineUri)
+    }
+    val jobId = matchingEntry?.key ?: TtsAudioExportRequest.makeJobId(
         chapter.bookUrl,
         chapter.url,
         source,
         pair.source,
         pair.target,
     )
+    val existing = matchingEntry?.value
     val phase = if (hasVideoCheckpoint) "VIDEO" else "AUDIO"
-    val job = TtsAudioJobState(
+    val job = (existing ?: TtsAudioJobState(
         chapterUrl = chapter.url,
         novelUrl = chapter.bookUrl,
         chapterTitle = chapter.title,
         source = source,
         status = TtsAudioJobStatus.SUCCESS,
         message = "",
-        documentUri = videoUri,
+        documentUri = "",
         displayName = audioName,
         progress = 100,
-        phase = phase,
+        phase = "AUDIO",
         audioUri = audioUri,
         timelineUri = timelineUri,
         outputDirectoryUri = treeUri.toString(),
+        videoSizeBytes = 0L,
+        workRequestId = "",
+    )).copy(
+        chapterUrl = chapter.url,
+        novelUrl = chapter.bookUrl,
+        chapterTitle = chapter.title,
+        source = source,
+        status = TtsAudioJobStatus.SUCCESS,
+        message = "",
+        documentUri = if (hasVideoCheckpoint) videoUri else "",
+        displayName = audioName,
+        progress = 100,
+        phase = phase,
+        audioUri = audioUri.ifBlank { existing?.audioUri ?: "" },
+        timelineUri = timelineUri.ifBlank { existing?.timelineUri ?: "" },
+        outputDirectoryUri = existing?.outputDirectoryUri?.ifBlank { treeUri.toString() } ?: treeUri.toString(),
         videoSizeBytes = if (hasVideoCheckpoint) queryDocumentSize(context, videoUri) else 0L,
         workRequestId = "",
+        videoStagingUri = "",
+        videoStagingComplete = false,
+        videoRecoveryAttempts = 0,
+        videoStopReason = "",
     )
     DiscoveredAudioCheckpoint(jobId, job, novelDirUri.toString())
 }.getOrNull()
@@ -518,21 +570,3 @@ private fun openDocument(context: Context, uriString: String, mime: String) {
         })
     }
 }
-
-private fun sourceIdleIcon(source: TtsAudioSource): ImageVector = when (source) {
-    TtsAudioSource.ORIGINAL -> Icons.Outlined.AudioFile
-    TtsAudioSource.TRANSLATED -> Icons.Outlined.Translate
-    TtsAudioSource.ASK_EVERY_TIME -> Icons.Outlined.GraphicEq
-}
-
-private fun sourceFilledIcon(source: TtsAudioSource): ImageVector = when (source) {
-    TtsAudioSource.ORIGINAL -> Icons.Filled.AudioFile
-    TtsAudioSource.TRANSLATED -> Icons.Filled.Translate
-    TtsAudioSource.ASK_EVERY_TIME -> Icons.Filled.GraphicEq
-}
-
-private fun sanitize(name: String, fallback: String = "chapter") =
-    name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
-        .trim()
-        .take(80)
-        .ifBlank { fallback }
