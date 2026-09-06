@@ -96,6 +96,19 @@ object TtsVideoExportQueue {
         for ((jobId, job) in current.toList()) {
             if (!job.phase.equals("VIDEO", true)) continue
 
+            // A successfully checkpointed MP4 is authoritative even when WorkManager reports a stop
+            // immediately after the checkpoint. Validate the document before touching the state.
+            if (job.status == TtsAudioJobStatus.SUCCESS && job.documentUri.isNotBlank()) {
+                val sizeBytes = queryDocumentSize(context, Uri.parse(job.documentUri))
+                if (sizeBytes > 0L) {
+                    if (job.workRequestId.isNotBlank() || job.progress != 100 || job.videoSizeBytes != sizeBytes) {
+                        current[jobId] = job.copy(workRequestId = "", progress = 100, videoSizeBytes = sizeBytes, message = "")
+                        changed = true
+                    }
+                    continue
+                }
+            }
+
             // A blank request id means this job is intentionally waiting behind another VIDEO worker.
             // Do not count that normal queue state as a failed/system-interrupted generation.
             if (job.workRequestId.isBlank() && job.status == TtsAudioJobStatus.QUEUED) {
@@ -107,12 +120,7 @@ object TtsVideoExportQueue {
             when (info?.state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> Unit
                 WorkInfo.State.SUCCEEDED -> {
-                    if (job.documentUri.isNotBlank()) {
-                        val u = job.copy(status = TtsAudioJobStatus.SUCCESS, phase = "VIDEO", progress = 100, workRequestId = "")
-                        if (u != job) { current[jobId] = u; changed = true }
-                    } else {
-                        restartJobs += job to NORMAL_RECOVERY_DELAY_MS
-                    }
+                    restartJobs += job to NORMAL_RECOVERY_DELAY_MS
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED, null -> {
                     val stopReason = info?.stopReason ?: WorkInfo.STOP_REASON_UNKNOWN
@@ -197,6 +205,21 @@ object TtsVideoExportQueue {
         WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> "foreground_service_timeout"
         WorkInfo.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED -> "launch_time_changed"
         else -> "reason_$stopReason"
+    }
+
+    private suspend fun queryDocumentSize(context: Context, uri: Uri): Long = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                if (sizeCol >= 0 && cursor.moveToFirst() && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
+            } ?: 0L
+        }.getOrDefault(0L)
     }
 
     private suspend fun findParentDirectoryUri(context: Context, treeUri: Uri, targetUri: Uri): Uri? = withContext(Dispatchers.IO) {
