@@ -296,7 +296,7 @@ class CinematicVideoExporter(private val context: Context) {
         private val display: android.opengl.EGLDisplay
         private val eglContext: EGLContext
         private val eglSurface: android.opengl.EGLSurface
-        private val program: Int
+        private val program: GlProgram
         private val texture: Int
 
         init {
@@ -330,12 +330,11 @@ class CinematicVideoExporter(private val context: Context) {
 
         fun drawBitmap(bitmap: Bitmap) {
             check(bitmap.config == Bitmap.Config.ARGB_8888) { "Unsupported bitmap config: ${bitmap.config}" }
-            GLES20.glUseProgram(program)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
             check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "Bitmap upload failed" }
             GLES20.glViewport(0, 0, bitmap.width, bitmap.height)
-            GlProgram.draw(texture, program)
+            program.draw()
             check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "GL draw failed" }
         }
 
@@ -348,8 +347,8 @@ class CinematicVideoExporter(private val context: Context) {
         }
 
         fun release() {
+            runCatching { program.release() }
             runCatching { GLES20.glDeleteTextures(1, intArrayOf(texture), 0) }
-            runCatching { GLES20.glDeleteProgram(program) }
             runCatching { EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
             runCatching { EGL14.eglDestroySurface(display, eglSurface) }
             runCatching { EGL14.eglDestroyContext(display, eglContext) }
@@ -357,78 +356,108 @@ class CinematicVideoExporter(private val context: Context) {
         }
     }
 
-    private object GlProgram {
-        private const val VERTEX = """
-            attribute vec4 aPosition;
-            attribute vec2 aTexCoord;
-            varying vec2 vTexCoord;
-            void main() { gl_Position = aPosition; vTexCoord = aTexCoord; }
-        """
-        private const val FRAGMENT = """
-            precision mediump float;
-            varying vec2 vTexCoord;
-            uniform sampler2D uTexture;
-            void main() { gl_FragColor = texture2D(uTexture, vTexCoord); }
-        """
+    private class GlProgram private constructor(
+        private val program: Int,
+        private val positionLocation: Int,
+        private val texCoordLocation: Int,
+        private val samplerLocation: Int,
+        private val vertexBuffer: java.nio.FloatBuffer,
+    ) {
+        companion object {
+            private const val VERTEX = """
+                attribute vec4 aPosition;
+                attribute vec2 aTexCoord;
+                varying vec2 vTexCoord;
+                void main() { gl_Position = aPosition; vTexCoord = aTexCoord; }
+            """
+            private const val FRAGMENT = """
+                precision mediump float;
+                varying vec2 vTexCoord;
+                uniform sampler2D uTexture;
+                void main() { gl_FragColor = texture2D(uTexture, vTexCoord); }
+            """
+            private val VERTICES = floatArrayOf(
+                -1f, -1f, 0f, 1f,
+                 1f, -1f, 1f, 1f,
+                -1f,  1f, 0f, 0f,
+                 1f,  1f, 1f, 0f,
+            )
 
-        fun create(): Int {
-            val vertex = compile(GLES20.GL_VERTEX_SHADER, VERTEX)
-            val fragment = compile(GLES20.GL_FRAGMENT_SHADER, FRAGMENT)
-            val program = GLES20.glCreateProgram()
-            check(program != 0) { "glCreateProgram failed" }
-            GLES20.glAttachShader(program, vertex)
-            GLES20.glAttachShader(program, fragment)
-            GLES20.glLinkProgram(program)
-            val status = IntArray(1)
-            GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0)
-            GLES20.glDeleteShader(vertex)
-            GLES20.glDeleteShader(fragment)
-            check(status[0] != 0) { "Could not link texture program" }
-            return program
+            fun create(): GlProgram {
+                val vertex = compile(GLES20.GL_VERTEX_SHADER, VERTEX)
+                val fragment = compile(GLES20.GL_FRAGMENT_SHADER, FRAGMENT)
+                val program = GLES20.glCreateProgram()
+                check(program != 0) { "glCreateProgram failed" }
+                GLES20.glAttachShader(program, vertex)
+                GLES20.glAttachShader(program, fragment)
+                GLES20.glLinkProgram(program)
+                val status = IntArray(1)
+                GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0)
+                GLES20.glDeleteShader(vertex)
+                GLES20.glDeleteShader(fragment)
+                check(status[0] != 0) { "Could not link texture program" }
+
+                val position = GLES20.glGetAttribLocation(program, "aPosition")
+                val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
+                val sampler = GLES20.glGetUniformLocation(program, "uTexture")
+                check(position >= 0 && texCoord >= 0 && sampler >= 0) { "Texture shader locations missing" }
+
+                val buffer = ByteBuffer
+                    .allocateDirect(VERTICES.size * 4)
+                    .order(ByteOrder.nativeOrder())
+                    .asFloatBuffer()
+                    .apply {
+                        put(VERTICES)
+                        position(0)
+                    }
+
+                GLES20.glUseProgram(program)
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                GLES20.glUniform1i(sampler, 0)
+
+                buffer.position(0)
+                GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, buffer)
+                buffer.position(2)
+                GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 16, buffer)
+                GLES20.glEnableVertexAttribArray(position)
+                GLES20.glEnableVertexAttribArray(texCoord)
+                buffer.position(0)
+
+                return GlProgram(program, position, texCoord, sampler, buffer)
+            }
+
+            fun createTexture(): Int {
+                val textures = IntArray(1)
+                GLES20.glGenTextures(1, textures, 0)
+                check(textures[0] != 0) { "glGenTextures failed" }
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[0])
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+                return textures[0]
+            }
+
+            private fun compile(type: Int, source: String): Int {
+                val shader = GLES20.glCreateShader(type)
+                check(shader != 0) { "glCreateShader failed" }
+                GLES20.glShaderSource(shader, source)
+                GLES20.glCompileShader(shader)
+                val status = IntArray(1)
+                GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0)
+                check(status[0] != 0) { "Could not compile GL shader" }
+                return shader
+            }
         }
 
-        fun createTexture(): Int {
-            val textures = IntArray(1)
-            GLES20.glGenTextures(1, textures, 0)
-            check(textures[0] != 0) { "glGenTextures failed" }
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[0])
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-            return textures[0]
-        }
-
-        fun draw(texture: Int, program: Int) {
-            val vertices = floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 1f, 1f, -1f, 1f, 0f, 0f, 1f, 1f, 1f, 0f)
-            val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(vertices).position(0) }
-            val position = GLES20.glGetAttribLocation(program, "aPosition")
-            val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
-            val sampler = GLES20.glGetUniformLocation(program, "uTexture")
-            check(position >= 0 && texCoord >= 0 && sampler >= 0) { "Texture shader locations missing" }
-            buffer.position(0)
-            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, buffer)
-            buffer.position(2)
-            GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 16, buffer)
-            GLES20.glEnableVertexAttribArray(position)
-            GLES20.glEnableVertexAttribArray(texCoord)
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-            GLES20.glUniform1i(sampler, 0)
+        fun draw() {
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-            GLES20.glDisableVertexAttribArray(position)
-            GLES20.glDisableVertexAttribArray(texCoord)
         }
 
-        private fun compile(type: Int, source: String): Int {
-            val shader = GLES20.glCreateShader(type)
-            check(shader != 0) { "glCreateShader failed" }
-            GLES20.glShaderSource(shader, source)
-            GLES20.glCompileShader(shader)
-            val status = IntArray(1)
-            GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0)
-            check(status[0] != 0) { "Could not compile GL shader" }
-            return shader
+        fun release() {
+            runCatching { GLES20.glDisableVertexAttribArray(positionLocation) }
+            runCatching { GLES20.glDisableVertexAttribArray(texCoordLocation) }
+            runCatching { GLES20.glDeleteProgram(program) }
         }
     }
 }
