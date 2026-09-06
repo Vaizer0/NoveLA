@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -22,7 +23,7 @@
         android:name=".App"
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="true"
-        tools:targetApi="33"
+        tools:targetApi="35"
         android:icon="@mipmap/ic_logo"
         android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_logo_round"
@@ -73,12 +74,10 @@
             android:foregroundServiceType="dataSync">
         </service>
 
-        <!-- WorkManager запускает SystemForegroundService для setForeground().
-             Без явного foregroundServiceType на Android 14+ краш:
-             "foregroundServiceType ... is not a subset ... in service element". -->
+        <!-- WorkManager's foreground service supports long-running video processing. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="dataSync|mediaProcessing"
             tools:node="merge">
         </service>
 
