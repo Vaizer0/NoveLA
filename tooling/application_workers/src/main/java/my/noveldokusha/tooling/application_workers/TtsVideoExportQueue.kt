@@ -2,6 +2,7 @@ package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
@@ -109,8 +110,8 @@ object TtsVideoExportQueue {
                 }
             }
 
-            // A blank request id means this job is intentionally waiting behind another VIDEO worker.
-            // Do not count that normal queue state as a failed/system-interrupted generation.
+            // A blank request id means this job is intentionally waiting to be restarted. Do not
+            // increment its recovery count just because WorkManager has not created the next request yet.
             if (job.workRequestId.isBlank() && job.status == TtsAudioJobStatus.QUEUED) {
                 restartJobs += job to 0L
                 continue
@@ -120,10 +121,41 @@ object TtsVideoExportQueue {
             when (info?.state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> Unit
                 WorkInfo.State.SUCCEEDED -> {
-                    restartJobs += job to NORMAL_RECOVERY_DELAY_MS
+                    // A successful worker normally checkpoints the final MP4 before returning. A
+                    // missing checkpoint is still recoverable without rerunning AUDIO/TTS.
+                    val attempts = job.videoRecoveryAttempts + 1
+                    if (attempts <= MAX_VIDEO_RECOVERY_ATTEMPTS) {
+                        val updated = job.copy(
+                            status = TtsAudioJobStatus.QUEUED,
+                            phase = "VIDEO",
+                            progress = 0,
+                            documentUri = "",
+                            workRequestId = "",
+                            videoSizeBytes = 0L,
+                            videoRecoveryAttempts = attempts,
+                            message = "Video checkpoint missing; recovery queued ($attempts/$MAX_VIDEO_RECOVERY_ATTEMPTS).",
+                        )
+                        current[jobId] = updated
+                        changed = true
+                        restartJobs += updated to NORMAL_RECOVERY_DELAY_MS
+                    } else {
+                        current[jobId] = job.copy(
+                            status = TtsAudioJobStatus.SUCCESS,
+                            phase = "AUDIO",
+                            progress = 100,
+                            documentUri = "",
+                            workRequestId = "",
+                            videoSizeBytes = 0L,
+                            videoStagingUri = "",
+                            videoStagingComplete = false,
+                            videoRecoveryAttempts = attempts,
+                            message = "Video checkpoint could not be recovered; WAV + timeline are preserved.",
+                        )
+                        changed = true
+                    }
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED, null -> {
-                    val stopReason = info?.stopReason ?: WorkInfo.STOP_REASON_UNKNOWN
+                    val stopReason = readStopReason(info)
                     val reasonName = stopReasonName(stopReason)
                     val canRecover = stopReason == WorkInfo.STOP_REASON_UNKNOWN ||
                         stopReason == WorkInfo.STOP_REASON_QUOTA ||
@@ -132,7 +164,10 @@ object TtsVideoExportQueue {
                         stopReason == WorkInfo.STOP_REASON_SYSTEM_PROCESSING ||
                         stopReason == WorkInfo.STOP_REASON_DEVICE_STATE ||
                         stopReason == WorkInfo.STOP_REASON_PREEMPT ||
-                        stopReason == WorkInfo.STOP_REASON_USER
+                        stopReason == WorkInfo.STOP_REASON_USER ||
+                        stopReason == WorkInfo.STOP_REASON_APP_STANDBY ||
+                        stopReason == WorkInfo.STOP_REASON_BACKGROUND_RESTRICTION ||
+                        stopReason == WorkInfo.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED
                     val attempts = job.videoRecoveryAttempts + 1
 
                     if (canRecover && attempts <= MAX_VIDEO_RECOVERY_ATTEMPTS && job.audioUri.isNotBlank() && job.timelineUri.isNotBlank()) {
@@ -175,13 +210,21 @@ object TtsVideoExportQueue {
         for ((job, delay) in restartJobs) enqueueFromJob(context, job, delay)
     }
 
+    private fun readStopReason(info: WorkInfo?): Int {
+        if (info == null) return WorkInfo.STOP_REASON_UNKNOWN
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) info.stopReason else WorkInfo.STOP_REASON_UNKNOWN
+    }
+
     private fun recoveryDelayMs(stopReason: Int, attempts: Int): Long {
         val base = when (stopReason) {
             WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> FGS_TIMEOUT_RECOVERY_DELAY_MS
             WorkInfo.STOP_REASON_QUOTA,
             WorkInfo.STOP_REASON_SYSTEM_PROCESSING,
             WorkInfo.STOP_REASON_DEVICE_STATE,
-            WorkInfo.STOP_REASON_PREEMPT -> QUOTA_RECOVERY_DELAY_MS
+            WorkInfo.STOP_REASON_PREEMPT,
+            WorkInfo.STOP_REASON_APP_STANDBY,
+            WorkInfo.STOP_REASON_BACKGROUND_RESTRICTION,
+            WorkInfo.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED -> QUOTA_RECOVERY_DELAY_MS
             else -> NORMAL_RECOVERY_DELAY_MS
         }
         return base * (1L shl (attempts - 1).coerceIn(0, 2))
@@ -196,11 +239,13 @@ object TtsVideoExportQueue {
         WorkInfo.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW -> "battery_constraint"
         WorkInfo.STOP_REASON_CONSTRAINT_CHARGING -> "charging_constraint"
         WorkInfo.STOP_REASON_CONSTRAINT_CONNECTIVITY -> "connectivity_constraint"
+        WorkInfo.STOP_REASON_CONSTRAINT_DEVICE_IDLE -> "idle_constraint"
         WorkInfo.STOP_REASON_CONSTRAINT_STORAGE_NOT_LOW -> "storage_constraint"
         WorkInfo.STOP_REASON_CANCELLED_BY_APP -> "cancelled_by_app"
         WorkInfo.STOP_REASON_QUOTA -> "quota"
         WorkInfo.STOP_REASON_BACKGROUND_RESTRICTION -> "background_restriction"
         WorkInfo.STOP_REASON_USER -> "user"
+        WorkInfo.STOP_REASON_APP_STANDBY -> "app_standby"
         WorkInfo.STOP_REASON_SYSTEM_PROCESSING -> "system_processing"
         WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> "foreground_service_timeout"
         WorkInfo.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED -> "launch_time_changed"
@@ -209,13 +254,7 @@ object TtsVideoExportQueue {
 
     private suspend fun queryDocumentSize(context: Context, uri: Uri): Long = withContext(Dispatchers.IO) {
         runCatching {
-            context.contentResolver.query(
-                uri,
-                arrayOf(DocumentsContract.Document.COLUMN_SIZE),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
+            context.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null)?.use { cursor ->
                 val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                 if (sizeCol >= 0 && cursor.moveToFirst() && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
             } ?: 0L
@@ -233,14 +272,7 @@ object TtsVideoExportQueue {
                 val (parentId, depth) = stack.removeLast()
                 if (depth > 8 || !visited.add(parentId)) continue
                 val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
-                context.contentResolver.query(
-                    children,
-                    arrayOf(
-                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    ),
-                    null, null, null,
-                )?.use { cursor ->
+                context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)?.use { cursor ->
                     val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                     val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                     while (cursor.moveToNext()) {
