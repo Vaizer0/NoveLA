@@ -17,12 +17,10 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Уведомление загрузки аудио главы (WAV).
+ * Foreground notification for chapter TTS export + cinematic video generation.
  *
- * Жизненный цикл: foregroundNotification (foreground) → updateProgress →
- * showComplete / showError → close. Каждый экземпляр изолирован (свой
- * notificationId); requestCode = notificationId. Foreground-уведомление несёт
- * кнопку Cancel только для своего WorkRequest.
+ * Lifecycle: foregroundNotification (foreground) -> updateProgress ->
+ * showComplete / showError -> close. Each instance has its own notification id.
  */
 class TtsAudioExportNotification(
     private val chapterTitle: String,
@@ -33,34 +31,55 @@ class TtsAudioExportNotification(
     val notificationId: Int = idCounter.getAndIncrement()
 
     private var builder: NotificationCompat.Builder? = null
+    private var lastPhase: String = "AUDIO"
+    private var lastPercent: Int = -1
+    private var lastUpdateMs: Long = 0L
 
     private val channelName = context.getString(StringsR.string.tts_audio_export_channel_name)
 
-    /** Foreground-уведомление воркера: показывается сразу с кнопкой Cancel. */
+    /** Foreground notification shown immediately, with a cancel action for this WorkRequest. */
     fun foregroundNotification(): Notification {
-        val builder = notificationsCenter.showNotification(
+        val notificationBuilder = notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
             channelName = channelName,
             notificationId = notificationId,
             importance = NotificationManager.IMPORTANCE_LOW,
         ) {
             setContentTitle(context.getString(StringsR.string.tts_audio_export_running, chapterTitle))
-            setContentText(context.getString(StringsR.string.tts_audio_export_running_detail))
+            setContentText(stageText("AUDIO", 0))
             setOngoing(true)
-            setProgress(0, 0, true)
+            setProgress(100, 0, false)
             addCancelAction()
         }
-        this.builder = builder
-        return builder.build()
+        builder = notificationBuilder
+        lastPhase = "AUDIO"
+        lastPercent = 0
+        lastUpdateMs = 0L
+        return notificationBuilder.build()
     }
 
-    /** Обновляет детерминированный прогресс (0..100) у foreground-уведомления. */
-    fun updateProgress(percent: Int) {
+    /**
+     * Updates the foreground notification progress and explicitly identifies the active stage.
+     * Updates are throttled unless the stage or displayed percentage changes.
+     */
+    fun updateProgress(percent: Int, phase: String = lastPhase) {
         if (!hasNotificationPermission()) return
         val current = builder ?: return
+        val safePercent = percent.coerceIn(0, 100)
+        val safePhase = phase.uppercase()
+        val now = android.os.SystemClock.elapsedRealtime()
+        val phaseChanged = safePhase != lastPhase
+        val percentChanged = safePercent != lastPercent
+        if (!phaseChanged && !percentChanged) return
+        if (!phaseChanged && safePercent != 100 && now - lastUpdateMs < 500L) return
+
+        lastPhase = safePhase
+        lastPercent = safePercent
+        lastUpdateMs = now
         notificationsCenter.modifyNotification(current, notificationId) {
-            setProgress(100, percent, false)
-            setContentText(context.getString(StringsR.string.tts_audio_export_running_progress, percent))
+            setProgress(100, safePercent, false)
+            setContentText(stageText(safePhase, safePercent))
+            setOngoing(safePercent < 100)
         }
     }
 
@@ -103,6 +122,11 @@ class TtsAudioExportNotification(
     fun close() {
         notificationsCenter.close(notificationId)
         builder = null
+    }
+
+    private fun stageText(phase: String, percent: Int): String = when (phase) {
+        "VIDEO" -> "Generating video • $percent%"
+        else -> "Generating audio • $percent%"
     }
 
     private fun hasNotificationPermission(): Boolean {
