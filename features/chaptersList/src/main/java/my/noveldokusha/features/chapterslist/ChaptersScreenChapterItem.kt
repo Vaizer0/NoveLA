@@ -80,7 +80,6 @@ internal fun ChaptersScreenChapterItem(
     translatedAudioAvailable: Boolean = true,
 ) {
     val chapter = chapterWithContext.chapter
-
     val sizeLabel = chapterSize?.sizeBytes?.let { formatBytes(it) }
 
     val targetContainerColor = when {
@@ -209,16 +208,6 @@ internal fun ChaptersScreenChapterItem(
     }
 }
 
-/**
- * Иконка аудиозагрузки главы для одного [source] (Original или Translated).
- * Одна глава имеет ДВЕ такие иконки — по источнику, состояния не пересекаются.
- * Глиф различает источник: AudioFile = Original, Translate = Translated — во ВСЕХ
- * состояниях. Состояния:
- * - нет задачи → КОНТУРНЫЙ глиф источника «скачать аудио» (клик = запуск источника);
- * - QUEUED/RUNNING → кольцо прогресса вокруг ЗАЛИТОГО глифа источника (процент в CD);
- * - SUCCESS + файл существует → ЗАЛИТЫЙ глиф источника + галочка (клик = открыть файл);
- * - FAILED → ЗАЛИТЫЙ глиф источника в цвете ошибки + стрелка повтора (клик = перезапуск).
- */
 @Composable
 private fun ChapterAudioButton(
     source: TtsAudioSource,
@@ -252,39 +241,42 @@ private fun ChapterAudioButton(
 
     when {
         running -> {
-            // Кольцо прогресса с процентами внутри; глиф источника — маленьким
-            // бейджем в углу (как галочка успеха / стрелка повтора), чтобы
-            // источник оставался различим и во время синтеза.
-            val percent = (audioJob!!.progress).coerceIn(0, 100)
+            val percent = audioJob!!.progress.coerceIn(0, 100)
+            val isVideoPhase = audioJob.phase.equals("VIDEO", ignoreCase = true)
+            val progressColor = if (isVideoPhase) {
+                Color(0xFFFFA726)
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            }
             val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
+            val stageDescription = if (isVideoPhase) "video generation" else "audio generation"
             IconButton(onClick = onAudio) {
                 Box {
                     CircularProgressIndicator(
                         modifier = Modifier.size(28.dp),
                         progress = { percent / 100f },
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = progressColor
                     )
                     Text(
                         text = "$percent",
                         modifier = Modifier.align(Alignment.Center),
                         fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = progressColor
                     )
                     Icon(
                         sourceFilledIcon(source),
-                        contentDescription = "$contentDescription ($progressDesc)",
+                        contentDescription = "$contentDescription ($stageDescription, $progressDesc)",
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .size(12.dp),
-                        tint = MaterialTheme.colorScheme.tertiary
+                        tint = progressColor
                     )
                 }
             }
         }
 
         status == TtsAudioJobStatus.SUCCESS && audioFileExists -> {
-            // Залитый глиф источника + галочка: «этот источник готов».
             IconButton(onClick = onAudio) {
                 Box {
                     Icon(
@@ -305,7 +297,6 @@ private fun ChapterAudioButton(
         }
 
         status == TtsAudioJobStatus.FAILED -> {
-            // Глиф источника в цвете ошибки + стрелка повтор: «этот источник упал».
             IconButton(onClick = onAudio) {
                 Box {
                     Icon(
@@ -325,11 +316,7 @@ private fun ChapterAudioButton(
             }
         }
 
-        // CANCELLED / нет задачи / SUCCESS без файла → «скачать» (повторный запуск).
         else -> {
-            // Контурный глиф источника: «скачать аудио этого источника».
-            // Перевод недоступен (нет кеша перевода тела) и активной задачи нет —
-            // кнопка неактивна: синтезировать нечего (воркер честно упал бы в FAILED).
             IconButton(
                 onClick = {
                     if (clickable) onAudio()
@@ -347,14 +334,12 @@ private fun ChapterAudioButton(
     }
 }
 
-/** Глиф источника для состояния «скачать» (без задачи / на повтор). */
 private fun sourceIdleIcon(source: TtsAudioSource): ImageVector = when (source) {
     TtsAudioSource.ORIGINAL -> Icons.Outlined.AudioFile
     TtsAudioSource.TRANSLATED -> Icons.Outlined.Translate
     TtsAudioSource.ASK_EVERY_TIME -> Icons.Outlined.GraphicEq
 }
 
-/** Залитый глиф источника для состояний прогресса/готово/ошибка. */
 private fun sourceFilledIcon(source: TtsAudioSource): ImageVector = when (source) {
     TtsAudioSource.ORIGINAL -> Icons.Filled.AudioFile
     TtsAudioSource.TRANSLATED -> Icons.Filled.Translate
@@ -379,7 +364,6 @@ private fun PreviewView(
         )
     }
 }
-
 
 private data class PreviewProviderState(
     val chapterWithContext: ChapterWithContext,
