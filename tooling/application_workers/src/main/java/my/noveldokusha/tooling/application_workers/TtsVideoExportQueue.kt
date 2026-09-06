@@ -28,8 +28,6 @@ object TtsVideoExportQueue {
     private const val NORMAL_RECOVERY_DELAY_MS = 30_000L
     private const val QUOTA_RECOVERY_DELAY_MS = 5 * 60_000L
     private const val FGS_TIMEOUT_RECOVERY_DELAY_MS = 15 * 60_000L
-    private const val GLOBAL_VIDEO_SLOT_LOCK = "video-slot"
-    private val enqueueLock = Any()
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -47,7 +45,7 @@ object TtsVideoExportQueue {
         enqueue(context, prefs, entry.key, entry.value, parentDirectoryUri.toString(), initialDelayMs)
     }
 
-    /** Enqueue at most one VIDEO worker at a time; additional chapters remain durable QUEUED/VIDEO. */
+    /** Enqueue one logical chapter/source using replace semantics; the worker serializes actual VIDEO rendering. */
     suspend fun enqueue(
         context: Context,
         prefs: AppPreferences,
@@ -60,76 +58,32 @@ object TtsVideoExportQueue {
         if (!job.phase.equals("AUDIO", true) && !job.phase.equals("VIDEO", true)) return@withContext
         if (job.audioUri.isBlank() || job.timelineUri.isBlank() || job.outputDirectoryUri.isBlank() || parentDirectoryUri.isBlank()) return@withContext
 
-        synchronized(enqueueLock) {
-            val workManager = WorkManager.getInstance(context)
-            val active = workManager.getWorkInfosByTag(VIDEO_TAG).get().any {
-                it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
-            }
-            if (active) {
-                TtsAudioQueue.updateState(prefs, jobId) {
-                    it?.copy(
-                        status = TtsAudioJobStatus.QUEUED,
-                        phase = "VIDEO",
-                        progress = 0,
-                        documentUri = "",
-                        workRequestId = "",
-                        videoSizeBytes = 0L,
-                        message = "Waiting for another video export…",
-                    )
-                }
-                return@synchronized
-            }
+        val requestBuilder = OneTimeWorkRequestBuilder<TtsVideoExportWorker>()
+            .setInputData(workDataOf(
+                TtsVideoExportWorker.KEY_JOB_ID to jobId,
+                TtsVideoExportWorker.KEY_AUDIO_URI to job.audioUri,
+                TtsVideoExportWorker.KEY_TIMELINE_URI to job.timelineUri,
+                TtsVideoExportWorker.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
+                TtsVideoExportWorker.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
+                TtsVideoExportWorker.KEY_CHAPTER_TITLE to job.chapterTitle,
+                TtsVideoExportWorker.KEY_DISPLAY_NAME to job.displayName,
+            ))
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
+        if (initialDelayMs > 0L) requestBuilder.setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
+        val request = requestBuilder.addTag(VIDEO_TAG).build()
 
-            val requestBuilder = OneTimeWorkRequestBuilder<TtsVideoExportWorker>()
-                .setInputData(workDataOf(
-                    TtsVideoExportWorker.KEY_JOB_ID to jobId,
-                    TtsVideoExportWorker.KEY_AUDIO_URI to job.audioUri,
-                    TtsVideoExportWorker.KEY_TIMELINE_URI to job.timelineUri,
-                    TtsVideoExportWorker.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
-                    TtsVideoExportWorker.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
-                    TtsVideoExportWorker.KEY_CHAPTER_TITLE to job.chapterTitle,
-                    TtsVideoExportWorker.KEY_DISPLAY_NAME to job.displayName,
-                ))
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
-            if (initialDelayMs > 0L) requestBuilder.setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
-            val request = requestBuilder.addTag(VIDEO_TAG).build()
-
-            TtsAudioQueue.updateState(prefs, jobId) {
-                it?.copy(
-                    status = TtsAudioJobStatus.QUEUED,
-                    phase = "VIDEO",
-                    progress = 0,
-                    documentUri = "",
-                    workRequestId = request.id.toString(),
-                    videoSizeBytes = 0L,
-                    message = if (initialDelayMs > 0L) "Video recovery scheduled…" else "",
-                )
-            }
-            workManager.beginUniqueWork(workName(jobId), ExistingWorkPolicy.REPLACE, request).enqueue()
+        TtsAudioQueue.updateState(prefs, jobId) {
+            it?.copy(
+                status = TtsAudioJobStatus.QUEUED,
+                phase = "VIDEO",
+                progress = 0,
+                documentUri = "",
+                workRequestId = request.id.toString(),
+                videoSizeBytes = 0L,
+                message = if (initialDelayMs > 0L) "Video recovery scheduled…" else "",
+            )
         }
-    }
-
-    suspend fun kickNext(context: Context, prefs: AppPreferences) {
-        val current = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value
-        val hasActiveWork = withContext(Dispatchers.IO) {
-            WorkManager.getInstance(context).getWorkInfosByTag(VIDEO_TAG).get().any {
-                it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
-            }
-        }
-        if (hasActiveWork) return
-
-        current.entries.asSequence()
-            .filter { (_, job) ->
-                job.phase.equals("VIDEO", true) &&
-                    job.status == TtsAudioJobStatus.QUEUED &&
-                    job.workRequestId.isBlank() &&
-                    job.audioUri.isNotBlank() &&
-                    job.timelineUri.isNotBlank() &&
-                    job.outputDirectoryUri.isNotBlank()
-            }
-            .map { it.value }
-            .firstOrNull()
-            ?.let { enqueueFromJob(context, it) }
+        WorkManager.getInstance(context).beginUniqueWork(workName(jobId), ExistingWorkPolicy.REPLACE, request).enqueue()
     }
 
     suspend fun reconcile(context: Context, prefs: AppPreferences) {
@@ -141,6 +95,14 @@ object TtsVideoExportQueue {
 
         for ((jobId, job) in current.toList()) {
             if (!job.phase.equals("VIDEO", true)) continue
+
+            // A blank request id means this job is intentionally waiting behind another VIDEO worker.
+            // Do not count that normal queue state as a failed/system-interrupted generation.
+            if (job.workRequestId.isBlank() && job.status == TtsAudioJobStatus.QUEUED) {
+                restartJobs += job to 0L
+                continue
+            }
+
             val info = byId[job.workRequestId]
             when (info?.state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> Unit
@@ -203,13 +165,12 @@ object TtsVideoExportQueue {
         if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
 
         for ((job, delay) in restartJobs) enqueueFromJob(context, job, delay)
-        kickNext(context, prefs)
     }
 
     private fun recoveryDelayMs(stopReason: Int, attempts: Int): Long {
         val base = when (stopReason) {
             WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> FGS_TIMEOUT_RECOVERY_DELAY_MS
-            WorkInfo.STOP_REASON_QUOTA -> QUOTA_RECOVERY_DELAY_MS
+            WorkInfo.STOP_REASON_QUOTA,
             WorkInfo.STOP_REASON_SYSTEM_PROCESSING,
             WorkInfo.STOP_REASON_DEVICE_STATE,
             WorkInfo.STOP_REASON_PREEMPT -> QUOTA_RECOVERY_DELAY_MS
