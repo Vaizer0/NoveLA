@@ -15,11 +15,11 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.view.Surface
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.File
-import java.io.RandomAccessFile
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -29,13 +29,12 @@ class CinematicVideoExporter(private val context: Context) {
     data class Result(val outputFile: File, val durationMs: Long)
 
     suspend fun export(
-        wavFile: File,
+        wavInput: InputStream,
         timelineFile: File,
         outputFile: File,
         onProgress: (Float) -> Unit = {},
         onSizeBytes: (Long) -> Unit = {},
     ): Result = withContext(Dispatchers.Default) {
-        require(wavFile.isFile && wavFile.length() > 44L) { "WAV file does not exist or is empty" }
         require(timelineFile.isFile) { "Timeline JSON does not exist" }
         val timeline = JSONObject(timelineFile.readText())
         val durationMs = timeline.getJSONObject("audio").getLong("durationMs")
@@ -52,7 +51,7 @@ class CinematicVideoExporter(private val context: Context) {
                 onSizeBytes(videoOnly.length())
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            encodeWavToAacMp4(wavFile, durationMs, audioOnly) { fraction ->
+            encodeWavToAacMp4(wavInput, durationMs, audioOnly) { fraction ->
                 onProgress(0.82f + fraction * 0.13f)
                 onSizeBytes(videoOnly.length())
             }
@@ -154,12 +153,12 @@ class CinematicVideoExporter(private val context: Context) {
     }
 
     private suspend fun encodeWavToAacMp4(
-        wavFile: File,
+        wavInput: InputStream,
         expectedDurationMs: Long,
         outputFile: File,
         onProgress: (Float) -> Unit,
     ) {
-        WavPcmReader(RandomAccessFile(wavFile, "r")).use { wav ->
+        WavPcmReader(BufferedInputStream(wavInput, WAV_BUFFER_SIZE)).use { wav ->
             require(wav.bitsPerSample == 16) { "Only PCM16 WAV is supported" }
             val format = MediaFormat.createAudioFormat(AUDIO_MIME, wav.sampleRate, wav.channels).apply {
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
@@ -289,6 +288,7 @@ class CinematicVideoExporter(private val context: Context) {
         const val VIDEO_BITRATE = 10_000_000
         const val AUDIO_BITRATE = 128_000
         const val EGL_RECORDABLE_ANDROID = 0x3142
+        const val WAV_BUFFER_SIZE = 128 * 1024
     }
 
     private class EglSurfaceRenderer(surface: Surface) {
@@ -432,66 +432,142 @@ class CinematicVideoExporter(private val context: Context) {
     }
 }
 
-private class WavPcmReader(private val file: RandomAccessFile) : AutoCloseable {
+private class WavPcmReader(inputStream: InputStream) : AutoCloseable {
     var sampleRate: Int = 0; private set
     var channels: Int = 0; private set
     var bitsPerSample: Int = 0; private set
     var totalDataBytes: Long = 0; private set
     var durationMs: Long = 0; private set
+    private val input = inputStream
+    private val buffer = ByteArray(64 * 1024)
+    private var position = 0L
     private var dataStart = 0L
     private var dataEnd = 0L
 
     init { parse() }
-    fun remainingDataBytes(): Long = (dataEnd - file.filePointer).coerceAtLeast(0L)
+
+    fun remainingDataBytes(): Long = (dataEnd - position).coerceAtLeast(0L)
+
     fun read(target: ByteBuffer, count: Int): Int {
-        if (count <= 0) return 0
-        val temp = ByteArray(minOf(count, 64 * 1024))
-        val read = file.read(temp)
-        if (read > 0) target.put(temp, 0, read)
-        return read
+        if (count <= 0 || position >= dataEnd) return 0
+        var total = 0
+        while (total < count) {
+            val requested = minOf(count - total, buffer.size, (dataEnd - position).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            val read = input.read(buffer, 0, requested)
+            if (read <= 0) break
+            target.put(buffer, 0, read)
+            position += read
+            total += read
+            if (read < requested) break
+        }
+        return total
     }
-    override fun close() = file.close()
+
+    override fun close() = input.close()
 
     private fun parse() {
-        file.seek(0)
         require(readAscii(4) == "RIFF") { "Not a RIFF WAV file" }
-        file.skipBytes(4)
+        skipFully(4)
         require(readAscii(4) == "WAVE") { "Not a WAVE file" }
         var fmtFound = false
-        var dataFound = false
-        while (file.filePointer + 8 <= file.length()) {
-            val id = readAscii(4)
+        while (true) {
+            val id = readAsciiOrNull(4) ?: break
             val size = readUInt32()
-            val start = file.filePointer
-            require(size <= file.length() - start) { "Invalid WAV chunk size" }
+            val start = position
             when (id) {
                 "fmt " -> {
                     require(size >= 16L) { "Invalid WAV fmt chunk" }
                     val format = readUInt16()
                     channels = readUInt16()
                     sampleRate = readUInt32().toInt()
-                    file.skipBytes(6)
+                    skipFully(6)
                     bitsPerSample = readUInt16()
                     require(format == 1) { "Only PCM WAV is supported" }
                     require(bitsPerSample == 16) { "Only 16-bit PCM WAV is supported" }
+                    skipFully(size - 16L)
                     fmtFound = true
                 }
                 "data" -> {
+                    require(fmtFound) { "WAV fmt chunk must precede data chunk" }
                     dataStart = start
                     dataEnd = start + size
                     totalDataBytes = size
-                    dataFound = true
+                    require(sampleRate > 0 && channels > 0) { "Invalid WAV format" }
+                    position = dataStart
+                    durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels.toLong() * 2L)
+                    return
                 }
+                else -> skipFully(size)
             }
-            file.seek(start + size + (size and 1L))
-            if (fmtFound && dataFound) break
+            if ((size and 1L) != 0L) skipFully(1)
         }
-        require(fmtFound && dataFound) { "WAV fmt/data chunks are missing" }
-        require(sampleRate > 0 && channels > 0) { "Invalid WAV format" }
-        file.seek(dataStart)
-        durationMs = totalDataBytes * 1000L / (sampleRate.toLong() * channels.toLong() * 2L)
+        error("WAV fmt/data chunks are missing")
     }
-    private fun readAscii(n: Int): String { val bytes = ByteArray(n); file.readFully(bytes); return bytes.toString(Charsets.US_ASCII) }
-    private fun readUInt16(): Int = java.lang.Short.toUnsignedInt(java.lang.Short.reverseBytes(file.readShort()))
-    private fun readUInt32(): Long = java.lang.Integer.toUnsignedLong(Integer.reverseBytes(file.readInt()))
+
+    private fun readAscii(n: Int): String {
+        val bytes = ByteArray(n)
+        readFully(bytes)
+        return bytes.toString(Charsets.US_ASCII)
+    }
+
+    private fun readAsciiOrNull(n: Int): String? {
+        val bytes = ByteArray(n)
+        var offset = 0
+        while (offset < n) {
+            val read = input.read(bytes, offset, n - offset)
+            if (read < 0) return null
+            if (read == 0) continue
+            offset += read
+            position += read
+        }
+        return bytes.toString(Charsets.US_ASCII)
+    }
+
+    private fun readUInt16(): Int {
+        val b0 = readUnsignedByte()
+        val b1 = readUnsignedByte()
+        return b0 or (b1 shl 8)
+    }
+
+    private fun readUInt32(): Long {
+        val b0 = readUnsignedByte().toLong()
+        val b1 = readUnsignedByte().toLong()
+        val b2 = readUnsignedByte().toLong()
+        val b3 = readUnsignedByte().toLong()
+        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    }
+
+    private fun readUnsignedByte(): Int {
+        val value = input.read()
+        require(value >= 0) { "Unexpected end of WAV file" }
+        position++
+        return value
+    }
+
+    private fun readFully(bytes: ByteArray) {
+        var offset = 0
+        while (offset < bytes.size) {
+            val read = input.read(bytes, offset, bytes.size - offset)
+            require(read > 0) { "Unexpected end of WAV file" }
+            offset += read
+            position += read
+        }
+    }
+
+    private fun skipFully(count: Long) {
+        require(count >= 0L) { "Invalid negative WAV skip" }
+        var remaining = count
+        while (remaining > 0L) {
+            val skipped = input.skip(remaining)
+            if (skipped > 0L) {
+                position += skipped
+                remaining -= skipped
+            } else {
+                val value = input.read()
+                require(value >= 0) { "Unexpected end of WAV file" }
+                position++
+                remaining--
+            }
+        }
+    }
 }
