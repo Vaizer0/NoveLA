@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.strings.R as StringsR
@@ -19,8 +20,9 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Foreground notification for chapter TTS export + cinematic video generation.
  *
- * Lifecycle: foregroundNotification (foreground) -> updateProgress ->
- * showComplete / showError -> close. Each instance has its own notification id.
+ * The app's job progress remains one continuous 0..100% value (audio = 0..82,
+ * video = 82..100), while this notification deliberately shows each stage as
+ * its own 0..100% progress bar so the user never sees an apparently stuck 82%.
  */
 class TtsAudioExportNotification(
     private val chapterTitle: String,
@@ -57,26 +59,45 @@ class TtsAudioExportNotification(
         return notificationBuilder.build()
     }
 
-    /** Updates the foreground notification and explicitly identifies the active stage. */
+    /**
+     * Updates the notification using stage-local progress. This is intentionally
+     * different from the app/job progress: when VIDEO begins at overall 82%, the
+     * notification resets to 0% and then advances to 100% for video rendering.
+     */
     fun updateProgress(percent: Int, phase: String = lastPhase) {
         if (!hasNotificationPermission()) return
         val current = builder ?: return
-        val safePercent = percent.coerceIn(0, 100)
+        val safeOverall = percent.coerceIn(0, 100)
         val safePhase = phase.uppercase()
+        val stagePercent = when (safePhase) {
+            "VIDEO" -> (((safeOverall - VIDEO_START_PERCENT) * 100f) / VIDEO_REMAINING_PERCENT)
+                .toInt()
+                .coerceIn(0, 100)
+            else -> ((safeOverall * 100f) / AUDIO_END_PERCENT)
+                .toInt()
+                .coerceIn(0, 100)
+        }
         val now = android.os.SystemClock.elapsedRealtime()
         val phaseChanged = safePhase != lastPhase
-        val percentChanged = safePercent != lastPercent
+        val percentChanged = stagePercent != lastPercent
         if (!phaseChanged && !percentChanged) return
-        if (!phaseChanged && safePercent != 100 && now - lastUpdateMs < 500L) return
+        if (!phaseChanged && stagePercent != 100 && now - lastUpdateMs < 400L) return
 
         lastPhase = safePhase
-        lastPercent = safePercent
+        lastPercent = stagePercent
         lastUpdateMs = now
+
         notificationsCenter.modifyNotification(current, notificationId) {
-            setProgress(100, safePercent, false)
-            setContentText(stageText(safePhase, safePercent))
-            setOngoing(safePercent < 100)
+            setProgress(100, stagePercent, false)
+            setContentText(stageText(safePhase, stagePercent))
+            setOngoing(!(safePhase == "VIDEO" && stagePercent >= 100))
         }
+
+        // Keep the system notification in sync even when the NotificationsCenter
+        // builder is also being used by WorkManager's foreground service.
+        runCatching {
+            NotificationManagerCompat.from(context).notify(notificationId, current.build())
+        }.onFailure { Timber.w(it, "TtsAudio: notification progress update failed") }
     }
 
     fun showComplete(displayName: String, uri: Uri?) {
@@ -147,8 +168,8 @@ class TtsAudioExportNotification(
                     action = TtsAudioNotificationReceiver.ACTION_CANCEL
                     putExtra(TtsAudioNotificationReceiver.EXTRA_WORK_REQUEST_ID, workRequestId)
                 },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
         )
     }
 
@@ -160,7 +181,7 @@ class TtsAudioExportNotification(
                 setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }.getOrNull()
 
@@ -177,8 +198,8 @@ class TtsAudioExportNotification(
                     putExtra(TtsAudioNotificationReceiver.EXTRA_MIME_TYPE, mimeType)
                     putExtra(TtsAudioNotificationReceiver.EXTRA_NOTIFICATION_ID, actionId)
                 },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
         )
     }
 
@@ -194,8 +215,8 @@ class TtsAudioExportNotification(
                     putExtra(TtsAudioNotificationReceiver.EXTRA_URI, uri.toString())
                     putExtra(TtsAudioNotificationReceiver.EXTRA_NOTIFICATION_ID, actionId)
                 },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
         )
     }
 
@@ -204,6 +225,10 @@ class TtsAudioExportNotification(
         const val MIME_TYPE = "audio/wav"
         const val MIME_AUDIO = "audio/wav"
         const val MIME_VIDEO = "video/mp4"
+
+        private const val AUDIO_END_PERCENT = 82
+        private const val VIDEO_START_PERCENT = 82
+        private const val VIDEO_REMAINING_PERCENT = 18
 
         private val idCounter = AtomicInteger(4000)
         private val completeIdCounter = AtomicInteger(5000)
