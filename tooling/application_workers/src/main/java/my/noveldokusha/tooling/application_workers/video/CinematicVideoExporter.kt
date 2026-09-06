@@ -15,6 +15,7 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.view.Surface
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedInputStream
