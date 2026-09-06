@@ -2,6 +2,7 @@ package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -49,10 +50,27 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
         val tempWav = File(tempDir, "$jobId.wav")
         var audioUri: Uri? = null
         var timelineUri: Uri? = null
+        var lastProgressPercent = -1
+        var lastProgressAtMs = 0L
+
+        fun publishProgress(percent: Int, force: Boolean = false) {
+            val now = SystemClock.elapsedRealtime()
+            val shouldPublish = force ||
+                percent == 100 ||
+                lastProgressPercent < 0 ||
+                percent != lastProgressPercent && now - lastProgressAtMs >= PROGRESS_UPDATE_INTERVAL_MS
+            if (!shouldPublish) return
+            lastProgressPercent = percent
+            lastProgressAtMs = now
+            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = percent, phase = "AUDIO", documentUri = "") }
+        }
+
         try {
             if (!isDirectoryAccessible(request.outputDirectoryUri)) throw TtsExportException(context.getString(StringsR.string.tts_audio_export_dir_error))
             val novelFolderUri = resolveNovelFolder(request) ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_folder_error))
-            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", progress = 0) }
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", progress = 0, documentUri = "", audioUri = "", timelineUri = "")
+            }
 
             val chapterText = fetchChapterText(database, prefs, request)
                 ?: throw TtsExportException(context.getString(if (request.source == TtsAudioSource.TRANSLATED) StringsR.string.tts_audio_export_no_translation else StringsR.string.tts_audio_export_no_download))
@@ -67,7 +85,7 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
             val timelineName = "$base${if (suffix.isBlank()) "" else " $suffix"}.timeline.json"
             val result = TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav, fileName) { fraction ->
                 val percent = (fraction * 100f).toInt().coerceIn(0, 100)
-                TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
+                publishProgress(percent, force = percent == 100)
             }
             require(tempWav.length() > 44L) { "Generated WAV is empty" }
             audioUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName) }
@@ -80,7 +98,7 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
             val state = TtsAudioJobState(
                 chapterUrl = request.chapterUrl, novelUrl = request.novelUrl, chapterTitle = request.chapterTitle,
                 source = request.source, status = TtsAudioJobStatus.SUCCESS, message = "",
-                documentUri = audioUri.toString(), displayName = fileName, progress = 100, phase = "AUDIO",
+                documentUri = "", displayName = fileName, progress = 100, phase = "AUDIO",
                 audioUri = audioUri.toString(), timelineUri = timelineUri.toString(), outputDirectoryUri = request.outputDirectoryUri,
                 videoSizeBytes = 0L, workRequestId = "",
             )
@@ -165,6 +183,6 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
     private fun sanitize(name: String, fallback: String = "chapter") = name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
     companion object {
         const val KEY_JOB_ID = "jobId"; const val KEY_NOVEL_TITLE = "novelTitle"; const val KEY_NOVEL_URL = "novelUrl"; const val KEY_CHAPTER_URL = "chapterUrl"; const val KEY_CHAPTER_TITLE = "chapterTitle"; const val KEY_CHAPTER_INDEX = "chapterIndex"; const val KEY_SOURCE = "source"; const val KEY_ENGINE_PACKAGE = "enginePackage"; const val KEY_VOICE_ID = "voiceId"; const val KEY_SPEED = "speed"; const val KEY_PITCH = "pitch"; const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"; const val KEY_FORMAT = "format"; const val KEY_TRANSLATION_SOURCE_LANG = "translationSourceLang"; const val KEY_TRANSLATION_TARGET_LANG = "translationTargetLang"
-        private const val MIME_WAV = "audio/wav"; private const val MIME_JSON = "application/json"
+        private const val MIME_WAV = "audio/wav"; private const val MIME_JSON = "application/json"; private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
     }
 }
