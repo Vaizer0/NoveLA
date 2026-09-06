@@ -3,6 +3,7 @@ package my.noveldokusha.tooling.application_workers
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -17,10 +18,12 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
+import java.util.concurrent.TimeUnit
 
 object TtsVideoExportQueue {
     const val VIDEO_TAG = "tts-video-export"
     private const val WORK_PREFIX = "tts-video-export"
+    private const val RETRY_DELAY_MS = 30_000L
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -51,6 +54,7 @@ object TtsVideoExportQueue {
                 TtsVideoExportWorker.KEY_CHAPTER_TITLE to job.chapterTitle,
                 TtsVideoExportWorker.KEY_DISPLAY_NAME to job.displayName,
             ))
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
             .addTag(VIDEO_TAG)
             .build()
         TtsAudioQueue.updateState(prefs, jobId) {
