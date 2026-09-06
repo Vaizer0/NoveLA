@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
@@ -50,6 +51,7 @@ class TtsVideoExportWorker(
         // the OS may stop a multi-minute/hour video encode once the app is backgrounded.
         setForeground(createForegroundInfo())
 
+        val wakeLock = acquireVideoWakeLock(jobId)
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val renderJson = File(tempDir, "$jobId-video.timeline.json")
         val tempVideo = File(tempDir, "$jobId-video.mp4.tmp")
@@ -142,8 +144,6 @@ class TtsVideoExportWorker(
             runCatching { publishedVideoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderJson.delete(); tempVideo.delete()
             if (runAttemptCount + 1 < MAX_RETRY_ATTEMPTS) {
-                // Leave the durable WAV+timeline checkpoint intact. WorkManager will retry the
-                // VIDEO stage with the same inputs and exponential backoff.
                 TtsAudioQueue.updateState(prefs, jobId) {
                     it?.copy(
                         status = TtsAudioJobStatus.QUEUED,
@@ -160,9 +160,23 @@ class TtsVideoExportWorker(
             restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
             return Result.failure()
         } finally {
+            wakeLock?.let { runCatching { if (it.isHeld) it.release() } }
             runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderJson.delete(); tempVideo.delete()
         }
+    }
+
+    private fun acquireVideoWakeLock(jobId: String): PowerManager.WakeLock? {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return null
+        return runCatching {
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "${context.packageName}:tts-video:$jobId",
+            ).apply {
+                setReferenceCounted(false)
+                acquire(MAX_WAKE_LOCK_MS)
+            }
+        }.onFailure { Timber.w(it, "TtsVideo: unable to acquire video wake lock for $jobId") }.getOrNull()
     }
 
     private suspend fun createForegroundInfo(): ForegroundInfo = withContext(Dispatchers.Default) {
@@ -254,6 +268,7 @@ class TtsVideoExportWorker(
         private const val COPY_BUFFER_SIZE = 64 * 1024
         private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
         private const val MAX_RETRY_ATTEMPTS = 4
+        private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
         private const val VIDEO_NOTIFICATION_ID = 0x4E56
         private const val VIDEO_CHANNEL_ID = "tts_video_generation"
     }
