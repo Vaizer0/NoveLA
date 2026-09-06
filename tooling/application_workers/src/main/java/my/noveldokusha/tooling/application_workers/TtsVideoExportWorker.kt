@@ -39,6 +39,8 @@ class TtsVideoExportWorker(
         fun appPreferences(): AppPreferences
     }
 
+    override suspend fun getForegroundInfo(): ForegroundInfo = createForegroundInfo()
+
     override suspend fun doWork(): Result {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
         val audioUri = inputData.getString(KEY_AUDIO_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
@@ -49,7 +51,7 @@ class TtsVideoExportWorker(
 
         // WorkManager's CoroutineWorker must explicitly become foreground work; otherwise
         // the OS may stop a multi-minute/hour video encode once the app is backgrounded.
-        setForeground(createForegroundInfo())
+        setForeground(getForegroundInfo())
 
         val wakeLock = acquireVideoWakeLock(jobId)
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
@@ -136,7 +138,8 @@ class TtsVideoExportWorker(
             runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             runCatching { publishedVideoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderJson.delete(); tempVideo.delete()
-            restoreAudioState(prefs, jobId, audioUri, displayName)
+            // Preserve VIDEO state and durable WAV+timeline. A background/system stop is
+            // not a user cancellation of the export: WorkManager/reconciliation can restart VIDEO.
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsVideo: video generation failed for $jobId attempt=${runAttemptCount + 1}")
@@ -179,7 +182,7 @@ class TtsVideoExportWorker(
         }.onFailure { Timber.w(it, "TtsVideo: unable to acquire video wake lock for $jobId") }.getOrNull()
     }
 
-    private suspend fun createForegroundInfo(): ForegroundInfo = withContext(Dispatchers.Default) {
+    private fun createForegroundInfo(): ForegroundInfo {
         ensureNotificationChannel()
         val notification = NotificationCompat.Builder(context, VIDEO_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -197,7 +200,7 @@ class TtsVideoExportWorker(
         } else {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         }
-        ForegroundInfo(VIDEO_NOTIFICATION_ID, notification, serviceType)
+        return ForegroundInfo(VIDEO_NOTIFICATION_ID, notification, serviceType)
     }
 
     private fun ensureNotificationChannel() {
