@@ -33,7 +33,7 @@ import java.io.File
 
 /**
  * Durable VIDEO stage. The SAF .part document is created before rendering and is preserved until a
- * complete MP4 is validated and atomically renamed to its final .mp4 name.
+ * complete MP4 is validated and renamed to its final .mp4 name.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 class TtsVideoExportWorkerV2(
@@ -63,8 +63,7 @@ class TtsVideoExportWorkerV2(
             return Result.success()
         }
 
-        // A complete staging document may have been produced just before process death. Publish it
-        // without rendering again, regardless of the legacy boolean checkpoint flag.
+        // Recover a fully written SAF staging artifact before rendering again.
         val existingJob = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
         existingJob?.videoStagingUri?.takeIf { it.isNotBlank() }?.let { stagedString ->
             val staged = Uri.parse(stagedString)
@@ -79,7 +78,6 @@ class TtsVideoExportWorkerV2(
         }
 
         if (!RENDER_MUTEX.tryLock()) {
-            // Do not reset progress or state while another chapter owns the renderer.
             return Result.retry()
         }
 
@@ -120,7 +118,7 @@ class TtsVideoExportWorkerV2(
             publishProgress(0, 0L, force = true)
 
             // Create the SAF staging artifact BEFORE the expensive render. It remains durable across
-            // process death and is only renamed to .mp4 after the full staged MP4 passes validation.
+            // process death and is only renamed to .mp4 after the complete staged MP4 has been validated.
             stagingUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(
                     context.contentResolver,
@@ -164,8 +162,8 @@ class TtsVideoExportWorkerV2(
             ensureActive()
             require(tempVideo.isFile && tempVideo.length() > 0L) { "Generated MP4 is empty" }
 
-            // Final muxing is written into SAF .part with MediaMuxer(FileDescriptor), not copied into a
-            // pre-existing final .mp4. The target extension stays .part until generation is complete.
+            // Write the completed MP4 into the SAF staging document. Never write directly to the final
+            // .mp4 name; publication happens only after muxing and validation finish.
             SafMp4Stager.remuxLocalMp4ToSaf(context, tempVideo, stagingUri!!)
             ensureActive()
             val stagedSize = SafMp4Stager.querySize(context, stagingUri!!)
@@ -184,8 +182,7 @@ class TtsVideoExportWorkerV2(
             }
             return Result.success()
         } catch (e: CancellationException) {
-            // Preserve the SAF stage. A valid stage will be published on the next reconcile; an invalid
-            // stage is removed by the next worker before rendering. Existing final MP4s are untouched.
+            // Preserve SAF staging across cancellation/process death. Existing final MP4s are untouched.
             renderJson.delete()
             tempVideo.delete()
             throw e
@@ -238,6 +235,7 @@ class TtsVideoExportWorkerV2(
         stagedUri: Uri,
     ): Uri {
         findValidFinal(parentUri, videoName)?.let { existing ->
+            // The final artifact is authoritative. Never replace it with another render.
             SafMp4Stager.delete(context, stagedUri)
             checkpointSuccess(prefs, jobId, existing)
             return existing
@@ -292,6 +290,12 @@ class TtsVideoExportWorkerV2(
             }
             null
         }.getOrNull()
+    }
+
+    private fun buildStagingName(videoName: String, jobId: String): String {
+        val base = videoName.removeSuffix(".mp4")
+        val safeJobId = jobId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        return "$base.$safeJobId.mp4.part"
     }
 
     private fun acquireWakeLock(jobId: String): PowerManager.WakeLock? {
@@ -351,8 +355,8 @@ class TtsVideoExportWorkerV2(
                 workRequestId = "",
                 videoSizeBytes = 0L,
                 displayName = displayName,
-                videoStagingUri = it.videoStagingUri,
-                videoStagingComplete = it.videoStagingComplete,
+                videoStagingUri = "",
+                videoStagingComplete = false,
                 message = message,
             )
         }
@@ -364,7 +368,7 @@ class TtsVideoExportWorkerV2(
         } ?: throw IllegalStateException("Cannot read $uri")
     }
 
-    private companion object {
+    companion object {
         const val KEY_JOB_ID = "jobId"
         const val KEY_AUDIO_URI = "audioUri"
         const val KEY_TIMELINE_URI = "timelineUri"
