@@ -88,12 +88,28 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
                 publishProgress(percent, force = percent == 100)
             }
             require(tempWav.length() > 44L) { "Generated WAV is empty" }
-            audioUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName) }
-                ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            copyFileToUri(tempWav, audioUri!!)
-            timelineUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelineName) }
-                ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            writeTextToUri(timelineToJson(result.timeline), timelineUri!!)
+
+            val wavPartName = "$fileName.part"
+            val audioPartUri = withContext(Dispatchers.IO) {
+                DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, wavPartName)
+            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+            audioUri = audioPartUri
+            copyFileToUri(tempWav, audioPartUri)
+            ensureActive()
+            audioUri = withContext(Dispatchers.IO) {
+                DocumentsContract.renameDocument(context.contentResolver, audioPartUri, fileName)
+            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+
+            val timelinePartName = "$timelineName.part"
+            val timelinePartUri = withContext(Dispatchers.IO) {
+                DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelinePartName)
+            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+            timelineUri = timelinePartUri
+            writeTextToUri(timelineToJson(result.timeline), timelinePartUri)
+            ensureActive()
+            timelineUri = withContext(Dispatchers.IO) {
+                DocumentsContract.renameDocument(context.contentResolver, timelinePartUri, timelineName)
+            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
 
             val state = TtsAudioJobState(
                 chapterUrl = request.chapterUrl, novelUrl = request.novelUrl, chapterTitle = request.chapterTitle,
@@ -177,12 +193,24 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
         val tree = Uri.parse(uri)
         context.contentResolver.query(DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree)), arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { true } ?: false
     }.getOrDefault(false)
-    private suspend fun copyFileToUri(file: File, uri: Uri) = withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { out -> file.inputStream().use { it.copyTo(out, 64 * 1024) } } ?: throw TtsExportException("Cannot write $uri") }
-    private suspend fun writeTextToUri(text: String, uri: Uri) = withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { it.writer(Charsets.UTF_8).use { w -> w.write(text) } } ?: throw TtsExportException("Cannot write $uri") }
+
+    private suspend fun copyFileToUri(file: File, uri: Uri) = withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+            file.inputStream().use { it.copyTo(out, COPY_BUFFER_SIZE) }
+        } ?: throw TtsExportException("Cannot write $uri")
+    }
+
+    private suspend fun writeTextToUri(text: String, uri: Uri) = withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(uri, "wt")?.use { it.writer(Charsets.UTF_8).use { w -> w.write(text) } }
+            ?: throw TtsExportException("Cannot write $uri")
+    }
+
+    private suspend fun ensureActive() = kotlinx.coroutines.currentCoroutineContext().ensureActive()
     private fun cleanupUri(uri: Uri?) { if (uri != null) runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) } }
     private fun sanitize(name: String, fallback: String = "chapter") = name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
+
     companion object {
         const val KEY_JOB_ID = "jobId"; const val KEY_NOVEL_TITLE = "novelTitle"; const val KEY_NOVEL_URL = "novelUrl"; const val KEY_CHAPTER_URL = "chapterUrl"; const val KEY_CHAPTER_TITLE = "chapterTitle"; const val KEY_CHAPTER_INDEX = "chapterIndex"; const val KEY_SOURCE = "source"; const val KEY_ENGINE_PACKAGE = "enginePackage"; const val KEY_VOICE_ID = "voiceId"; const val KEY_SPEED = "speed"; const val KEY_PITCH = "pitch"; const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"; const val KEY_FORMAT = "format"; const val KEY_TRANSLATION_SOURCE_LANG = "translationSourceLang"; const val KEY_TRANSLATION_TARGET_LANG = "translationTargetLang"
-        private const val MIME_WAV = "audio/wav"; private const val MIME_JSON = "application/json"; private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
+        private const val MIME_WAV = "audio/wav"; private const val MIME_JSON = "application/json"; private const val COPY_BUFFER_SIZE = 64 * 1024; private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
     }
 }
