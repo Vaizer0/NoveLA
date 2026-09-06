@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.feature.local_database.AppDatabase
@@ -84,7 +85,7 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
                 videoSizeBytes = 0L, workRequestId = "",
             )
             TtsAudioQueue.updateState(prefs, jobId) { state }
-            TtsVideoExportQueue.enqueue(context, prefs, jobId, state)
+            TtsVideoExportQueue.enqueue(context, prefs, jobId, state, novelFolderUri.toString())
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
@@ -127,7 +128,7 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
         if (source == TtsAudioSource.ASK_EVERY_TIME) return null
         return TtsAudioExportRequest(inputData.getString(KEY_JOB_ID) ?: return null, novelTitle, novelUrl, chapterUrl, chapterTitle, chapterIndex, source,
             inputData.getString(KEY_ENGINE_PACKAGE) ?: "", inputData.getString(KEY_VOICE_ID) ?: "", inputData.getFloat(KEY_SPEED, 1f), inputData.getFloat(KEY_PITCH, 1f),
-            inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null, inputData.getString(KEY_FORMAT)?.let { TtsAudioFormat.valueOf(it) } ?: TtsAudioFormat.WAV,
+            inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null, inputData.getString(KEY_FORMAT) ?: TtsAudioFormat.WAV,
             inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: "", inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: "")
     }
 
