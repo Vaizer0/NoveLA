@@ -37,7 +37,6 @@ class TtsAudioExportNotification(
 
     private val channelName = context.getString(StringsR.string.tts_audio_export_channel_name)
 
-    /** Foreground notification shown immediately, with a cancel action for this WorkRequest. */
     fun foregroundNotification(): Notification {
         val notificationBuilder = notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
@@ -58,10 +57,7 @@ class TtsAudioExportNotification(
         return notificationBuilder.build()
     }
 
-    /**
-     * Updates the foreground notification progress and explicitly identifies the active stage.
-     * Updates are throttled unless the stage or displayed percentage changes.
-     */
+    /** Updates the foreground notification and explicitly identifies the active stage. */
     fun updateProgress(percent: Int, phase: String = lastPhase) {
         if (!hasNotificationPermission()) return
         val current = builder ?: return
@@ -86,6 +82,7 @@ class TtsAudioExportNotification(
     fun showComplete(displayName: String, uri: Uri?) {
         if (!hasNotificationPermission()) return
         val completeId = completeIdCounter.getAndIncrement()
+        val mimeType = if (displayName.endsWith(".mp4", ignoreCase = true)) MIME_VIDEO else MIME_AUDIO
         builder = notificationsCenter.showNotification(
             channelId = CHANNEL_ID,
             channelName = channelName,
@@ -97,8 +94,8 @@ class TtsAudioExportNotification(
             setOngoing(false)
             setAutoCancel(true)
             if (uri != null) {
-                buildOpenContentIntent(uri, completeId)?.let { setContentIntent(it) }
-                addOpenAction(uri, completeId)
+                buildOpenContentIntent(uri, completeId, mimeType)?.let { setContentIntent(it) }
+                addOpenAction(uri, completeId, mimeType)
                 addDeleteAction(uri, completeId)
             }
         }
@@ -131,10 +128,7 @@ class TtsAudioExportNotification(
 
     private fun hasNotificationPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        val result = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS
-        )
+        val result = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
         if (result != PackageManager.PERMISSION_GRANTED) {
             Timber.w("POST_NOTIFICATIONS denied, skipping TTS audio notification")
             return false
@@ -158,19 +152,19 @@ class TtsAudioExportNotification(
         )
     }
 
-    private fun buildOpenContentIntent(uri: Uri, actionId: Int): PendingIntent? = runCatching {
+    private fun buildOpenContentIntent(uri: Uri, actionId: Int, mimeType: String): PendingIntent? = runCatching {
         PendingIntent.getActivity(
             context.applicationContext,
             actionId,
             Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, MIME_TYPE)
+                setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }.getOrNull()
 
-    private fun NotificationCompat.Builder.addOpenAction(uri: Uri, actionId: Int) {
+    private fun NotificationCompat.Builder.addOpenAction(uri: Uri, actionId: Int, mimeType: String) {
         addAction(
             android.R.drawable.ic_menu_view,
             context.getString(StringsR.string.tts_audio_export_open),
@@ -180,6 +174,7 @@ class TtsAudioExportNotification(
                 Intent(context, TtsAudioNotificationReceiver::class.java).apply {
                     action = TtsAudioNotificationReceiver.ACTION_OPEN
                     putExtra(TtsAudioNotificationReceiver.EXTRA_URI, uri.toString())
+                    putExtra(TtsAudioNotificationReceiver.EXTRA_MIME_TYPE, mimeType)
                     putExtra(TtsAudioNotificationReceiver.EXTRA_NOTIFICATION_ID, actionId)
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -207,6 +202,8 @@ class TtsAudioExportNotification(
     companion object {
         const val CHANNEL_ID = "tts_audio_export"
         const val MIME_TYPE = "audio/wav"
+        const val MIME_AUDIO = "audio/wav"
+        const val MIME_VIDEO = "video/mp4"
 
         private val idCounter = AtomicInteger(4000)
         private val completeIdCounter = AtomicInteger(5000)
