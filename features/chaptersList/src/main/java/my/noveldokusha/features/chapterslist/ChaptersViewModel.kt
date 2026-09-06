@@ -449,6 +449,14 @@ internal class ChaptersViewModel @Inject constructor(
             }
         }
 
+        // Сверяем первый снимок с WorkManager ДО подписки на частые progress updates.
+        // Нельзя делать reconcile внутри collectLatest: video worker пишет прогресс каждые ~250ms,
+        // поэтому каждый новый снимок отменял предыдущий reconcile до того, как UI успевал обновить
+        // state.audioJobs. Уведомление обновлялось независимо, а Compose оставался на 0%.
+        viewModelScope.launch {
+            TtsAudioQueue.reconcile(context, appPreferences)
+        }
+
         // Статусы аудиозагрузок текущей книги. Ключ в UI — (chapterUrl, source):
         // каждая задача несёт свой СВОЙ источник (TtsAudioJobState.source), поэтому
         // Original и Translated одной главы наблюдаются независимо и прогресс
@@ -460,13 +468,11 @@ internal class ChaptersViewModel @Inject constructor(
                 bookUrlFlow,
                 appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow(),
             ) { url, jobs -> url to jobs }
-                .collectLatest { (url, jobs) ->
-                    // Сверяем «застрявшие» активные записи с реальным состоянием
-                    // WorkManager (после kill/force-stop воркер мог не донести статус).
-                    // Дёшево и безопасно вызывать при каждом значимом снимке: reconcile
-                    // трогает только записи, чей WorkRequest не выполняется.
-                    TtsAudioQueue.reconcile(context, appPreferences)
-                    val effective = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value
+                .collect { (url, jobs) ->
+                    // Keep this collector lightweight. reconcile runs once at screen start and
+                    // explicit refresh paths handle lifecycle recovery; progress updates must reach
+                    // Compose immediately instead of being cancelled by WorkManager IO.
+                    val effective = jobs
                     val byChapter = mutableMapOf<AudioJobKey, TtsAudioJobState>()
                     for (job in effective.values) {
                         if (job.novelUrl != url) continue
@@ -718,10 +724,6 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Incremental update: re-read the last known page to detect new chapters,
-     * then load any new pages beyond the last known total.
-     */
     private suspend fun updateChaptersIncremental(bookUrl: String, lastKnownPage: Int) {
         val lastPageResult = downloaderRepository.bookChaptersPage(bookUrl, lastKnownPage)
         val lastPageData = (lastPageResult as? Response.Success)?.data
@@ -735,7 +737,6 @@ internal class ChaptersViewModel @Inject constructor(
         var positionOffset = existingUrls.size
         val chaptersToAdd = mutableListOf<Chapter>()
 
-        // From the last page, only take chapters that don't exist yet
         val newFromLastPage = lastPageData.chapters.filter { it.url !in existingUrls }
         newFromLastPage.forEachIndexed { idx, ch ->
             chaptersToAdd.add(
@@ -746,7 +747,6 @@ internal class ChaptersViewModel @Inject constructor(
         }
         positionOffset += chaptersToAdd.size
 
-        // Load any new pages beyond the last known total
         val newTotalPages = lastPageData.totalPages
         for (page in (lastKnownPage + 1)..newTotalPages) {
             val pageData = (downloaderRepository.bookChaptersPage(bookUrl, page) as? Response.Success)?.data
@@ -773,15 +773,11 @@ internal class ChaptersViewModel @Inject constructor(
         if (BuildConfig.DEBUG) MemoryDiagnostics.logMemoryStats("ChaptersList:updateChaptersIncremental")
     }
 
-    /**
-     * Full update: load all pages via parsePage or fallback to getChapterList.
-     */
     private suspend fun updateChaptersFull(bookUrl: String) {
         downloaderRepository.bookChaptersList(bookUrl = bookUrl)
             .onSuccess {
                 if (it.isEmpty()) toasty.show(R.string.no_chapters_found)
                 appRepository.bookChapters.merge(newChapters = it, bookUrl = bookUrl)
-                // Save chaptersLastPage for future incremental updates
                 val firstPage = downloaderRepository.bookChaptersPage(bookUrl, 1)
                 val totalPages = (firstPage as? Response.Success)?.data?.totalPages
                 if (totalPages != null) {
@@ -1043,32 +1039,20 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
-    // ─── Аудиозагрузка главы (TTS) ──────────────────────────────────────────
-
-    /**
-     * Клик по иконке аудио конкретного источника у главы. Готово+файл жив —
-     * открываем; активно — игнорируем (не плодим дубли); иначе — запускаем
-     * экспорт ИМЕННО этого источника. Источник выбран кнопкой, а не глобальной
-     * настройкой: Original и Translated одной главы живут независимо.
-     */
     fun onChapterAudio(chapter: ChapterWithContext, source: TtsAudioSource) {
         val key = AudioJobKey(chapter.chapter.url, source)
         val job = state.audioJobs[key]
         when {
             job?.status == TtsAudioJobStatus.SUCCESS &&
                 (state.audioFilesExist[key] ?: false) -> openAudioFile(job)
-
             job != null && job.isActive -> Unit
-
             source == TtsAudioSource.TRANSLATED &&
                 !(state.translatedAudioAvailable.value[chapter.chapter.url] ?: false) ->
                 toasty.show(R.string.translation_not_configured)
-
             else -> startAudioDownload(chapter, source)
         }
     }
 
-    /** Открывает готовый аудиофайл системным плеером (как ACTION_OPEN в уведомлении). */
     private fun openAudioFile(job: TtsAudioJobState) {
         val uri = job.documentUri.takeIf { it.isNotBlank() } ?: return
         runCatching {
@@ -1081,11 +1065,6 @@ internal class ChaptersViewModel @Inject constructor(
         }.onFailure { Timber.e(it, "TtsAudio: failed to open chapter audio") }
     }
 
-    /**
-     * Проверяет существование готовых файлов (SUCCESS) на диске и обновляет
-     * [ChaptersScreenState.audioFilesExist]. SUCCESS-снимок задач сравнивается с
-     * последним проверенным — прогресс выполняемых задач не вызывает пере-скан.
-     */
     private fun refreshAudioFileExistence(
         jobs: Map<AudioJobKey, TtsAudioJobState>,
         force: Boolean = false,
@@ -1111,7 +1090,6 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
-    /** Дубликат сканирования диска для onResume (файл мог быть удалён снаружи). */
     fun refreshAudioFiles() {
         val jobs = lastAudioJobs
         if (jobs.isEmpty()) return
@@ -1128,10 +1106,6 @@ internal class ChaptersViewModel @Inject constructor(
         )?.use { it.moveToFirst() } ?: false
     }.getOrDefault(false)
 
-    /**
-     * Запускает аудиозагрузку главы. Проверяет настройки (перевод, голос, папка);
-     * при отсутствии папки переводит поток в ожидание SAF-пикера.
-     */
     fun startAudioDownload(chapter: ChapterWithContext, source: TtsAudioSource) {
         if (source == TtsAudioSource.TRANSLATED) {
             val pair = appPreferences.translationPairForBook(bookUrl)
@@ -1155,10 +1129,7 @@ internal class ChaptersViewModel @Inject constructor(
         enqueueAudio(chapter, source, folderUri)
     }
 
-    /** Ставит экспорт аудио главы в очередь WorkManager (снимок настроек сейчас). */
     private fun enqueueAudio(chapter: ChapterWithContext, source: TtsAudioSource, folderUri: String) {
-        // Снимок пары языков перевода на момент старта (для TRANSLATED): воркер
-        // возьмёт именно её, а не текущую настройку на момент выполнения.
         val pair = if (source == TtsAudioSource.TRANSLATED) {
             appPreferences.translationPairForBook(bookUrl)
         } else {
@@ -1185,15 +1156,12 @@ internal class ChaptersViewModel @Inject constructor(
             outputDirectoryUri = folderUri,
             translationSourceLang = pair.source,
             translationTargetLang = pair.target,
-            // V1 поддерживает ТОЛЬКО WAV: пережиток выбора (например "m4a") намеренно
-            // сбрасывается — иначе файл с расширением .m4a содержал бы WAV-данные.
             format = TtsAudioFormat.WAV,
         )
         TtsAudioQueue.enqueue(context, appPreferences, request)
         toasty.show(StringsR.string.tts_audio_download_started)
     }
 
-    /** Папка выбрана через SAF: запоминаем и запускаем отложенную аудиозагрузку. */
     fun onAudioDirectorySaved(uri: String) {
         appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = uri
         val pending = pendingAudio
@@ -1208,7 +1176,6 @@ internal class ChaptersViewModel @Inject constructor(
         }
     }
 
-    /** Пикер папки аудиозагрузки закрыт без выбора — отменяем ожидание. */
     fun onAudioFolderCancel() {
         pendingAudio = null
         state.audioNeedDirectory.value = false
@@ -1234,7 +1201,6 @@ internal class ChaptersViewModel @Inject constructor(
     }
 }
 
-/** Экспорт, ожидающий выбора папки через SAF (ветка NeedDirectory). */
 private data class PendingExport(
     val bookUrl: String,
     val bookTitle: String,
@@ -1244,17 +1210,11 @@ private data class PendingExport(
     val availableCount: Int,
 )
 
-/** Аудиозагрузка главы, ожидающая выбора папки (SAF-пикер). Источник уже
- *  выбран кнопкой (ORIGINAL/TRANSLATED) и сохраняется до возврата пикера. */
 private data class PendingAudio(
     val chapter: ChapterWithContext,
     val source: TtsAudioSource,
 )
 
-/**
- * Число глав, доступных для экспорта: скачанные тела для оригинала,
- * переведённые главы выбранной пары для перевода.
- */
 private fun availableCountFor(
     dialog: ExportDialogState,
     mode: String,
