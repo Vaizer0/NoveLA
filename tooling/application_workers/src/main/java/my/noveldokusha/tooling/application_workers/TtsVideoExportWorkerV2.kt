@@ -58,14 +58,17 @@ class TtsVideoExportWorkerV2(
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
         val videoName = displayName.removeSuffix(".wav") + ".mp4"
 
-        findValidFinal(parentUri, videoName)?.let { finalUri ->
-            checkpointSuccess(prefs, jobId, finalUri)
+        val existingFinal = findValidFinal(parentUri, videoName)
+        if (existingFinal != null) {
+            checkpointSuccess(prefs, jobId, existingFinal)
             return Result.success()
         }
 
-        val existingJob = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
-        existingJob?.videoStagingUri?.takeIf { it.isNotBlank() }?.let { stagedString ->
-            val staged = Uri.parse(stagedString)
+        val existingStagingString = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
+            ?.videoStagingUri
+            ?.takeIf { it.isNotBlank() }
+        if (existingStagingString != null) {
+            val staged = Uri.parse(existingStagingString)
             if (SafMp4Stager.isValidMp4(context, staged)) {
                 publishStaged(prefs, jobId, parentUri, videoName, staged)
                 return Result.success()
