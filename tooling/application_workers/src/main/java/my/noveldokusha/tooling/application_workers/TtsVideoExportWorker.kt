@@ -11,6 +11,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
@@ -33,7 +34,7 @@ class TtsVideoExportWorker(
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
         val audioUri = inputData.getString(KEY_AUDIO_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val timelineUri = inputData.getString(KEY_TIMELINE_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
-        val outputTree = inputData.getString(KEY_OUTPUT_DIRECTORY_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
+        val parentDirectoryUri = inputData.getString(KEY_PARENT_DIRECTORY_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: "chapter.wav"
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
 
@@ -50,7 +51,6 @@ class TtsVideoExportWorker(
             copyUriToFile(Uri.parse(audioUri), renderWav)
             copyUriToFile(Uri.parse(timelineUri), renderJson)
             ensureActive()
-            deleteExpectedVideo(Uri.parse(outputTree), Uri.parse(audioUri), displayName)
 
             CinematicVideoExporter(context).export(
                 wavFile = renderWav,
@@ -68,9 +68,7 @@ class TtsVideoExportWorker(
             )
             ensureActive()
 
-            val parentId = queryParentId(Uri.parse(audioUri))
-                ?: throw IllegalStateException("Cannot resolve audio parent directory")
-            val parentUri = DocumentsContract.buildDocumentUriUsingTree(Uri.parse(outputTree), parentId)
+            val parentUri = Uri.parse(parentDirectoryUri)
             val videoName = displayName.removeSuffix(".wav") + ".mp4"
             videoUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(context.contentResolver, parentUri, MIME_MP4, videoName)
@@ -134,36 +132,13 @@ class TtsVideoExportWorker(
         } ?: throw IllegalStateException("Cannot write $uri")
     }
 
-    private suspend fun deleteExpectedVideo(treeUri: Uri, audioUri: Uri, audioName: String) = withContext(Dispatchers.IO) {
-        val parentId = queryParentId(audioUri) ?: return@withContext
-        val videoName = audioName.removeSuffix(".wav") + ".mp4"
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
-        context.contentResolver.query(children, null, null, null, null)?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            while (cursor.moveToNext()) {
-                if (cursor.getString(nameCol).equals(videoName, true)) {
-                    DocumentsContract.deleteDocument(context.contentResolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(idCol)))
-                    break
-                }
-            }
-        }
-    }
-
-    private fun queryParentId(uri: Uri): String? = context.contentResolver.query(
-        uri,
-        arrayOf(DocumentsContract.Document.COLUMN_PARENT_DOCUMENT_ID),
-        null, null, null,
-    )?.use { cursor ->
-        if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_PARENT_DOCUMENT_ID)) else null
-    }
-
     private suspend fun ensureActive() = kotlinx.coroutines.currentCoroutineContext().ensureActive()
 
     companion object {
         const val KEY_JOB_ID = "jobId"
         const val KEY_AUDIO_URI = "audioUri"
         const val KEY_TIMELINE_URI = "timelineUri"
+        const val KEY_PARENT_DIRECTORY_URI = "parentDirectoryUri"
         const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"
         const val KEY_CHAPTER_TITLE = "chapterTitle"
         const val KEY_DISPLAY_NAME = "displayName"
