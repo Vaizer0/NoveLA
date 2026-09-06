@@ -189,15 +189,20 @@ class TtsVideoExportWorkerV2(
             }
 
             if (runAttemptCount + 1 < MAX_RETRY_ATTEMPTS) {
-                TtsAudioQueue.updateState(prefs, jobId) {
-                    it?.copy(
+                val persistedStagingUri = stagingUri ?: prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
+                    ?.videoStagingUri
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(Uri::parse)
+                val recoveredStagingComplete = stagingUri?.let { SafMp4Stager.isValidMp4(context, it) }
+                TtsAudioQueue.updateState(prefs, jobId) { current ->
+                    current?.copy(
                         status = TtsAudioJobStatus.QUEUED,
                         phase = "VIDEO",
-                        progress = it.progress.coerceIn(0, 99),
+                        progress = current.progress.coerceIn(0, 99),
                         documentUri = "",
                         workRequestId = id.toString(),
-                        videoStagingUri = stagingUri?.toString() ?: it.videoStagingUri,
-                        videoStagingComplete = stagingUri?.let { uri -> SafMp4Stager.isValidMp4(context, uri) } ?: it.videoStagingComplete,
+                        videoStagingUri = persistedStagingUri?.toString() ?: current.videoStagingUri,
+                        videoStagingComplete = recoveredStagingComplete ?: current.videoStagingComplete,
                         message = "Retrying video generation…",
                     )
                 }
@@ -216,7 +221,7 @@ class TtsVideoExportWorkerV2(
 
     private suspend fun findValidFinal(parentUri: Uri, videoName: String): Uri? {
         val final = findChildDocument(parentUri, videoName) ?: return null
-        return final.takeIf { SafMp4Stager.isValidMp4(context, it) }
+        return if (SafMp4Stager.isValidMp4(context, final)) final else null
     }
 
     private suspend fun publishStaged(
