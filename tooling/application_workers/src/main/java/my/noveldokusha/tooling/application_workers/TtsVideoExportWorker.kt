@@ -21,13 +21,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.tooling.application_workers.video.CinematicVideoExporter
 import timber.log.Timber
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Long-running, foreground-backed VIDEO stage. It consumes durable WAV+timeline and never deletes them. */
 class TtsVideoExportWorker(
@@ -50,199 +50,220 @@ class TtsVideoExportWorker(
         val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: "chapter.wav"
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
 
-        setForeground(getForegroundInfo())
-
-        val parentUri = Uri.parse(parentDirectoryUri)
-        val videoName = displayName.removeSuffix(".wav") + ".mp4"
-        val currentJob = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
-
-        // First recover a final URI already stored in the durable job state. This avoids rerendering
-        // when the process died after publication but before the final preference checkpoint.
-        currentJob?.documentUri?.takeIf { it.isNotBlank() }?.let { documentUriString ->
-            val documentUri = Uri.parse(documentUriString)
-            if (queryDocumentSize(documentUri) > 0L) {
-                Timber.i("TtsVideo: recovered checkpointed MP4 for $jobId from $documentUri")
-                checkpointVideoSuccess(prefs, jobId, documentUriString, queryDocumentSize(documentUri))
-                return Result.success()
-            }
-        }
-
-        // The staging URI is persisted before copying starts. Only a staging document explicitly
-        // marked complete is eligible for recovery; an incomplete one is safely discarded and the
-        // video is rendered again from the durable WAV+timeline.
-        currentJob?.videoStagingUri?.takeIf { it.isNotBlank() }?.let { stagingUriString ->
-            val stagingUri = Uri.parse(stagingUriString)
-            if (currentJob.videoStagingComplete && queryDocumentSize(stagingUri) > 0L) {
-                val recovered = runCatching {
-                    withContext(Dispatchers.IO) {
-                        DocumentsContract.renameDocument(context.contentResolver, stagingUri, videoName)
-                    }
-                }.getOrNull()
-                if (recovered != null && queryDocumentSize(recovered) > 0L) {
-                    Timber.i("TtsVideo: recovered published MP4 for $jobId from staging URI $recovered")
-                    checkpointVideoSuccess(prefs, jobId, recovered.toString(), queryDocumentSize(recovered))
-                    return Result.success()
-                }
-            }
-            runCatching { DocumentsContract.deleteDocument(context.contentResolver, stagingUri) }
-            TtsAudioQueue.updateState(prefs, jobId) {
-                it?.copy(videoStagingUri = "", videoStagingComplete = false)
-            }
-        }
-
-        val wakeLock = acquireVideoWakeLock(jobId)
-        val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
-        val renderJson = File(tempDir, "$jobId-video.timeline.json")
-        val tempVideo = File(tempDir, "$jobId-video.mp4.tmp")
-        var partUri: Uri? = null
-        var publishedVideoUri: Uri? = null
-
-        var lastProgressPercent = -1
-        var lastProgressAtMs = 0L
-
-        fun publishProgress(percent: Int, videoSizeBytes: Long? = null, force: Boolean = false) {
-            val now = SystemClock.elapsedRealtime()
-            val shouldPublish = force ||
-                percent == 100 ||
-                lastProgressPercent < 0 ||
-                percent != lastProgressPercent && now - lastProgressAtMs >= PROGRESS_UPDATE_INTERVAL_MS
-            if (!shouldPublish) return
-            lastProgressPercent = percent
-            lastProgressAtMs = now
+        // Do not hold a foreground service or consume a long-running execution slot while waiting
+        // for another chapter's 1080p renderer. Contending workers retry through WorkManager.
+        if (!VIDEO_RENDER_MUTEX.tryLock()) {
             TtsAudioQueue.updateState(prefs, jobId) {
                 it?.copy(
-                    status = TtsAudioJobStatus.RUNNING,
+                    status = TtsAudioJobStatus.QUEUED,
                     phase = "VIDEO",
-                    progress = percent,
+                    progress = 0,
                     documentUri = "",
-                    videoSizeBytes = videoSizeBytes ?: it.videoSizeBytes,
+                    message = "Waiting for another video export…",
                 )
             }
+            return Result.retry()
         }
 
         try {
-            publishProgress(0, 0L, force = true)
+            setForeground(getForegroundInfo())
 
-            copyUriToFile(Uri.parse(timelineUri), renderJson)
-            ensureActive()
+            val parentUri = Uri.parse(parentDirectoryUri)
+            val videoName = displayName.removeSuffix(".wav") + ".mp4"
+            val currentJob = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
 
-            val wavUri = Uri.parse(audioUri)
-            context.contentResolver.openInputStream(wavUri)?.use { wavInput ->
-                CinematicVideoExporter(context).export(
-                    wavInput = wavInput,
-                    timelineFile = renderJson,
-                    outputFile = tempVideo,
-                    onProgress = { fraction ->
-                        val percent = (fraction * 100f).toInt().coerceIn(0, 100)
-                        publishProgress(percent, force = percent == 100)
-                    },
-                    onSizeBytes = { bytes ->
-                        publishProgress(lastProgressPercent.coerceAtLeast(0), bytes)
-                    },
-                )
-            } ?: throw IllegalStateException("Cannot read $wavUri")
-            ensureActive()
-            require(tempVideo.length() > 0L) { "Generated MP4 is empty" }
-
-            val stagingName = buildStagingName(videoName, jobId)
-            partUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(context.contentResolver, parentUri, MIME_MP4, stagingName)
-            } ?: throw IllegalStateException("Cannot create MP4 staging document")
-
-            // Persist the staging URI before the potentially long SAF copy so a process death can
-            // deterministically recover or discard this exact document without touching old MP4s.
-            val durablePartUri = partUri!!.toString()
-            withContext(NonCancellable) {
-                TtsAudioQueue.updateState(prefs, jobId) {
-                    it?.copy(
-                        videoStagingUri = durablePartUri,
-                        videoStagingComplete = false,
-                        videoSizeBytes = 0L,
-                    )
-                }
-            }
-
-            copyFileToUri(tempVideo, partUri!!)
-            ensureActive()
-
-            // A complete staging file may safely survive worker cancellation until publication is
-            // retried. This checkpoint intentionally happens before rename.
-            withContext(NonCancellable) {
-                TtsAudioQueue.updateState(prefs, jobId) {
-                    it?.copy(
-                        videoStagingUri = durablePartUri,
-                        videoStagingComplete = true,
-                        videoSizeBytes = tempVideo.length(),
-                    )
-                }
-            }
-
-            // Only replace an old same-named MP4 after the new staging file is complete. If the
-            // process dies after deletion, the completed staging URI remains durable and recovery
-            // can still publish it without rerendering.
-            findChildDocument(parentUri, videoName)?.let { existing ->
-                if (existing.toString() != durablePartUri) {
-                    runCatching { DocumentsContract.deleteDocument(context.contentResolver, existing) }
-                }
-            }
-
-            publishedVideoUri = withContext(Dispatchers.IO) {
-                DocumentsContract.renameDocument(context.contentResolver, partUri!!, videoName)
-            } ?: throw IllegalStateException("Cannot publish MP4 document")
-            partUri = null
-
-            // Publication is durable before this point. Make the state checkpoint non-cancellable
-            // so Android/WorkManager interruption cannot strand a completed MP4 without metadata.
-            withContext(NonCancellable) {
-                checkpointVideoSuccess(prefs, jobId, publishedVideoUri.toString(), tempVideo.length())
-            }
-            TtsVideoExportQueue.kickNext(context, prefs)
-            return Result.success()
-        } catch (e: CancellationException) {
-            runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
-            // Never delete publishedVideoUri: once renameDocument() returned successfully the MP4
-            // is durable and must survive system/background interruption.
-            renderJson.delete(); tempVideo.delete()
-            throw e
-        } catch (e: Exception) {
-            Timber.e(e, "TtsVideo: video generation failed for $jobId attempt=${runAttemptCount + 1}")
-            runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
-            renderJson.delete(); tempVideo.delete()
-
-            publishedVideoUri?.let { published ->
-                val sizeBytes = queryDocumentSize(published).takeIf { it > 0L } ?: tempVideo.length()
-                runCatching {
-                    withContext(NonCancellable) {
-                        checkpointVideoSuccess(prefs, jobId, published.toString(), sizeBytes)
-                    }
-                    TtsVideoExportQueue.kickNext(context, prefs)
+            // Recover a final URI already stored in the durable job state. This avoids rerendering
+            // when the process died after publication but before the final preference checkpoint.
+            currentJob?.documentUri?.takeIf { it.isNotBlank() }?.let { documentUriString ->
+                val documentUri = Uri.parse(documentUriString)
+                val sizeBytes = queryDocumentSize(documentUri)
+                if (sizeBytes > 0L) {
+                    Timber.i("TtsVideo: recovered checkpointed MP4 for $jobId from $documentUri")
+                    checkpointVideoSuccess(prefs, jobId, documentUriString, sizeBytes)
                     return Result.success()
-                }.onFailure { checkpointError ->
-                    Timber.e(checkpointError, "TtsVideo: failed to checkpoint published MP4 for $jobId")
                 }
             }
 
-            if (runAttemptCount + 1 < MAX_RETRY_ATTEMPTS) {
+            // The staging URI is persisted before copying starts. Only a staging document explicitly
+            // marked complete is eligible for recovery; an incomplete one is safely discarded and the
+            // video is rendered again from the durable WAV+timeline.
+            currentJob?.videoStagingUri?.takeIf { it.isNotBlank() }?.let { stagingUriString ->
+                val stagingUri = Uri.parse(stagingUriString)
+                if (currentJob.videoStagingComplete && queryDocumentSize(stagingUri) > 0L) {
+                    val recovered = runCatching {
+                        withContext(Dispatchers.IO) {
+                            DocumentsContract.renameDocument(context.contentResolver, stagingUri, videoName)
+                        }
+                    }.getOrNull()
+                    if (recovered != null) {
+                        val sizeBytes = queryDocumentSize(recovered)
+                        if (sizeBytes > 0L) {
+                            Timber.i("TtsVideo: recovered published MP4 for $jobId from staging URI $recovered")
+                            checkpointVideoSuccess(prefs, jobId, recovered.toString(), sizeBytes)
+                            return Result.success()
+                        }
+                    }
+                }
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, stagingUri) }
+                TtsAudioQueue.updateState(prefs, jobId) {
+                    it?.copy(videoStagingUri = "", videoStagingComplete = false)
+                }
+            }
+
+            val wakeLock = acquireVideoWakeLock(jobId)
+            val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
+            val renderJson = File(tempDir, "$jobId-video.timeline.json")
+            val tempVideo = File(tempDir, "$jobId-video.mp4.tmp")
+            var partUri: Uri? = null
+            var publishedVideoUri: Uri? = null
+
+            var lastProgressPercent = -1
+            var lastProgressAtMs = 0L
+
+            fun publishProgress(percent: Int, videoSizeBytes: Long? = null, force: Boolean = false) {
+                val now = SystemClock.elapsedRealtime()
+                val shouldPublish = force ||
+                    percent == 100 ||
+                    lastProgressPercent < 0 ||
+                    percent != lastProgressPercent && now - lastProgressAtMs >= PROGRESS_UPDATE_INTERVAL_MS
+                if (!shouldPublish) return
+                lastProgressPercent = percent
+                lastProgressAtMs = now
                 TtsAudioQueue.updateState(prefs, jobId) {
                     it?.copy(
-                        status = TtsAudioJobStatus.QUEUED,
+                        status = TtsAudioJobStatus.RUNNING,
                         phase = "VIDEO",
-                        progress = 0,
+                        progress = percent,
                         documentUri = "",
-                        workRequestId = id.toString(),
-                        videoSizeBytes = 0L,
-                        message = "Retrying video generation…",
+                        videoSizeBytes = videoSizeBytes ?: it.videoSizeBytes,
+                        message = "",
                     )
                 }
-                return Result.retry()
             }
-            restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
-            TtsVideoExportQueue.kickNext(context, prefs)
-            return Result.failure()
+
+            try {
+                publishProgress(0, 0L, force = true)
+
+                copyUriToFile(Uri.parse(timelineUri), renderJson)
+                ensureActive()
+
+                val wavUri = Uri.parse(audioUri)
+                context.contentResolver.openInputStream(wavUri)?.use { wavInput ->
+                    CinematicVideoExporter(context).export(
+                        wavInput = wavInput,
+                        timelineFile = renderJson,
+                        outputFile = tempVideo,
+                        onProgress = { fraction ->
+                            val percent = (fraction * 100f).toInt().coerceIn(0, 100)
+                            publishProgress(percent, force = percent == 100)
+                        },
+                        onSizeBytes = { bytes ->
+                            publishProgress(lastProgressPercent.coerceAtLeast(0), bytes)
+                        },
+                    )
+                } ?: throw IllegalStateException("Cannot read $wavUri")
+                ensureActive()
+                require(tempVideo.length() > 0L) { "Generated MP4 is empty" }
+
+                val stagingName = buildStagingName(videoName, jobId)
+                partUri = withContext(Dispatchers.IO) {
+                    DocumentsContract.createDocument(context.contentResolver, parentUri, MIME_MP4, stagingName)
+                } ?: throw IllegalStateException("Cannot create MP4 staging document")
+
+                // Persist the staging URI before the potentially long SAF copy so process death can
+                // deterministically recover or discard this exact document without touching old MP4s.
+                val durablePartUri = partUri!!.toString()
+                withContext(NonCancellable) {
+                    TtsAudioQueue.updateState(prefs, jobId) {
+                        it?.copy(
+                            videoStagingUri = durablePartUri,
+                            videoStagingComplete = false,
+                            videoSizeBytes = 0L,
+                        )
+                    }
+                }
+
+                copyFileToUri(tempVideo, partUri!!)
+                ensureActive()
+
+                // A complete staging file may safely survive worker cancellation until publication is
+                // retried. This checkpoint intentionally happens before rename.
+                withContext(NonCancellable) {
+                    TtsAudioQueue.updateState(prefs, jobId) {
+                        it?.copy(
+                            videoStagingUri = durablePartUri,
+                            videoStagingComplete = true,
+                            videoSizeBytes = tempVideo.length(),
+                        )
+                    }
+                }
+
+                // Replace an older same-named MP4 only after the new staging file is complete. If the
+                // process dies after deletion, the completed staging URI remains durable and recovery
+                // can still publish it without rerendering.
+                findChildDocument(parentUri, videoName)?.let { existing ->
+                    if (existing.toString() != durablePartUri) {
+                        runCatching { DocumentsContract.deleteDocument(context.contentResolver, existing) }
+                    }
+                }
+
+                publishedVideoUri = withContext(Dispatchers.IO) {
+                    DocumentsContract.renameDocument(context.contentResolver, partUri!!, videoName)
+                } ?: throw IllegalStateException("Cannot publish MP4 document")
+                partUri = null
+
+                // Publication is durable before this point. Make the state checkpoint non-cancellable
+                // so Android/WorkManager interruption cannot strand a completed MP4 without metadata.
+                withContext(NonCancellable) {
+                    checkpointVideoSuccess(prefs, jobId, publishedVideoUri.toString(), tempVideo.length())
+                }
+                return Result.success()
+            } catch (e: CancellationException) {
+                runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
+                // Never delete publishedVideoUri: once renameDocument() returned successfully the MP4
+                // is durable and must survive system/background interruption.
+                renderJson.delete(); tempVideo.delete()
+                throw e
+            } catch (e: Exception) {
+                Timber.e(e, "TtsVideo: video generation failed for $jobId attempt=${runAttemptCount + 1}")
+                runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
+                renderJson.delete(); tempVideo.delete()
+
+                publishedVideoUri?.let { published ->
+                    val sizeBytes = queryDocumentSize(published).takeIf { it > 0L } ?: tempVideo.length()
+                    runCatching {
+                        withContext(NonCancellable) {
+                            checkpointVideoSuccess(prefs, jobId, published.toString(), sizeBytes)
+                        }
+                        return Result.success()
+                    }.onFailure { checkpointError ->
+                        Timber.e(checkpointError, "TtsVideo: failed to checkpoint published MP4 for $jobId")
+                    }
+                }
+
+                if (runAttemptCount + 1 < MAX_RETRY_ATTEMPTS) {
+                    TtsAudioQueue.updateState(prefs, jobId) {
+                        it?.copy(
+                            status = TtsAudioJobStatus.QUEUED,
+                            phase = "VIDEO",
+                            progress = 0,
+                            documentUri = "",
+                            workRequestId = id.toString(),
+                            videoSizeBytes = 0L,
+                            message = "Retrying video generation…",
+                        )
+                    }
+                    return Result.retry()
+                }
+                restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
+                return Result.failure()
+            } finally {
+                wakeLock?.let { runCatching { if (it.isHeld) it.release() } }
+                runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
+                renderJson.delete(); tempVideo.delete()
+            }
         } finally {
-            wakeLock?.let { runCatching { if (it.isHeld) it.release() } }
-            runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
-            renderJson.delete(); tempVideo.delete()
+            VIDEO_RENDER_MUTEX.unlock()
         }
     }
 
@@ -428,5 +449,6 @@ class TtsVideoExportWorker(
         private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
         private const val VIDEO_NOTIFICATION_ID = 0x4E56
         private const val VIDEO_CHANNEL_ID = "tts_video_generation"
+        private val VIDEO_RENDER_MUTEX = Mutex()
     }
 }
