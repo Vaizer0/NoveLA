@@ -34,6 +34,8 @@ data class TtsAudioJobState(
     val workRequestId: String = "",
     /** Durable SAF URI for the current MP4 staging document, before final publication. */
     val videoStagingUri: String = "",
+    /** True only after the staged MP4 copy completed successfully. */
+    val videoStagingComplete: Boolean = false,
     /** Last WorkManager stop reason observed during VIDEO reconciliation. */
     val videoStopReason: String = "",
     /** Number of app-start/reconciliation VIDEO recoveries attempted for this generation. */
