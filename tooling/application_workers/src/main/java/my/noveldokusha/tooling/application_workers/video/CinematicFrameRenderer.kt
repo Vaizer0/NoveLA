@@ -48,6 +48,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
 
     private data class Paragraph(
         val index: Int,
+        val label: String,
         val text: String,
         val startChar: Int,
         val endChar: Int,
@@ -116,9 +117,42 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
     private val selectionPath = Path()
     private val selectionBounds = RectF()
+    private val cardRect = RectF()
+    private val innerCardRect = RectF()
+    private val highlightRect = RectF()
+    private val footerTrackRect = RectF()
     private val slowStars: List<Star>
     private val mediumStars: List<Star>
     private val fastStars: List<Star>
+    private val rockPaths: List<Path>
+    private val rockSpeeds: FloatArray
+    private val backgroundGradient = LinearGradient(
+        0f,
+        0f,
+        WIDTH.toFloat(),
+        HEIGHT.toFloat(),
+        intArrayOf(Color.rgb(4, 5, 14), Color.rgb(14, 17, 39), Color.rgb(5, 8, 20)),
+        floatArrayOf(0f, 0.56f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private val vignetteGradient = RadialGradient(
+        WIDTH / 2f,
+        HEIGHT / 2f,
+        930f,
+        intArrayOf(Color.TRANSPARENT, Color.argb(110, 0, 0, 0)),
+        floatArrayOf(0.63f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private val nebulaShaders = listOf(
+        RadialGradient(430f, 370f, 520f, intArrayOf(Color.argb(92, 42, 33, 90), Color.TRANSPARENT), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP),
+        RadialGradient(1190f, 260f, 630f, intArrayOf(Color.argb(92, 24, 51, 106), Color.TRANSPARENT), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP),
+        RadialGradient(980f, 820f, 720f, intArrayOf(Color.argb(92, 37, 31, 90), Color.TRANSPARENT), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP),
+    )
+    private val nebulaRects = arrayOf(
+        RectF(430f - 520f, 370f - 370f, 430f + 520f, 370f + 370f),
+        RectF(1190f - 630f, 260f - 300f, 1190f + 630f, 260f + 300f),
+        RectF(980f - 720f, 820f - 250f, 980f + 720f, 820f + 250f),
+    )
 
     private val rocks = listOf(
         floatArrayOf(1060f, 90f, -7.5f, 1.1f, 11f, 18f),
@@ -164,11 +198,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
                         val start = raw.optInt("startChar", 0)
                         val end = raw.optInt("endChar", start)
                         val startMs = raw.optInt("startMs", 0)
-                        val endMs = if (raw.has("endMs") && !raw.isNull("endMs")) {
-                            raw.optInt("endMs")
-                        } else {
-                            null
-                        }
+                        val endMs = if (raw.has("endMs") && !raw.isNull("endMs")) raw.optInt("endMs") else null
                         if (end > start) add(Range(start, end, startMs, endMs))
                     }
                 }
@@ -176,6 +206,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
 
             prepared += Paragraph(
                 index = p.optInt("index", i),
+                label = "PARAGRAPH ${String.format("%02d", p.optInt("index", i) + 1)} / ${String.format("%02d", rawParagraphs.length())}",
                 text = text,
                 startChar = p.optInt("startChar", 0),
                 endChar = p.optInt("endChar", text.length),
@@ -192,6 +223,20 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         slowStars = makeStars(230, 0.2f, 0.6f, 1.4f, 0.8f, 0.55f, 1.35f, 35f, 110f)
         mediumStars = makeStars(115, 0.6f, 1f, 5.5f, 2.3f, 0.8f, 1.9f, 75f, 180f)
         fastStars = makeFastStars()
+        rockPaths = rocks.map { rock ->
+            val radius = rock[5]
+            Path().apply {
+                for (i in 0 until 10) {
+                    val angle = i * Math.PI * 2.0 / 10.0
+                    val rr = radius * (0.74f + ((i * 37) % 31) / 100f)
+                    val px = cos(angle).toFloat() * rr
+                    val py = sin(angle).toFloat() * rr
+                    if (i == 0) moveTo(px, py) else lineTo(px, py)
+                }
+                close()
+            }
+        }
+        rockSpeeds = rocks.map { it[4] }.toFloatArray()
     }
 
     fun durationSeconds(): Double = durationMs.coerceAtLeast(0L) / 1000.0
@@ -223,9 +268,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
                 .setIncludePad(false)
                 .setLineSpacing(0f, BODY_LINE_SPACING)
                 .build()
-            if (layout.height <= (CARD_MAX_H - 2f * PAD_Y).toInt()) {
-                return size.toFloat()
-            }
+            if (layout.height <= (CARD_MAX_H - 2f * PAD_Y).toInt()) return size.toFloat()
         }
         return 32f
     }
@@ -275,20 +318,15 @@ internal class CinematicFrameRenderer(timelineFile: File) {
 
     private fun drawBackground(t: Double) {
         canvas.drawColor(Color.rgb(3, 4, 11))
-        shapePaint.shader = LinearGradient(
-            0f,
-            0f,
-            WIDTH.toFloat(),
-            HEIGHT.toFloat(),
-            intArrayOf(Color.rgb(4, 5, 14), Color.rgb(14, 17, 39), Color.rgb(5, 8, 20)),
-            floatArrayOf(0f, 0.56f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+        shapePaint.shader = backgroundGradient
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), shapePaint)
         shapePaint.shader = null
-        drawNebula(430f, 370f, 520f, 370f, Color.rgb(42, 33, 90))
-        drawNebula(1190f, 260f, 630f, 300f, Color.rgb(24, 51, 106))
-        drawNebula(980f, 820f, 720f, 250f, Color.rgb(37, 31, 90))
+
+        for (i in nebulaShaders.indices) {
+            shapePaint.shader = nebulaShaders[i]
+            canvas.drawRect(nebulaRects[i], shapePaint)
+        }
+        shapePaint.shader = null
 
         for (star in slowStars) {
             val x = mod(star.x + star.vx * t.toFloat(), WIDTH.toFloat())
@@ -333,26 +371,17 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             canvas.drawCircle(x, y, 1.5f, starPaint)
         }
 
-        for (r in rocks) {
+        for (i in rocks.indices) {
+            val r = rocks[i]
             val sx = mod(r[0] + r[2] * t.toFloat(), WIDTH.toFloat() + 100f) - 50f
             val sy = r[1] + r[3] * t.toFloat()
-            val radius = r[5]
-            val path = Path()
-            for (i in 0 until 10) {
-                val angle = i * Math.PI * 2.0 / 10.0
-                val rr = radius * (0.74f + ((i * 37) % 31) / 100f)
-                val px = cos(angle).toFloat() * rr
-                val py = sin(angle).toFloat() * rr
-                if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-            }
-            path.close()
             canvas.save()
             canvas.translate(sx, sy)
-            canvas.rotate(r[4] * t.toFloat())
+            canvas.rotate(rockSpeeds[i] * t.toFloat())
             shapePaint.color = Color.argb(232, 62, 65, 77)
             shapePaint.style = Paint.Style.FILL
-            canvas.drawPath(path, shapePaint)
-            canvas.drawPath(path, highlightStrokePaint)
+            canvas.drawPath(rockPaths[i], shapePaint)
+            canvas.drawPath(rockPaths[i], highlightStrokePaint)
             canvas.restore()
         }
 
@@ -365,31 +394,8 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             canvas.drawLine(sx, sy, sx + 52f, sy - 25f, shapePaint)
         }
 
-        shapePaint.shader = RadialGradient(
-            WIDTH / 2f,
-            HEIGHT / 2f,
-            930f,
-            intArrayOf(Color.TRANSPARENT, Color.argb(110, 0, 0, 0)),
-            floatArrayOf(0.63f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+        shapePaint.shader = vignetteGradient
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), shapePaint)
-        shapePaint.shader = null
-    }
-
-    private fun drawNebula(cx: Float, cy: Float, rx: Float, ry: Float, color: Int) {
-        shapePaint.shader = RadialGradient(
-            cx,
-            cy,
-            max(rx, ry),
-            intArrayOf(
-                Color.argb(92, Color.red(color), Color.green(color), Color.blue(color)),
-                Color.TRANSPARENT,
-            ),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawOval(RectF(cx - rx, cy - ry, cx + rx, cy + ry), shapePaint)
         shapePaint.shader = null
     }
 
@@ -404,25 +410,21 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
 
     private fun drawCard(p: Paragraph, tMs: Int) {
-        val rect = RectF(CARD_X, p.cardY, CARD_X + CARD_W, p.cardY + p.cardH)
+        cardRect.set(CARD_X, p.cardY, CARD_X + CARD_W, p.cardY + p.cardH)
         shapePaint.style = Paint.Style.FILL
         shapePaint.color = Color.argb(230, 7, 10, 21)
-        canvas.drawRoundRect(rect, 29f, 29f, shapePaint)
+        canvas.drawRoundRect(cardRect, 29f, 29f, shapePaint)
         shapePaint.style = Paint.Style.STROKE
         shapePaint.strokeWidth = 2f
         shapePaint.color = Color.argb(205, 134, 147, 226)
-        canvas.drawRoundRect(rect, 29f, 29f, shapePaint)
+        canvas.drawRoundRect(cardRect, 29f, 29f, shapePaint)
         shapePaint.strokeWidth = 1f
         shapePaint.color = Color.argb(22, 255, 255, 255)
-        canvas.drawRoundRect(
-            RectF(rect.left + 10f, rect.top + 10f, rect.right - 10f, rect.bottom - 10f),
-            22f,
-            22f,
-            shapePaint,
-        )
+        innerCardRect.set(cardRect.left + 10f, cardRect.top + 10f, cardRect.right - 10f, cardRect.bottom - 10f)
+        canvas.drawRoundRect(innerCardRect, 22f, 22f, shapePaint)
         shapePaint.style = Paint.Style.FILL
 
-        val textTop = rect.top + (p.cardH - p.layout.height) / 2f
+        val textTop = cardRect.top + (p.cardH - p.layout.height) / 2f
         val contentLeft = CARD_X + PAD_X
         canvas.save()
         canvas.translate(contentLeft, textTop)
@@ -432,17 +434,16 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             val start = (active.startChar - p.startChar).coerceIn(0, p.text.length)
             val end = (active.endChar - p.startChar).coerceIn(start, p.text.length)
             if (end > start) {
-                // Draw the highlight in the exact same coordinate system as StaticLayout.
-                // This prevents alignment drift and keeps the box on the currently spoken word.
                 selectionPath.reset()
                 p.layout.getSelectionPath(start, end, selectionPath)
                 selectionPath.computeBounds(selectionBounds, true)
                 if (!selectionBounds.isEmpty) {
-                    val left = selectionBounds.left - 5f
-                    val top = selectionBounds.top - 3f
-                    val right = selectionBounds.right + 5f
-                    val bottom = selectionBounds.bottom + 3f
-                    val highlightRect = RectF(left, top, right, bottom)
+                    highlightRect.set(
+                        selectionBounds.left - 5f,
+                        selectionBounds.top - 3f,
+                        selectionBounds.right + 5f,
+                        selectionBounds.bottom + 3f,
+                    )
                     canvas.drawRoundRect(highlightRect, 9f, 9f, highlightPaint)
                     canvas.drawRoundRect(highlightRect, 9f, 9f, highlightStrokePaint)
                 }
@@ -465,26 +466,18 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         if (index < 0) return null
         val range = p.ranges[index]
         val end = range.endMs ?: p.ranges.getOrNull(index + 1)?.startMs ?: p.endMs
-        return if (tMs >= range.startMs && tMs < max(end, range.startMs + 1)) {
-            range
-        } else {
-            null
-        }
+        return if (tMs >= range.startMs && tMs < max(end, range.startMs + 1)) range else null
     }
 
     private fun drawFooter(p: Paragraph, tMs: Int) {
-        val label = "PARAGRAPH ${String.format("%02d", p.index + 1)} / ${String.format("%02d", paragraphs.size)}"
-        canvas.drawText(label, 90f, 1009f, footerPaint)
+        canvas.drawText(p.label, 90f, 1009f, footerPaint)
         val bx = WIDTH - 477f
         val by = 996f
         val bw = 383f
+        footerTrackRect.set(bx, by, bx + bw, by + 4f)
         shapePaint.color = Color.argb(155, 55, 61, 88)
-        canvas.drawRect(bx, by, bx + bw, by + 4f, shapePaint)
-        val progress = if (durationMs > 0) {
-            (tMs.toDouble() / durationMs).coerceIn(0.0, 1.0)
-        } else {
-            0.0
-        }
+        canvas.drawRect(footerTrackRect, shapePaint)
+        val progress = if (durationMs > 0) (tMs.toDouble() / durationMs).coerceIn(0.0, 1.0) else 0.0
         shapePaint.color = Color.argb(220, 142, 125, 238)
         canvas.drawRect(bx, by, bx + bw * progress.toFloat(), by + 4f, shapePaint)
     }
