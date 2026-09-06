@@ -142,13 +142,15 @@ class TtsAudioExportWorker(
                 TtsAudioQueue.updateState(appPreferences, jobId) {
                     it?.copy(phase = "VIDEO", progress = 82, videoSizeBytes = 0L)
                 }
+                notification.updateProgress(82, "VIDEO")
                 CinematicVideoExporter(context).export(
                     wavFile = renderWav,
                     timelineFile = renderJson,
                     outputFile = tempVideo,
                     onProgress = { fraction ->
-                        val percent = (82f + fraction * 17f).toInt().coerceIn(82, 99)
+                        val percent = (82f + fraction * 18f).toInt().coerceIn(82, 100)
                         TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "VIDEO") }
+                        notification.updateProgress(percent, "VIDEO")
                     },
                     onSizeBytes = { bytes ->
                         TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
@@ -170,7 +172,7 @@ class TtsAudioExportWorker(
                         videoSizeBytes = tempVideo.length(),
                     )
                 }
-                notification.updateProgress(100)
+                notification.updateProgress(100, "VIDEO")
                 notification.showComplete(videoFileName, videoUri)
             } finally {
                 renderWav.delete()
@@ -219,7 +221,7 @@ class TtsAudioExportWorker(
                 TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastNotifyMs >= 1000L || percent == 100) {
-                    notification.updateProgress(percent)
+                    notification.updateProgress(percent, "AUDIO")
                     lastNotifyMs = now
                 }
             }
@@ -326,45 +328,45 @@ class TtsAudioExportWorker(
         target.parentFile?.mkdirs()
         context.contentResolver.openInputStream(uri)?.use { input ->
             target.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
-        } ?: throw TtsExportException("Unable to read exported document")
+        } ?: throw TtsExportException("Cannot read persisted document: $uri")
     }
 
     private suspend fun copyFileToUri(file: File, uri: Uri) = withContext(Dispatchers.IO) {
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            file.inputStream().use { it.copyTo(output, 64 * 1024) }
-        } ?: throw TtsExportException("Unable to write exported document")
+        context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+            file.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
+        } ?: throw TtsExportException("Cannot write document: $uri")
     }
 
     private suspend fun writeTextToUri(text: String, uri: Uri) = withContext(Dispatchers.IO) {
-        context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-            ?: throw TtsExportException("Unable to write timeline document")
+        context.contentResolver.openOutputStream(uri, "wt")?.use { output -> output.writer(Charsets.UTF_8).use { it.write(text) } }
+            ?: throw TtsExportException("Cannot write document: $uri")
     }
 
     private fun cleanupUri(context: Context, uri: Uri?) {
-        if (uri != null) runCatching { context.contentResolver.delete(uri, null, null) }
+        if (uri == null) return
+        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            .onFailure { Timber.w(it, "TtsAudio: failed to delete generated document $uri") }
     }
 
     companion object {
-        const val TAG = "TtsAudioExport"
-        const val MIME_WAV = "audio/wav"
-        const val MIME_JSON = "application/json"
-        const val MIME_MP4 = "video/mp4"
-        const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
-        const val KEY_PROGRESS = "progress"
-        const val KEY_JOB_ID = "job_id"
-        const val KEY_NOVEL_TITLE = "novel_title"
-        const val KEY_NOVEL_URL = "novel_url"
-        const val KEY_CHAPTER_URL = "chapter_url"
-        const val KEY_CHAPTER_TITLE = "chapter_title"
-        const val KEY_CHAPTER_INDEX = "chapter_index"
+        const val KEY_JOB_ID = "jobId"
+        const val KEY_NOVEL_TITLE = "novelTitle"
+        const val KEY_NOVEL_URL = "novelUrl"
+        const val KEY_CHAPTER_URL = "chapterUrl"
+        const val KEY_CHAPTER_TITLE = "chapterTitle"
+        const val KEY_CHAPTER_INDEX = "chapterIndex"
         const val KEY_SOURCE = "source"
-        const val KEY_ENGINE_PACKAGE = "engine_package"
-        const val KEY_VOICE_ID = "voice_id"
+        const val KEY_ENGINE_PACKAGE = "enginePackage"
+        const val KEY_VOICE_ID = "voiceId"
         const val KEY_SPEED = "speed"
         const val KEY_PITCH = "pitch"
-        const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
+        const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"
         const val KEY_FORMAT = "format"
-        const val KEY_TRANSLATION_SOURCE_LANG = "translation_source_lang"
-        const val KEY_TRANSLATION_TARGET_LANG = "translation_target_lang"
+        const val KEY_TRANSLATION_SOURCE_LANG = "translationSourceLang"
+        const val KEY_TRANSLATION_TARGET_LANG = "translationTargetLang"
+        private const val MIME_WAV = "audio/wav"
+        private const val MIME_JSON = "application/json"
+        private const val MIME_MP4 = "video/mp4"
+        private const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
     }
 }
