@@ -67,12 +67,30 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         val radius: Float,
         val alpha: Float,
         val phase: Float,
+        val unitX: Float = 0f,
+        val unitY: Float = 0f,
+    )
+
+    private data class Rock(
+        val x: Float,
+        val y: Float,
+        val vx: Float,
+        val vy: Float,
+        val rotation: Float,
+        val radius: Float,
+        val path: Path,
+    )
+
+    private data class Nebula(
+        val oval: RectF,
+        val shader: RadialGradient,
     )
 
     private val title: String
     private val chapter: String
     private val durationMs: Long
     private val paragraphs: List<Paragraph>
+    private val paragraphLabels: List<String>
     private val frameBitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
     private val canvas = Canvas(frameBitmap)
 
@@ -116,14 +134,31 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
     private val selectionPath = Path()
     private val selectionBounds = RectF()
+    private val cardRect = RectF()
+    private val cardInnerRect = RectF()
+    private val highlightRect = RectF()
+    private val fullFrameRect = RectF(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat())
     private val slowStars: List<Star>
     private val mediumStars: List<Star>
     private val fastStars: List<Star>
-
-    private val rocks = listOf(
-        floatArrayOf(1060f, 90f, -7.5f, 1.1f, 11f, 18f),
-        floatArrayOf(180f, 580f, 6f, -0.7f, -9f, 12f),
-        floatArrayOf(1160f, 505f, -4f, 0.5f, 7f, 9f),
+    private val rocks: List<Rock>
+    private val nebulae: List<Nebula>
+    private val backgroundGradient = LinearGradient(
+        0f,
+        0f,
+        WIDTH.toFloat(),
+        HEIGHT.toFloat(),
+        intArrayOf(Color.rgb(4, 5, 14), Color.rgb(14, 17, 39), Color.rgb(5, 8, 20)),
+        floatArrayOf(0f, 0.56f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private val vignetteGradient = RadialGradient(
+        WIDTH / 2f,
+        HEIGHT / 2f,
+        930f,
+        intArrayOf(Color.TRANSPARENT, Color.argb(110, 0, 0, 0)),
+        floatArrayOf(0.63f, 1f),
+        Shader.TileMode.CLAMP,
     )
 
     init {
@@ -189,9 +224,18 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         }
 
         paragraphs = prepared.sortedBy { it.startMs }
+        paragraphLabels = paragraphs.map {
+            "PARAGRAPH ${String.format("%02d", it.index + 1)} / ${String.format("%02d", paragraphs.size)}"
+        }
         slowStars = makeStars(230, 0.2f, 0.6f, 1.4f, 0.8f, 0.55f, 1.35f, 35f, 110f)
         mediumStars = makeStars(115, 0.6f, 1f, 5.5f, 2.3f, 0.8f, 1.9f, 75f, 180f)
         fastStars = makeFastStars()
+        rocks = makeRocks()
+        nebulae = listOf(
+            makeNebula(430f, 370f, 520f, 370f, Color.rgb(42, 33, 90)),
+            makeNebula(1190f, 260f, 630f, 300f, Color.rgb(24, 51, 106)),
+            makeNebula(980f, 820f, 720f, 250f, Color.rgb(37, 31, 90)),
+        )
     }
 
     fun durationSeconds(): Double = durationMs.coerceAtLeast(0L) / 1000.0
@@ -261,38 +305,79 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         return List(7) {
             val a = random.nextFloat() * Math.PI.toFloat() * 2f
             val speed = 150f + random.nextFloat() * 170f
+            val vx = cos(a) * speed
+            val vy = sin(a) * speed
+            val mag = sqrt(vx * vx + vy * vy)
             Star(
                 random.nextFloat() * WIDTH,
                 random.nextFloat() * HEIGHT,
-                cos(a) * speed,
-                sin(a) * speed,
+                vx,
+                vy,
                 12f + random.nextFloat() * 26f,
                 65f + random.nextFloat() * 60f,
                 random.nextFloat() * 25f,
+                vx / mag,
+                vy / mag,
             )
         }
     }
 
-    private fun drawBackground(t: Double) {
-        canvas.drawColor(Color.rgb(3, 4, 11))
-        shapePaint.shader = LinearGradient(
-            0f,
-            0f,
-            WIDTH.toFloat(),
-            HEIGHT.toFloat(),
-            intArrayOf(Color.rgb(4, 5, 14), Color.rgb(14, 17, 39), Color.rgb(5, 8, 20)),
-            floatArrayOf(0f, 0.56f, 1f),
+    private fun makeRocks(): List<Rock> = listOf(
+        makeRock(1060f, 90f, -7.5f, 1.1f, 11f, 18f),
+        makeRock(180f, 580f, 6f, -0.7f, -9f, 12f),
+        makeRock(1160f, 505f, -4f, 0.5f, 7f, 9f),
+    )
+
+    private fun makeRock(
+        x: Float,
+        y: Float,
+        vx: Float,
+        vy: Float,
+        rotation: Float,
+        radius: Float,
+    ): Rock {
+        val path = Path()
+        for (i in 0 until 10) {
+            val angle = i * Math.PI * 2.0 / 10.0
+            val rr = radius * (0.74f + ((i * 37) % 31) / 100f)
+            val px = cos(angle).toFloat() * rr
+            val py = sin(angle).toFloat() * rr
+            if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+        }
+        path.close()
+        return Rock(x, y, vx, vy, rotation, radius, path)
+    }
+
+    private fun makeNebula(cx: Float, cy: Float, rx: Float, ry: Float, color: Int): Nebula {
+        val shader = RadialGradient(
+            cx,
+            cy,
+            max(rx, ry),
+            intArrayOf(
+                Color.argb(92, Color.red(color), Color.green(color), Color.blue(color)),
+                Color.TRANSPARENT,
+            ),
+            floatArrayOf(0f, 1f),
             Shader.TileMode.CLAMP,
         )
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), shapePaint)
-        shapePaint.shader = null
-        drawNebula(430f, 370f, 520f, 370f, Color.rgb(42, 33, 90))
-        drawNebula(1190f, 260f, 630f, 300f, Color.rgb(24, 51, 106))
-        drawNebula(980f, 820f, 720f, 250f, Color.rgb(37, 31, 90))
+        return Nebula(RectF(cx - rx, cy - ry, cx + rx, cy + ry), shader)
+    }
 
+    private fun drawBackground(t: Double) {
+        canvas.drawColor(Color.rgb(3, 4, 11))
+        shapePaint.shader = backgroundGradient
+        canvas.drawRect(fullFrameRect, shapePaint)
+        shapePaint.shader = null
+        for (nebula in nebulae) {
+            shapePaint.shader = nebula.shader
+            canvas.drawOval(nebula.oval, shapePaint)
+            shapePaint.shader = null
+        }
+
+        val timeFloat = t.toFloat()
         for (star in slowStars) {
-            val x = mod(star.x + star.vx * t.toFloat(), WIDTH.toFloat())
-            val y = mod(star.y + star.vy * t.toFloat(), HEIGHT.toFloat())
+            val x = mod(star.x + star.vx * timeFloat, WIDTH.toFloat())
+            val y = mod(star.y + star.vy * timeFloat, HEIGHT.toFloat())
             starPaint.color = Color.argb(
                 (star.alpha * (0.82 + 0.18 * sin(t * 0.45 + star.phase))).toInt().coerceIn(0, 255),
                 205,
@@ -303,8 +388,8 @@ internal class CinematicFrameRenderer(timelineFile: File) {
         }
 
         for (star in mediumStars) {
-            val x = mod(star.x + star.vx * t.toFloat(), WIDTH.toFloat())
-            val y = mod(star.y + star.vy * t.toFloat(), HEIGHT.toFloat())
+            val x = mod(star.x + star.vx * timeFloat, WIDTH.toFloat())
+            val y = mod(star.y + star.vy * timeFloat, HEIGHT.toFloat())
             starPaint.color = Color.argb(
                 (star.alpha * (0.76 + 0.24 * sin(t * 0.8 + star.phase))).toInt().coerceIn(0, 255),
                 222,
@@ -318,9 +403,6 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             val cyc = mod(t + star.phase.toDouble(), 11.0)
             val x = mod(star.x + star.vx * cyc, WIDTH.toDouble() + 140.0).toFloat() - 70f
             val y = mod(star.y + star.vy * cyc, HEIGHT.toDouble() + 140.0).toFloat() - 70f
-            val mag = sqrt(star.vx * star.vx + star.vy * star.vy)
-            val ux = star.vx / mag
-            val uy = star.vy / mag
             starPaint.color = Color.argb(
                 (star.alpha * (0.65 + 0.35 * sin(t * 0.6 + star.phase))).toInt().coerceIn(0, 255),
                 225,
@@ -328,31 +410,27 @@ internal class CinematicFrameRenderer(timelineFile: File) {
                 255,
             )
             starPaint.strokeWidth = 1f
-            canvas.drawLine(x - ux * star.radius, y - uy * star.radius, x, y, starPaint)
+            canvas.drawLine(
+                x - star.unitX * star.radius,
+                y - star.unitY * star.radius,
+                x,
+                y,
+                starPaint,
+            )
             starPaint.color = Color.argb(220, 242, 246, 255)
             canvas.drawCircle(x, y, 1.5f, starPaint)
         }
 
-        for (r in rocks) {
-            val sx = mod(r[0] + r[2] * t.toFloat(), WIDTH.toFloat() + 100f) - 50f
-            val sy = r[1] + r[3] * t.toFloat()
-            val radius = r[5]
-            val path = Path()
-            for (i in 0 until 10) {
-                val angle = i * Math.PI * 2.0 / 10.0
-                val rr = radius * (0.74f + ((i * 37) % 31) / 100f)
-                val px = cos(angle).toFloat() * rr
-                val py = sin(angle).toFloat() * rr
-                if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-            }
-            path.close()
+        for (rock in rocks) {
+            val sx = mod(rock.x + rock.vx * timeFloat, WIDTH.toFloat() + 100f) - 50f
+            val sy = rock.y + rock.vy * timeFloat
             canvas.save()
             canvas.translate(sx, sy)
-            canvas.rotate(r[4] * t.toFloat())
+            canvas.rotate(rock.rotation * timeFloat)
             shapePaint.color = Color.argb(232, 62, 65, 77)
             shapePaint.style = Paint.Style.FILL
-            canvas.drawPath(path, shapePaint)
-            canvas.drawPath(path, highlightStrokePaint)
+            canvas.drawPath(rock.path, shapePaint)
+            canvas.drawPath(rock.path, highlightStrokePaint)
             canvas.restore()
         }
 
@@ -365,31 +443,8 @@ internal class CinematicFrameRenderer(timelineFile: File) {
             canvas.drawLine(sx, sy, sx + 52f, sy - 25f, shapePaint)
         }
 
-        shapePaint.shader = RadialGradient(
-            WIDTH / 2f,
-            HEIGHT / 2f,
-            930f,
-            intArrayOf(Color.TRANSPARENT, Color.argb(110, 0, 0, 0)),
-            floatArrayOf(0.63f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), shapePaint)
-        shapePaint.shader = null
-    }
-
-    private fun drawNebula(cx: Float, cy: Float, rx: Float, ry: Float, color: Int) {
-        shapePaint.shader = RadialGradient(
-            cx,
-            cy,
-            max(rx, ry),
-            intArrayOf(
-                Color.argb(92, Color.red(color), Color.green(color), Color.blue(color)),
-                Color.TRANSPARENT,
-            ),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawOval(RectF(cx - rx, cy - ry, cx + rx, cy + ry), shapePaint)
+        shapePaint.shader = vignetteGradient
+        canvas.drawRect(fullFrameRect, shapePaint)
         shapePaint.shader = null
     }
 
@@ -404,25 +459,26 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
 
     private fun drawCard(p: Paragraph, tMs: Int) {
-        val rect = RectF(CARD_X, p.cardY, CARD_X + CARD_W, p.cardY + p.cardH)
+        cardRect.set(CARD_X, p.cardY, CARD_X + CARD_W, p.cardY + p.cardH)
         shapePaint.style = Paint.Style.FILL
         shapePaint.color = Color.argb(230, 7, 10, 21)
-        canvas.drawRoundRect(rect, 29f, 29f, shapePaint)
+        canvas.drawRoundRect(cardRect, 29f, 29f, shapePaint)
         shapePaint.style = Paint.Style.STROKE
         shapePaint.strokeWidth = 2f
         shapePaint.color = Color.argb(205, 134, 147, 226)
-        canvas.drawRoundRect(rect, 29f, 29f, shapePaint)
+        canvas.drawRoundRect(cardRect, 29f, 29f, shapePaint)
         shapePaint.strokeWidth = 1f
         shapePaint.color = Color.argb(22, 255, 255, 255)
-        canvas.drawRoundRect(
-            RectF(rect.left + 10f, rect.top + 10f, rect.right - 10f, rect.bottom - 10f),
-            22f,
-            22f,
-            shapePaint,
+        cardInnerRect.set(
+            cardRect.left + 10f,
+            cardRect.top + 10f,
+            cardRect.right - 10f,
+            cardRect.bottom - 10f,
         )
+        canvas.drawRoundRect(cardInnerRect, 22f, 22f, shapePaint)
         shapePaint.style = Paint.Style.FILL
 
-        val textTop = rect.top + (p.cardH - p.layout.height) / 2f
+        val textTop = cardRect.top + (p.cardH - p.layout.height) / 2f
         val contentLeft = CARD_X + PAD_X
         canvas.save()
         canvas.translate(contentLeft, textTop)
@@ -438,11 +494,12 @@ internal class CinematicFrameRenderer(timelineFile: File) {
                 p.layout.getSelectionPath(start, end, selectionPath)
                 selectionPath.computeBounds(selectionBounds, true)
                 if (!selectionBounds.isEmpty) {
-                    val left = selectionBounds.left - 5f
-                    val top = selectionBounds.top - 3f
-                    val right = selectionBounds.right + 5f
-                    val bottom = selectionBounds.bottom + 3f
-                    val highlightRect = RectF(left, top, right, bottom)
+                    highlightRect.set(
+                        selectionBounds.left - 5f,
+                        selectionBounds.top - 3f,
+                        selectionBounds.right + 5f,
+                        selectionBounds.bottom + 3f,
+                    )
                     canvas.drawRoundRect(highlightRect, 9f, 9f, highlightPaint)
                     canvas.drawRoundRect(highlightRect, 9f, 9f, highlightStrokePaint)
                 }
@@ -473,8 +530,7 @@ internal class CinematicFrameRenderer(timelineFile: File) {
     }
 
     private fun drawFooter(p: Paragraph, tMs: Int) {
-        val label = "PARAGRAPH ${String.format("%02d", p.index + 1)} / ${String.format("%02d", paragraphs.size)}"
-        canvas.drawText(label, 90f, 1009f, footerPaint)
+        canvas.drawText(paragraphLabels[p.index.coerceIn(0, paragraphLabels.lastIndex)], 90f, 1009f, footerPaint)
         val bx = WIDTH - 477f
         val by = 996f
         val bw = 383f
