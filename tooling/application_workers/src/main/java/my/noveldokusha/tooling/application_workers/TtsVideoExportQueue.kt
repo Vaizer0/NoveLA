@@ -20,6 +20,7 @@ import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.tooling.application_workers.video.SafMp4Stager
+import my.noveldokusha.tooling.application_workers.video.TtsVideoArtifactManifest
 import java.util.concurrent.TimeUnit
 
 object TtsVideoExportQueue {
@@ -41,17 +42,20 @@ object TtsVideoExportQueue {
     suspend fun enqueueFromJob(context: Context, job: TtsAudioJobState, initialDelayMs: Long = 0L) {
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
         val entry = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.entries.firstOrNull { (_, value) ->
-            value.chapterUrl == job.chapterUrl && value.novelUrl == job.novelUrl && value.source == job.source &&
-                value.audioUri == job.audioUri && value.timelineUri == job.timelineUri
+            value.chapterUrl == job.chapterUrl &&
+                value.novelUrl == job.novelUrl &&
+                value.source == job.source &&
+                value.audioUri == job.audioUri &&
+                value.timelineUri == job.timelineUri
         } ?: return
-        val parentDirectoryUri = findParentDirectoryUri(context, Uri.parse(entry.value.outputDirectoryUri), Uri.parse(entry.value.audioUri)) ?: return
+        val parentDirectoryUri = findParentDirectoryUri(
+            context,
+            Uri.parse(entry.value.outputDirectoryUri),
+            Uri.parse(entry.value.audioUri),
+        ) ?: return
         enqueue(context, prefs, entry.key, entry.value, parentDirectoryUri.toString(), initialDelayMs)
     }
 
-    /**
-     * Enqueue only when there is no live unique work for this chapter. A live request is never
-     * replaced and its persisted progress is never reset to zero.
-     */
     suspend fun enqueue(
         context: Context,
         prefs: AppPreferences,
@@ -71,8 +75,14 @@ object TtsVideoExportQueue {
             it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
         }
         if (active != null) {
-            if (job.workRequestId != active.id.toString()) {
-                TtsAudioQueue.updateState(prefs, jobId) { current -> current?.copy(workRequestId = active.id.toString(), phase = "VIDEO") }
+            if (job.workRequestId != active.id.toString() || job.status != TtsAudioJobStatus.RUNNING || !job.phase.equals("VIDEO", true)) {
+                TtsAudioQueue.updateState(prefs, jobId) { current ->
+                    current?.copy(
+                        workRequestId = active.id.toString(),
+                        status = TtsAudioJobStatus.RUNNING,
+                        phase = "VIDEO",
+                    )
+                }
             }
             return@withContext
         }
@@ -86,6 +96,9 @@ object TtsVideoExportQueue {
                     TtsVideoExportWorkerV2.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
                     TtsVideoExportWorkerV2.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
                     TtsVideoExportWorkerV2.KEY_CHAPTER_TITLE to job.chapterTitle,
+                    TtsVideoExportWorkerV2.KEY_NOVEL_URL to job.novelUrl,
+                    TtsVideoExportWorkerV2.KEY_CHAPTER_URL to job.chapterUrl,
+                    TtsVideoExportWorkerV2.KEY_SOURCE to job.source.name,
                     TtsVideoExportWorkerV2.KEY_DISPLAY_NAME to job.displayName,
                 ),
             )
@@ -104,13 +117,13 @@ object TtsVideoExportQueue {
                 message = if (initialDelayMs > 0L) "Video recovery scheduled…" else "",
             )
         }
-        // All existing work is terminal here, so REPLACE is safe and cannot discard a running export.
         workManager.beginUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, request).enqueue()
     }
 
     suspend fun reconcile(context: Context, prefs: AppPreferences) {
+        val workManager = WorkManager.getInstance(context)
         val infos = runCatching {
-            withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfosByTag(VIDEO_TAG).get() }
+            withContext(Dispatchers.IO) { workManager.getWorkInfosByTag(VIDEO_TAG).get() }
         }.getOrNull() ?: emptyList()
         val byId = infos.associateBy { it.id.toString() }
         val current = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
@@ -120,16 +133,34 @@ object TtsVideoExportQueue {
         for ((jobId, job) in current.toList()) {
             if (!job.phase.equals("VIDEO", true)) continue
 
-            // Filesystem/SАF evidence is authoritative over stale preference or WorkManager state.
-            // Never delete a valid final MP4 just because its work record is missing.
             val parentUri = if (job.outputDirectoryUri.isNotBlank() && job.audioUri.isNotBlank()) {
                 findParentDirectoryUri(context, Uri.parse(job.outputDirectoryUri), Uri.parse(job.audioUri))
             } else null
+
             if (parentUri != null) {
                 val videoName = job.displayName.removeSuffix(".wav") + ".mp4"
                 val finalUri = findChildDocument(context, parentUri, videoName)
-                if (finalUri != null && SafMp4Stager.isValidMp4(context, finalUri)) {
-                    val size = SafMp4Stager.querySize(context, finalUri)
+                val manifestUri = TtsVideoArtifactManifest.findInDirectory(
+                    context,
+                    parentUri,
+                    TtsVideoArtifactManifest.finalName(videoName),
+                )
+                val authoritativeFinal = finalUri != null &&
+                    manifestUri != null &&
+                    SafMp4Stager.isValidMp4(context, finalUri) &&
+                    TtsVideoArtifactManifest.matches(
+                        context,
+                        manifestUri,
+                        job.novelUrl,
+                        job.chapterUrl,
+                        job.source,
+                        job.audioUri,
+                        job.timelineUri,
+                        job.displayName,
+                    )
+
+                if (authoritativeFinal) {
+                    val size = SafMp4Stager.querySize(context, finalUri!!)
                     current[jobId] = job.copy(
                         status = TtsAudioJobStatus.SUCCESS,
                         phase = "VIDEO",
@@ -140,38 +171,110 @@ object TtsVideoExportQueue {
                         videoStagingUri = "",
                         videoStagingComplete = false,
                         videoRecoveryAttempts = 0,
+                        videoStopReason = "",
                         message = "",
                     )
                     changed = true
                     continue
                 }
 
-                // A valid .part is itself a completed checkpoint. Leave it in place and let V2 publish
-                // it; this handles process death between mux completion and state publication.
-                if (job.videoStagingUri.isNotBlank() && SafMp4Stager.isValidMp4(context, Uri.parse(job.videoStagingUri))) {
-                    val noWork = job.workRequestId.isBlank() || byId[job.workRequestId] == null
-                    if (noWork) {
-                        restartJobs += job to 0L
+                // Never treat a same-named MP4 as belonging to this chapter without its identity manifest.
+                // V2 will quarantine an untrusted exact-name MP4 before publishing the correct artifact.
+                val stagedUri = job.videoStagingUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                val stagedManifest = TtsVideoArtifactManifest.findInDirectory(
+                    context,
+                    parentUri,
+                    TtsVideoArtifactManifest.stagingName(videoName, jobId),
+                )
+                val authoritativeStaging = stagedUri != null &&
+                    stagedManifest != null &&
+                    SafMp4Stager.isValidMp4(context, stagedUri) &&
+                    TtsVideoArtifactManifest.matches(
+                        context,
+                        stagedManifest,
+                        job.novelUrl,
+                        job.chapterUrl,
+                        job.source,
+                        job.audioUri,
+                        job.timelineUri,
+                        job.displayName,
+                    )
+                if (authoritativeStaging) {
+                    val actualUnique = runCatching {
+                        withContext(Dispatchers.IO) { workManager.getWorkInfosForUniqueWork(workName(jobId)).get() }
+                    }.getOrNull().orEmpty()
+                    val activeUnique = actualUnique.firstOrNull {
+                        it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
                     }
+                    if (activeUnique == null) restartJobs += job.copy(videoStagingComplete = true) to 0L
+                    else if (job.workRequestId != activeUnique.id.toString() || job.status != TtsAudioJobStatus.RUNNING) {
+                        current[jobId] = job.copy(workRequestId = activeUnique.id.toString(), status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", videoStagingComplete = true)
+                        changed = true
+                    }
+                    continue
+                }
+
+                val actualUnique = runCatching {
+                    withContext(Dispatchers.IO) { workManager.getWorkInfosForUniqueWork(workName(jobId)).get() }
+                }.getOrNull().orEmpty()
+                val activeUnique = actualUnique.firstOrNull {
+                    it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
+                }
+                if (activeUnique != null) {
+                    if (job.workRequestId != activeUnique.id.toString() || job.status != TtsAudioJobStatus.RUNNING) {
+                        current[jobId] = job.copy(
+                            workRequestId = activeUnique.id.toString(),
+                            status = TtsAudioJobStatus.RUNNING,
+                            phase = "VIDEO",
+                        )
+                        changed = true
+                    }
+                    continue
+                }
+
+                // SUCCESS/VIDEO without an authoritative final artifact is stale. Do not let it paint
+                // an orange tick; the durable WAV+timeline checkpoint remains available as blue Audio ✓.
+                if (job.status == TtsAudioJobStatus.SUCCESS &&
+                    job.audioUri.isNotBlank() &&
+                    job.timelineUri.isNotBlank()
+                ) {
+                    current[jobId] = job.copy(
+                        status = TtsAudioJobStatus.SUCCESS,
+                        phase = "AUDIO",
+                        progress = 100,
+                        documentUri = "",
+                        workRequestId = "",
+                        videoSizeBytes = 0L,
+                        videoStagingUri = "",
+                        videoStagingComplete = false,
+                        message = "",
+                    )
+                    changed = true
                     continue
                 }
             }
 
             if (job.workRequestId.isBlank()) {
-                if (job.status == TtsAudioJobStatus.QUEUED) restartJobs += job to 0L
+                if (job.status == TtsAudioJobStatus.QUEUED && job.audioUri.isNotBlank() && job.timelineUri.isNotBlank()) {
+                    restartJobs += job to 0L
+                }
                 continue
             }
 
             val info = byId[job.workRequestId]
             val actualUnique = runCatching {
-                withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfosForUniqueWork(workName(jobId)).get() }
+                withContext(Dispatchers.IO) { workManager.getWorkInfosForUniqueWork(workName(jobId)).get() }
             }.getOrNull().orEmpty()
             val activeUnique = actualUnique.firstOrNull {
                 it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED
             }
             if (activeUnique != null) {
-                if (job.workRequestId != activeUnique.id.toString()) {
-                    current[jobId] = job.copy(workRequestId = activeUnique.id.toString())
+                if (job.workRequestId != activeUnique.id.toString() || job.status != TtsAudioJobStatus.RUNNING) {
+                    current[jobId] = job.copy(
+                        workRequestId = activeUnique.id.toString(),
+                        status = TtsAudioJobStatus.RUNNING,
+                        phase = "VIDEO",
+                    )
                     changed = true
                 }
                 continue
@@ -188,7 +291,6 @@ object TtsVideoExportQueue {
                             progress = job.progress.coerceIn(0, 99),
                             documentUri = "",
                             workRequestId = "",
-                            videoSizeBytes = job.videoSizeBytes,
                             videoRecoveryAttempts = attempts,
                             message = "Video checkpoint missing; recovery queued ($attempts/$MAX_VIDEO_RECOVERY_ATTEMPTS).",
                         )
@@ -231,7 +333,6 @@ object TtsVideoExportQueue {
                             progress = job.progress.coerceIn(0, 99),
                             documentUri = "",
                             workRequestId = "",
-                            videoSizeBytes = job.videoSizeBytes,
                             videoStopReason = reasonName,
                             videoRecoveryAttempts = attempts,
                             message = "Video interrupted ($reasonName); recovery queued (${attempts}/$MAX_VIDEO_RECOVERY_ATTEMPTS).",
@@ -240,7 +341,7 @@ object TtsVideoExportQueue {
                         changed = true
                         restartJobs += updated to recoveryDelayMs(stopReason, attempts)
                     } else {
-                        val updated = job.copy(
+                        current[jobId] = job.copy(
                             status = TtsAudioJobStatus.SUCCESS,
                             phase = "AUDIO",
                             progress = 100,
@@ -251,7 +352,6 @@ object TtsVideoExportQueue {
                             videoRecoveryAttempts = attempts,
                             message = "Video export stopped after recovery limit; WAV + timeline are preserved.",
                         )
-                        current[jobId] = updated
                         changed = true
                     }
                 }
@@ -259,7 +359,6 @@ object TtsVideoExportQueue {
         }
 
         if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
-        // De-duplicate requests produced by the two reconciliation checks above.
         val seen = HashSet<String>()
         for ((job, delay) in restartJobs) {
             val key = "${job.novelUrl}\u0000${job.chapterUrl}\u0000${job.source}\u0000${job.audioUri}\u0000${job.timelineUri}"
@@ -313,7 +412,11 @@ object TtsVideoExportQueue {
         runCatching {
             context.contentResolver.query(
                 DocumentsContract.buildChildDocumentsUriUsingTree(parentUri, DocumentsContract.getDocumentId(parentUri)),
-                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE),
+                arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                ),
                 "${DocumentsContract.Document.COLUMN_DISPLAY_NAME} = ?",
                 arrayOf(displayName),
                 null,
