@@ -32,6 +32,12 @@ data class TtsAudioJobState(
     val videoSizeBytes: Long = 0L,
     /** WorkManager id for the current stage. */
     val workRequestId: String = "",
+    /** Durable SAF URI for the current MP4 staging document, before final publication. */
+    val videoStagingUri: String = "",
+    /** Last WorkManager stop reason observed during VIDEO reconciliation. */
+    val videoStopReason: String = "",
+    /** Number of app-start/reconciliation VIDEO recoveries attempted for this generation. */
+    val videoRecoveryAttempts: Int = 0,
 ) {
     val isActive: Boolean
         get() = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
