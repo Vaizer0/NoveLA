@@ -1,10 +1,16 @@
 package my.noveldokusha.tooling.application_workers
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.provider.DocumentsContract
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -19,8 +25,9 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.tooling.application_workers.video.CinematicVideoExporter
 import timber.log.Timber
 import java.io.File
+import java.util.concurrent.TimeUnit
 
-/** Non-destructive VIDEO stage. It consumes durable WAV+timeline and never deletes them. */
+/** Long-running, foreground-backed VIDEO stage. It consumes durable WAV+timeline and never deletes them. */
 class TtsVideoExportWorker(
     private val context: Context,
     workerParameters: WorkerParameters,
@@ -38,6 +45,10 @@ class TtsVideoExportWorker(
         val parentDirectoryUri = inputData.getString(KEY_PARENT_DIRECTORY_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: "chapter.wav"
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
+
+        // WorkManager's CoroutineWorker must explicitly become foreground work; otherwise
+        // the OS may stop a multi-minute/hour video encode once the app is backgrounded.
+        setForeground(createForegroundInfo())
 
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val renderJson = File(tempDir, "$jobId-video.timeline.json")
@@ -126,15 +137,69 @@ class TtsVideoExportWorker(
             restoreAudioState(prefs, jobId, audioUri, displayName)
             throw e
         } catch (e: Exception) {
-            Timber.e(e, "TtsVideo: video generation failed for $jobId")
+            Timber.e(e, "TtsVideo: video generation failed for $jobId attempt=${runAttemptCount + 1}")
             runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             runCatching { publishedVideoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderJson.delete(); tempVideo.delete()
+            if (runAttemptCount + 1 < MAX_RETRY_ATTEMPTS) {
+                // Leave the durable WAV+timeline checkpoint intact. WorkManager will retry the
+                // VIDEO stage with the same inputs and exponential backoff.
+                TtsAudioQueue.updateState(prefs, jobId) {
+                    it?.copy(
+                        status = TtsAudioJobStatus.QUEUED,
+                        phase = "VIDEO",
+                        progress = 0,
+                        documentUri = "",
+                        workRequestId = id.toString(),
+                        videoSizeBytes = 0L,
+                        message = "Retrying video generation…",
+                    )
+                }
+                return Result.retry()
+            }
             restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
             return Result.failure()
         } finally {
             runCatching { partUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderJson.delete(); tempVideo.delete()
+        }
+    }
+
+    private suspend fun createForegroundInfo(): ForegroundInfo = withContext(Dispatchers.Default) {
+        ensureNotificationChannel()
+        val notification = NotificationCompat.Builder(context, VIDEO_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("NoveLA")
+            .setContentText("Generating chapter video…")
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(0, 0, true)
+            .build()
+
+        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+        ForegroundInfo(VIDEO_NOTIFICATION_ID, notification, serviceType)
+    }
+
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(VIDEO_CHANNEL_ID) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    VIDEO_CHANNEL_ID,
+                    "Video generation",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Required while NoveLA generates a chapter video in the background"
+                    setShowBadge(false)
+                },
+            )
         }
     }
 
@@ -188,5 +253,8 @@ class TtsVideoExportWorker(
         private const val MIME_MP4 = "video/mp4"
         private const val COPY_BUFFER_SIZE = 64 * 1024
         private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
+        private const val MAX_RETRY_ATTEMPTS = 4
+        private const val VIDEO_NOTIFICATION_ID = 0x4E56
+        private const val VIDEO_CHANNEL_ID = "tts_video_generation"
     }
 }
