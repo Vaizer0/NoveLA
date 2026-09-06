@@ -20,13 +20,13 @@ class TtsVideoExportWorker(
     override suspend fun doWork(): Result = delegate.doWork()
 
     companion object {
-        const val KEY_JOB_ID = TtsVideoExportWorkerV2.KEY_JOB_ID
-        const val KEY_AUDIO_URI = TtsVideoExportWorkerV2.KEY_AUDIO_URI
-        const val KEY_TIMELINE_URI = TtsVideoExportWorkerV2.KEY_TIMELINE_URI
-        const val KEY_PARENT_DIRECTORY_URI = TtsVideoExportWorkerV2.KEY_PARENT_DIRECTORY_URI
-        const val KEY_OUTPUT_DIRECTORY_URI = TtsVideoExportWorkerV2.KEY_OUTPUT_DIRECTORY_URI
-        const val KEY_CHAPTER_TITLE = TtsVideoExportWorkerV2.KEY_CHAPTER_TITLE
-        const val KEY_DISPLAY_NAME = TtsVideoExportWorkerV2.KEY_DISPLAY_NAME
+        const val KEY_JOB_ID = "jobId"
+        const val KEY_AUDIO_URI = "audioUri"
+        const val KEY_TIMELINE_URI = "timelineUri"
+        const val KEY_PARENT_DIRECTORY_URI = "parentDirectoryUri"
+        const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"
+        const val KEY_CHAPTER_TITLE = "chapterTitle"
+        const val KEY_DISPLAY_NAME = "displayName"
         const val KEY_NOVEL_URL = "novelUrl"
         const val KEY_CHAPTER_URL = "chapterUrl"
         const val KEY_SOURCE = "source"
