@@ -3,23 +3,14 @@ package my.noveldokusha.core.appPreferences
 import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
-/** Статус задачи загрузки аудио главы (см. TTS_AUDIO_DOWNLOAD_JOBS). */
+/** Status of a chapter audio/video generation job. */
 @Immutable
 @Serializable
 enum class TtsAudioJobStatus {
-    /** Поставлена в очередь, ещё не выполнялась. */
     QUEUED,
-
-    /** Выполняется (Worker поднят foreground-сервисом). */
     RUNNING,
-
-    /** Готово: файл создан в выбранной папке. */
     SUCCESS,
-
-    /** Не удалось выполнить. */
     FAILED,
-
-    /** Пользователь отменил задачу (не ошибка). */
     CANCELLED,
 }
 
@@ -32,13 +23,19 @@ data class TtsAudioJobState(
     val source: TtsAudioSource = TtsAudioSource.ORIGINAL,
     val status: TtsAudioJobStatus,
     val message: String = "",
-    val displayName: String = "",
+    /** Current user-visible artifact: WAV during AUDIO, MP4 during VIDEO. */
     val documentUri: String = "",
+    val displayName: String = "",
     val progress: Int = 0,
-    /** AUDIO = WAV/timeline generation; VIDEO = cinematic MP4 rendering. */
+    /** AUDIO = WAV+timeline generation; VIDEO = cinematic MP4 generation. */
     val phase: String = "AUDIO",
-    /** Current generated MP4 byte size while the VIDEO phase is running. */
+    /** Persisted WAV document used by the video-only stage. */
+    val audioUri: String = "",
+    /** Persisted timeline JSON paired with [audioUri]. */
+    val timelineUri: String = "",
+    /** Current/generated MP4 size while VIDEO is running. */
     val videoSizeBytes: Long = 0L,
+    /** WorkManager id for the currently executing stage. */
     val workRequestId: String = "",
 ) {
     val isActive: Boolean
