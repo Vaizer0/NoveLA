@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +70,12 @@ fun PluginTranslationSettingsDialog(
     val provider = remember(extensionId) { mutableStateOf(viewModel.translationProvider(extensionId) ?: "GOOGLE_PA") }
     val scope = remember(extensionId) { mutableStateOf(viewModel.translationScope(extensionId)) }
     val prompt = remember(extensionId) { mutableStateOf(viewModel.translationPrompt(extensionId).orEmpty()) }
+
+    // Hide toggles — локальные Compose-State (записывают в VM + мутуют себя для мгновенной реакции UI)
+    val hideLibrary = remember(extensionId) { mutableStateOf(viewModel.translationHideLibrary(extensionId)) }
+    val hideHistory = remember(extensionId) { mutableStateOf(viewModel.translationHideHistory(extensionId)) }
+    val hideCatalog = remember(extensionId) { mutableStateOf(viewModel.translationHideCatalog(extensionId)) }
+    val hideSearch = remember(extensionId) { mutableStateOf(viewModel.translationHideSearch(extensionId)) }
 
     // Реактивные списки избранного и последних пар: clear+addAll после мутации
     // триггерят рекомпозицию диалога (по образцу ReaderLiveTranslation).
@@ -314,6 +323,52 @@ fun PluginTranslationSettingsDialog(
                     onClick = { scope.value = my.noveldokusha.core.appPreferences.AppPreferences.TRANSLATION_SCOPE_FULL; viewModel.setTranslationScope(extensionId, my.noveldokusha.core.appPreferences.AppPreferences.TRANSLATION_SCOPE_FULL) },
                 )
 
+                // ── Скрытие переведённых названий (только при scope=FULL) ──
+                if (scope.value == my.noveldokusha.core.appPreferences.AppPreferences.TRANSLATION_SCOPE_FULL) {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(my.noveldokusha.strings.R.string.plugin_translation_hide_section),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        FilterChip(
+                            selected = hideLibrary.value,
+                            onClick = {
+                                viewModel.setTranslationHideLibrary(extensionId, !hideLibrary.value)
+                                hideLibrary.value = !hideLibrary.value
+                            },
+                            label = { Text(stringResource(my.noveldokusha.strings.R.string.plugin_translation_hide_library)) },
+                        )
+                        FilterChip(
+                            selected = hideHistory.value,
+                            onClick = {
+                                viewModel.setTranslationHideHistory(extensionId, !hideHistory.value)
+                                hideHistory.value = !hideHistory.value
+                            },
+                            label = { Text(stringResource(my.noveldokusha.strings.R.string.plugin_translation_hide_history)) },
+                        )
+                        FilterChip(
+                            selected = hideCatalog.value,
+                            onClick = {
+                                viewModel.setTranslationHideCatalog(extensionId, !hideCatalog.value)
+                                hideCatalog.value = !hideCatalog.value
+                            },
+                            label = { Text(stringResource(my.noveldokusha.strings.R.string.plugin_translation_hide_catalog)) },
+                        )
+                        FilterChip(
+                            selected = hideSearch.value,
+                            onClick = {
+                                viewModel.setTranslationHideSearch(extensionId, !hideSearch.value)
+                                hideSearch.value = !hideSearch.value
+                            },
+                            label = { Text(stringResource(my.noveldokusha.strings.R.string.plugin_translation_hide_search)) },
+                        )
+                    }
+                }
+
                 // ── Промпт (только Gemini/OpenAI) ──
                 if (safeProvider == "GEMINI" || safeProvider == "OPENAI") {
                     HorizontalDivider()
@@ -422,3 +477,4 @@ private fun ScopeOption(
         }
     }
 }
+

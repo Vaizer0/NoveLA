@@ -75,6 +75,7 @@ fun CatalogExplorerScreen(
 
     val extensionsViewModel = hiltViewModel<ExtensionsManagerViewModel>()
     val extensionsState by extensionsViewModel.state.collectAsStateWithLifecycle()
+    val pluginEnabledMap by extensionsViewModel.pluginEnabledMap.collectAsStateWithLifecycle()
 
     // Карта catalog.id → extensionId для установленных плагинов: каталог Lua-источника
     // имеет metadata.id = extension.id либо "lua_${extension.id}".
@@ -278,7 +279,7 @@ fun CatalogExplorerScreen(
                         onSourceSetPinned = viewModel::onSourceSetPinned,
                         translationSettingsExtensionIds = translationSettingsExtensionIds,
                         onTranslationSettingsClick = onTranslationSettingsClick,
-                        isTranslationEnabled = { id -> extensionsViewModel.translationEnabled(id) },
+                        pluginEnabledMap = pluginEnabledMap,
                     )
                 }
                 1 -> {

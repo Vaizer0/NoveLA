@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
@@ -157,8 +158,21 @@ internal data class SourceResults(
         if (prefs != null && dao != null && manager != null) {
             coroutineScope.launch {
                 val inflight = mutableSetOf<String>()
+                val originalTitles = mutableMapOf<String, String>() // url -> исходное название до перевода
                 snapshotFlow { fetchIterator.list.map { it.url }.toSet() }
+                    .combine(prefs.TRANSLATION_PLUGIN_HIDE_SEARCH.flow()) { urls, _ -> urls }
                     .collect { urls ->
+                        // Per-plugin hide: revert translated titles immediately.
+                        if (prefs.TRANSLATION_PLUGIN_HIDE_SEARCH.value[source.catalog.id] == true) {
+                            originalTitles.forEach { (url, origTitle) ->
+                                val idx = fetchIterator.list.indexOfFirst { it.url == url }
+                                if (idx >= 0 && fetchIterator.list[idx].title != origTitle) {
+                                    fetchIterator.list[idx] = fetchIterator.list[idx].copy(title = origTitle)
+                                }
+                            }
+                            originalTitles.clear()
+                            return@collect
+                        }
                         // Активация по настройкам плагина (source.catalog.id): только если scope == FULL.
                         val extId = source.catalog.id
                         val enabled = prefs.translationEnabledForPlugin(extId)
@@ -201,6 +215,8 @@ internal data class SourceResults(
                                 toApply.forEach { (url, translated) ->
                                     val idx = fetchIterator.list.indexOfFirst { it.url == url }
                                     if (idx >= 0) {
+                                        // Сохраняем оригинал до первого перевода — чтобы можно было откатить.
+                                        originalTitles.putIfAbsent(url, fetchIterator.list[idx].title)
                                         fetchIterator.list[idx] = fetchIterator.list[idx].copy(title = translated)
                                     }
                                 }
@@ -240,6 +256,7 @@ internal data class SourceResults(
                                         // Реактивно обновляем название в списке поиска.
                                         val idx = fetchIterator.list.indexOfFirst { it.url == url }
                                         if (idx >= 0) {
+                                            originalTitles.putIfAbsent(url, fetchIterator.list[idx].title)
                                             fetchIterator.list[idx] = fetchIterator.list[idx].copy(title = translated)
                                         }
                                     }

@@ -806,6 +806,11 @@
     <string name="plugin_translation_scope_full_description">উপন্যাসের শিরোনাম এবং বিবরণও অনুবাদ ও সংরক্ষণ করে।</string>
     <string name="plugin_translation_prompt_label">প্রম্পট</string>
     <string name="plugin_translation_prompt_hint">ঐচ্ছিক: Gemini/OpenAI-এর জন্য কাস্টম সিস্টেম প্রম্পট</string>
+    <string name="plugin_translation_hide_section">অনুবাদিত শিরোনাম লুকান</string>
+    <string name="plugin_translation_hide_library">লাইব্রেরিতে</string>
+    <string name="plugin_translation_hide_history">ইতিহাসে</string>
+    <string name="plugin_translation_hide_catalog">তালিকায়</string>
+    <string name="plugin_translation_hide_search">অনুসন্ধানে</string>
     <string name="active_translator_label">সক্রিয় অনুবাদক: %s</string>
     <string name="translators_all_off">অনুবাদকগুলো বন্ধ আছে</string>
 </resources>

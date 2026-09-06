@@ -513,14 +513,15 @@ internal class ReaderLiveTranslation(
     }
 
     private fun resolveSystemPromptOverride(): String? {
-        val novelPrompt = state.novelPrompt.value
-        if (novelPrompt.isBlank()) return null
+        // Каскад: per-novel → per-plugin → global (через resolver).
+        val resolvedPrompt = translationSettingsResolver.translationPromptForBook(bookUrl)
+        if (resolvedPrompt.isNullOrBlank()) return null
         return if (state.novelPromptAppendMode.value) {
             val globalPrompt = appPreferences.TRANSLATION_ACTIVE_SYSTEM_PROMPT.value
-            if (globalPrompt.isNotBlank()) "$globalPrompt\n\n$novelPrompt"
-            else novelPrompt
+            if (globalPrompt.isNotBlank()) "$globalPrompt\n\n$resolvedPrompt"
+            else resolvedPrompt
         } else {
-            novelPrompt
+            resolvedPrompt
         }
     }
 

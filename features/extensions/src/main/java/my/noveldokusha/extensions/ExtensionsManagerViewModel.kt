@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,12 @@ class ExtensionsManagerViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ExtensionsScreenState())
     val state: StateFlow<ExtensionsScreenState> = _state.asStateFlow()
+
+    // ponytail: реактивный поток для Compose — чтобы иконка переводчика
+    // в CatalogList обновлялась при переключении per-plugin toggle.
+    val pluginEnabledMap: StateFlow<Map<String, Boolean>> =
+        appPreferences.TRANSLATION_PLUGIN_ENABLED_MAP.flow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), appPreferences.TRANSLATION_PLUGIN_ENABLED_MAP.value)
 
     /** Сериализует импорт/сохранение/сброс локальных Lua-скриптов,
      *  чтобы параллельные операции не гоняли reload() и запись файлов одновременно. */
@@ -608,6 +616,35 @@ class ExtensionsManagerViewModel @Inject constructor(
 
     fun setTranslationPrompt(extensionId: String, prompt: String) {
         appPreferences.setTranslationPromptForPlugin(extensionId, prompt)
+    }
+
+    // Hide translation toggles (per-plugin, only when scope==FULL)
+    fun translationHideLibrary(extensionId: String): Boolean =
+        appPreferences.TRANSLATION_PLUGIN_HIDE_LIBRARY.value[extensionId] == true
+
+    fun translationHideHistory(extensionId: String): Boolean =
+        appPreferences.TRANSLATION_PLUGIN_HIDE_HISTORY.value[extensionId] == true
+
+    fun translationHideCatalog(extensionId: String): Boolean =
+        appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG.value[extensionId] == true
+
+    fun translationHideSearch(extensionId: String): Boolean =
+        appPreferences.TRANSLATION_PLUGIN_HIDE_SEARCH.value[extensionId] == true
+
+    fun setTranslationHideLibrary(extensionId: String, hide: Boolean) {
+        appPreferences.setTranslationPluginHideMap(appPreferences.TRANSLATION_PLUGIN_HIDE_LIBRARY, extensionId, hide)
+    }
+
+    fun setTranslationHideHistory(extensionId: String, hide: Boolean) {
+        appPreferences.setTranslationPluginHideMap(appPreferences.TRANSLATION_PLUGIN_HIDE_HISTORY, extensionId, hide)
+    }
+
+    fun setTranslationHideCatalog(extensionId: String, hide: Boolean) {
+        appPreferences.setTranslationPluginHideMap(appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG, extensionId, hide)
+    }
+
+    fun setTranslationHideSearch(extensionId: String, hide: Boolean) {
+        appPreferences.setTranslationPluginHideMap(appPreferences.TRANSLATION_PLUGIN_HIDE_SEARCH, extensionId, hide)
     }
 
     // Мост к избранным языкам и последним парам: делегируют напрямую в AppPreferences.

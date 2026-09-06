@@ -33,18 +33,19 @@ interface TranslationSettingsResolver {
     fun translationTargetForBook(bookUrl: String): String
     fun translationScopeForBook(bookUrl: String): String
     fun translationProviderForBook(bookUrl: String): String?
+    fun translationPromptForBook(bookUrl: String): String?
 
     /**
      * Реактивный Flow эффективных настроек перевода для книги.
      *
-     * Подписывается на ВСЕ 9 преф-флоёв (per-book, per-plugin, global) через combine.
+     * Подписывается на ВСЕ 13 преф-флоёв (per-book, per-plugin, global, hide) через combine.
      * При изменении ЛЮБОГО из них — перерезолвит настройки и эмитит свежий [TranslationSettings].
      * Используется ViewModel для реактивного обновления UI без ручных подписок на отдельные флои.
      */
     fun settingsChangeSignal(bookUrl: String): Flow<TranslationSettings>
 
     /**
-     * Сигнал изменения ЛЮБОГО из 9 настроек перевода (per-book, per-plugin, global).
+     * Сигнал изменения ЛЮБОГО из 13 настроек перевода (per-book, per-plugin, global, hide).
      *
      * Эмитит [Unit] при изменении любого преф-флоа. Используется когда нужен триггер
      * пересчёта (например, в библиотеке где `flatMapLatest` по `baseLibraryFlow`

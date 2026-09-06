@@ -806,6 +806,11 @@
     <string name="plugin_translation_scope_full_description">उपन्यास का शीर्षक और विवरण भी अनुवाद और सहेजता है।</string>
     <string name="plugin_translation_prompt_label">प्रॉम्प्ट</string>
     <string name="plugin_translation_prompt_hint">वैकल्पिक: Gemini/OpenAI के लिए कस्टम सिस्टम प्रॉम्प्ट</string>
+    <string name="plugin_translation_hide_section">अनुवादित शीर्षक छुपाएं</string>
+    <string name="plugin_translation_hide_library">पुस्तकालय में</string>
+    <string name="plugin_translation_hide_history">इतिहास में</string>
+    <string name="plugin_translation_hide_catalog">सूची में</string>
+    <string name="plugin_translation_hide_search">खोज में</string>
     <string name="active_translator_label">सक्रिय अनुवादक: %s</string>
     <string name="translators_all_off">अनुवादक बंद हैं</string>
 </resources>

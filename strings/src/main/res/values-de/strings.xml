@@ -816,6 +816,11 @@
     <string name="plugin_translation_scope_full_description">Übersetzt und speichert auch Titel und Beschreibung des Romans.</string>
     <string name="plugin_translation_prompt_label">Prompt</string>
     <string name="plugin_translation_prompt_hint">Optional: eigener System-Prompt für Gemini/OpenAI</string>
+    <string name="plugin_translation_hide_section">Übersetzte Titel ausblenden</string>
+    <string name="plugin_translation_hide_library">In der Bibliothek</string>
+    <string name="plugin_translation_hide_history">Im Verlauf</string>
+    <string name="plugin_translation_hide_catalog">Im Katalog</string>
+    <string name="plugin_translation_hide_search">In der Suche</string>
     <string name="active_translator_label">Aktiver Übersetzer: %s</string>
     <string name="translators_all_off">Übersetzer sind deaktiviert</string>
 </resources>

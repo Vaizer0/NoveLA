@@ -816,6 +816,11 @@
     <string name="plugin_translation_scope_full_description">También traduce y guarda el título y la descripción de la novela.</string>
     <string name="plugin_translation_prompt_label">Indicación</string>
     <string name="plugin_translation_prompt_hint">Opcional: indicación de sistema personalizada para Gemini/OpenAI</string>
+    <string name="plugin_translation_hide_section">Ocultar títulos traducidos</string>
+    <string name="plugin_translation_hide_library">En la biblioteca</string>
+    <string name="plugin_translation_hide_history">En el historial</string>
+    <string name="plugin_translation_hide_catalog">En el catálogo</string>
+    <string name="plugin_translation_hide_search">En la búsqueda</string>
     <string name="active_translator_label">Traductor activo: %s</string>
     <string name="translators_all_off">Los traductores están desactivados</string>
 </resources>

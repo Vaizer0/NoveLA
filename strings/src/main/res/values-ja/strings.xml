@@ -817,6 +817,11 @@
     <string name="plugin_translation_scope_full_description">小説のタイトルと説明も翻訳して保存します。</string>
     <string name="plugin_translation_prompt_label">プロンプト</string>
     <string name="plugin_translation_prompt_hint">任意：Gemini/OpenAI用のカスタムシステムプロンプト</string>
+    <string name="plugin_translation_hide_section">翻訳タイトルを非表示</string>
+    <string name="plugin_translation_hide_library">ライブラリ</string>
+    <string name="plugin_translation_hide_history">履歴</string>
+    <string name="plugin_translation_hide_catalog">カタログ</string>
+    <string name="plugin_translation_hide_search">検索</string>
     <string name="active_translator_label">アクティブな翻訳者: %s</string>
     <string name="translators_all_off">翻訳者はオフです</string>
 </resources>

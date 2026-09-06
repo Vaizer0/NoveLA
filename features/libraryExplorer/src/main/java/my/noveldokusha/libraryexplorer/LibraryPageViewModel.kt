@@ -212,6 +212,11 @@ internal class LibraryPageViewModel @Inject constructor(
             if (books.isEmpty()) flowOf(emptyMap())
             else combine(books.map { book ->
                 val url = book.book.url
+                // Per-plugin hide: skip translation if the source plugin hides library titles.
+                val sourceId = scraper.getCompatibleSource(url)?.id
+                if (sourceId != null && preferences.TRANSLATION_PLUGIN_HIDE_LIBRARY.value[sourceId] == true) {
+                    return@map flowOf(url to "")
+                }
                 val targetLang = translationSettingsResolver.translationTargetForBook(url)
                 val enabled = translationSettingsResolver.translationEnabledForBook(url)
                 val scope = translationSettingsResolver.translationScopeForBook(url)

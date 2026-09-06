@@ -808,5 +808,10 @@
     <string name="plugin_translation_scope_full_description">Also translates and saves the novel title and description.</string>
     <string name="plugin_translation_prompt_label">Prompt</string>
     <string name="plugin_translation_prompt_hint">Optional: custom system prompt for Gemini/OpenAI</string>
+    <string name="plugin_translation_hide_section">Hide translated titles</string>
+    <string name="plugin_translation_hide_library">In library</string>
+    <string name="plugin_translation_hide_history">In history</string>
+    <string name="plugin_translation_hide_catalog">In catalog</string>
+    <string name="plugin_translation_hide_search">In search</string>
 
 </resources>

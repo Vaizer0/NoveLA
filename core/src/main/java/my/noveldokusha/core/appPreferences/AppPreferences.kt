@@ -831,6 +831,54 @@ class AppPreferences @Inject constructor(
             )
         }
 
+    // ── Per-plugin translation visibility toggles (hide translated titles in FULL mode) ──
+    // Map<sourceId, Boolean>. true = скрывать переведённые названия, показывать оригинал.
+    // Ключ отсутствует = не скрывать (default).
+
+    val TRANSLATION_PLUGIN_HIDE_LIBRARY =
+        object : Preference<Map<String, Boolean>>("TRANSLATION_PLUGIN_HIDE_LIBRARY") {
+            override var value by SharedPreference_Serializable<Map<String, Boolean>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { encodeEnabledMap(it) },
+                decode = { decodeEnabledMap(it) }
+            )
+        }
+
+    val TRANSLATION_PLUGIN_HIDE_HISTORY =
+        object : Preference<Map<String, Boolean>>("TRANSLATION_PLUGIN_HIDE_HISTORY") {
+            override var value by SharedPreference_Serializable<Map<String, Boolean>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { encodeEnabledMap(it) },
+                decode = { decodeEnabledMap(it) }
+            )
+        }
+
+    val TRANSLATION_PLUGIN_HIDE_CATALOG =
+        object : Preference<Map<String, Boolean>>("TRANSLATION_PLUGIN_HIDE_CATALOG") {
+            override var value by SharedPreference_Serializable<Map<String, Boolean>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { encodeEnabledMap(it) },
+                decode = { decodeEnabledMap(it) }
+            )
+        }
+
+    val TRANSLATION_PLUGIN_HIDE_SEARCH =
+        object : Preference<Map<String, Boolean>>("TRANSLATION_PLUGIN_HIDE_SEARCH") {
+            override var value by SharedPreference_Serializable<Map<String, Boolean>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyMap(),
+                encode = { encodeEnabledMap(it) },
+                decode = { decodeEnabledMap(it) }
+            )
+        }
+
     // sourceId (id плагина/источника) — необязательный третий уровень каскада:
     // null = plugin-уровень пропускается (прежнее поведение).
     fun translationEnabledForBook(bookUrl: String, sourceId: String? = null): Boolean =
@@ -1003,6 +1051,13 @@ class AppPreferences @Inject constructor(
         val current = TRANSLATION_PLUGIN_PROMPTS.value.toMutableMap()
         if (prompt.isBlank()) current.remove(extensionId) else current[extensionId] = prompt
         TRANSLATION_PLUGIN_PROMPTS.value = current
+    }
+
+    // Generic setter for per-plugin hide translation maps.
+    fun setTranslationPluginHideMap(pref: Preference<Map<String, Boolean>>, extensionId: String, hide: Boolean) {
+        val current = pref.value.toMutableMap()
+        if (hide) current[extensionId] = true else current.remove(extensionId)
+        pref.value = current
     }
 
     // Запись ВСЕГДА в per-novel карту (TRANSLATION_BOOK_LANG_PAIR), независимо от

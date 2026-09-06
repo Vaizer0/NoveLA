@@ -817,6 +817,11 @@
     <string name="plugin_translation_scope_full_description">소설 제목과 설명도 번역하여 저장합니다.</string>
     <string name="plugin_translation_prompt_label">프롬프트</string>
     <string name="plugin_translation_prompt_hint">선택 사항: Gemini/OpenAI용 사용자 지정 시스템 프롬프트</string>
+    <string name="plugin_translation_hide_section">번역된 제목 숨기기</string>
+    <string name="plugin_translation_hide_library">서재</string>
+    <string name="plugin_translation_hide_history">기록</string>
+    <string name="plugin_translation_hide_catalog">카탈로그</string>
+    <string name="plugin_translation_hide_search">검색</string>
     <string name="active_translator_label">활성 번역기: %s</string>
     <string name="translators_all_off">번역기가 꺼져 있습니다</string>
 </resources>

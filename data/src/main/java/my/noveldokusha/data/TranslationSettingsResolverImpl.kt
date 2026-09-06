@@ -110,6 +110,17 @@ class TranslationSettingsResolverImpl @Inject constructor(
         return result
     }
 
+    override fun translationPromptForBook(bookUrl: String): String? {
+        val sourceId = sourceIdFor(bookUrl)
+        // Каскад: per-novel → per-plugin → global (null)
+        val novelPrompt = appPreferences.TRANSLATION_NOVEL_PROMPTS.value[bookUrl]?.prompt
+            ?.takeIf { it.isNotBlank() }
+        if (novelPrompt != null) return novelPrompt
+        val pluginPrompt = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_PROMPTS.value[it] }
+            ?.takeIf { it.isNotBlank() }
+        return pluginPrompt
+    }
+
     // Активный переводчик книги — первый по приоритету (пер-новел > плагин > глобал)
     // уровень, который реально переводит: его флаг enable включён И пара полная.
     // Уровень определяется НЕ по наличию сохранённой пары (карты enable и pair
@@ -148,7 +159,7 @@ class TranslationSettingsResolverImpl @Inject constructor(
         scraper.getCompatibleSource(bookUrl)?.name?.takeIf { it.isNotBlank() }
 
     /**
-     * Реактивный Flow: combine на все 9 преф-флоёв (per-book + per-plugin + global).
+     * Реактивный Flow: combine на все 13 преф-флоёв (per-book + per-plugin + global + hide).
      *
      * При изменении ЛЮБОГО из них — перерезолвит настройки через существующие
      * translationEnabledForBook / translationPairForBook / translationScopeForBook /
@@ -171,8 +182,14 @@ class TranslationSettingsResolverImpl @Inject constructor(
                 appPreferences.TRANSLATION_PLUGIN_LANG_PAIR.flow(),
                 appPreferences.TRANSLATION_PLUGIN_SCOPE.flow(),
                 appPreferences.TRANSLATION_PLUGIN_PROVIDER.flow(),
+            ) { _, _, _, _ -> },
+            combine(
+                appPreferences.TRANSLATION_PLUGIN_HIDE_LIBRARY.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_HISTORY.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_SEARCH.flow(),
             ) { _, _, _, _ -> }
-        ) { _, _ ->
+        ) { _, _, _ ->
             val pair = translationPairForBook(bookUrl)
             TranslationSettings(
                 enabled = translationEnabledForBook(bookUrl),
@@ -184,7 +201,7 @@ class TranslationSettingsResolverImpl @Inject constructor(
         }.distinctUntilChanged()
 
     /**
-     * Сигнал: эмитит [Unit] при изменении любого из 9 преф-флоёв.
+     * Сигнал: эмитит [Unit] при изменении любого из 13 преф-флоёв.
      * Используется для триггера пересчёта в тех ViewModel, где нет привязки
      * к конкретной книге (например, библиотека).
      */
@@ -202,6 +219,12 @@ class TranslationSettingsResolverImpl @Inject constructor(
                 appPreferences.TRANSLATION_PLUGIN_LANG_PAIR.flow(),
                 appPreferences.TRANSLATION_PLUGIN_SCOPE.flow(),
                 appPreferences.TRANSLATION_PLUGIN_PROVIDER.flow(),
+            ) { _, _, _, _ -> },
+            combine(
+                appPreferences.TRANSLATION_PLUGIN_HIDE_LIBRARY.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_HISTORY.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG.flow(),
+                appPreferences.TRANSLATION_PLUGIN_HIDE_SEARCH.flow(),
             ) { _, _, _, _ -> }
-        ) { _, _ -> }
+        ) { _, _, _ -> }
 }

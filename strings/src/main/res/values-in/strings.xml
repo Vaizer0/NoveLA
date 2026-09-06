@@ -806,6 +806,11 @@
     <string name="plugin_translation_scope_full_description">Juga menerjemahkan dan menyimpan judul serta deskripsi novel.</string>
     <string name="plugin_translation_prompt_label">Prompt</string>
     <string name="plugin_translation_prompt_hint">Opsional: prompt sistem kustom untuk Gemini/OpenAI</string>
+    <string name="plugin_translation_hide_section">Sembunyikan judul terjemahan</string>
+    <string name="plugin_translation_hide_library">Di perpustakaan</string>
+    <string name="plugin_translation_hide_history">Di riwayat</string>
+    <string name="plugin_translation_hide_catalog">Di katalog</string>
+    <string name="plugin_translation_hide_search">Di pencarian</string>
     <string name="active_translator_label">Penerjemah aktif: %s</string>
     <string name="translators_all_off">Penerjemah nonaktif</string>
 </resources>

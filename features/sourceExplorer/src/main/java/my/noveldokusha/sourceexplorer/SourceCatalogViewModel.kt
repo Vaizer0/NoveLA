@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -147,10 +148,16 @@ internal class SourceCatalogViewModel @Inject constructor(
         viewModelScope.launch {
             val inflight = mutableSetOf<String>()
             snapshotFlow { state.fetchIterator.list.map { it.url }.toSet() }
+                .combine(appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG.flow()) { urls, _ -> urls }
                 .collect { urls ->
                     // Убираем переводы url, которых больше нет в списке (поиск/фильтр/смена
                     // страницы) — иначе призрачные названия наложатся на новые книги.
                     _translatedTitles.keys.retainAll(urls)
+                    // Per-plugin hide: skip + clear existing translations immediately.
+                    if (appPreferences.TRANSLATION_PLUGIN_HIDE_CATALOG.value[source.id] == true) {
+                        urls.forEach { _translatedTitles.remove(it) }
+                        return@collect
+                    }
                     // Активация по настройкам плагина (source.id): только если scope == FULL.
                     val extId = source.id
                     val enabled = appPreferences.translationEnabledForPlugin(extId)
