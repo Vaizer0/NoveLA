@@ -1,13 +1,9 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
-import android.content.pm.ServiceInfo
 import android.net.Uri
-import android.os.Build
-import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -19,7 +15,6 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
-import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
@@ -39,7 +34,6 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
     interface EntryPointAccess {
         fun appPreferences(): AppPreferences
         fun appDatabase(): AppDatabase
-        fun notificationsCenter(): NotificationsCenter
     }
 
     override suspend fun doWork(): Result {
@@ -48,11 +42,7 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
         val entry = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java)
         val prefs = entry.appPreferences()
         val database = entry.appDatabase()
-        val notification = TtsAudioExportNotification(request.chapterTitle, id.toString(), context, entry.notificationsCenter())
-        if (request.format != TtsAudioFormat.WAV) {
-            notification.showError(context.getString(StringsR.string.tts_audio_export_unsupported_format, request.format))
-            return Result.failure()
-        }
+        if (request.format != TtsAudioFormat.WAV) return Result.failure()
 
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val tempWav = File(tempDir, "$jobId.wav")
@@ -61,9 +51,6 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
         try {
             if (!isDirectoryAccessible(request.outputDirectoryUri)) throw TtsExportException(context.getString(StringsR.string.tts_audio_export_dir_error))
             val novelFolderUri = resolveNovelFolder(request) ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_folder_error))
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-            runCatching { setForeground(ForegroundInfo(notification.notificationId, notification.foregroundNotification(), type)) }
-                .onFailure { Timber.w(it, "TtsAudio: setForeground failed") }
             TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", progress = 0) }
 
             val chapterText = fetchChapterText(database, prefs, request)
@@ -80,7 +67,6 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
             val result = TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav, fileName) { fraction ->
                 val percent = (fraction * 100f).toInt().coerceIn(0, 100)
                 TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
-                notification.updateProgress(percent, "AUDIO")
             }
             require(tempWav.length() > 44L) { "Generated WAV is empty" }
             audioUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName) }
@@ -98,20 +84,17 @@ class TtsAudioExportWorker(private val context: Context, workerParameters: Worke
                 videoSizeBytes = 0L, workRequestId = "",
             )
             TtsAudioQueue.updateState(prefs, jobId) { state }
-            notification.close()
             TtsVideoExportQueue.enqueue(context, prefs, jobId, state)
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
             cleanupUri(audioUri); cleanupUri(timelineUri); tempWav.delete()
             TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.CANCELLED, phase = "AUDIO", progress = 0, documentUri = "", audioUri = "", timelineUri = "", workRequestId = "") }
-            notification.close()
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsAudio: AUDIO generation failed for $jobId")
             cleanupUri(audioUri); cleanupUri(timelineUri); tempWav.delete()
             val message = e.message ?: ""
-            notification.showError(context.getString(StringsR.string.tts_audio_export_failure_detail, message))
             TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.FAILED, phase = "AUDIO", progress = 0, message = message, documentUri = "", audioUri = "", timelineUri = "") }
             return Result.failure()
         }
