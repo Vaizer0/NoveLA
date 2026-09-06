@@ -139,6 +139,11 @@ class TtsVideoExportWorker(
                         message = "",
                     )
                 }
+                runCatching {
+                    setForegroundAsync(createForegroundInfo(percent))
+                }.onFailure { error ->
+                    Timber.w(error, "TtsVideo: failed to update notification progress for $jobId")
+                }
             }
 
             try {
@@ -288,6 +293,7 @@ class TtsVideoExportWorker(
                 message = "",
             )
         }
+        runCatching { setForegroundAsync(createForegroundInfo(100)) }
     }
 
     private suspend fun findChildDocument(parentUri: Uri, displayName: String): Uri? = withContext(Dispatchers.IO) {
@@ -353,17 +359,23 @@ class TtsVideoExportWorker(
         }.onFailure { Timber.w(it, "TtsVideo: unable to acquire video wake lock for $jobId") }.getOrNull()
     }
 
-    private fun createForegroundInfo(): ForegroundInfo {
+    private fun createForegroundInfo(progressPercent: Int? = null): ForegroundInfo {
         ensureNotificationChannel()
+        val hasProgress = progressPercent != null
+        val progress = progressPercent?.coerceIn(0, 100) ?: 0
         val notification = NotificationCompat.Builder(context, VIDEO_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("NoveLA")
-            .setContentText("Generating chapter video…")
+            .setContentText(
+                if (hasProgress) "Generating chapter video — $progress%"
+                else "Generating chapter video…"
+            )
+            .setSubText(if (hasProgress) "$progress%" else null)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setProgress(0, 0, true)
+            .setProgress(100, progress, !hasProgress)
             .build()
 
         val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
