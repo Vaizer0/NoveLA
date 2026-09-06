@@ -42,8 +42,10 @@ object TtsVideoExportQueue {
     }
 
     fun enqueue(context: Context, prefs: AppPreferences, jobId: String, job: TtsAudioJobState, parentDirectoryUri: String) {
-        if (job.status != TtsAudioJobStatus.SUCCESS || !job.phase.equals("AUDIO", true)) return
+        if (job.status != TtsAudioJobStatus.SUCCESS) return
+        if (!job.phase.equals("AUDIO", true) && !job.phase.equals("VIDEO", true)) return
         if (job.audioUri.isBlank() || job.timelineUri.isBlank() || job.outputDirectoryUri.isBlank() || parentDirectoryUri.isBlank()) return
+
         val request = OneTimeWorkRequestBuilder<TtsVideoExportWorker>()
             .setInputData(workDataOf(
                 TtsVideoExportWorker.KEY_JOB_ID to jobId,
@@ -57,6 +59,7 @@ object TtsVideoExportQueue {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
             .addTag(VIDEO_TAG)
             .build()
+
         TtsAudioQueue.updateState(prefs, jobId) {
             it?.copy(
                 status = TtsAudioJobStatus.QUEUED,
@@ -76,6 +79,8 @@ object TtsVideoExportQueue {
         val byId = infos.associateBy { it.id.toString() }
         val current = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
         var changed = false
+        val restartJobs = mutableListOf<TtsAudioJobState>()
+
         for ((jobId, job) in current.toList()) {
             if (!job.phase.equals("VIDEO", true)) continue
             when (byId[job.workRequestId]?.state) {
@@ -85,20 +90,29 @@ object TtsVideoExportQueue {
                     if (u != job) { current[jobId] = u; changed = true }
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED, null -> {
-                    val u = job.copy(
-                        status = TtsAudioJobStatus.SUCCESS,
-                        phase = "AUDIO",
-                        progress = 100,
-                        documentUri = "",
-                        workRequestId = "",
-                        videoSizeBytes = 0L,
-                        message = "",
-                    )
-                    if (u != job) { current[jobId] = u; changed = true }
+                    // Durable WAV+timeline mean VIDEO can be reconstructed without rerunning TTS.
+                    // Keep the checkpoint and enqueue a fresh VIDEO request instead of downgrading
+                    // the chapter to AUDIO after a process/system interruption.
+                    if (job.status == TtsAudioJobStatus.QUEUED || job.status == TtsAudioJobStatus.RUNNING || job.status == TtsAudioJobStatus.SUCCESS) {
+                        restartJobs += job
+                    } else {
+                        val u = job.copy(
+                            status = TtsAudioJobStatus.SUCCESS,
+                            phase = "AUDIO",
+                            progress = 100,
+                            documentUri = "",
+                            workRequestId = "",
+                            videoSizeBytes = 0L,
+                            message = "",
+                        )
+                        if (u != job) { current[jobId] = u; changed = true }
+                    }
                 }
             }
         }
         if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+
+        restartJobs.forEach { enqueueFromJob(context, it) }
     }
 
     private suspend fun findParentDirectoryUri(context: Context, treeUri: Uri, targetUri: Uri): Uri? = withContext(Dispatchers.IO) {
