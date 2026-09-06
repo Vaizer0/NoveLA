@@ -21,6 +21,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -145,7 +146,7 @@ class TtsVideoExportWorkerV2(
             }
 
             copyUriToFile(Uri.parse(timelineUri), renderJson)
-            ensureActive()
+            currentCoroutineContext().ensureActive()
 
             context.contentResolver.openInputStream(Uri.parse(audioUri))?.use { wavInput ->
                 CinematicVideoExporter(context).export(
@@ -159,13 +160,13 @@ class TtsVideoExportWorkerV2(
                     onSizeBytes = { bytes -> publishProgress(lastPercent.coerceAtLeast(0), bytes) },
                 )
             } ?: throw IllegalStateException("Cannot read $audioUri")
-            ensureActive()
+            currentCoroutineContext().ensureActive()
             require(tempVideo.isFile && tempVideo.length() > 0L) { "Generated MP4 is empty" }
 
             // Write the completed MP4 into the SAF staging document. Never write directly to the final
             // .mp4 name; publication happens only after muxing and validation finish.
             SafMp4Stager.remuxLocalMp4ToSaf(context, tempVideo, stagingUri!!)
-            ensureActive()
+            currentCoroutineContext().ensureActive()
             val stagedSize = SafMp4Stager.querySize(context, stagingUri!!)
             require(stagedSize > 0L) { "SAF staging MP4 is empty" }
 
@@ -264,7 +265,11 @@ class TtsVideoExportWorkerV2(
                 message = "",
             )
         }
-        runCatching { setForegroundAsync(createForegroundInfo(100)) }
+        try {
+            setForegroundAsync(createForegroundInfo(100))
+        } catch (error: Exception) {
+            Timber.w(error, "TtsVideoV2: final notification update failed for $jobId")
+        }
     }
 
     private suspend fun findChildDocument(parentUri: Uri, displayName: String): Uri? = withContext(Dispatchers.IO) {
