@@ -1,12 +1,9 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
-import android.content.pm.ServiceInfo
 import android.net.Uri
-import android.os.Build
 import android.provider.DocumentsContract
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -17,8 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
-import my.noveldokusha.coreui.states.NotificationsCenter
-import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.tooling.application_workers.video.CinematicVideoExporter
 import timber.log.Timber
 import java.io.File
@@ -32,7 +27,6 @@ class TtsVideoExportWorker(
     @InstallIn(SingletonComponent::class)
     interface EntryPointAccess {
         fun appPreferences(): AppPreferences
-        fun notificationsCenter(): NotificationsCenter
     }
 
     override suspend fun doWork(): Result {
@@ -40,16 +34,8 @@ class TtsVideoExportWorker(
         val audioUri = inputData.getString(KEY_AUDIO_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val timelineUri = inputData.getString(KEY_TIMELINE_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
         val outputTree = inputData.getString(KEY_OUTPUT_DIRECTORY_URI)?.takeIf { it.isNotBlank() } ?: return Result.failure()
-        val chapterTitle = inputData.getString(KEY_CHAPTER_TITLE) ?: ""
         val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: "chapter.wav"
-        val entry = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java)
-        val prefs = entry.appPreferences()
-        val notification = TtsAudioExportNotification(
-            chapterTitle = chapterTitle,
-            workRequestId = id.toString(),
-            context = context,
-            notificationsCenter = entry.notificationsCenter(),
-        )
+        val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
 
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val renderWav = File(tempDir, "$jobId-video.wav")
@@ -57,10 +43,9 @@ class TtsVideoExportWorker(
         val tempVideo = File(tempDir, "$jobId-video.mp4.tmp")
         var videoUri: Uri? = null
         try {
-            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = 0, documentUri = audioUri) }
-            val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-            runCatching { setForeground(ForegroundInfo(notification.notificationId, notification.videoForegroundNotification(), foregroundType)) }
-                .onFailure { Timber.w(it, "TtsVideo: setForeground failed") }
+            TtsAudioQueue.updateState(prefs, jobId) {
+                it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = 0, documentUri = audioUri)
+            }
 
             copyUriToFile(Uri.parse(audioUri), renderWav)
             copyUriToFile(Uri.parse(timelineUri), renderJson)
@@ -73,8 +58,9 @@ class TtsVideoExportWorker(
                 outputFile = tempVideo,
                 onProgress = { fraction ->
                     val percent = (fraction * 100f).toInt().coerceIn(0, 100)
-                    TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = percent, documentUri = audioUri) }
-                    notification.updateProgress(percent, "VIDEO")
+                    TtsAudioQueue.updateState(prefs, jobId) {
+                        it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = percent, documentUri = audioUri)
+                    }
                 },
                 onSizeBytes = { bytes ->
                     TtsAudioQueue.updateState(prefs, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
@@ -103,22 +89,17 @@ class TtsVideoExportWorker(
                     message = "",
                 )
             }
-            notification.updateProgress(100, "VIDEO")
-            notification.close()
-            notification.showComplete(videoName, videoUri)
             return Result.success()
         } catch (e: CancellationException) {
             runCatching { videoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderWav.delete(); renderJson.delete(); tempVideo.delete()
             restoreAudioState(prefs, jobId, audioUri, displayName)
-            notification.close()
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsVideo: video generation failed for $jobId")
             runCatching { videoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
             renderWav.delete(); renderJson.delete(); tempVideo.delete()
             restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
-            notification.close()
             return Result.failure()
         } finally {
             renderWav.delete(); renderJson.delete(); tempVideo.delete()
