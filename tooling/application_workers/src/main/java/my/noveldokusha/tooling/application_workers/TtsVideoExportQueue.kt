@@ -1,6 +1,8 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -26,15 +28,14 @@ object TtsVideoExportQueue {
         fun appPreferences(): AppPreferences
     }
 
-    fun enqueueFromJob(context: Context, job: TtsAudioJobState) {
+    suspend fun enqueueFromJob(context: Context, job: TtsAudioJobState) {
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
         val entry = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value.entries.firstOrNull { (_, value) ->
             value.chapterUrl == job.chapterUrl && value.novelUrl == job.novelUrl && value.source == job.source &&
                 value.audioUri == job.audioUri && value.timelineUri == job.timelineUri
         } ?: return
-        // Re-enqueueing an old durable audio job is only possible when its original parent URI
-        // is still available in WorkManager input. Normal flow always uses enqueue(...) below.
-        Unit
+        val parentDirectoryUri = findParentDirectoryUri(context, Uri.parse(entry.value.outputDirectoryUri), Uri.parse(entry.value.audioUri)) ?: return
+        enqueue(context, prefs, entry.key, entry.value, parentDirectoryUri.toString())
     }
 
     fun enqueue(context: Context, prefs: AppPreferences, jobId: String, job: TtsAudioJobState, parentDirectoryUri: String) {
@@ -80,6 +81,42 @@ object TtsVideoExportQueue {
             }
         }
         if (changed) prefs.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+    }
+
+    private suspend fun findParentDirectoryUri(context: Context, treeUri: Uri, targetUri: Uri): Uri? = withContext(Dispatchers.IO) {
+        runCatching {
+            val targetId = DocumentsContract.getDocumentId(targetUri)
+            val rootId = DocumentsContract.getTreeDocumentId(treeUri)
+            val stack = ArrayDeque<Pair<String, Int>>()
+            val visited = HashSet<String>()
+            stack.add(rootId to 0)
+            while (stack.isNotEmpty()) {
+                val (parentId, depth) = stack.removeLast()
+                if (depth > 8 || !visited.add(parentId)) continue
+                val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+                context.contentResolver.query(
+                    children,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    ),
+                    null, null, null,
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    while (cursor.moveToNext()) {
+                        val childId = cursor.getString(idCol)
+                        if (childId == targetId) {
+                            return@runCatching DocumentsContract.buildDocumentUriUsingTree(treeUri, parentId)
+                        }
+                        if (cursor.getString(mimeCol) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            stack.add(childId to depth + 1)
+                        }
+                    }
+                }
+            }
+            null
+        }.getOrNull()
     }
 
     private fun workName(jobId: String) = "$WORK_PREFIX-$jobId"
