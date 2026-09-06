@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
@@ -29,20 +28,15 @@ import my.noveldokusha.text_to_speech.TtsAudioExporter
 import my.noveldokusha.text_to_speech.TtsExportException
 import my.noveldokusha.text_to_speech.TtsTextPreparer
 import my.noveldokusha.text_to_speech.timelineToJson
-import my.noveldokusha.tooling.application_workers.video.CinematicVideoExporter
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
 
-/** Exports chapter audio + timeline and then builds a cinematic MP4 from those exact artifacts. */
-class TtsAudioExportWorker(
-    private val context: Context,
-    workerParameters: WorkerParameters,
-) : CoroutineWorker(context, workerParameters) {
-
+/** Cancellable AUDIO stage. Produces durable WAV + timeline JSON and then queues VIDEO. */
+class TtsAudioExportWorker(private val context: Context, workerParameters: WorkerParameters) : CoroutineWorker(context, workerParameters) {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
-    interface TtsAudioEntryPoint {
+    interface EntryPointAccess {
         fun appPreferences(): AppPreferences
         fun appDatabase(): AppDatabase
         fun notificationsCenter(): NotificationsCenter
@@ -51,196 +45,92 @@ class TtsAudioExportWorker(
     override suspend fun doWork(): Result {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
         val request = readRequest() ?: return Result.failure()
-        val entryPoint = EntryPointAccessors.fromApplication(context.applicationContext, TtsAudioEntryPoint::class.java)
-        val appPreferences = entryPoint.appPreferences()
-        val appDatabase = entryPoint.appDatabase()
-        val notificationsCenter = entryPoint.notificationsCenter()
-        val notification = TtsAudioExportNotification(
-            chapterTitle = request.chapterTitle,
-            workRequestId = id.toString(),
-            context = context,
-            notificationsCenter = notificationsCenter,
-        )
-
+        val entry = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java)
+        val prefs = entry.appPreferences()
+        val database = entry.appDatabase()
+        val notification = TtsAudioExportNotification(request.chapterTitle, id.toString(), context, entry.notificationsCenter())
         if (request.format != TtsAudioFormat.WAV) {
-            val msg = context.getString(StringsR.string.tts_audio_export_unsupported_format, request.format)
-            fail(appPreferences, jobId, notification, msg)
+            notification.showError(context.getString(StringsR.string.tts_audio_export_unsupported_format, request.format))
             return Result.failure()
         }
 
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
         val tempWav = File(tempDir, "$jobId.wav")
-        val tempVideo = File(tempDir, "$jobId.mp4.tmp")
-        var createdUri: Uri? = null
+        var audioUri: Uri? = null
         var timelineUri: Uri? = null
-        var videoUri: Uri? = null
-
         try {
-            if (!isDirectoryAccessible(context, request.outputDirectoryUri)) {
-                appPreferences.TTS_AUDIO_DOWNLOAD_LOCATION_URI.value = ""
-                fail(appPreferences, jobId, notification, context.getString(StringsR.string.tts_audio_export_dir_error))
-                return Result.failure()
-            }
-            val novelFolderUri = resolveNovelFolder(context, request)
-                ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_folder_error))
+            if (!isDirectoryAccessible(request.outputDirectoryUri)) throw TtsExportException(context.getString(StringsR.string.tts_audio_export_dir_error))
+            val novelFolderUri = resolveNovelFolder(request) ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_folder_error))
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+            runCatching { setForeground(ForegroundInfo(notification.notificationId, notification.foregroundNotification(), type)) }
+                .onFailure { Timber.w(it, "TtsAudio: setForeground failed") }
+            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", progress = 0) }
 
-            val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-            runCatching {
-                setForeground(ForegroundInfo(notification.notificationId, notification.foregroundNotification(), foregroundType))
-            }.onFailure { Timber.w(it, "TtsAudio: setForeground failed") }
-
-            TtsAudioQueue.updateState(appPreferences, jobId) {
-                it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "AUDIO", videoSizeBytes = 0L, progress = 0)
-            }
-            val chapterText = withContext(Dispatchers.IO) { fetchChapterText(appDatabase, appPreferences, request) }
-            if (chapterText == null) {
-                val msg = context.getString(
-                    if (request.source == TtsAudioSource.TRANSLATED) StringsR.string.tts_audio_export_no_translation
-                    else StringsR.string.tts_audio_export_no_download
-                )
-                fail(appPreferences, jobId, notification, msg)
-                return Result.failure()
-            }
-
-            val regexRules = appPreferences.effectiveRegexRules(request.novelUrl)
-            val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, regexRules)
-            val sourceSuffix = when (request.source) {
+            val chapterText = fetchChapterText(database, prefs, request)
+                ?: throw TtsExportException(context.getString(if (request.source == TtsAudioSource.TRANSLATED) StringsR.string.tts_audio_export_no_translation else StringsR.string.tts_audio_export_no_download))
+            val paragraphs = TtsTextPreparer.paragraphsFromBody(chapterText, prefs.effectiveRegexRules(request.novelUrl))
+            val suffix = when (request.source) {
                 TtsAudioSource.ORIGINAL -> context.getString(StringsR.string.tts_audio_file_suffix_original)
                 TtsAudioSource.TRANSLATED -> context.getString(StringsR.string.tts_audio_file_suffix_translated)
                 TtsAudioSource.ASK_EVERY_TIME -> ""
             }
-            val baseName = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
-            val fileName = if (sourceSuffix.isBlank()) "$baseName.${request.format}" else "$baseName $sourceSuffix.${request.format}"
-            val timelineFileName = "${fileName.removeSuffix(".${request.format}")}.timeline.json"
-            val reportAudio = progressReporter(appPreferences, jobId, notification)
-
-            val exportResult = TtsAudioExporter(context).exportAudio(
-                request = request,
-                paragraphs = paragraphs,
-                destFile = tempWav,
-                audioFileName = fileName,
-            ) { fraction -> reportAudio((fraction * 82f).toInt().coerceIn(0, 82)) }
-            require(tempWav.length() > 44L) { "Generated WAV is empty for '${request.chapterTitle}'" }
-
-            createdUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName)
-            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            copyFileToUri(tempWav, createdUri!!)
-
-            timelineUri = withContext(Dispatchers.IO) {
-                DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelineFileName)
-            } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-            writeTextToUri(timelineToJson(exportResult.timeline), timelineUri!!)
-
-            val renderWav = File(tempDir, "$jobId-render.wav")
-            val renderJson = File(tempDir, "$jobId-render.timeline.json")
-            try {
-                // Render from the exact documents that were persisted to the user's SAF directory.
-                copyUriToFile(createdUri!!, renderWav)
-                copyUriToFile(timelineUri!!, renderJson)
-                TtsAudioQueue.updateState(appPreferences, jobId) {
-                    it?.copy(phase = "VIDEO", progress = 82, videoSizeBytes = 0L)
-                }
-                notification.updateProgress(82, "VIDEO")
-                CinematicVideoExporter(context).export(
-                    wavFile = renderWav,
-                    timelineFile = renderJson,
-                    outputFile = tempVideo,
-                    onProgress = { fraction ->
-                        val percent = (82f + fraction * 18f).toInt().coerceIn(82, 100)
-                        TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "VIDEO") }
-                        notification.updateProgress(percent, "VIDEO")
-                    },
-                    onSizeBytes = { bytes ->
-                        TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
-                    },
-                )
-
-                val videoFileName = "${fileName.removeSuffix(".${request.format}")}.mp4"
-                videoUri = withContext(Dispatchers.IO) {
-                    DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_MP4, videoFileName)
-                } ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
-                copyFileToUri(tempVideo, videoUri!!)
-                TtsAudioQueue.updateState(appPreferences, jobId) {
-                    it?.copy(
-                        status = TtsAudioJobStatus.SUCCESS,
-                        displayName = videoFileName,
-                        documentUri = videoUri.toString(),
-                        progress = 100,
-                        phase = "VIDEO",
-                        videoSizeBytes = tempVideo.length(),
-                    )
-                }
-                notification.updateProgress(100, "VIDEO")
-                notification.showComplete(videoFileName, videoUri)
-            } finally {
-                renderWav.delete()
-                renderJson.delete()
-                tempVideo.delete()
+            val base = "${request.chapterIndex + 1} - ${sanitize(request.chapterTitle)}"
+            val fileName = "$base${if (suffix.isBlank()) "" else " $suffix"}.wav"
+            val timelineName = "$base${if (suffix.isBlank()) "" else " $suffix"}.timeline.json"
+            val result = TtsAudioExporter(context).exportAudio(request, paragraphs, tempWav, fileName) { fraction ->
+                val percent = (fraction * 100f).toInt().coerceIn(0, 100)
+                TtsAudioQueue.updateState(prefs, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
+                notification.updateProgress(percent, "AUDIO")
             }
+            require(tempWav.length() > 44L) { "Generated WAV is empty" }
+            audioUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_WAV, fileName) }
+                ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+            copyFileToUri(tempWav, audioUri!!)
+            timelineUri = withContext(Dispatchers.IO) { DocumentsContract.createDocument(context.contentResolver, novelFolderUri, MIME_JSON, timelineName) }
+                ?: throw TtsExportException(context.getString(StringsR.string.tts_audio_export_file_error))
+            writeTextToUri(timelineToJson(result.timeline), timelineUri!!)
 
+            val state = TtsAudioJobState(
+                chapterUrl = request.chapterUrl, novelUrl = request.novelUrl, chapterTitle = request.chapterTitle,
+                source = request.source, status = TtsAudioJobStatus.SUCCESS, message = "",
+                documentUri = audioUri.toString(), displayName = fileName, progress = 100, phase = "AUDIO",
+                audioUri = audioUri.toString(), timelineUri = timelineUri.toString(), outputDirectoryUri = request.outputDirectoryUri,
+                videoSizeBytes = 0L, workRequestId = "",
+            )
+            TtsAudioQueue.updateState(prefs, jobId) { state }
+            notification.close()
+            TtsVideoExportQueue.enqueue(context, prefs, jobId, state)
             tempWav.delete()
             return Result.success()
         } catch (e: CancellationException) {
-            cleanupUri(context, videoUri)
-            if (videoUri == null) cleanupUri(context, createdUri)
-            cleanupUri(context, timelineUri)
-            tempWav.delete()
-            tempVideo.delete()
-            TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.CANCELLED, message = "Cancelled") }
+            cleanupUri(audioUri); cleanupUri(timelineUri); tempWav.delete()
+            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.CANCELLED, phase = "AUDIO", progress = 0, documentUri = "", audioUri = "", timelineUri = "", workRequestId = "") }
             notification.close()
             throw e
         } catch (e: Exception) {
-            Timber.e(e, "TtsAudio: export/video FAILED for $jobId")
-            // Preserve the already-saved WAV + timeline if the cinematic stage fails.
-            cleanupUri(context, videoUri)
-            tempWav.delete()
-            tempVideo.delete()
+            Timber.e(e, "TtsAudio: AUDIO generation failed for $jobId")
+            cleanupUri(audioUri); cleanupUri(timelineUri); tempWav.delete()
             val message = e.message ?: ""
             notification.showError(context.getString(StringsR.string.tts_audio_export_failure_detail, message))
-            TtsAudioQueue.updateState(appPreferences, jobId) {
-                it?.copy(status = TtsAudioJobStatus.FAILED, message = message, phase = if (timelineUri != null) "VIDEO" else "AUDIO")
-            }
+            TtsAudioQueue.updateState(prefs, jobId) { it?.copy(status = TtsAudioJobStatus.FAILED, phase = "AUDIO", progress = 0, message = message, documentUri = "", audioUri = "", timelineUri = "") }
             return Result.failure()
         }
     }
 
-    private fun fail(appPreferences: AppPreferences, jobId: String, notification: TtsAudioExportNotification, message: String) {
-        notification.showError(message)
-        TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(status = TtsAudioJobStatus.FAILED, message = message) }
-    }
-
-    private fun progressReporter(appPreferences: AppPreferences, jobId: String, notification: TtsAudioExportNotification): (Int) -> Unit {
-        var lastReported = -1
-        var lastNotifyMs = 0L
-        return { value ->
-            val percent = value.coerceIn(0, 100)
-            if (percent != lastReported) {
-                lastReported = percent
-                TtsAudioQueue.updateState(appPreferences, jobId) { it?.copy(progress = percent, phase = "AUDIO") }
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastNotifyMs >= 1000L || percent == 100) {
-                    notification.updateProgress(percent, "AUDIO")
-                    lastNotifyMs = now
-                }
-            }
-        }
-    }
-
-    private suspend fun fetchChapterText(appDatabase: AppDatabase, appPreferences: AppPreferences, request: TtsAudioExportRequest): String? {
+    private suspend fun fetchChapterText(db: AppDatabase, prefs: AppPreferences, request: TtsAudioExportRequest): String? {
         return if (request.source == TtsAudioSource.TRANSLATED) {
-            val sourceLang = request.translationSourceLang.ifBlank { appPreferences.translationPairForBook(request.novelUrl).source }
-            val targetLang = request.translationTargetLang.ifBlank { appPreferences.translationPairForBook(request.novelUrl).target }
-            if (sourceLang.isBlank() || targetLang.isBlank()) return null
-            val translation = appDatabase.chapterTranslationDao().getTranslations(request.chapterUrl, sourceLang, targetLang) ?: return null
-            if (translation.translatedParagraphs.isBlank()) return null
-            runCatching {
-                val paragraphs = JSONArray(translation.translatedParagraphs)
-                if (paragraphs.length() == 0) null else (0 until paragraphs.length()).joinToString("\n\n") { paragraphs.getString(it) }
-            }.onFailure { Timber.e(it, "TtsAudio: invalid translation JSON") }.getOrNull()
+            val source = request.translationSourceLang.ifBlank { prefs.translationPairForBook(request.novelUrl).source }
+            val target = request.translationTargetLang.ifBlank { prefs.translationPairForBook(request.novelUrl).target }
+            if (source.isBlank() || target.isBlank()) null
+            else {
+                val translation = db.chapterTranslationDao().getTranslations(request.chapterUrl, source, target) ?: return null
+                if (translation.translatedParagraphs.isBlank()) null else runCatching {
+                    val array = JSONArray(translation.translatedParagraphs)
+                    if (array.length() == 0) null else (0 until array.length()).joinToString("\n\n") { array.getString(it) }
+                }.getOrNull()
+            }
         } else {
-            appDatabase.chapterBodyDao().get(request.chapterUrl)?.body?.takeIf { it.isNotBlank() }
+            db.chapterBodyDao().get(request.chapterUrl)?.body?.takeIf { it.isNotBlank() }
         }
     }
 
@@ -252,121 +142,45 @@ class TtsAudioExportWorker(
         val chapterIndex = inputData.getInt(KEY_CHAPTER_INDEX, 0)
         val source = runCatching { TtsAudioSource.valueOf(inputData.getString(KEY_SOURCE) ?: return null) }.getOrNull() ?: return null
         if (source == TtsAudioSource.ASK_EVERY_TIME) return null
-        return TtsAudioExportRequest(
-            jobId = inputData.getString(KEY_JOB_ID) ?: return null,
-            novelTitle = novelTitle,
-            novelUrl = novelUrl,
-            chapterUrl = chapterUrl,
-            chapterTitle = chapterTitle,
-            chapterIndex = chapterIndex,
-            source = source,
-            enginePackage = inputData.getString(KEY_ENGINE_PACKAGE) ?: "",
-            voiceId = inputData.getString(KEY_VOICE_ID) ?: "",
-            speed = inputData.getFloat(KEY_SPEED, 1f),
-            pitch = inputData.getFloat(KEY_PITCH, 1f),
-            outputDirectoryUri = inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null,
-            format = inputData.getString(KEY_FORMAT) ?: TtsAudioFormat.WAV,
-            translationSourceLang = inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: "",
-            translationTargetLang = inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: "",
-        )
+        return TtsAudioExportRequest(inputData.getString(KEY_JOB_ID) ?: return null, novelTitle, novelUrl, chapterUrl, chapterTitle, chapterIndex, source,
+            inputData.getString(KEY_ENGINE_PACKAGE) ?: "", inputData.getString(KEY_VOICE_ID) ?: "", inputData.getFloat(KEY_SPEED, 1f), inputData.getFloat(KEY_PITCH, 1f),
+            inputData.getString(KEY_OUTPUT_DIRECTORY_URI) ?: return null, inputData.getString(KEY_FORMAT)?.let { TtsAudioFormat.valueOf(it) } ?: TtsAudioFormat.WAV,
+            inputData.getString(KEY_TRANSLATION_SOURCE_LANG) ?: "", inputData.getString(KEY_TRANSLATION_TARGET_LANG) ?: "")
     }
 
-    private fun isDirectoryAccessible(context: Context, directoryUri: String): Boolean = try {
-        val treeUri = Uri.parse(directoryUri)
-        val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
-        context.contentResolver.query(docUri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { true } ?: false
-    } catch (e: Exception) {
-        Timber.e(e, "TtsAudio: directory access check failed")
-        false
-    }
-
-    private fun queryDisplayName(uri: Uri): String? = runCatching {
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
-        }
-    }.getOrNull()?.takeIf { it.isNotBlank() }
-
-    private fun sanitize(name: String, fallback: String = "chapter"): String =
-        name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
-
-    private suspend fun resolveNovelFolder(context: Context, request: TtsAudioExportRequest): Uri? = withContext(Dispatchers.IO) {
+    private suspend fun resolveNovelFolder(request: TtsAudioExportRequest): Uri? = withContext(Dispatchers.IO) {
         runCatching {
-            val treeUri = Uri.parse(request.outputDirectoryUri)
-            val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
-            val wrapperDocId = findOrCreateDirectoryDocId(context, treeUri, rootDocId, WRAPPER_FOLDER_NAME) ?: return@runCatching null
-            val novelDocId = findOrCreateDirectoryDocId(context, treeUri, wrapperDocId, sanitize(request.novelTitle, "novel")) ?: return@runCatching null
-            DocumentsContract.buildDocumentUriUsingTree(treeUri, novelDocId)
+            val tree = Uri.parse(request.outputDirectoryUri)
+            val root = DocumentsContract.getTreeDocumentId(tree)
+            val wrapper = findOrCreateDirectory(tree, root, "NoveLA Audio") ?: return@runCatching null
+            val novel = findOrCreateDirectory(tree, wrapper, sanitize(request.novelTitle, "novel")) ?: return@runCatching null
+            DocumentsContract.buildDocumentUriUsingTree(tree, novel)
         }.getOrNull()
     }
 
-    private fun findOrCreateDirectoryDocId(context: Context, treeUri: Uri, parentDocId: String, folderName: String): String? {
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
-        val existing = queryDirectoryId(context, childrenUri, folderName)
-        if (existing != null) return existing
-        val created = runCatching {
-            DocumentsContract.createDocument(
-                context.contentResolver,
-                DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId),
-                DocumentsContract.Document.MIME_TYPE_DIR,
-                folderName,
-            )?.let { DocumentsContract.getDocumentId(it) }
-        }.getOrNull()
-        return created ?: queryDirectoryId(context, childrenUri, folderName)
-    }
-
-    private fun queryDirectoryId(context: Context, childrenUri: Uri, folderName: String): String? =
-        context.contentResolver.query(childrenUri, null, null, null, null)?.use { cursor ->
-            while (cursor.moveToNext()) {
-                if (cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)) != DocumentsContract.Document.MIME_TYPE_DIR) continue
-                val name = cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
-                if (name.equals(folderName, ignoreCase = true)) return@use cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID))
-            }
-            null
+    private fun findOrCreateDirectory(tree: Uri, parentId: String, name: String): String? {
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+        context.contentResolver.query(children, null, null, null, null)?.use { cursor ->
+            val id = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val mime = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val display = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            while (cursor.moveToNext()) if (cursor.getString(mime) == DocumentsContract.Document.MIME_TYPE_DIR && cursor.getString(display).equals(name, true)) return cursor.getString(id)
         }
-
-    private suspend fun copyUriToFile(uri: Uri, target: File) = withContext(Dispatchers.IO) {
-        target.parentFile?.mkdirs()
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            target.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
-        } ?: throw TtsExportException("Cannot read persisted document: $uri")
+        return runCatching {
+            DocumentsContract.createDocument(context.contentResolver, DocumentsContract.buildDocumentUriUsingTree(tree, parentId), DocumentsContract.Document.MIME_TYPE_DIR, name)?.let { DocumentsContract.getDocumentId(it) }
+        }.getOrNull()
     }
 
-    private suspend fun copyFileToUri(file: File, uri: Uri) = withContext(Dispatchers.IO) {
-        context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-            file.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
-        } ?: throw TtsExportException("Cannot write document: $uri")
-    }
-
-    private suspend fun writeTextToUri(text: String, uri: Uri) = withContext(Dispatchers.IO) {
-        context.contentResolver.openOutputStream(uri, "wt")?.use { output -> output.writer(Charsets.UTF_8).use { it.write(text) } }
-            ?: throw TtsExportException("Cannot write document: $uri")
-    }
-
-    private fun cleanupUri(context: Context, uri: Uri?) {
-        if (uri == null) return
-        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            .onFailure { Timber.w(it, "TtsAudio: failed to delete generated document $uri") }
-    }
-
+    private fun isDirectoryAccessible(uri: String): Boolean = runCatching {
+        val tree = Uri.parse(uri)
+        context.contentResolver.query(DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree)), arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { true } ?: false
+    }.getOrDefault(false)
+    private suspend fun copyFileToUri(file: File, uri: Uri) = withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { out -> file.inputStream().use { it.copyTo(out, 64 * 1024) } } ?: throw TtsExportException("Cannot write $uri") }
+    private suspend fun writeTextToUri(text: String, uri: Uri) = withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { it.writer(Charsets.UTF_8).use { w -> w.write(text) } } ?: throw TtsExportException("Cannot write $uri") }
+    private fun cleanupUri(uri: Uri?) { if (uri != null) runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) } }
+    private fun sanitize(name: String, fallback: String = "chapter") = name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80).ifBlank { fallback }
     companion object {
-        const val KEY_JOB_ID = "jobId"
-        const val KEY_NOVEL_TITLE = "novelTitle"
-        const val KEY_NOVEL_URL = "novelUrl"
-        const val KEY_CHAPTER_URL = "chapterUrl"
-        const val KEY_CHAPTER_TITLE = "chapterTitle"
-        const val KEY_CHAPTER_INDEX = "chapterIndex"
-        const val KEY_SOURCE = "source"
-        const val KEY_ENGINE_PACKAGE = "enginePackage"
-        const val KEY_VOICE_ID = "voiceId"
-        const val KEY_SPEED = "speed"
-        const val KEY_PITCH = "pitch"
-        const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"
-        const val KEY_FORMAT = "format"
-        const val KEY_TRANSLATION_SOURCE_LANG = "translationSourceLang"
-        const val KEY_TRANSLATION_TARGET_LANG = "translationTargetLang"
-        private const val MIME_WAV = "audio/wav"
-        private const val MIME_JSON = "application/json"
-        private const val MIME_MP4 = "video/mp4"
-        private const val WRAPPER_FOLDER_NAME = "NoveLA Audio"
+        const val KEY_JOB_ID = "jobId"; const val KEY_NOVEL_TITLE = "novelTitle"; const val KEY_NOVEL_URL = "novelUrl"; const val KEY_CHAPTER_URL = "chapterUrl"; const val KEY_CHAPTER_TITLE = "chapterTitle"; const val KEY_CHAPTER_INDEX = "chapterIndex"; const val KEY_SOURCE = "source"; const val KEY_ENGINE_PACKAGE = "enginePackage"; const val KEY_VOICE_ID = "voiceId"; const val KEY_SPEED = "speed"; const val KEY_PITCH = "pitch"; const val KEY_OUTPUT_DIRECTORY_URI = "outputDirectoryUri"; const val KEY_FORMAT = "format"; const val KEY_TRANSLATION_SOURCE_LANG = "translationSourceLang"; const val KEY_TRANSLATION_TARGET_LANG = "translationTargetLang"
+        private const val MIME_WAV = "audio/wav"; private const val MIME_JSON = "application/json"
     }
 }

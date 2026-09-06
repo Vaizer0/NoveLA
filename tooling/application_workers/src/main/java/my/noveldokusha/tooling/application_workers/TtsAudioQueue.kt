@@ -15,27 +15,14 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.text_to_speech.TtsAudioExportRequest
 import timber.log.Timber
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Persistent audio-export scheduler with five independent export-only TTS clients.
- *
- * Each logical chapter/source gets its own WorkManager unique-work name, so different
- * chapters never share a serialized chain. The TTS engine pool is the concurrency gate:
- * at most [MAX_CONCURRENT_EXPORTS] exports can synthesize at once.
- *
- * Re-enqueueing the same logical chapter/source replaces only that chapter's previous
- * generation. Every generation has a unique internal job ID, so late callbacks from an
- * older cancellation cannot overwrite the replacement's progress or temporary WAV.
- */
 object TtsAudioQueue {
     const val MAX_CONCURRENT_EXPORTS = 5
     private const val WORK_PREFIX = "tts-audio-download"
     const val AUDIO_TAG = "tts-audio-export"
     private const val RECONCILE_MIN_INTERVAL_MS = 10_000L
-
     private val lock = Any()
-    private val lastReconcileAtMs = AtomicLong(0L)
+    private val lastReconcileAtMs = java.util.concurrent.atomic.AtomicLong(0L)
 
     fun enqueue(context: Context, appPreferences: AppPreferences, request: TtsAudioExportRequest) {
         val logicalJobId = request.jobId
@@ -63,85 +50,47 @@ object TtsAudioQueue {
             .addTag(AUDIO_TAG)
             .build()
 
-        updateState(appPreferences, generationJobId) {
-            TtsAudioJobState(
+        synchronized(lock) {
+            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+            current.entries.removeAll { (_, value) ->
+                value.chapterUrl == request.chapterUrl && value.novelUrl == request.novelUrl && value.source == request.source
+            }
+            current[generationJobId] = TtsAudioJobState(
                 chapterUrl = request.chapterUrl,
                 novelUrl = request.novelUrl,
                 chapterTitle = request.chapterTitle,
                 source = request.source,
                 status = TtsAudioJobStatus.QUEUED,
-                message = "",
-                displayName = "",
-                documentUri = "",
-                progress = 0,
                 workRequestId = workRequest.id.toString(),
+                outputDirectoryUri = request.outputDirectoryUri,
             )
+            appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
 
-        // One chain per logical export, not one of five hash buckets. This preserves
-        // duplicate protection for the same chapter/source without serializing unrelated
-        // chapters that happen to hash to the same lane.
         WorkManager.getInstance(context)
-            .beginUniqueWork(
-                workName(logicalJobId),
-                ExistingWorkPolicy.REPLACE,
-                workRequest,
-            )
+            .beginUniqueWork(workName(logicalJobId), ExistingWorkPolicy.REPLACE, workRequest)
             .enqueue()
     }
 
-    /** Cancel exactly one WorkRequest generation. */
-    fun cancel(
-        context: Context,
-        appPreferences: AppPreferences,
-        workRequestId: String,
-    ) {
-        val id = runCatching { UUID.fromString(workRequestId) }
-            .onFailure { Timber.w(it, "TtsAudio: invalid WorkRequest id for cancel: $workRequestId") }
-            .getOrNull() ?: return
-
-        WorkManager.getInstance(context).cancelWorkById(id)
+    fun cancel(context: Context, appPreferences: AppPreferences, workRequestId: String) {
+        val id = runCatching { UUID.fromString(workRequestId) }.getOrNull() ?: return
         synchronized(lock) {
-            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            val iterator = current.iterator()
-            var changed = false
-            while (iterator.hasNext()) {
-                val (_, job) = iterator.next()
-                if (job.workRequestId == workRequestId && job.isActive) {
-                    iterator.remove()
-                    changed = true
-                    break
-                }
-            }
-            if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+            val job = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.values.firstOrNull { it.workRequestId == workRequestId }
+            if (job != null && job.phase.equals("VIDEO", true)) return
         }
+        WorkManager.getInstance(context).cancelWorkById(id)
     }
 
-    /** Cancel all current exports (kept for explicit queue-wide cancellation callers). */
     fun cancelAll(context: Context, appPreferences: AppPreferences) {
         WorkManager.getInstance(context).cancelAllWorkByTag(AUDIO_TAG)
-        synchronized(lock) {
-            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            val iterator = current.iterator()
-            var changed = false
-            while (iterator.hasNext()) {
-                val (_, job) = iterator.next()
-                if (!job.isActive) continue
-                iterator.remove()
-                changed = true
-            }
-            if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
-        }
     }
 
-    fun cancelAllReactive(context: Context) {
+    fun cancelAllReactive(context: Context) =
         WorkManager.getInstance(context).cancelAllWorkByTag(AUDIO_TAG)
-    }
 
     fun observeJobs(appPreferences: AppPreferences): Flow<Map<String, TtsAudioJobState>> =
         appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.flow()
 
-    /** Repair persisted QUEUED/RUNNING records after process death or force-stop. */
     suspend fun reconcile(context: Context, appPreferences: AppPreferences) {
         val now = android.os.SystemClock.elapsedRealtime()
         val last = lastReconcileAtMs.get()
@@ -153,68 +102,30 @@ object TtsAudioQueue {
                 WorkManager.getInstance(context).getWorkInfosByTag(AUDIO_TAG).get()
             }
         }.getOrNull() ?: return
+        val byId = workInfos.associateBy { it.id.toString() }
+        val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
+        var changed = false
 
-        val infoById = HashMap<String, WorkInfo>(workInfos.size)
-        for (info in workInfos) {
-            infoById[info.id.toString()] = info
-        }
-
-        synchronized(lock) {
-            val current = appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value.toMutableMap()
-            val iterator = current.iterator()
-            var changed = false
-            while (iterator.hasNext()) {
-                val (jobId, job) = iterator.next()
-                if (!job.isActive) continue
-
-                val info = infoById[job.workRequestId]
-                if (info == null) {
-                    iterator.remove()
+        for ((jobId, job) in current.toList()) {
+            if (job.phase.equals("VIDEO", true)) continue
+            val info = byId[job.workRequestId]
+            when (info?.state) {
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.RUNNING,
+                WorkInfo.State.BLOCKED -> Unit
+                WorkInfo.State.SUCCEEDED -> Unit
+                WorkInfo.State.CANCELLED,
+                WorkInfo.State.FAILED,
+                null -> {
+                    deleteLocalAudioTemp(context, jobId)
+                    current.remove(jobId)
                     changed = true
-                    continue
                 }
-
-                when (info.state) {
-                    WorkInfo.State.ENQUEUED,
-                    WorkInfo.State.RUNNING,
-                    WorkInfo.State.BLOCKED,
-                    -> Unit
-
-                    WorkInfo.State.SUCCEEDED -> {
-                        val repaired = job.copy(
-                            status = TtsAudioJobStatus.SUCCESS,
-                            progress = 100,
-                            message = "",
-                        )
-                        if (repaired != job) {
-                            current[jobId] = repaired
-                            changed = true
-                        }
-                    }
-
-                    WorkInfo.State.CANCELLED -> {
-                        iterator.remove()
-                        changed = true
-                    }
-
-                    WorkInfo.State.FAILED -> {
-                        val repaired = job.copy(
-                            status = TtsAudioJobStatus.FAILED,
-                            message = if (job.message.isBlank()) "failed" else job.message,
-                        )
-                        if (repaired != job) {
-                            current[jobId] = repaired
-                            changed = true
-                        }
-                    }
-                }
-            }
-
-            if (changed) {
-                Timber.w("TtsAudio: reconciled persisted export jobs after process restart")
-                appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
             }
         }
+        if (changed) appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
+
+        TtsVideoExportQueue.reconcile(context, appPreferences)
     }
 
     fun updateState(
@@ -228,6 +139,11 @@ object TtsAudioQueue {
             current[jobId] = updated
             appPreferences.TTS_AUDIO_DOWNLOAD_JOBS.value = current
         }
+    }
+
+    private fun deleteLocalAudioTemp(context: Context, jobId: String) {
+        runCatching { java.io.File(context.cacheDir, "tts_audio/$jobId.wav").delete() }
+            .onFailure { Timber.w(it, "TtsAudio: temp cleanup failed for $jobId") }
     }
 
     private fun workName(logicalJobId: String): String = "$WORK_PREFIX-$logicalJobId"

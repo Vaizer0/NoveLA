@@ -1,13 +1,10 @@
 package my.noveldokusha.features.chapterslist
 
-import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +26,8 @@ import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,8 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
@@ -51,14 +46,12 @@ import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
 import my.noveldokusha.core.appPreferences.TtsAudioSource
 import my.noveldokusha.coreui.components.AnimatedTransition
 import my.noveldokusha.coreui.components.SlimListItem
-import my.noveldokusha.coreui.theme.InternalTheme
-import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.chapterslist.R
-import my.noveldokusha.feature.local_database.ChapterWithContext
-import my.noveldokusha.feature.local_database.tables.Chapter
 import my.noveldokusha.strings.R as StringsR
+import my.noveldokusha.feature.local_database.ChapterWithContext
+import kotlinx.coroutines.runBlocking
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalAnimationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChaptersScreenChapterItem(
     chapterWithContext: ChapterWithContext,
@@ -80,129 +73,23 @@ internal fun ChaptersScreenChapterItem(
     translatedAudioAvailable: Boolean = true,
 ) {
     val chapter = chapterWithContext.chapter
-    val sizeLabel = chapterSize?.sizeBytes?.let { formatBytes(it) }
-
-    val targetContainerColor = when {
-        selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-        highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        else -> Color.Transparent
-    }
-    val containerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(durationMillis = 200),
-        label = "chapterItemBackground"
-    )
-
-    val stableOnClick = remember(onClick) { onClick }
-    val stableOnLongClick = remember(onLongClick) { onLongClick }
-    val stableOnDownload = remember(onDownload) { onDownload }
-    val stableOnAudioOriginal = remember(onAudioOriginal) { onAudioOriginal }
-    val stableOnAudioTranslated = remember(onAudioTranslated) { onAudioTranslated }
-
-    val badge: @Composable (() -> Unit)? = remember(chapterWithContext.lastReadChapter, chapter.read) {
-        when {
-            chapterWithContext.lastReadChapter -> {
-                {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Text(
-                            text = stringResource(id = R.string.last_read),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-            chapter.read -> {
-                {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = stringResource(id = R.string.read),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-            else -> null
-        }
-    }
-
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 0.5.dp,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(containerColor)
-                .combinedClickable(
-                    onClick = stableOnClick,
-                    onLongClick = stableOnLongClick,
-                )
-        ) {
+    Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 0.5.dp, color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
             SlimListItem(
-                headlineContent = {
-                    Text(
-                        text = translatedTitle ?: chapter.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (chapter.read) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                    )
-                },
-                supportingContent = if (badge != null || sizeLabel != null) {
-                    {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (badge != null) badge()
-                            if (sizeLabel != null) {
-                                Text(
-                                    text = sizeLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                } else null,
+                headlineContent = { Text(translatedTitle ?: chapter.title, style = MaterialTheme.typography.bodyMedium) },
+                supportingContent = chapterSize?.sizeBytes?.let { { Text(formatBytes(it), style = MaterialTheme.typography.labelSmall) } },
                 trailingContent = {
                     Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                         if (!isLocalSource) {
-                            AnimatedTransition(
-                                targetState = chapterWithContext.downloaded,
-                                transitionSpec = { fadeIn() togetherWith fadeOut() }
-                            ) { downloaded ->
-                                IconButton(onClick = stableOnDownload) {
-                                    Icon(
-                                        if (downloaded) Icons.Filled.CloudDownload
-                                        else Icons.Outlined.CloudDownload,
-                                        null
-                                    )
-                                }
+                            AnimatedTransition(targetState = chapterWithContext.downloaded) { downloaded ->
+                                IconButton(onClick = onDownload) { Icon(if (downloaded) Icons.Filled.CloudDownload else Icons.Outlined.CloudDownload, null) }
                             }
                         }
-                        ChapterAudioButton(
-                            source = TtsAudioSource.ORIGINAL,
-                            audioJob = audioOriginalJob,
-                            audioFileExists = audioOriginalFileExists,
-                            onAudio = stableOnAudioOriginal
-                        )
-                        ChapterAudioButton(
-                            source = TtsAudioSource.TRANSLATED,
-                            audioJob = audioTranslatedJob,
-                            audioFileExists = audioTranslatedFileExists,
-                            enabled = translatedAudioAvailable || audioTranslatedJob != null,
-                            onAudio = stableOnAudioTranslated
-                        )
+                        ChapterAudioButton(TtsAudioSource.ORIGINAL, audioOriginalJob, audioOriginalFileExists, true, onAudioOriginal)
+                        ChapterAudioButton(TtsAudioSource.TRANSLATED, audioTranslatedJob, audioTranslatedFileExists, translatedAudioAvailable || audioTranslatedJob != null, onAudioTranslated)
                     }
-                },
+                }
             )
         }
     }
@@ -213,124 +100,73 @@ private fun ChapterAudioButton(
     source: TtsAudioSource,
     audioJob: TtsAudioJobState?,
     audioFileExists: Boolean,
-    enabled: Boolean = true,
-    onAudio: () -> Unit
+    enabled: Boolean,
+    onAudio: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val status = audioJob?.status
-    val running = status == TtsAudioJobStatus.QUEUED || status == TtsAudioJobStatus.RUNNING
+    val phase = audioJob?.phase?.uppercase()
+    val running = audioJob != null && audioJob.isActive
+    val audioReady = status == TtsAudioJobStatus.SUCCESS && phase == "AUDIO" && audioJob.audioUri.isNotBlank() &&
+        audioFileExists && audioJob.timelineUri.isNotBlank() && documentExists(context, audioJob.timelineUri)
+    val videoReady = status == TtsAudioJobStatus.SUCCESS && phase == "VIDEO" && audioFileExists && audioJob.documentUri.isNotBlank()
     val clickable = enabled || audioJob != null
-    val contentDescription = stringResource(
-        when (status) {
-            TtsAudioJobStatus.QUEUED -> StringsR.string.tts_audio_status_queued
-            TtsAudioJobStatus.RUNNING -> StringsR.string.tts_audio_status_running
-            TtsAudioJobStatus.SUCCESS -> StringsR.string.tts_audio_downloaded
-            TtsAudioJobStatus.FAILED -> StringsR.string.tts_audio_download_failed
-            TtsAudioJobStatus.CANCELLED -> StringsR.string.tts_audio_chapter_action
-            null -> StringsR.string.tts_audio_chapter_action
-        }
-    ).let { statusDesc ->
-        val sourceLabel = stringResource(
-            when (source) {
-                TtsAudioSource.ORIGINAL -> StringsR.string.tts_audio_source_original
-                TtsAudioSource.TRANSLATED -> StringsR.string.tts_audio_source_translated
-                TtsAudioSource.ASK_EVERY_TIME -> StringsR.string.tts_audio_chapter_action
-            }
-        )
-        if (sourceLabel.isNotBlank()) "$sourceLabel: $statusDesc" else statusDesc
-    }
 
     when {
         running -> {
-            val percent = audioJob!!.progress.coerceIn(0, 100)
-            val isVideoPhase = audioJob.phase.equals("VIDEO", ignoreCase = true)
-            val progressColor = if (isVideoPhase) {
-                Color(0xFFFFA726)
-            } else {
-                MaterialTheme.colorScheme.tertiary
-            }
-            val progressDesc = stringResource(StringsR.string.tts_audio_progress_percent, percent)
-            val stageDescription = if (isVideoPhase) "video generation" else "audio generation"
-            IconButton(onClick = onAudio) {
+            val p = audioJob!!.progress.coerceIn(0, 100)
+            val c = if (phase == "VIDEO") Color(0xFFFF9800) else MaterialTheme.colorScheme.tertiary
+            IconButton(onClick = {}) {
                 Box {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
-                        progress = { percent / 100f },
-                        strokeWidth = 2.dp,
-                        color = progressColor
-                    )
-                    Text(
-                        text = "$percent",
-                        modifier = Modifier.align(Alignment.Center),
-                        fontSize = 9.sp,
-                        color = progressColor
-                    )
-                    Icon(
-                        sourceFilledIcon(source),
-                        contentDescription = "$contentDescription ($stageDescription, $progressDesc)",
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(12.dp),
-                        tint = progressColor
-                    )
+                    CircularProgressIndicator(Modifier.size(28.dp), progress = { p / 100f }, strokeWidth = 2.dp, color = c)
+                    Text("$p", Modifier.align(Alignment.Center), fontSize = 9.sp, color = c)
+                    Icon(sourceFilledIcon(source), null, Modifier.align(Alignment.BottomEnd).size(12.dp), tint = c)
                 }
             }
         }
-
-        status == TtsAudioJobStatus.SUCCESS && audioFileExists -> {
-            IconButton(onClick = onAudio) {
+        videoReady -> {
+            IconButton(onClick = { openDocument(context, audioJob!!.documentUri, "video/mp4") }) {
                 Box {
-                    Icon(
-                        sourceFilledIcon(source),
-                        contentDescription = contentDescription,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Icon(
-                        Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(12.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(sourceFilledIcon(source), null, tint = Color(0xFFFF9800))
+                    Icon(Icons.Filled.CheckCircle, null, Modifier.align(Alignment.BottomEnd).size(12.dp), tint = Color(0xFFFF9800))
                 }
             }
         }
-
+        audioReady -> {
+            val blue = Color(0xFF2196F3)
+            IconButton(onClick = { my.noveldokusha.tooling.application_workers.TtsVideoExportQueue.enqueueFromJob(context, audioJob!!) }) {
+                Box {
+                    Icon(sourceFilledIcon(source), null, tint = blue)
+                    Icon(Icons.Filled.CheckCircle, null, Modifier.align(Alignment.BottomEnd).size(12.dp), tint = blue)
+                }
+            }
+        }
         status == TtsAudioJobStatus.FAILED -> {
             IconButton(onClick = onAudio) {
                 Box {
-                    Icon(
-                        sourceFilledIcon(source),
-                        contentDescription = contentDescription,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Icon(
-                        Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(12.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                    Icon(sourceFilledIcon(source), null, tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Filled.Refresh, null, Modifier.align(Alignment.BottomEnd).size(12.dp), tint = MaterialTheme.colorScheme.error)
                 }
             }
         }
-
         else -> {
-            IconButton(
-                onClick = {
-                    if (clickable) onAudio()
-                },
-                enabled = clickable
-            ) {
-                Icon(
-                    sourceIdleIcon(source),
-                    contentDescription = contentDescription,
-                    tint = if (clickable) LocalContentColor.current
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                )
+            IconButton(onClick = onAudio, enabled = clickable) {
+                Icon(sourceIdleIcon(source), null, tint = if (clickable) LocalContentColor.current else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
             }
         }
+    }
+}
+
+private fun documentExists(context: Context, uriString: String): Boolean = runCatching {
+    context.contentResolver.query(Uri.parse(uriString), arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { it.moveToFirst() } ?: false
+}.getOrDefault(false)
+
+private fun openDocument(context: Context, uriString: String, mime: String) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(uriString), mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
     }
 }
 
@@ -344,81 +180,4 @@ private fun sourceFilledIcon(source: TtsAudioSource): ImageVector = when (source
     TtsAudioSource.ORIGINAL -> Icons.Filled.AudioFile
     TtsAudioSource.TRANSLATED -> Icons.Filled.Translate
     TtsAudioSource.ASK_EVERY_TIME -> Icons.Filled.GraphicEq
-}
-
-@PreviewThemes
-@Composable
-private fun PreviewView(
-    @PreviewParameter(PreviewProvider::class) previewProviderState: PreviewProviderState
-) {
-    InternalTheme {
-        ChaptersScreenChapterItem(
-            chapterWithContext = previewProviderState.chapterWithContext,
-            selected = previewProviderState.selected,
-            isLocalSource = false,
-            onLongClick = {},
-            onClick = {},
-            onDownload = {},
-            onAudioOriginal = {},
-            onAudioTranslated = {}
-        )
-    }
-}
-
-private data class PreviewProviderState(
-    val chapterWithContext: ChapterWithContext,
-    val selected: Boolean
-)
-
-private class PreviewProvider : PreviewParameterProvider<PreviewProviderState> {
-    override val values = sequenceOf(
-        PreviewProviderState(
-            chapterWithContext = ChapterWithContext(
-                chapter = Chapter(
-                    title = "Title of the chapter",
-                    url = "url",
-                    bookUrl = "bookUrl",
-                    lastReadOffset = 0,
-                    lastReadPosition = 0,
-                    position = 0,
-                    read = false
-                ),
-                downloaded = false,
-                lastReadChapter = false
-            ),
-            selected = false
-        ),
-        PreviewProviderState(
-            chapterWithContext = ChapterWithContext(
-                chapter = Chapter(
-                    title = "Title of the chapter, Title of the chapter, Title of the chapter, Title of the chapter, Title of the chapter,Title of the chapter ,Title of the chapter",
-                    url = "url",
-                    bookUrl = "bookUrl",
-                    lastReadOffset = 0,
-                    lastReadPosition = 0,
-                    position = 0,
-                    read = true
-                ),
-                downloaded = true,
-                lastReadChapter = false
-            ),
-            selected = false
-        ),
-        PreviewProviderState(
-            chapterWithContext = ChapterWithContext(
-                chapter = Chapter(
-                    title = "Title of the chapter",
-                    url = "url",
-                    bookUrl = "bookUrl",
-                    lastReadOffset = 0,
-                    lastReadPosition = 0,
-                    position = 0,
-                    read = false
-                ),
-                downloaded = true,
-                lastReadChapter = true
-            ),
-            selected = true
-        )
-    )
 }
