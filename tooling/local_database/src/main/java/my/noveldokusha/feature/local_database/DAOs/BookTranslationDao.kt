@@ -61,4 +61,18 @@ interface BookTranslationDao {
 
     @Query("DELETE FROM BookTranslation")
     suspend fun deleteAll()
+
+    // ponytail: bulk query для library titles — одна Room Flow на весь список книг,
+    // вместо 300+ per-book подписок. Room observer: 1 вместо 300.
+    @Query("""
+        SELECT bookUrl, sourceLang, titleTranslation, descriptionTranslation
+        FROM BookTranslation
+        WHERE bookUrl IN (:bookUrls)
+        AND targetLang = :targetLang
+        AND (titleTranslation != '' OR descriptionTranslation != '')
+    """)
+    fun getTranslatedBooksBulkFlow(
+        bookUrls: List<String>,
+        targetLang: String
+    ): Flow<List<BookTitleTranslation>>
 }

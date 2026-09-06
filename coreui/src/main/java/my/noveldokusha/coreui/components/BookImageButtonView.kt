@@ -64,6 +64,7 @@ fun BookImageButtonView(
     sourceStripSourceName: String? = null,
     sourceStripOnCover: Boolean = true,
     forceCache: Boolean = false,
+    fadeInDurationMillis: Int = 250,
     onClick: () -> Unit,
     onLongClick: () -> Unit = { },
 ) {
@@ -84,10 +85,10 @@ fun BookImageButtonView(
                 .aspectRatio(1 / 1.45f)
         ) {
             // Image with clipping — badges must be OUTSIDE this Box
+            // ponytail: убран дублирующий clip — внешний Box уже clip(ImageBorderShape)
             Box(
                 Modifier
                     .matchParentSize()
-                    .clip(ImageBorderShape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .combinedClickable(
                         indication = indication,
@@ -101,6 +102,7 @@ fun BookImageButtonView(
                     imageModel = coverImageModel,
                     contentDescription = title,
                     modifier = Modifier.fillMaxSize(),
+                    fadeInDurationMillis = fadeInDurationMillis,
                     error = R.drawable.default_book_cover,
                     forceCache = forceCache,
                 )

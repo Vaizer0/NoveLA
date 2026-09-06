@@ -25,9 +25,11 @@ dependencies {
     implementation(libs.compose.androidx.lifecycle.viewmodel)
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.coil)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.compose.lazyColumnScrollbar)
 
     implementation(libs.timber)
+    implementation(libs.androidx.room.runtime) // ponytail: SimpleSQLiteQuery for @RawQuery
 
     testImplementation(libs.test.junit)
     testImplementation(libs.test.mockito.kotlin)

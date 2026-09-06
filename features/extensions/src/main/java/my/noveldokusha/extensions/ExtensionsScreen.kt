@@ -225,7 +225,7 @@ private fun UnifiedExtensionsScreen(
                         contentPadding = PaddingValues(bottom = 300.dp),
                     ) {
                         if (installedExtensions.isNotEmpty()) {
-                            item {
+                            item(contentType = "header") {
                                 Text(
                                     text = stringResource(my.noveldokusha.strings.R.string.installed),
                                     style = MaterialTheme.typography.titleMedium,
@@ -236,7 +236,7 @@ private fun UnifiedExtensionsScreen(
                                 )
                             }
 
-                            items(installedExtensions, key = { extension -> extension.id }) { extension ->
+                            items(installedExtensions, key = { extension -> extension.id }, contentType = { "extension" }) { extension ->
                                 ExtensionListItem(
                                     extension = extension,
                                     viewModel = viewModel
@@ -245,7 +245,7 @@ private fun UnifiedExtensionsScreen(
                         }
 
                         if (availableExtensions.isNotEmpty()) {
-                            item {
+                            item(contentType = "header") {
                                 Text(
                                     text = stringResource(my.noveldokusha.strings.R.string.available),
                                     style = MaterialTheme.typography.titleMedium,
@@ -256,7 +256,7 @@ private fun UnifiedExtensionsScreen(
                                 )
                             }
 
-                            items(availableExtensions, key = { extension -> extension.id }) { extension ->
+                            items(availableExtensions, key = { extension -> extension.id }, contentType = { "extension" }) { extension ->
                                 ExtensionListItem(
                                     extension = extension,
                                     viewModel = viewModel

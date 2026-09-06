@@ -2,7 +2,6 @@ package my.noveldokusha.core
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -11,8 +10,6 @@ import java.nio.file.Paths
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
-import my.noveldokusha.core.isCoverValid
-
 
 @Singleton
 class AppFileResolver @Inject constructor(
@@ -79,15 +76,16 @@ class AppFileResolver @Inject constructor(
     }
 
     /**
-     * Returns the path to the image if local, no changes if non local.
+     * Возвращает путь к изображению: локальный File если обложка есть на диске,
+     * иначе remote URL (для загрузки из сети).
      *
-     * For a cover image (isCover=true) with a remote (https) URL we prefer the locally
-     * cached cover file when it exists and is a valid image; otherwise we return the
-     * remote URL so a missing local cover (e.g. after a backup restore) is transparently
-     * re-fetched from the site instead of showing a broken/empty image.
+     * Для обложек (isCover=true) с HTTPS-URL проверяем наличие файла на диске.
+     * Если файл существует — возвращаем его (Coil грузит локально, без сети).
+     * Если файла нет — возвращаем remote URL (Coil скачает).
+     * Повреждённые файлы Coil обработает сам (placeholder), что лучше 4-6 сек
+     * DNS timeout при обращении к мёртвому домену.
      *
-     * For inline chapter images (isCover=false) remote URLs are returned as-is so Coil
-     * fetches them directly from the source.
+     * Для изображений глав (isCover=false) remote URL возвращается как есть.
      */
     fun resolvedBookImagePath(
         bookUrl: String,
@@ -100,7 +98,7 @@ class AppFileResolver @Inject constructor(
             bookUrl.isContentUri -> resolved
             resolved.isHttpsUrl && isCover -> {
                 val coverFile = getStorageBookCoverImageFile(getLocalBookFolderName(bookUrl))
-                if (isCoverValid(coverFile)) coverFile else resolved
+                if (coverFile.exists()) coverFile else resolved
             }
             resolved.isHttpsUrl -> resolved
             else -> getStorageBookImageFile(bookUrl, resolved)
@@ -109,7 +107,7 @@ class AppFileResolver @Inject constructor(
 }
 
 /**
- * Returns the path to the image if local, no changes if non local.
+ * Resolves the path to the image if local, no changes if non local.
  */
 @Composable
 fun rememberResolvedBookImagePath(
@@ -119,13 +117,12 @@ fun rememberResolvedBookImagePath(
 ): Any {
     val context = LocalContext.current
     val appFileResolver = remember(context) { AppFileResolver(context) }
-    return remember(context, bookUrl, imagePath, isCover) {
-        mutableStateOf(
-            appFileResolver.resolvedBookImagePath(
-                bookUrl = bookUrl,
-                imagePath = imagePath,
-                isCover = isCover
-            )
+
+    return remember(appFileResolver, bookUrl, imagePath, isCover) {
+        appFileResolver.resolvedBookImagePath(
+            bookUrl = bookUrl,
+            imagePath = imagePath,
+            isCover = isCover
         )
-    }.value
+    }
 }

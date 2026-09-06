@@ -35,6 +35,8 @@ dependencies {
     implementation(libs.compose.material3.android)
     implementation(libs.coil)
     implementation(libs.compose.coil)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.okhttp)
     implementation(libs.jsoup)
     implementation(libs.timber)
     implementation(libs.subsampling.scale.image.view)

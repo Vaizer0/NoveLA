@@ -5,10 +5,12 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.BookWithContext
 import my.noveldokusha.feature.local_database.tables.Book
+import my.noveldokusha.feature.local_database.tables.Chapter
 
 @Dao
 interface LibraryDao {

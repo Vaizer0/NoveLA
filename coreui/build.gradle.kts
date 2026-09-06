@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.material3.android)
     implementation(libs.compose.coil)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.compose.lazyColumnScrollbar)
 
     // Sora Editor — LGPL v2.1, (C) 2020-2026 Rosemoe (https://github.com/Rosemoe/sora-editor)

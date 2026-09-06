@@ -8,12 +8,15 @@ import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.toBitmap
-import coil.Coil
+import coil3.SingletonImageLoader
+import coil3.asDrawable
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import coil.request.ImageRequest
-import coil.request.SuccessResult
-import coil.size.Size
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.size.Size
 import dagger.hilt.android.qualifiers.ApplicationContext
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.utils.refererFor
@@ -154,19 +157,26 @@ internal class LibraryUpdateNotification @Inject constructor(
 
         if (book.coverImageUrl.isBlank()) return
 
-        val imageLoader = Coil.imageLoader(context)
+        val imageLoader = SingletonImageLoader.get(context)
         val localCover = appFileResolver.resolvedBookImagePath(book.url, book.coverImageUrl, isCover = true)
         val referer = (localCover as? String)?.takeIf { it.startsWith("http://") || it.startsWith("https://") }?.let(::refererFor)
         val request = ImageRequest.Builder(context)
             .data(localCover)
             .size(Size(512, 512))
-            .allowHardware(false)
-            .apply { if (!referer.isNullOrEmpty()) setHeader("Referer", referer) }
+            .apply {
+                if (!referer.isNullOrEmpty()) {
+                    httpHeaders(
+                        NetworkHeaders.Builder()
+                            .set("Referer", referer)
+                            .build()
+                    )
+                }
+            }
             .build()
 
         val bitmap = try {
             when (val result = withContext(Dispatchers.IO) { imageLoader.execute(request) }) {
-                is SuccessResult -> result.drawable.toBitmap()
+                is SuccessResult -> result.image.asDrawable(context.resources).toBitmap()
                 else -> null
             }
         } catch (_: Exception) { null }

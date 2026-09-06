@@ -9,7 +9,6 @@ import my.noveldokusha.core.appPreferences.TranslationSettingsResolver
 import my.noveldokusha.core.appPreferences.TranslationSettingsResolver.ActiveTranslatorLevel
 import my.noveldokusha.core.appPreferences.TranslationSettingsResolver.TranslationSettings
 import my.noveldokusha.scraper.Scraper
-import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,88 +34,56 @@ class TranslationSettingsResolverImpl @Inject constructor(
 ) : TranslationSettingsResolver {
 
     // Идентичность источника — только загруженные источники (см. KDoc класса).
-    private fun sourceIdFor(bookUrl: String): String? =
+    // ponytail: sourceIdFor вынесен в публичный resolveSourceId чтобы вызывающий код
+    // мог вычислить sourceId один раз и передать в остальные методы (6 вызовов → 1).
+    override fun resolveSourceId(bookUrl: String): String? =
         scraper.getCompatibleSource(bookUrl)?.id
 
-    override fun translationEnabledForBook(bookUrl: String): Boolean {
-        val sourceId = sourceIdFor(bookUrl)
-        val pluginContained = sourceId != null && appPreferences.TRANSLATION_PLUGIN_ENABLED_MAP.value.containsKey(sourceId)
-        val pluginValue = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_ENABLED_MAP.value[it] }
-        val bookContained = appPreferences.TRANSLATION_BOOK_ENABLED_MAP.value.containsKey(bookUrl)
-        val result = appPreferences.translationEnabledForBook(
+    private fun sourceIdFor(bookUrl: String, sourceId: String?): String? =
+        sourceId ?: scraper.getCompatibleSource(bookUrl)?.id
+
+    override fun translationEnabledForBook(bookUrl: String, sourceId: String?): Boolean {
+        val resolvedSourceId = sourceIdFor(bookUrl, sourceId)
+        return appPreferences.translationEnabledForBook(
             bookUrl = bookUrl,
-            sourceId = sourceId,
+            sourceId = resolvedSourceId,
         )
-        Timber.d(
-            "resolverEnabled: book=%s sourceId=%s globalMode=%s globalEnabled=%s " +
-                "bookContained=%s pluginContained=%s pluginValue=%s => enabled=%s",
-            bookUrl.takeLast(40), sourceId,
-            appPreferences.TRANSLATION_GLOBAL_MODE.value,
-            appPreferences.GLOBAL_TRANSLATION_ENABLED.value,
-            bookContained, pluginContained, pluginValue, result,
-        )
-        return result
     }
 
-    override fun translationPairForBook(bookUrl: String): TranslationLangPair {
-        val sourceId = sourceIdFor(bookUrl)
-        val bookPair = appPreferences.TRANSLATION_BOOK_LANG_PAIR.value[bookUrl]
-        val pluginPair = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_LANG_PAIR.value[it] }
-        val globalSource = appPreferences.GLOBAL_TRANSLATION_PREFERRED_SOURCE.value
-        val globalTarget = appPreferences.GLOBAL_TRANSLATION_PREFERRED_TARGET.value
-        val result = appPreferences.translationPairForBook(
+    override fun translationPairForBook(bookUrl: String, sourceId: String?): TranslationLangPair {
+        val resolvedSourceId = sourceIdFor(bookUrl, sourceId)
+        return appPreferences.translationPairForBook(
             bookUrl = bookUrl,
-            sourceId = sourceId,
+            sourceId = resolvedSourceId,
         )
-        Timber.d(
-            "resolverPair: book=%s sourceId=%s bookPair=%s pluginPair=%s " +
-                "global=(%s,%s) globalMode=%s => pair=(%s,%s)",
-            bookUrl.takeLast(40), sourceId, bookPair, pluginPair,
-            globalSource, globalTarget,
-            appPreferences.TRANSLATION_GLOBAL_MODE.value,
-            result.source, result.target,
-        )
-        return result
     }
 
-    override fun translationTargetForBook(bookUrl: String): String =
-        translationPairForBook(bookUrl).target
+    override fun translationTargetForBook(bookUrl: String, sourceId: String?): String =
+        translationPairForBook(bookUrl, sourceId).target
 
-    override fun translationScopeForBook(bookUrl: String): String {
-        val sourceId = sourceIdFor(bookUrl)
-        val pluginScope = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_SCOPE.value[it] }
-        val result = appPreferences.translationScopeForBook(
+    override fun translationScopeForBook(bookUrl: String, sourceId: String?): String {
+        val resolvedSourceId = sourceIdFor(bookUrl, sourceId)
+        return appPreferences.translationScopeForBook(
             bookUrl = bookUrl,
-            sourceId = sourceId,
+            sourceId = resolvedSourceId,
         )
-        Timber.d(
-            "resolverScope: book=%s sourceId=%s pluginScope=%s => scope=%s",
-            bookUrl.takeLast(40), sourceId, pluginScope, result,
-        )
-        return result
     }
 
-    override fun translationProviderForBook(bookUrl: String): String? {
-        val sourceId = sourceIdFor(bookUrl)
-        val pluginProvider = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_PROVIDER.value[it] }
-        val result = appPreferences.translationProviderForBook(
+    override fun translationProviderForBook(bookUrl: String, sourceId: String?): String? {
+        val resolvedSourceId = sourceIdFor(bookUrl, sourceId)
+        return appPreferences.translationProviderForBook(
             bookUrl = bookUrl,
-            sourceId = sourceId,
+            sourceId = resolvedSourceId,
         )
-        Timber.d(
-            "resolverProvider: book=%s sourceId=%s pluginProvider=%s => provider=%s",
-            bookUrl.takeLast(40), sourceId, pluginProvider, result,
-        )
-        return result
     }
 
-    override fun translationPromptForBook(bookUrl: String): String? {
-        val sourceId = sourceIdFor(bookUrl)
+    override fun translationPromptForBook(bookUrl: String, sourceId: String?): String? {
+        val resolvedSourceId = sourceIdFor(bookUrl, sourceId)
         // Каскад: per-novel → per-plugin → global (null)
         val novelPrompt = appPreferences.TRANSLATION_NOVEL_PROMPTS.value[bookUrl]?.prompt
             ?.takeIf { it.isNotBlank() }
         if (novelPrompt != null) return novelPrompt
-        val pluginPrompt = sourceId?.let { appPreferences.TRANSLATION_PLUGIN_PROMPTS.value[it] }
+        val pluginPrompt = resolvedSourceId?.let { appPreferences.TRANSLATION_PLUGIN_PROMPTS.value[it] }
             ?.takeIf { it.isNotBlank() }
         return pluginPrompt
     }
@@ -127,7 +94,7 @@ class TranslationSettingsResolverImpl @Inject constructor(
     // независимы), а по состоянию перевода — иначе полоска «Активный переводчик XX»
     // врала бы, показывая пер-новел при выключенном пер-новел и включённом глобале.
     override fun activeTranslatorLevelForBook(bookUrl: String): ActiveTranslatorLevel {
-        val sourceId = sourceIdFor(bookUrl)
+        val sourceId = sourceIdFor(bookUrl, null)
 
         // Пер-новел: включён И пара книги полная (source/target непустые).
         val bookPair = appPreferences.TRANSLATION_BOOK_LANG_PAIR.value[bookUrl]
@@ -190,13 +157,14 @@ class TranslationSettingsResolverImpl @Inject constructor(
                 appPreferences.TRANSLATION_PLUGIN_HIDE_SEARCH.flow(),
             ) { _, _, _, _ -> }
         ) { _, _, _ ->
-            val pair = translationPairForBook(bookUrl)
+            val sourceId = resolveSourceId(bookUrl)
+            val pair = translationPairForBook(bookUrl, sourceId)
             TranslationSettings(
-                enabled = translationEnabledForBook(bookUrl),
+                enabled = translationEnabledForBook(bookUrl, sourceId),
                 source = pair.source,
                 target = pair.target,
-                scope = translationScopeForBook(bookUrl),
-                provider = translationProviderForBook(bookUrl),
+                scope = translationScopeForBook(bookUrl, sourceId),
+                provider = translationProviderForBook(bookUrl, sourceId),
             )
         }.distinctUntilChanged()
 

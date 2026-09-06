@@ -79,7 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import my.noveldokusha.coreui.composableActions.onDoAskForImage
 import my.noveldokusha.coreui.components.PillSlider

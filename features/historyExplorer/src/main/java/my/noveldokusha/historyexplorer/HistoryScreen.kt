@@ -47,8 +47,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
 import my.noveldokusha.core.rememberResolvedBookImagePath
 import my.noveldokusha.core.utils.refererFor
 import my.noveldokusha.feature.local_database.BookMetadata
@@ -194,8 +196,15 @@ private fun HistoryItemCard(
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(coverImageModel)
-                .crossfade(true)
-                .apply { if (!referer.isNullOrEmpty()) setHeader("Referer", referer) }
+                .apply {
+                    if (!referer.isNullOrEmpty()) {
+                        httpHeaders(
+                            NetworkHeaders.Builder()
+                                .set("Referer", referer)
+                                .build()
+                        )
+                    }
+                }
                 .build(),
             contentDescription = item.bookTitle,
             modifier = Modifier

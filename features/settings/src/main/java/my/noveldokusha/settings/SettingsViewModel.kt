@@ -230,7 +230,7 @@ internal class SettingsViewModel @Inject constructor(
 
             context.cacheDir.resolve("image_cache").deleteRecursively()
             withContext(Dispatchers.Main) {
-                coil.Coil.imageLoader(context).memoryCache?.clear()
+                coil3.SingletonImageLoader.get(context).memoryCache?.clear()
             }
 
             updateImagesFolderSizeAndWait()

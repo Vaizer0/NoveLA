@@ -28,12 +28,19 @@ interface TranslationSettingsResolver {
         val provider: String?,
     )
 
-    fun translationEnabledForBook(bookUrl: String): Boolean
-    fun translationPairForBook(bookUrl: String): TranslationLangPair
-    fun translationTargetForBook(bookUrl: String): String
-    fun translationScopeForBook(bookUrl: String): String
-    fun translationProviderForBook(bookUrl: String): String?
-    fun translationPromptForBook(bookUrl: String): String?
+    /**
+     * Вычисляет [sourceId] для книги.
+     * Результат кэшируется в вызывающем коде и передаётся в остальные методы,
+     * чтобы избежать повторного сканирования списка источников (6 вызовов на книгу).
+     */
+    fun resolveSourceId(bookUrl: String): String?
+
+    fun translationEnabledForBook(bookUrl: String, sourceId: String? = null): Boolean
+    fun translationPairForBook(bookUrl: String, sourceId: String? = null): TranslationLangPair
+    fun translationTargetForBook(bookUrl: String, sourceId: String? = null): String
+    fun translationScopeForBook(bookUrl: String, sourceId: String? = null): String
+    fun translationProviderForBook(bookUrl: String, sourceId: String? = null): String?
+    fun translationPromptForBook(bookUrl: String, sourceId: String? = null): String?
 
     /**
      * Реактивный Flow эффективных настроек перевода для книги.

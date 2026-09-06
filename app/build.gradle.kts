@@ -178,6 +178,7 @@ dependencies {
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.material3.android)
     implementation(libs.compose.coil)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.compose.lazyColumnScrollbar)
 
     // Networking

@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.compose.androidx.lifecycle.viewmodel)
     implementation(libs.compose.androidx.material.icons.extended)
     implementation(libs.compose.coil)
+    implementation(libs.coil.network.okhttp)
 
     implementation(libs.timber)
 }

@@ -20,7 +20,9 @@ import androidx.appcompat.content.res.AppCompatResources
 import timber.log.Timber
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.updateLayoutParams
-import coil.load
+import coil3.load
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.utils.inflater
 import my.noveldokusha.core.utils.refererFor
@@ -247,10 +249,9 @@ internal class ReaderItemAdapter(
             ?.let(::refererFor)
 
         bind.image.load(imageModel) {
-            crossfade(true)
-            scale(coil.size.Scale.FIT)
+            scale(coil3.size.Scale.FIT)
             size(1024)
-            if (!referer.isNullOrEmpty()) setHeader("Referer", referer)
+            if (!referer.isNullOrEmpty()) httpHeaders(NetworkHeaders.Builder().set("Referer", referer).build())
             listener(onError = { _,_ ->
                 Timber.d("viewImage: load error for path=%s", item.image.path)
                 if (bind.image.tag == null && item.image.path.startsWith("http")) {
@@ -258,8 +259,7 @@ internal class ReaderItemAdapter(
                     val proxyUrl = "https://images.weserv.nl/?url=${android.net.Uri.encode(item.image.path)}"
                     Timber.d("viewImage: trying proxy url=%s", proxyUrl)
                     bind.image.load(proxyUrl) {
-                        crossfade(true)
-                        scale(coil.size.Scale.FIT)
+                        scale(coil3.size.Scale.FIT)
                         size(1024)
                         error(R.drawable.ic_baseline_error_outline_24)
                     }

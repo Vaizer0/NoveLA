@@ -1,12 +1,19 @@
 package my.noveldokusha
 
 import android.app.Application
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.work.Configuration as WorkConfiguration
-import coil.ImageLoader
-import coil.ImageLoaderFactory
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.request.crossfade
+import coil3.request.allowHardware
+import coil3.request.allowRgb565
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import okio.Path.Companion.toPath
 import dagger.hilt.EntryPoints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +36,7 @@ import java.util.Locale
 
 
 @HiltAndroidApp
-class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
+class App : Application(), SingletonImageLoader.Factory, WorkConfiguration.Provider {
 
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -65,37 +72,41 @@ class App : Application(), ImageLoaderFactory, WorkConfiguration.Provider {
         }
     }
 
-    override fun newImageLoader(): ImageLoader {
-        val diskCache = coil.disk.DiskCache.Builder()
-            .directory(cacheDir.resolve("image_cache"))
+    override fun newImageLoader(context: Context): ImageLoader {
+        val diskCache = coil3.disk.DiskCache.Builder()
+            .directory("${context.cacheDir.absolutePath}/image_cache".toPath())
             .maxSizeBytes(100 * 1024 * 1024) // 100 MB
             .build()
 
-        val memoryCache = coil.memory.MemoryCache.Builder(this)
-            .maxSizeBytes(64 * 1024 * 1024) // 64 MB
+        val memoryCache = coil3.memory.MemoryCache.Builder()
+            .maxSizePercent(context, 0.25) // ponytail: 25% — стандарт для сетевых грид-приложений (Mihon=20%, Coil Sample=25%)
             .build()
 
+        val animatorDurationScale = Settings.System.getFloat(
+            contentResolver, Settings.System.ANIMATOR_DURATION_SCALE, 1f
+        )
+
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val isLowRamDevice = activityManager.isLowRamDevice
+
+        val sharedBuilder = ImageLoader.Builder(context)
+            .fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(8))
+            .decoderCoroutineContext(Dispatchers.IO.limitedParallelism(3))
+            .memoryCache(memoryCache)
+            .diskCache(diskCache)
+            .diskCachePolicy(coil3.request.CachePolicy.ENABLED)
+            .crossfade((300 * animatorDurationScale).toInt())
+            .allowHardware(true)
+            .allowRgb565(isLowRamDevice) // ponytail: RGB_565 только на слабых устройствах — теряет качество на normal/high-end
+
         return when (val networkClient = networkClient) {
-            is ScraperNetworkClient -> ImageLoader
-                .Builder(this)
-                .dispatcher(Dispatchers.IO.limitedParallelism(4))
-                .memoryCache(memoryCache)
-                .okHttpClient(networkClient.client)
-                .diskCache(diskCache)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                .respectCacheHeaders(false)
-                .addLastModifiedToFileCacheKey(true)
+            is ScraperNetworkClient -> sharedBuilder
+                .components {
+                    add(OkHttpNetworkFetcherFactory(callFactory = { networkClient.client }))
+                }
                 .build()
 
-            else -> ImageLoader
-                .Builder(this)
-                .dispatcher(Dispatchers.IO.limitedParallelism(4))
-                .memoryCache(memoryCache)
-                .diskCache(diskCache)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                .respectCacheHeaders(false)
-                .addLastModifiedToFileCacheKey(true)
-                .build()
+            else -> sharedBuilder.build()
         }
     }
 
