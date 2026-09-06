@@ -30,20 +30,23 @@ class TtsAudioNotificationReceiver : BroadcastReceiver() {
                 intent.getStringExtra(EXTRA_URI)?.let { uriString ->
                     runCatching {
                         context.contentResolver.delete(Uri.parse(uriString), null, null)
-                    }.onFailure { Timber.e(it, "TtsAudio: failed to delete audio file") }
+                    }.onFailure { Timber.e(it, "TtsAudio: failed to delete generated media file") }
                 }
                 cancelNotification(context, intent)
             }
             ACTION_OPEN -> {
                 intent.getStringExtra(EXTRA_URI)?.let { uriString ->
                     runCatching {
+                        val uri = Uri.parse(uriString)
+                        val mimeType = intent.getStringExtra(EXTRA_MIME_TYPE)
+                            ?: TtsAudioExportNotification.MIME_AUDIO
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(uriString), TtsAudioExportNotification.MIME_TYPE)
+                                setDataAndType(uri, mimeType)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                         )
-                    }.onFailure { Timber.e(it, "TtsAudio: failed to open audio file") }
+                    }.onFailure { Timber.e(it, "TtsAudio: failed to open generated media file") }
                 }
                 cancelNotification(context, intent)
             }
@@ -62,6 +65,7 @@ class TtsAudioNotificationReceiver : BroadcastReceiver() {
         const val ACTION_OPEN = "my.noveldokusha.action.OPEN_TTS_AUDIO"
         const val ACTION_DELETE = "my.noveldokusha.action.DELETE_TTS_AUDIO"
         const val EXTRA_URI = "extra_uri"
+        const val EXTRA_MIME_TYPE = "extra_mime_type"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
         const val EXTRA_WORK_REQUEST_ID = "extra_work_request_id"
     }
