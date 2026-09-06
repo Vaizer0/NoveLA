@@ -193,7 +193,11 @@ class TtsVideoExportWorkerV2(
                     ?.videoStagingUri
                     ?.takeIf { it.isNotBlank() }
                     ?.let(Uri::parse)
-                val recoveredStagingComplete = stagingUri?.let { SafMp4Stager.isValidMp4(context, it) }
+                val recoveredStagingComplete = if (stagingUri != null) {
+                    SafMp4Stager.isValidMp4(context, stagingUri!!)
+                } else {
+                    null
+                }
                 TtsAudioQueue.updateState(prefs, jobId) { current ->
                     current?.copy(
                         status = TtsAudioJobStatus.QUEUED,
