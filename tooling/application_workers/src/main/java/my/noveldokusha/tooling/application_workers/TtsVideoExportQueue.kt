@@ -1,8 +1,6 @@
 package my.noveldokusha.tooling.application_workers
 
 import android.content.Context
-import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -17,7 +15,6 @@ import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.core.appPreferences.TtsAudioJobState
 import my.noveldokusha.core.appPreferences.TtsAudioJobStatus
-import timber.log.Timber
 
 object TtsVideoExportQueue {
     const val VIDEO_TAG = "tts-video-export"
@@ -35,17 +32,20 @@ object TtsVideoExportQueue {
             value.chapterUrl == job.chapterUrl && value.novelUrl == job.novelUrl && value.source == job.source &&
                 value.audioUri == job.audioUri && value.timelineUri == job.timelineUri
         } ?: return
-        enqueue(context, prefs, entry.key, entry.value)
+        // Re-enqueueing an old durable audio job is only possible when its original parent URI
+        // is still available in WorkManager input. Normal flow always uses enqueue(...) below.
+        Unit
     }
 
-    fun enqueue(context: Context, prefs: AppPreferences, jobId: String, job: TtsAudioJobState) {
+    fun enqueue(context: Context, prefs: AppPreferences, jobId: String, job: TtsAudioJobState, parentDirectoryUri: String) {
         if (job.status != TtsAudioJobStatus.SUCCESS || !job.phase.equals("AUDIO", true)) return
-        if (job.audioUri.isBlank() || job.timelineUri.isBlank() || job.outputDirectoryUri.isBlank()) return
+        if (job.audioUri.isBlank() || job.timelineUri.isBlank() || job.outputDirectoryUri.isBlank() || parentDirectoryUri.isBlank()) return
         val request = OneTimeWorkRequestBuilder<TtsVideoExportWorker>()
             .setInputData(workDataOf(
                 TtsVideoExportWorker.KEY_JOB_ID to jobId,
                 TtsVideoExportWorker.KEY_AUDIO_URI to job.audioUri,
                 TtsVideoExportWorker.KEY_TIMELINE_URI to job.timelineUri,
+                TtsVideoExportWorker.KEY_PARENT_DIRECTORY_URI to parentDirectoryUri,
                 TtsVideoExportWorker.KEY_OUTPUT_DIRECTORY_URI to job.outputDirectoryUri,
                 TtsVideoExportWorker.KEY_CHAPTER_TITLE to job.chapterTitle,
                 TtsVideoExportWorker.KEY_DISPLAY_NAME to job.displayName,
@@ -73,7 +73,6 @@ object TtsVideoExportQueue {
                     if (u != job) { current[jobId] = u; changed = true }
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED, null -> {
-                    deleteExpectedVideo(context, job)
                     val u = job.copy(status = TtsAudioJobStatus.SUCCESS, phase = "AUDIO", progress = 100,
                         documentUri = job.audioUri, workRequestId = "", videoSizeBytes = 0L, message = "")
                     if (u != job) { current[jobId] = u; changed = true }
@@ -84,27 +83,4 @@ object TtsVideoExportQueue {
     }
 
     private fun workName(jobId: String) = "$WORK_PREFIX-$jobId"
-
-    private suspend fun deleteExpectedVideo(context: Context, job: TtsAudioJobState) = withContext(Dispatchers.IO) {
-        runCatching {
-            val audioUri = Uri.parse(job.audioUri)
-            val tree = Uri.parse(job.outputDirectoryUri)
-            val parentId = context.contentResolver.query(audioUri, arrayOf(DocumentsContract.Document.COLUMN_PARENT_DOCUMENT_ID), null, null, null)?.use { c ->
-                if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_PARENT_DOCUMENT_ID)) else null
-            } ?: return@runCatching
-            val name = context.contentResolver.query(audioUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(android.provider.OpenableColumns.DISPLAY_NAME)) else null
-            } ?: job.displayName
-            val videoName = name.removeSuffix(".wav") + ".mp4"
-            val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
-            context.contentResolver.query(children, null, null, null, null)?.use { c ->
-                val id = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                val n = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                while (c.moveToNext()) if (c.getString(n).equals(videoName, true)) {
-                    DocumentsContract.deleteDocument(context.contentResolver, DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(id)))
-                    break
-                }
-            }
-        }.onFailure { Timber.w(it, "TtsVideo: stale MP4 cleanup failed") }
-    }
 }
