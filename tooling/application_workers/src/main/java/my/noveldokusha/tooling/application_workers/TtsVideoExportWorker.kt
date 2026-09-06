@@ -39,7 +39,6 @@ class TtsVideoExportWorker(
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
 
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
-        val renderWav = File(tempDir, "$jobId-video.wav")
         val renderJson = File(tempDir, "$jobId-video.timeline.json")
         val tempVideo = File(tempDir, "$jobId-video.mp4.tmp")
         var videoUri: Uri? = null
@@ -48,24 +47,26 @@ class TtsVideoExportWorker(
                 it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = 0, documentUri = audioUri)
             }
 
-            copyUriToFile(Uri.parse(audioUri), renderWav)
             copyUriToFile(Uri.parse(timelineUri), renderJson)
             ensureActive()
 
-            CinematicVideoExporter(context).export(
-                wavFile = renderWav,
-                timelineFile = renderJson,
-                outputFile = tempVideo,
-                onProgress = { fraction ->
-                    val percent = (fraction * 100f).toInt().coerceIn(0, 100)
-                    TtsAudioQueue.updateState(prefs, jobId) {
-                        it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = percent, documentUri = audioUri)
-                    }
-                },
-                onSizeBytes = { bytes ->
-                    TtsAudioQueue.updateState(prefs, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
-                },
-            )
+            val wavUri = Uri.parse(audioUri)
+            context.contentResolver.openInputStream(wavUri)?.use { wavInput ->
+                CinematicVideoExporter(context).export(
+                    wavInput = wavInput,
+                    timelineFile = renderJson,
+                    outputFile = tempVideo,
+                    onProgress = { fraction ->
+                        val percent = (fraction * 100f).toInt().coerceIn(0, 100)
+                        TtsAudioQueue.updateState(prefs, jobId) {
+                            it?.copy(status = TtsAudioJobStatus.RUNNING, phase = "VIDEO", progress = percent, documentUri = audioUri)
+                        }
+                    },
+                    onSizeBytes = { bytes ->
+                        TtsAudioQueue.updateState(prefs, jobId) { it?.copy(phase = "VIDEO", videoSizeBytes = bytes) }
+                    },
+                )
+            } ?: throw IllegalStateException("Cannot read $wavUri")
             ensureActive()
 
             val parentUri = Uri.parse(parentDirectoryUri)
@@ -90,17 +91,17 @@ class TtsVideoExportWorker(
             return Result.success()
         } catch (e: CancellationException) {
             runCatching { videoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
-            renderWav.delete(); renderJson.delete(); tempVideo.delete()
+            renderJson.delete(); tempVideo.delete()
             restoreAudioState(prefs, jobId, audioUri, displayName)
             throw e
         } catch (e: Exception) {
             Timber.e(e, "TtsVideo: video generation failed for $jobId")
             runCatching { videoUri?.let { DocumentsContract.deleteDocument(context.contentResolver, it) } }
-            renderWav.delete(); renderJson.delete(); tempVideo.delete()
+            renderJson.delete(); tempVideo.delete()
             restoreAudioState(prefs, jobId, audioUri, displayName, e.message ?: "")
             return Result.failure()
         } finally {
-            renderWav.delete(); renderJson.delete(); tempVideo.delete()
+            renderJson.delete(); tempVideo.delete()
         }
     }
 
