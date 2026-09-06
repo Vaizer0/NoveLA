@@ -58,13 +58,11 @@ class TtsVideoExportWorkerV2(
         val prefs = EntryPointAccessors.fromApplication(context.applicationContext, EntryPointAccess::class.java).appPreferences()
         val videoName = displayName.removeSuffix(".wav") + ".mp4"
 
-        // A valid final artifact always wins over stale WorkManager state. Never overwrite or delete it.
         findValidFinal(parentUri, videoName)?.let { finalUri ->
             checkpointSuccess(prefs, jobId, finalUri)
             return Result.success()
         }
 
-        // Recover a fully written SAF staging artifact before rendering again.
         val existingJob = prefs.TTS_AUDIO_DOWNLOAD_JOBS.value[jobId]
         existingJob?.videoStagingUri?.takeIf { it.isNotBlank() }?.let { stagedString ->
             val staged = Uri.parse(stagedString)
@@ -78,9 +76,7 @@ class TtsVideoExportWorkerV2(
             }
         }
 
-        if (!RENDER_MUTEX.tryLock()) {
-            return Result.retry()
-        }
+        if (!RENDER_MUTEX.tryLock()) return Result.retry()
 
         val wakeLock = acquireWakeLock(jobId)
         val tempDir = File(context.cacheDir, "tts_audio").apply { mkdirs() }
@@ -118,8 +114,6 @@ class TtsVideoExportWorkerV2(
             setForeground(getForegroundInfo())
             publishProgress(0, 0L, force = true)
 
-            // Create the SAF staging artifact BEFORE the expensive render. It remains durable across
-            // process death and is only renamed to .mp4 after the complete staged MP4 has been validated.
             stagingUri = withContext(Dispatchers.IO) {
                 DocumentsContract.createDocument(
                     context.contentResolver,
@@ -163,8 +157,6 @@ class TtsVideoExportWorkerV2(
             currentCoroutineContext().ensureActive()
             require(tempVideo.isFile && tempVideo.length() > 0L) { "Generated MP4 is empty" }
 
-            // Write the completed MP4 into the SAF staging document. Never write directly to the final
-            // .mp4 name; publication happens only after muxing and validation finish.
             SafMp4Stager.remuxLocalMp4ToSaf(context, tempVideo, stagingUri!!)
             currentCoroutineContext().ensureActive()
             val stagedSize = SafMp4Stager.querySize(context, stagingUri!!)
@@ -183,7 +175,6 @@ class TtsVideoExportWorkerV2(
             }
             return Result.success()
         } catch (e: CancellationException) {
-            // Preserve SAF staging across cancellation/process death. Existing final MP4s are untouched.
             renderJson.delete()
             tempVideo.delete()
             throw e
@@ -235,8 +226,8 @@ class TtsVideoExportWorkerV2(
         videoName: String,
         stagedUri: Uri,
     ): Uri {
-        findValidFinal(parentUri, videoName)?.let { existing ->
-            // The final artifact is authoritative. Never replace it with another render.
+        val existing = findValidFinal(parentUri, videoName)
+        if (existing != null) {
             SafMp4Stager.delete(context, stagedUri)
             checkpointSuccess(prefs, jobId, existing)
             return existing
