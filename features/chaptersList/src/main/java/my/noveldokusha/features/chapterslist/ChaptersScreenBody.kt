@@ -174,6 +174,7 @@ internal fun ChaptersScreenBody(
             ) {
                 ChaptersScreenChapterItem(
                     chapterWithContext = it,
+                    novelTitle = state.book.value.title,
                     translatedTitle = state.translatedChapterTitles.value[it.chapter.url],
                     chapterSize = state.chapterSizes.value[it.chapter.url],
                     audioOriginalJob = state.audioJobs[
