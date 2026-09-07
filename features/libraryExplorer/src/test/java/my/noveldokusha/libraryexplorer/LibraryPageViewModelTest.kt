@@ -148,11 +148,13 @@ class LibraryPageViewModelTest {
 
         // Резолвер стабим: translatedTitles-подписка в init ходит в каскад.
         val resolver = mock<TranslationSettingsResolver>().also { r ->
-            whenever(r.translationTargetForBook(any())).thenReturn("")
-            whenever(r.translationEnabledForBook(any())).thenReturn(false)
-            whenever(r.translationScopeForBook(any())).thenReturn("STANDARD")
-            whenever(r.translationProviderForBook(any())).thenReturn(null)
-            whenever(r.translationPairForBook(any())).thenReturn(TranslationLangPair("", ""))
+            whenever(r.translationTargetForBook(any(), any())).thenReturn("")
+            whenever(r.translationEnabledForBook(any(), any())).thenReturn(false)
+            whenever(r.translationScopeForBook(any(), any())).thenReturn("STANDARD")
+            whenever(r.translationProviderForBook(any(), any())).thenReturn(null)
+            whenever(r.translationPairForBook(any(), any())).thenReturn(TranslationLangPair("", ""))
+            whenever(r.resolveSourceId(any())).thenReturn(null)
+            whenever(r.translationSettingsChangeSignal()).thenReturn(flowOf(Unit))
         }
 
         return LibraryPageViewModel(

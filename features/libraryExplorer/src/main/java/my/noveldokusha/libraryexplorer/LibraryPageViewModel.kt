@@ -81,12 +81,15 @@ private fun Sequence<BookWithContext>.applyReadFilter(filter: TernaryState) = wh
 private fun Sequence<BookWithContext>.applySearchFilter(
     query: String,
     genreMap: Map<String, Set<String>>,
-    sourceResolver: (String) -> String?
+    sourceResolver: (String) -> String?,
+    translations: Map<String, String> = emptyMap()
 ) = if (query.isBlank()) this else {
     val q = query.trim()
     filter { book ->
         val sourceName = sourceResolver(book.book.url) ?: ""
+        val translatedTitle = translations[book.book.url].orEmpty()
         book.book.title.contains(q, ignoreCase = true) ||
+            translatedTitle.contains(q, ignoreCase = true) ||
             sourceName.contains(q, ignoreCase = true) ||
             genreMap.any { (genre, urls) ->
                 book.book.url in urls && genre.contains(q, ignoreCase = true)
@@ -202,6 +205,67 @@ internal class LibraryPageViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    // ponytail: same bulk-translation logic as translatedTitles, but branches from
+    // sharedBooksFlow (all books) instead of categoryFilteredBooks.
+    val allBookTranslations: StateFlow<Map<String, String>> = sharedBooksFlow
+        .combine(translationSettingsResolver.translationSettingsChangeSignal()) { books, _ ->
+            translationSourceIdCache.clear()
+            books
+        }
+        .flatMapLatest { books ->
+            if (books.isEmpty()) return@flatMapLatest flowOf(emptyMap())
+
+            val translationParams = mutableMapOf<String, Pair<String, String>>()
+            val noTranslationUrls = mutableListOf<String>()
+
+            for (book in books) {
+                val url = book.book.url
+                val sourceId = translationSourceIdCache.getOrPut(url) {
+                    translationSettingsResolver.resolveSourceId(url)
+                }
+                if (sourceId != null && preferences.TRANSLATION_PLUGIN_HIDE_LIBRARY.value[sourceId] == true) {
+                    noTranslationUrls.add(url)
+                    continue
+                }
+                val targetLang = translationSettingsResolver.translationTargetForBook(url, sourceId)
+                val enabled = translationSettingsResolver.translationEnabledForBook(url, sourceId)
+                val scope = translationSettingsResolver.translationScopeForBook(url, sourceId)
+                val sourceLang = translationSettingsResolver.translationPairForBook(url, sourceId).source
+
+                if (targetLang.isBlank() || !enabled || scope != AppPreferences.TRANSLATION_SCOPE_FULL) {
+                    noTranslationUrls.add(url)
+                } else {
+                    translationParams[url] = targetLang to sourceLang
+                }
+            }
+
+            if (translationParams.isEmpty()) return@flatMapLatest flowOf(
+                books.associate { it.book.url to "" }
+            )
+
+            val byTargetLang = translationParams.entries.groupBy({ it.value.first }, { it.key })
+
+            combine(byTargetLang.map { (targetLang, urls) ->
+                bookTranslationDao.getTranslatedBooksBulkFlow(urls, targetLang)
+                    .map { rows -> targetLang to rows }
+            }) { langResults ->
+                val langRowsMap = langResults.toMap()
+                val result = mutableMapOf<String, String>()
+
+                for (url in noTranslationUrls) result[url] = ""
+                for (book in books) {
+                    val url = book.book.url
+                    if (url in result) continue
+                    val (targetLang, sourceLang) = translationParams[url] ?: continue
+                    val rows = langRowsMap[targetLang] ?: continue
+                    val row = rows.firstOrNull { it.bookUrl == url && it.sourceLang == sourceLang }
+                    result[url] = row?.titleTranslation ?: ""
+                }
+                result
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     // Доступные имена плагинов в библиотеке — определяем динамически из списка книг
     // ponytail: toState() returns State<T> for Compose `by` delegate — stateIn() doesn't support this.
     private val availableSourcesState = sharedBooksFlow
@@ -232,12 +296,13 @@ internal class LibraryPageViewModel @Inject constructor(
     // Source: sharedBooksFlow (single DB query). Sort moves to filteredList.
     private val preCategoryFilteredBooks = combine(
         sharedBooksFlow,
-        filterPrefsFlow
-    ) { books, prefs ->
+        filterPrefsFlow,
+        allBookTranslations
+    ) { books, prefs, translations ->
         val genreCache = genreToBookUrls.value
         books.asSequence()
             .applyReadFilter(prefs.read)
-            .applySearchFilter(prefs.query, genreCache, ::resolveSourceName)
+            .applySearchFilter(prefs.query, genreCache, ::resolveSourceName, translations)
             .applyGenreFilter(prefs.genres, genreCache)
             .applySourceFilter(prefs.sources, ::resolveSourceName)
             .applyContentTypeFilter(prefs.contentType)
@@ -259,6 +324,7 @@ internal class LibraryPageViewModel @Inject constructor(
     // bookUrl → переведённое название (read-only отображение из БД).
     // ponytail: bulk query вместо 300+ per-book Room Flow подписок.
     // 1 Room observer вместо 300 — reduce allocation pressure at startup.
+    // ponytail: safe on Main dispatcher — all collectors run on viewModelScope
     private val translationSourceIdCache = HashMap<String, String?>()
 
     val translatedTitles: StateFlow<Map<String, String>> = categoryFilteredBooks
