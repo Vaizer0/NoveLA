@@ -15,9 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +47,10 @@ internal fun TtsChapterDurationPanel(
         (currentMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val progressColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -58,7 +62,7 @@ internal fun TtsChapterDurationPanel(
             text = formatDuration(currentSeconds),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = textColor,
             modifier = Modifier.width(54.dp),
         )
 
@@ -74,20 +78,20 @@ internal fun TtsChapterDurationPanel(
                 val trackHeight = 4.dp.toPx()
                 val radius = trackHeight / 2f
                 drawRoundRect(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+                    color = trackColor,
                     topLeft = Offset(0f, centerY - radius),
                     size = Size(size.width, trackHeight),
                     cornerRadius = CornerRadius(radius, radius),
                 )
                 if (progress > 0f) {
                     drawRoundRect(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = progressColor,
                         topLeft = Offset(0f, centerY - radius),
                         size = Size(size.width * progress, trackHeight),
                         cornerRadius = CornerRadius(radius, radius),
                     )
                     drawCircle(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = progressColor,
                         radius = 6.dp.toPx(),
                         center = Offset(size.width * progress, centerY),
                     )
@@ -96,7 +100,7 @@ internal fun TtsChapterDurationPanel(
         }
 
         val rightText = when {
-            totalMs == null -> "--:--"
+            totalMs == null -> if (loading) "--:--" else "--:--"
             showTotal -> formatDuration(totalSeconds)
             else -> "-${formatDuration(remainingSeconds)}"
         }
@@ -104,7 +108,7 @@ internal fun TtsChapterDurationPanel(
             text = if (provisional && totalMs != null) "~$rightText" else rightText,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = textColor,
             modifier = Modifier
                 .width(54.dp)
                 .clickable(enabled = totalMs != null) { showTotal = !showTotal },
