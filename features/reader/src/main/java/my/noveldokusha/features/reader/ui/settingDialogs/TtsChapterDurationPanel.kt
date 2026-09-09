@@ -33,6 +33,7 @@ import my.noveldokusha.core.utils.formatDuration
 @Composable
 internal fun TtsChapterDurationPanel(
     totalMs: Long?,
+    estimatedSeconds: Int,
     currentMs: Long,
     remainingMs: Long,
     loading: Boolean,
@@ -43,8 +44,10 @@ internal fun TtsChapterDurationPanel(
     val totalSeconds = (totalMs ?: 0L).coerceAtLeast(0L).div(1000L).toInt()
     val currentSeconds = currentMs.coerceAtLeast(0L).div(1000L).toInt()
     val remainingSeconds = remainingMs.coerceAtLeast(0L).div(1000L).toInt()
-    val progress = if (totalMs != null && totalMs > 0L) {
-        (currentMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+    val fallbackSeconds = estimatedSeconds.coerceAtLeast(0)
+    val hasMeasuredDuration = totalMs != null && totalSeconds > 0
+    val progress = if (hasMeasuredDuration) {
+        (currentMs.toFloat() / totalMs!!.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
@@ -100,18 +103,20 @@ internal fun TtsChapterDurationPanel(
         }
 
         val rightText = when {
-            totalMs == null -> if (loading) "--:--" else "--:--"
-            showTotal -> formatDuration(totalSeconds)
-            else -> "-${formatDuration(remainingSeconds)}"
+            hasMeasuredDuration && showTotal -> formatDuration(totalSeconds)
+            hasMeasuredDuration -> "-${formatDuration(remainingSeconds)}"
+            fallbackSeconds > 0 -> "~${formatDuration(fallbackSeconds)}"
+            loading -> "…"
+            else -> "—:—"
         }
         Text(
-            text = if (provisional && totalMs != null) "~$rightText" else rightText,
+            text = if (provisional && hasMeasuredDuration) "~$rightText" else rightText,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
             color = textColor,
             modifier = Modifier
                 .width(54.dp)
-                .clickable(enabled = totalMs != null) { showTotal = !showTotal },
+                .clickable(enabled = hasMeasuredDuration) { showTotal = !showTotal },
         )
     }
 }
