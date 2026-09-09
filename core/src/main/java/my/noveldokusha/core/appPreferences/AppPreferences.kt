@@ -430,6 +430,11 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "FFFF6D00")
     }
 
+    /** Enables measured chapter-level TTS duration and the duration timeline. */
+    val TTS_DURATION_ENABLED = object : Preference<Boolean>("TTS_DURATION_ENABLED") {
+        override var value by SharedPreference_Boolean(name, preferences, false)
+    }
+
     /**
      * Читалка страничных глав (манхва/манга) — префикс MANGA_READER_*.
      * Пейджер и webtoon-лента; автопрокрутка и предзагрузка переиспользуют READER_* ключи.

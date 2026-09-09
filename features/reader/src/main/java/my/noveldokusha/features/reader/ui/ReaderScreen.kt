@@ -763,6 +763,14 @@ private fun ViewsPreview(
         originalVoiceId = remember { mutableStateOf("") },
         setOriginalVoiceId = {},
         spokenWordRange = remember { mutableStateOf(null) },
+        ttsDurationEnabled = remember { mutableStateOf(false) },
+        chapterTtsDurationMs = remember { mutableStateOf(null) },
+        chapterTtsDurationCurrentMs = remember { mutableStateOf(0L) },
+        chapterTtsDurationRemainingMs = remember { mutableStateOf(0L) },
+        chapterTtsDurationProgress = remember { mutableStateOf(0f) },
+        chapterTtsDurationLoading = remember { mutableStateOf(false) },
+        chapterTtsDurationProvisional = remember { mutableStateOf(false) },
+        setTtsDurationEnabled = {},
     )
 
     val style = ReaderScreenState.Settings.StyleSettingsData(

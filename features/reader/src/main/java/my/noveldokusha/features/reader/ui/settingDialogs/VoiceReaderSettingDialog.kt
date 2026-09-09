@@ -57,6 +57,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -277,6 +278,23 @@ internal fun VoiceReaderSettingDialog(
                             )
                         }
                     }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.tts_chapter_duration),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = state.ttsDurationEnabled.value,
+                        onCheckedChange = state.setTtsDurationEnabled,
+                    )
                 }
 
                 Row(

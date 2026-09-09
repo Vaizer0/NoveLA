@@ -1,5 +1,6 @@
 package my.noveldokusha.features.reader.features
 
+import android.os.SystemClock
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -26,11 +27,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.VoicePredefineState
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.features.reader.domain.ChapterIndex
 import my.noveldokusha.features.reader.domain.ChapterLoaded
 import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.text_to_speech.AppTtsEngine
+import my.noveldokusha.text_to_speech.ChapterTtsDurationManager
 import my.noveldokusha.text_to_speech.TextToSpeechManager
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
@@ -68,6 +71,14 @@ internal data class TextToSpeechSettingData(
     val originalVoiceId: State<String>,
     val setOriginalVoiceId: (String) -> Unit,
     val spokenWordRange: State<IntRange?>,
+    val ttsDurationEnabled: State<Boolean>,
+    val chapterTtsDurationMs: State<Long?>,
+    val chapterTtsDurationCurrentMs: State<Long>,
+    val chapterTtsDurationRemainingMs: State<Long>,
+    val chapterTtsDurationProgress: State<Float>,
+    val chapterTtsDurationLoading: State<Boolean>,
+    val chapterTtsDurationProvisional: State<Boolean>,
+    val setTtsDurationEnabled: (Boolean) -> Unit,
 )
 
 internal data class TextSynthesis(
@@ -122,6 +133,21 @@ internal class ReaderTextToSpeech(
     private val halfBuffer = 5
     private val _originalVoiceId = mutableStateOf(getPreferredVoiceIdForOriginal())
     private var updateJob: Job? = null
+    private val appPreferences = AppPreferences(context.applicationContext)
+    private val chapterTtsDurationManager = ChapterTtsDurationManager(context.applicationContext)
+    private val ttsDurationEnabledState = mutableStateOf(appPreferences.TTS_DURATION_ENABLED.value)
+    private val chapterTtsDurationMsState = mutableStateOf<Long?>(null)
+    private val chapterTtsDurationCurrentMsState = mutableStateOf(0L)
+    private val chapterTtsDurationLoadingState = mutableStateOf(false)
+    private val chapterTtsDurationProvisionalState = mutableStateOf(false)
+    private var chapterTtsDurationMeasurementJob: Job? = null
+    private var chapterTtsDurationRequestKey: String? = null
+    private var lastMeasuredDurationSpeed = 1f
+    private var durationClockChapterIndex = -1
+    private var durationClockElapsedMs = 0L
+    private var durationClockStartedAtMs = 0L
+    private var durationClockJob: Job? = null
+
     private val manager = TextToSpeechManager(
         context = context,
         appTtsEngine = AppTtsEngine.getInstance(context),
@@ -273,6 +299,19 @@ internal class ReaderTextToSpeech(
             onOriginalVoiceChanged()
         },
         spokenWordRange = manager.spokenWordRange,
+        ttsDurationEnabled = ttsDurationEnabledState,
+        chapterTtsDurationMs = chapterTtsDurationMsState,
+        chapterTtsDurationCurrentMs = chapterTtsDurationCurrentMsState,
+        chapterTtsDurationRemainingMs = derivedStateOf {
+            ((chapterTtsDurationMsState.value ?: 0L) - chapterTtsDurationCurrentMsState.value).coerceAtLeast(0L)
+        },
+        chapterTtsDurationProgress = derivedStateOf {
+            val total = chapterTtsDurationMsState.value ?: 0L
+            if (total > 0L) (chapterTtsDurationCurrentMsState.value.toFloat() / total).coerceIn(0f, 1f) else 0f
+        },
+        chapterTtsDurationLoading = chapterTtsDurationLoadingState,
+        chapterTtsDurationProvisional = chapterTtsDurationProvisionalState,
+        setTtsDurationEnabled = ::setTtsDurationEnabled,
     )
 
     val isActive = derivedStateOf { state.isThereActiveItem.value || state.isPlaying.value }
@@ -348,6 +387,134 @@ internal class ReaderTextToSpeech(
                 }
             }
         }
+    }
+
+    private fun chapterSpokenText(chapterIndex: Int): String =
+        items.filterIsInstance<ReaderItem.Text>()
+            .filter { it.chapterIndex == chapterIndex }
+            .joinToString("\n") { ttsText(it) }
+
+    private fun currentDurationConfig(): ChapterTtsDurationManager.Config? {
+        val voice = manager.activeVoice.value ?: return null
+        return ChapterTtsDurationManager.Config(
+            enginePackage = voice.enginePackage,
+            voiceId = voice.id,
+            localeTag = manager.service.voice?.locale?.toLanguageTag() ?: "",
+            speed = manager.voiceSpeed.floatValue,
+            pitch = manager.voicePitch.floatValue,
+        )
+    }
+
+    private fun durationRequestKey(chapterIndex: Int, text: String, config: ChapterTtsDurationManager.Config): String =
+        "$chapterIndex|${config.enginePackage}|${config.voiceId}|${config.localeTag}|${config.speed}|${config.pitch}|${text.hashCode()}"
+
+    private fun requestChapterTtsDuration(chapterIndex: Int) {
+        if (!ttsDurationEnabledState.value || !isChapterIndexValid(chapterIndex)) return
+        val text = chapterSpokenText(chapterIndex)
+        if (text.isBlank()) return
+        val config = currentDurationConfig() ?: return
+        val requestKey = durationRequestKey(chapterIndex, text, config)
+        if (chapterTtsDurationRequestKey == requestKey &&
+            (chapterTtsDurationLoadingState.value || chapterTtsDurationMsState.value != null)
+        ) return
+
+        chapterTtsDurationRequestKey = requestKey
+        chapterTtsDurationMeasurementJob?.cancel()
+        chapterTtsDurationManager.cancel()
+
+        chapterTtsDurationManager.cachedDuration(text, config)?.let { cached ->
+            chapterTtsDurationMsState.value = cached
+            chapterTtsDurationLoadingState.value = false
+            chapterTtsDurationProvisionalState.value = false
+            lastMeasuredDurationSpeed = config.speed
+            return
+        }
+
+        val previous = chapterTtsDurationMsState.value
+        if (previous != null && lastMeasuredDurationSpeed > 0f && config.speed > 0f) {
+            chapterTtsDurationMsState.value = (previous * lastMeasuredDurationSpeed / config.speed).toLong().coerceAtLeast(1L)
+            chapterTtsDurationProvisionalState.value = true
+        } else {
+            chapterTtsDurationProvisionalState.value = false
+        }
+        chapterTtsDurationLoadingState.value = true
+
+        chapterTtsDurationMeasurementJob = coroutineScope.launch(Dispatchers.IO) {
+            when (val result = chapterTtsDurationManager.measureBlocking(text, config)) {
+                is ChapterTtsDurationManager.Result.Measured -> withContext(Dispatchers.Main.immediate) {
+                    if (ttsDurationEnabledState.value && chapterTtsDurationRequestKey == requestKey) {
+                        chapterTtsDurationMsState.value = result.durationMs
+                        chapterTtsDurationLoadingState.value = false
+                        chapterTtsDurationProvisionalState.value = false
+                        lastMeasuredDurationSpeed = config.speed
+                    }
+                }
+                else -> withContext(Dispatchers.Main.immediate) {
+                    if (chapterTtsDurationRequestKey == requestKey) {
+                        chapterTtsDurationLoadingState.value = false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setTtsDurationEnabled(enabled: Boolean) {
+        ttsDurationEnabledState.value = enabled
+        appPreferences.TTS_DURATION_ENABLED.value = enabled
+        if (!enabled) {
+            chapterTtsDurationMeasurementJob?.cancel()
+            chapterTtsDurationMeasurementJob = null
+            chapterTtsDurationManager.cancel()
+            chapterTtsDurationRequestKey = null
+            chapterTtsDurationLoadingState.value = false
+            chapterTtsDurationProvisionalState.value = false
+            durationClockJob?.cancel()
+            durationClockJob = null
+            return
+        }
+        val chapter = manager.currentActiveItemState.value.itemPos.chapterIndex
+        if (isChapterIndexValid(chapter)) requestChapterTtsDuration(chapter)
+    }
+
+    private fun resetDurationClock(chapterIndex: Int) {
+        if (!ttsDurationEnabledState.value || !isChapterIndexValid(chapterIndex)) return
+        durationClockChapterIndex = chapterIndex
+        durationClockElapsedMs = 0L
+        durationClockStartedAtMs = if (state.isPlaying.value) SystemClock.elapsedRealtime() else 0L
+        chapterTtsDurationCurrentMsState.value = 0L
+        chapterTtsDurationRequestKey = null
+        requestChapterTtsDuration(chapterIndex)
+    }
+
+    private fun startDurationClock(chapterIndex: Int) {
+        if (!ttsDurationEnabledState.value || !isChapterIndexValid(chapterIndex)) return
+        if (durationClockChapterIndex != chapterIndex) resetDurationClock(chapterIndex)
+        if (durationClockStartedAtMs == 0L) durationClockStartedAtMs = SystemClock.elapsedRealtime()
+        durationClockJob?.cancel()
+        durationClockJob = coroutineScope.launch(Dispatchers.Default) {
+            while (ttsDurationEnabledState.value && state.isPlaying.value) {
+                val now = SystemClock.elapsedRealtime()
+                val current = durationClockElapsedMs + (now - durationClockStartedAtMs).coerceAtLeast(0L)
+                withContext(Dispatchers.Main.immediate) {
+                    if (ttsDurationEnabledState.value) {
+                        chapterTtsDurationCurrentMsState.value = if ((chapterTtsDurationMsState.value ?: 0L) > 0L) {
+                            current.coerceAtMost(chapterTtsDurationMsState.value ?: Long.MAX_VALUE)
+                        } else current
+                    }
+                }
+                delay(500L)
+            }
+        }
+    }
+
+    private fun pauseDurationClock() {
+        if (durationClockStartedAtMs != 0L) {
+            durationClockElapsedMs += (SystemClock.elapsedRealtime() - durationClockStartedAtMs).coerceAtLeast(0L)
+            durationClockStartedAtMs = 0L
+            chapterTtsDurationCurrentMsState.value = durationClockElapsedMs
+        }
+        durationClockJob?.cancel()
+        durationClockJob = null
     }
 
     private fun switchVoiceForMode() {
@@ -435,6 +602,7 @@ internal class ReaderTextToSpeech(
             NarratorMediaControlsService.reacquireFocus()
             switchVoiceForMode()
             state.isPlaying.value = true
+            startDurationClock(manager.currentActiveItemState.value.itemPos.chapterIndex)
             updateJob?.cancel()
             updateJob = coroutineScope.launch {
                 manager
@@ -893,6 +1061,7 @@ internal class ReaderTextToSpeech(
                 setPreferredVoiceId(voiceId)
                 if (voiceData != null) setPreferredVoiceEngine(voiceData.enginePackage)
                 resumeFromCurrentState()
+                requestChapterTtsDuration(state.currentActiveItemState.value.itemPos.chapterIndex)
             }
         }
     }
@@ -903,6 +1072,7 @@ internal class ReaderTextToSpeech(
         if (success) {
             setPreferredVoicePitch(value)
             resumeFromCurrentState()
+            requestChapterTtsDuration(state.currentActiveItemState.value.itemPos.chapterIndex)
         }
     }
 
@@ -912,6 +1082,7 @@ internal class ReaderTextToSpeech(
         if (success) {
             setPreferredVoiceSpeed(value)
             resumeFromCurrentState()
+            requestChapterTtsDuration(state.currentActiveItemState.value.itemPos.chapterIndex)
         }
     }
 

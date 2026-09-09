@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -143,7 +144,11 @@ private fun MiniPlayerControls(
     chapterCurrentNumber: Int,
     chaptersCount: Int,
     animatedProgress: Float,
+    current: Int,
     remaining: Int,
+    durationEnabled: Boolean,
+    showTotalDuration: Boolean,
+    onToggleDurationMode: () -> Unit,
     buttonSize: Dp = 32.dp,
     iconSize: Dp = 26.dp,
     iconCircleSize: Dp = 28.dp,
@@ -205,27 +210,46 @@ private fun MiniPlayerControls(
             )
         }
 
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
+        if (durationEnabled) {
+            Text(
+                text = formatDuration(current),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = if (showTotalDuration) formatDuration((state.chapterTtsDurationMs.value ?: 0L).div(1000L).toInt()) else "-${formatDuration(remaining)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(onClick = onToggleDurationMode)
+                    .padding(horizontal = 2.dp, vertical = 1.dp),
+            )
+        } else {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
             ) {
-                Icon(
-                    Icons.Rounded.AccessTime,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = formatDuration(remaining),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = badgeHorizPad, vertical = badgeVertPad)
+                ) {
+                    Icon(
+                        Icons.Rounded.AccessTime,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = formatDuration(remaining),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
             }
         }
 
@@ -330,9 +354,12 @@ private fun FloatingTtsMiniPlayer(
     glowMode: String = "auto",
     onGlowModeChange: ((String) -> Unit)? = null,
 ) {
-    val total = state.estimatedTotalSeconds.value
-    val remaining = state.estimatedRemainingSeconds.value
-    val progress = if (total > 0) (total - remaining).toFloat() / total else 0f
+    val durationEnabled = state.ttsDurationEnabled.value
+    val total = if (durationEnabled) (state.chapterTtsDurationMs.value?.div(1000L) ?: 0L).toInt() else state.estimatedTotalSeconds.value
+    val remaining = if (durationEnabled) state.chapterTtsDurationRemainingMs.value.div(1000L).toInt() else state.estimatedRemainingSeconds.value
+    val current = if (durationEnabled) state.chapterTtsDurationCurrentMs.value.div(1000L).toInt() else (total - remaining).coerceAtLeast(0)
+    val progress = if (durationEnabled) state.chapterTtsDurationProgress.value else if (total > 0) (total - remaining).toFloat() / total else 0f
+    var showTotalDuration by rememberSaveable { mutableStateOf(false) }
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 300),
@@ -411,7 +438,11 @@ private fun FloatingTtsMiniPlayer(
                         chapterCurrentNumber = chapterCurrentNumber,
                         chaptersCount = chaptersCount,
                         animatedProgress = animatedProgress,
+                        current = current,
                         remaining = remaining,
+                        durationEnabled = durationEnabled,
+                        showTotalDuration = showTotalDuration,
+                        onToggleDurationMode = { showTotalDuration = !showTotalDuration },
                         buttonSize = buttonSize,
                         iconSize = iconSize,
                         iconCircleSize = iconCircleSize,

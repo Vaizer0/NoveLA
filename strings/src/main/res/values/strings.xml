@@ -814,4 +814,5 @@
     <string name="plugin_translation_hide_catalog">In catalog</string>
     <string name="plugin_translation_hide_search">In search</string>
 
+    <string name="tts_chapter_duration">TTS chapter duration</string>
 </resources>
