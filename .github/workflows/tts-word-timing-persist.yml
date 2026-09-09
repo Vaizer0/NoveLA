@@ -31,20 +31,162 @@ jobs:
       - name: Apply speed-scaled TTS word timing patch
         run: python3 tools/add_tts_word_timing_persistence.py
 
+      - name: Apply cache retention and compile fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/TextToSpeechManager.kt')
+          s = p.read_text()
+          s = s.replace('if (range.isEmpty ||', 'if (range.isEmpty() ||', 1)
+          s = s.replace('if (finalRange != null && finalStartMs >= 0L)', 'if (finalRange != null && finalStartMs != null && finalStartMs >= 0L)', 1)
+          s = s.replace('tts_word_highlight_timing_json_v2', 'tts_word_highlight_timing_json_v2', 1)
+
+          ttl_block = '''    private companion object {
+        const val WORD_TIMING_CACHE_TTL_MS = 30L * 24L * 60L * 60L * 1000L
+        const val MAX_WORD_TIMING_CACHE_KEYS = 96
+    }
+
+    private fun loadPrunedWordTimingStore(): JSONObject {
+        val root = runCatching {
+            JSONObject(ttsPrefs.getString("tts_word_highlight_timing_json_v2", "{}") ?: "{}")
+        }.getOrDefault(JSONObject())
+        val now = System.currentTimeMillis()
+        val keys = root.keys().asSequence().toList()
+        keys.forEach { key ->
+            when (val value = root.opt(key)) {
+                is JSONArray -> {
+                    // Migrate the pre-retention array format without losing learned timings.
+                    root.put(key, JSONObject().apply {
+                        put("last_used", now)
+                        put("timings", value)
+                    })
+                }
+                is JSONObject -> {
+                    val lastUsed = value.optLong("last_used", 0L)
+                    if (lastUsed <= 0L || (now > lastUsed && now - lastUsed > WORD_TIMING_CACHE_TTL_MS)) {
+                        root.remove(key)
+                    }
+                }
+                else -> root.remove(key)
+            }
+        }
+        val remaining = root.keys().asSequence().toList()
+        if (remaining.size > MAX_WORD_TIMING_CACHE_KEYS) {
+            remaining
+                .sortedBy { root.optJSONObject(it)?.optLong("last_used", 0L) ?: 0L }
+                .take(remaining.size - MAX_WORD_TIMING_CACHE_KEYS)
+                .forEach(root::remove)
+        }
+        return root
+    }
+
+    private fun savePrunedWordTimingStore(root: JSONObject) {
+        ttsPrefs.edit().putString("tts_word_highlight_timing_json_v2", root.toString()).apply()
+    }
+
+'''
+          marker = '    private fun readPersistedWordTimings(cacheKey: String): List<CachedWordTiming> {'
+          assert marker in s
+          assert 'WORD_TIMING_CACHE_TTL_MS' not in s
+          s = s.replace(marker, ttl_block + marker, 1)
+
+          read_pattern = r'    private fun readPersistedWordTimings\(cacheKey: String\): List<CachedWordTiming> \{.*?\n    \}\n\n    private fun persistWordTiming'
+          read_repl = '''    private fun readPersistedWordTimings(cacheKey: String): List<CachedWordTiming> {
+        return runCatching {
+            val root = loadPrunedWordTimingStore()
+            val entry = root.optJSONObject(cacheKey)
+            val array = entry?.optJSONArray("timings")
+            val result = if (array == null) emptyList() else buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val start = item.optInt("start", -1)
+                    val end = item.optInt("end", -1)
+                    val startMs = item.optLong("start_ms", -1L)
+                    val durationMs = item.optLong("duration_ms", -1L)
+                    val speed = item.optDouble("speed", Double.NaN).toFloat()
+                    if (start >= 0 && end > start && startMs >= 0L && durationMs in 40L..15_000L &&
+                        speed.isFinite() && speed > 0f
+                    ) add(CachedWordTiming(start, end, startMs, durationMs, speed))
+                }
+            }
+            if (entry != null) {
+                entry.put("last_used", System.currentTimeMillis())
+                savePrunedWordTimingStore(root)
+            }
+            result
+        }.getOrDefault(emptyList())
+    }
+
+    private fun persistWordTiming'''
+          s, n = re.subn(read_pattern, read_repl, s, flags=re.S)
+          assert n == 1, n
+
+          persist_pattern = r'    private fun persistWordTiming\(cacheKey: String, range: IntRange, startMs: Long, durationMs: Long\) \{.*?\n    \}\n\n    private fun prepareWordTiming'
+          persist_repl = '''    private fun persistWordTiming(cacheKey: String, range: IntRange, startMs: Long, durationMs: Long) {
+        if (range.isEmpty || startMs < 0L || durationMs !in 40L..15_000L || voiceSpeed.floatValue <= 0f) return
+        runCatching {
+            val root = loadPrunedWordTimingStore()
+            val entry = root.optJSONObject(cacheKey)
+            val existing = entry?.optJSONArray("timings") ?: JSONArray()
+            val merged = mutableListOf<CachedWordTiming>()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                val start = item.optInt("start", -1)
+                val end = item.optInt("end", -1)
+                val oldStartMs = item.optLong("start_ms", -1L)
+                val oldDurationMs = item.optLong("duration_ms", -1L)
+                val oldSpeed = item.optDouble("speed", Double.NaN).toFloat()
+                if (start >= 0 && end > start && oldStartMs >= 0L && oldDurationMs in 40L..15_000L &&
+                    oldSpeed.isFinite() && oldSpeed > 0f &&
+                    (start != range.first || end != range.last + 1 || oldSpeed != voiceSpeed.floatValue)
+                ) merged += CachedWordTiming(start, end, oldStartMs, oldDurationMs, oldSpeed)
+            }
+            merged += CachedWordTiming(range.first, range.last + 1, startMs, durationMs, voiceSpeed.floatValue)
+            val array = JSONArray()
+            merged.takeLast(768).forEach { timing ->
+                array.put(JSONObject().apply {
+                    put("start", timing.start)
+                    put("end", timing.end)
+                    put("start_ms", timing.startMs)
+                    put("duration_ms", timing.durationMs)
+                    put("speed", timing.speed.toDouble())
+                })
+            }
+            root.put(cacheKey, JSONObject().apply {
+                put("last_used", System.currentTimeMillis())
+                put("timings", array)
+            })
+            savePrunedWordTimingStore(root)
+        }.onFailure { Timber.w(it, "Failed to persist TTS word timing") }
+    }
+
+    private fun prepareWordTiming'''
+          s, n = re.subn(persist_pattern, persist_repl, s, flags=re.S)
+          assert n == 1, n
+          p.write_text(s)
+          print('Applied 30-day TTS timing TTL, LRU-like key eviction, legacy migration, and compile fixes.')
+          PY
+
       - name: Verify source invariants
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/TextToSpeechManager.kt')
           s = p.read_text()
-          assert 'tts_word_highlight_timing_json_v2' in s
-          assert 'wordTimingCacheKey' in s
-          assert 'persistWordTiming' in s
-          assert 'currentScaledCachedTiming' in s
-          assert 'prepareWordTiming' in s
-          assert 'forgetWordTiming' in s
-          assert 'timing.speed.toDouble() / currentSpeed.toDouble()' in s
-          print('Speed-scaled persistent TTS timing assertions passed.')
+          for needle in [
+              'tts_word_highlight_timing_json_v2',
+              'currentScaledCachedTiming',
+              'prepareWordTiming',
+              'forgetWordTiming',
+              'timing.speed.toDouble() / currentSpeed.toDouble()',
+              'WORD_TIMING_CACHE_TTL_MS',
+              'MAX_WORD_TIMING_CACHE_KEYS',
+              'loadPrunedWordTimingStore',
+              'savePrunedWordTimingStore',
+          ]:
+              assert needle in s, needle
+          print('Speed-scaled persistence and cache-retention assertions passed.')
           PY
 
       - name: Run TTS duration tests
@@ -65,7 +207,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/TextToSpeechManager.kt
-          git rm -f tools/add_tts_word_timing_persistence.py .github/workflows/tts-word-timing-persist.yml .github/tts-speed-reuse-reverify.txt
-          git commit -m "feat: persist TTS word timing with speed scaling [skip ci]"
+          rm -f tools/add_tts_word_timing_persistence.py .github/workflows/tts-word-timing-persist.yml .github/tts-speed-reuse-reverify.txt .github/tts-speed-reuse-reverify-2.txt
+          git add -A
+          git commit -m "feat: bound TTS timing cache with automatic expiry [skip ci]"
           git push origin HEAD:feat/tts-chapter-duration
