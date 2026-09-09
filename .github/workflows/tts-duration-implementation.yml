@@ -30,11 +30,34 @@ jobs:
       - name: Apply implementation
         run: python3 tools/implement_tts_duration.py
 
-      - name: Apply SDK-compatible PCM normalization fix
+      - name: Apply Android SDK-compatible normalization fix
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+
+          # SystemClock import is required by the duration observer.
+          p = Path('features/reader/src/main/java/my/noveldokusha/features/reader/features/ReaderTextToSpeech.kt')
+          s = p.read_text(encoding='utf-8')
+          if 'import android.os.SystemClock\n' not in s:
+              s = s.replace('package my.noveldokusha.features.reader.features\n\n', 'package my.noveldokusha.features.reader.features\n\nimport android.os.SystemClock\n', 1)
+          p.write_text(s, encoding='utf-8')
+
+          # The duration fields were added to TextToSpeechSettingData and ReaderScreen has a
+          # preview/test fixture that constructs it manually. Keep this fixture valid without
+          # making production state nullable or changing the public data model semantics.
+          p = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/ReaderScreen.kt')
+          s = p.read_text(encoding='utf-8')
+          marker = '''        spokenWordRange = remember { mutableStateOf(null) },\n'''
+          addition = marker + '''        ttsDurationEnabled = remember { mutableStateOf(false) },\n        chapterTtsDurationMs = remember { mutableStateOf(null) },\n        chapterTtsDurationCurrentMs = remember { mutableStateOf(0L) },\n        chapterTtsDurationRemainingMs = remember { mutableStateOf(0L) },\n        chapterTtsDurationProgress = remember { mutableStateOf(0f) },\n        chapterTtsDurationLoading = remember { mutableStateOf(false) },\n        chapterTtsDurationProvisional = remember { mutableStateOf(false) },\n        setTtsDurationEnabled = {},\n'''
+          if 'ttsDurationEnabled = remember { mutableStateOf(false) }' not in s:
+              if marker not in s:
+                  raise SystemExit('ReaderScreen TextToSpeechSettingData marker not found')
+              s = s.replace(marker, addition, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Compile SDK 37 currently exposes PCM 8/16/float/32 constants used by the backend;
+          # do not reference PCM_24BIT, which is not present in this SDK API surface.
           p = Path('tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/ChapterTtsDurationManager.kt')
           s = p.read_text(encoding='utf-8')
           s = s.replace('''                    android.media.AudioFormat.ENCODING_PCM_24BIT -> 3L\n''', '')
