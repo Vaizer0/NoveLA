@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.outlined.Highlight
 import androidx.compose.material.icons.outlined.FormatPaint
 import androidx.compose.material3.CardDefaults
@@ -48,6 +49,8 @@ private val ttsHighlightColors = listOf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MoreSettingDialog(
+    ttsDurationEnabled: Boolean,
+    onTtsDurationEnabledChange: (Boolean) -> Unit,
     ttsHighlightEnabled: Boolean,
     onTtsHighlightEnabledChange: (Boolean) -> Unit,
     ttsHighlightColor: String,
@@ -58,6 +61,32 @@ internal fun MoreSettingDialog(
     ElevatedCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
     ) {
+        // TTS chapter duration — intentionally lives in More, immediately above Manual highlight.
+        SlimListItem(
+            modifier = Modifier
+                .clickable { onTtsDurationEnabledChange(!ttsDurationEnabled) },
+            headlineContent = {
+                Text(text = "TTS chapter duration")
+            },
+            leadingContent = {
+                Icon(
+                    Icons.Rounded.AccessTime,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = ttsDurationEnabled,
+                    onCheckedChange = onTtsDurationEnabledChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colorAccent(),
+                        checkedTrackColor = colorAccent().copy(alpha = 0.4f),
+                    )
+                )
+            }
+        )
+
         // Manual highlight
         SlimListItem(
             modifier = Modifier
