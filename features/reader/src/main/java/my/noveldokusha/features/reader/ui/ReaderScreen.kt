@@ -564,6 +564,18 @@ internal fun ReaderScreen(
             }
         }
 
+        // Keep the already-running floating player synchronized when TTS chapter duration
+        // is toggled from the More menu. The duration state lives inside the same
+        // TextToSpeechSettingData instance, but an explicit service update/recompose here
+        // also covers a long-lived overlay service that was created before the toggle.
+        LaunchedEffect(state.settings.textToSpeech.ttsDurationEnabled.value) {
+            if (FloatingTtsService.isRunning(context)) {
+                FloatingTtsService.activityWindowToken = windowToken
+                FloatingTtsService.ttsState.value = state.settings.textToSpeech
+                FloatingTtsService.recreateOverlay()
+            }
+        }
+
         LaunchedEffect(
             state.settings.floatingTts.showOutsideApp.value,
             state.settings.floatingTts.opacity.value,
