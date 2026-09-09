@@ -369,6 +369,17 @@ internal fun VoiceReaderSettingDialog(
                     }
                 }
             }
+                // Actual synthesized chapter-duration timeline.
+                // It lives in the same TTS card as the playback controls and is hidden when disabled.
+                if (state.ttsDurationEnabled.value) {
+                    TtsChapterDurationPanel(
+                        totalMs = state.chapterTtsDurationMs.value,
+                        currentMs = state.chapterTtsDurationCurrentMs.value,
+                        remainingMs = state.chapterTtsDurationRemainingMs.value,
+                        loading = state.chapterTtsDurationLoading.value,
+                        provisional = state.chapterTtsDurationProvisional.value,
+                    )
+                }
         }
     }
 }
