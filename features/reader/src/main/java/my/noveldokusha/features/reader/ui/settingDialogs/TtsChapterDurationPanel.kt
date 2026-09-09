@@ -33,7 +33,7 @@ import my.noveldokusha.core.utils.formatDuration
 @Composable
 internal fun TtsChapterDurationPanel(
     totalMs: Long?,
-    estimatedSeconds: Int,
+    estimatedSeconds: Int = 0,
     currentMs: Long,
     remainingMs: Long,
     loading: Boolean,
