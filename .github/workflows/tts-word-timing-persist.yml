@@ -1,0 +1,70 @@
+name: TTS word timing persistence
+
+on:
+  push:
+    branches:
+      - feat/tts-chapter-duration
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/tts-chapter-duration
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Apply persistent TTS word timing patch
+        run: python3 tools/add_tts_word_timing_persistence.py
+
+      - name: Verify source invariants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/TextToSpeechManager.kt')
+          s = p.read_text()
+          assert 'tts_word_highlight_timing_json_v1' in s
+          assert 'wordTimingCacheKey' in s
+          assert 'persistWordTiming' in s
+          assert 'cachedWordStartMs' in s
+          assert 'prepareWordTiming' in s
+          assert 'forgetWordTiming' in s
+          print('TTS word timing persistence assertions passed.')
+          PY
+
+      - name: Run TTS duration tests
+        run: ./gradlew :tooling:text_to_speech:test --no-daemon --console=plain
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - name: Verify APK artifacts
+        run: |
+          test -n "$(find app/build/outputs/apk/debug -name '*.apk' -type f -print -quit)"
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
+
+      - name: Commit verified feature and remove temporary tooling
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tooling/text_to_speech/src/main/java/my/noveldokusha/text_to_speech/TextToSpeechManager.kt
+          git rm -f tools/add_tts_word_timing_persistence.py .github/workflows/tts-word-timing-persist.yml
+          git commit -m "feat: persist TTS word highlight timing [skip ci]"
+          git push origin HEAD:feat/tts-chapter-duration
