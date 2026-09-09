@@ -1,0 +1,67 @@
+name: Verify TTS duration UI
+
+on:
+  push:
+    branches:
+      - feat/tts-chapter-duration
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/tts-chapter-duration
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify TTS duration source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          panel = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/TtsChapterDurationPanel.kt').read_text()
+          voice = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/VoiceReaderSettingDialog.kt').read_text()
+          more = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/MoreSettingDialog.kt').read_text()
+          assert 'estimatedSeconds: Int' in panel
+          assert 'fallbackSeconds > 0' in panel
+          assert 'TtsChapterDurationPanel(' in voice
+          assert 'state.ttsDurationEnabled.value' in voice
+          assert 'TTS chapter duration' in more
+          assert 'Manual highlight' in more
+          print('TTS duration source assertions passed.')
+          PY
+
+      - name: Run TTS duration tests
+        run: ./gradlew :tooling:text_to_speech:test --no-daemon --console=plain
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - name: Verify APK artifacts
+        run: |
+          test -n "$(find app/build/outputs/apk/debug -name '*.apk' -type f -print -quit)"
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
+
+      - name: Remove temporary verification workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/verify-tts-duration.yml
+          git commit -m "ci: finish TTS duration verification [skip ci]"
+          git push origin HEAD:feat/tts-chapter-duration
