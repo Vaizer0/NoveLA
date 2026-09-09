@@ -22,11 +22,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import my.noveldokusha.coreui.components.SlimListItem
 import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.reader.R
@@ -58,6 +60,15 @@ internal fun MoreSettingDialog(
     manualHighlightEnabled: Boolean = false,
     onManualHighlightEnabledChange: (Boolean) -> Unit = {},
 ) {
+    LaunchedEffect(ttsDurationEnabled) {
+        if (ttsDurationEnabled) {
+            // The TTS engine/voice may finish initialization after the toggle is enabled.
+            // Re-invoke the existing setter once so a previously rejected measurement is retried.
+            delay(1200)
+            if (ttsDurationEnabled) onTtsDurationEnabledChange(true)
+        }
+    }
+
     ElevatedCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
     ) {
