@@ -1,0 +1,70 @@
+name: TTS duration reader UI
+
+on:
+  push:
+    branches:
+      - feat/tts-chapter-duration
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/tts-chapter-duration
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Apply reader TTS duration UI fix
+        run: python3 tools/add_tts_reader_duration_ui.py
+
+      - name: Verify reader duration UI source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          voice = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/VoiceReaderSettingDialog.kt').read_text()
+          panel = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/TtsChapterDurationPanel.kt').read_text()
+          assert 'TtsChapterDurationPanel(' in voice
+          assert 'state.ttsDurationEnabled.value' in voice
+          assert 'formatDuration(currentSeconds)' in panel
+          assert 'showTotal' in panel
+          assert 'ttsDurationEnabled: Boolean' not in voice
+          print('Reader TTS duration panel assertions passed.')
+          PY
+
+      - name: Run TTS duration unit tests
+        run: ./gradlew :tooling:text_to_speech:test --no-daemon --console=plain
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - name: Verify APK artifacts
+        run: |
+          test -n "$(find app/build/outputs/apk/debug -name '*.apk' -type f -print -quit)"
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
+
+      - name: Commit verified reader UI fix and remove temporary tooling
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/VoiceReaderSettingDialog.kt
+          git add features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/TtsChapterDurationPanel.kt
+          git rm -f tools/add_tts_reader_duration_ui.py .github/workflows/tts-duration-reader-ui.yml
+          git commit -m "feat: show TTS duration timeline in reader TTS panel [skip ci]"
+          git push origin HEAD:feat/tts-chapter-duration
