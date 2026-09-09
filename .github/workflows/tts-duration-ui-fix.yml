@@ -28,9 +28,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Apply TTS duration UI fix
-        run: python3 tools/fix_tts_duration_ui.py
-
       - name: Verify intended source changes
         run: |
           python3 - <<'PY'
@@ -40,7 +37,7 @@ jobs:
           bar = Path('features/reader/src/main/java/my/noveldokusha/features/reader/ui/ReaderScreenBottomBarDialogs.kt').read_text()
           assert 'ttsDurationEnabled' not in voice, 'Duration toggle still present in VoiceReaderSettingDialog'
           assert more.count('ttsDurationEnabled: Boolean') == 1, 'MoreSettingDialog toggle state missing/duplicated'
-          assert '// TTS chapter duration' in more, 'More menu duration row missing'
+          assert more.index('// TTS chapter duration') < more.index('// Manual highlight'), 'Duration toggle is not above Manual Highlight'
           assert 'ttsDurationEnabled = settings.textToSpeech.ttsDurationEnabled.value' in bar
           assert 'onTtsDurationEnabledChange = settings.textToSpeech.setTtsDurationEnabled' in bar
           print('UI placement and wiring assertions passed.')
@@ -62,7 +59,8 @@ jobs:
           git add features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/MoreSettingDialog.kt
           git add features/reader/src/main/java/my/noveldokusha/features/reader/ui/ReaderScreenBottomBarDialogs.kt
           git add features/reader/src/main/java/my/noveldokusha/features/reader/ui/settingDialogs/VoiceReaderSettingDialog.kt
-          git rm -f tools/fix_tts_duration_ui.py .github/workflows/tts-duration-ui-fix.yml
+          git rm -f tools/fix_tts_duration_ui.py .github/workflows/tts-duration-ui-fix.yml 2>/dev/null || true
+          git add -A
           git commit -m "fix: place TTS duration toggle in More menu [skip ci]"
           git push origin HEAD:feat/tts-chapter-duration
 
