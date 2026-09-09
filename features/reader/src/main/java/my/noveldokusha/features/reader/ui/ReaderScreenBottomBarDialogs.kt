@@ -73,6 +73,8 @@ internal fun ReaderScreenBottomBarDialogs(
                         )
                     }
                     ReaderScreenState.Settings.Type.More -> MoreSettingDialog(
+                        ttsDurationEnabled = settings.textToSpeech.ttsDurationEnabled.value,
+                        onTtsDurationEnabledChange = settings.textToSpeech.setTtsDurationEnabled,
                         ttsHighlightEnabled = settings.ttsHighlight.isEnabled.value,
                         onTtsHighlightEnabledChange = onTtsHighlightEnabledChange,
                         ttsHighlightColor = settings.ttsHighlight.highlightColor.value,
