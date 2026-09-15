@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import my.noveldokusha.features.reader.manga.MangaPage
@@ -125,12 +126,19 @@ internal class MangaWebtoonPageHolder(
             showProgress()
         }
         loadJob = scope.launch {
-            val image = viewer.pageImageLoader.load(chapterUrl, page.url)
-            // Протухший результат: холдер уже перепривязан к другой главе —
-            // setPage/showError применять нельзя (показали бы чужую картинку).
+            var image = viewer.pageImageLoader.load(chapterUrl, page.url)
+            // Auto-retry: 2 дополнительные попытки с паузой 1с при ошибке.
+            var retryAttempt = 0
+            while (image == null && retryAttempt < 2) {
+                if (chapterUrl != boundChapterUrl) return@launch
+                if (!isActive) return@launch
+                delay(1000)
+                if (chapterUrl != boundChapterUrl) return@launch
+                if (!isActive) return@launch
+                image = viewer.pageImageLoader.load(chapterUrl, page.url)
+                retryAttempt++
+            }
             if (chapterUrl != boundChapterUrl) return@launch
-            // Guard: задача загрузки отменена (recycle/новый bind) — результат
-            // больше не нужен, setPage после отмены не вызываем.
             if (!isActive) return@launch
             if (image == null) {
                 showError()

@@ -203,6 +203,10 @@ internal class LibraryPageViewModel @Inject constructor(
         .toState(viewModelScope, emptyList())
 
     // Полная карта жанр → Set<bookUrl> — парсим из Book.genres
+    // ponytail: Eagerly вместо WhileSubscribed — StateFlow в цепочке считывается только через .value
+    // (не собирается как Flow), поэтому WhileSubscribed не активируется → пустая карта →
+    // фильтр жанров убирает все книги при первом выборе.
+
     private val genreToBookUrls = sharedBooksFlow
         .map { list ->
             val result = mutableMapOf<String, MutableSet<String>>()
@@ -214,7 +218,7 @@ internal class LibraryPageViewModel @Inject constructor(
             }
             result
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // ponytail: same bulk-translation logic as translatedTitles, but branches from
     // sharedBooksFlow (all books) instead of categoryFilteredBooks.

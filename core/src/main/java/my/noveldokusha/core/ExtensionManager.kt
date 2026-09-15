@@ -11,6 +11,7 @@ data class Extension(
     val enabled: Boolean,
     val installed: Boolean,
     val iconUrl: String? = null,
+    val contentType: String = "",
 )
 
 interface ExtensionManager {

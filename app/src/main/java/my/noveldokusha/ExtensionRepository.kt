@@ -113,14 +113,24 @@ class ExtensionRepository @Inject constructor(
     // ── Mappers ───────────────────────────────────────────────────────────────
 
     private fun my.noveldokusha.feature.local_database.tables.Extension.toCoreExtension(): Extension {
+        val contentType = try {
+            val settings = this.settings
+            if (!settings.isNullOrBlank() && settings.startsWith("{")) {
+                @Suppress("UNCHECKED_CAST")
+                val map = Gson().fromJson(settings, Map::class.java) as? Map<String, Any>
+                map?.get("content_type")?.toString() ?: ""
+            } else ""
+        } catch (e: Exception) { "" }
+
         return Extension(
-            id        = this.id,
-            name      = this.name,
-            version   = this.version,
-            language  = this.language,
-            enabled   = this.enabled,
-            installed = this.installed,
-            iconUrl   = this.imageURL.takeIf { it.isNotBlank() }
+            id          = this.id,
+            name        = this.name,
+            version     = this.version,
+            language    = this.language,
+            enabled     = this.enabled,
+            installed   = this.installed,
+            iconUrl     = this.imageURL.takeIf { it.isNotBlank() },
+            contentType = contentType
         )
     }
 

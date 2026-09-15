@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import my.noveldokusha.features.reader.manga.MangaPage
@@ -114,13 +115,19 @@ internal class MangaPagerPageHolder private constructor(
         }
         if (chapterUrl == null) return // главы нет
         loadJob = loadScope.launch {
-            val image = viewer.pageImageLoader.load(chapterUrl, page.url)
-            // Guard: холдер мог быть отресаклен/переиспользован под другую
-            // страницу, пока шла загрузка. Результат (и успех, и ошибку)
-            // применяем только если привязанная страница всё ещё наша.
+            var image = viewer.pageImageLoader.load(chapterUrl, page.url)
+            // Auto-retry: 2 дополнительные попытки с паузой 1с при ошибке.
+            var retryAttempt = 0
+            while (image == null && retryAttempt < 2) {
+                if (this@MangaPagerPageHolder.page !== page) return@launch
+                if (!isActive) return@launch
+                delay(1000)
+                if (this@MangaPagerPageHolder.page !== page) return@launch
+                if (!isActive) return@launch
+                image = viewer.pageImageLoader.load(chapterUrl, page.url)
+                retryAttempt++
+            }
             if (this@MangaPagerPageHolder.page !== page) return@launch
-            // Guard: задача загрузки отменена (recycle/новый bind) — результат
-            // больше не нужен, setPage после отмены не вызываем.
             if (!isActive) return@launch
             if (image != null) {
                 // Guard SSIV NPE («Failed to load bitmap», SSIV:1737 — Uri.toString()

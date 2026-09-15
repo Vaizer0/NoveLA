@@ -31,7 +31,10 @@ import my.noveldokusha.feature.local_database.BookMetadata
 import my.noveldokusha.feature.local_database.DAOs.BookTranslationDao
 import my.noveldokusha.feature.local_database.tables.BookTranslation
 import my.noveldokusha.network.interceptors.CloudflareBypassSignal
+import kotlinx.serialization.json.Json
 import my.noveldokusha.scraper.ActiveFilters
+import my.noveldokusha.scraper.FilterHistoryEntry
+import my.noveldokusha.scraper.FilterPreset
 import my.noveldokusha.scraper.Scraper
 import my.noveldokusha.scraper.SourceInterface
 import my.noveldokusha.text_translator.domain.TranslationManager
@@ -60,6 +63,17 @@ internal class SourceCatalogViewModel @Inject constructor(
 
     private val _filterList = mutableStateOf(emptyList<my.noveldokusha.scraper.LuaFilter>())
     private val _activeFilters = mutableStateOf(ActiveFilters())
+
+    private val _presets = mutableStateOf(emptyList<FilterPreset>())
+    val presets: State<List<FilterPreset>> = _presets
+
+    private val _textHistory = mutableStateOf(emptyList<FilterHistoryEntry>())
+    val textHistory: State<List<FilterHistoryEntry>> = _textHistory
+
+    companion object {
+        const val MAX_PRESETS_PER_SOURCE = 10
+        const val MAX_HISTORY_ENTRIES = 20
+    }
 
     // Переводы названий книг каталога (url -> translatedTitle).
     // Отдельный реактивный map вместо мутации list[i] = copy(...): LazyGrid с
@@ -97,6 +111,7 @@ internal class SourceCatalogViewModel @Inject constructor(
     val state = SourceCatalogScreenState(
         sourceCatalogNameStrId = mutableIntStateOf(source.nameStrId),
         sourceCatalogName      = mutableStateOf(source.name),
+        sourceContentType      = source.contentType,
         searchTextInput        = stateHandle.asMutableStateOf("searchTextInput") { "" },
         toolbarMode            = stateHandle.asMutableStateOf("toolbarMode") { ToolbarMode.MAIN },
         fetchIterator          = PagedListIteratorState(viewModelScope) {
@@ -121,11 +136,15 @@ internal class SourceCatalogViewModel @Inject constructor(
                     .onSuccess { _filterList.value = it }
                     .onError { Timber.e(it.exception, "Failed to load filter list") }
             }
+            loadPresets()
+            loadTextHistory()
         }
 
-        // Перезагружаем текущий список после успешного обхода CF.
-        // SharedFlow — сигнал получают все подписчики одновременно.
-        // Сравниваем host источника чтобы не трогать каталоги других сайтов.
+        // Interceptor уже делает retry с cf_clearance и возвращает
+        // валидный response оригинальному coroutine из fetchNext().
+        // reset()+fetchNext() здесь убраны — они убивали coroutine,
+        // который уже получил ответ от interceptor, и запускали
+        // дублирующий запрос без cf_clearance (Race Condition).
         viewModelScope.launch {
             val sourceHost = runCatching {
                 android.net.Uri.parse(sourceBaseUrl).host
@@ -133,11 +152,8 @@ internal class SourceCatalogViewModel @Inject constructor(
 
             CloudflareBypassSignal.bypassCompleted.collect { bypassedHost ->
                 Timber.d("bypassCompleted received: $bypassedHost, sourceHost: $sourceHost")
-                if (sourceHost != null && sourceHost == bypassedHost) {
-                    Timber.d("Reloading catalog for $sourceHost")
-                    state.fetchIterator.reset()
-                    state.fetchIterator.fetchNext()
-                }
+                // No action needed — interceptor already retried and returned
+                // the valid response to the original fn(index) coroutine.
             }
         }
 
@@ -313,5 +329,79 @@ internal class SourceCatalogViewModel @Inject constructor(
             val res = if (isInLibrary) R.string.added_to_library else R.string.removed_from_library
             toasty.show(res)
         }
+    }
+
+    private fun loadPresets() {
+        val json = appPreferences.getFilterPresets(sourceBaseUrl)
+        _presets.value = json.mapNotNull { entry ->
+            runCatching {
+                Json.decodeFromString<ActiveFilters>(entry.filterJson)
+            }.getOrNull()?.let { filters ->
+                FilterPreset(name = entry.name, filters = filters, createdAt = entry.createdAt)
+            }
+        }
+    }
+
+    private fun loadTextHistory() {
+        val coreEntries = appPreferences.getTextHistory(sourceBaseUrl)
+        _textHistory.value = coreEntries.mapNotNull { entry ->
+            FilterHistoryEntry(
+                filters = ActiveFilters(textValues = mapOf(entry.filterKey to entry.value)),
+                timestamp = entry.timestamp
+            )
+        }.take(MAX_HISTORY_ENTRIES)
+    }
+
+    fun onPresetSave(name: String) {
+        if (_presets.value.size >= MAX_PRESETS_PER_SOURCE) {
+            toasty.show("Max presets reached")
+            return
+        }
+        val filterJson = Json.encodeToString(_activeFilters.value)
+        val corePreset = my.noveldokusha.core.appPreferences.FilterPreset(
+            name = name,
+            filterJson = filterJson
+        )
+        val current = appPreferences.getFilterPresets(sourceBaseUrl).toMutableList()
+        current.add(corePreset)
+        appPreferences.saveFilterPresets(sourceBaseUrl, current)
+        loadPresets()
+    }
+
+    fun onPresetLoad(preset: FilterPreset) {
+        val currentKeys = _filterList.value.map { it.key }.toSet()
+        val merged = ActiveFilters(
+            sortValues = preset.filters.sortValues.filterKeys { it in currentKeys },
+            sortAscending = preset.filters.sortAscending.filterKeys { it in currentKeys },
+            selectValues = preset.filters.selectValues.filterKeys { it in currentKeys },
+            checkboxIncluded = preset.filters.checkboxIncluded.filterKeys { it in currentKeys },
+            triIncluded = preset.filters.triIncluded.filterKeys { it in currentKeys },
+            triExcluded = preset.filters.triExcluded.filterKeys { it in currentKeys },
+            switchValues = preset.filters.switchValues.filterKeys { it in currentKeys },
+            textValues = preset.filters.textValues.filterKeys { it in currentKeys },
+            tagInputValues = preset.filters.tagInputValues.filterKeys { it in currentKeys },
+        )
+        onApplyFilters(merged)
+    }
+
+    fun onPresetDelete(preset: FilterPreset) {
+        val current = appPreferences.getFilterPresets(sourceBaseUrl).toMutableList()
+        current.removeAll { it.name == preset.name && it.createdAt == preset.createdAt }
+        appPreferences.saveFilterPresets(sourceBaseUrl, current)
+        loadPresets()
+    }
+
+    fun onTextHistoryAdd(filterKey: String, value: String) {
+        val coreEntry = my.noveldokusha.core.appPreferences.FilterHistoryEntry(
+            filterKey = filterKey,
+            value = value
+        )
+        appPreferences.addTextHistory(sourceBaseUrl, coreEntry)
+        loadTextHistory()
+    }
+
+    fun onTextHistoryRemove(filterKey: String, value: String) {
+        appPreferences.removeTextHistory(sourceBaseUrl, filterKey, value)
+        loadTextHistory()
     }
 }

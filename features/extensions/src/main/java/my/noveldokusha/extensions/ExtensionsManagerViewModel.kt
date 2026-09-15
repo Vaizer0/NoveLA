@@ -94,8 +94,10 @@ class ExtensionsManagerViewModel @Inject constructor(
         is ExtensionsScreenEvent.OnUpdateRepositoryUrl   -> updateRepositoryUrl(event.url)
         is ExtensionsScreenEvent.OnLanguageFilterToggle  -> toggleLanguageFilter(event.languageCode)
         is ExtensionsScreenEvent.OnLanguageFilterClear   -> clearLanguageFilter(event.languageCode)
+        is ExtensionsScreenEvent.OnContentTypeFilterToggle -> toggleContentTypeFilter(event.contentType)
         ExtensionsScreenEvent.OnBackPressed              -> Unit
         is ExtensionsScreenEvent.OnExtensionInstall      -> installExtension(event.extensionId)
+        ExtensionsScreenEvent.OnUpdateAll                -> updateAllExtensions()
         is ExtensionsScreenEvent.OnExtensionUninstallById -> uninstallExtensionById(event.extensionId)
         is ExtensionsScreenEvent.OnEditLuaClick           -> openLuaEditor(event.extensionId)
         ExtensionsScreenEvent.OnLuaEditorDismiss          -> closeLuaEditor()
@@ -161,13 +163,14 @@ class ExtensionsManagerViewModel @Inject constructor(
                                     description      = src.get("description") as? String ?: "",
                                     author           = src.get("author") as? String ?: "",
                                     version          = installedVer ?: remoteVer,
-                                    remoteVersion    = remoteVer, // Удаленная версия из YAML
-                                    codeUrl          = src["url"] as String, // Поле называется "url" в YAML
+                                    remoteVersion    = remoteVer,
+                                    codeUrl          = src["url"] as String,
                                     iconUrl          = src["icon"] as String,
                                     language         = langCode,
                                     isInstalled      = installedVer != null,
                                     isEnabled        = isEnabled(id),
-                                    isUpdateAvailable = isUpdateAvailable(remoteVer, installedVer)
+                                    isUpdateAvailable = isUpdateAvailable(remoteVer, installedVer),
+                                    contentType      = src["content_type"] as? String ?: ""
                                 )
                             )
                         }
@@ -244,7 +247,8 @@ class ExtensionsManagerViewModel @Inject constructor(
                     language = cached.language,
                     isInstalled = getInstalledVersion(cached.id) != null,
                     isEnabled = isEnabled(cached.id),
-                    isUpdateAvailable = isUpdateAvailable(cached.remoteVersion, getInstalledVersion(cached.id))
+                    isUpdateAvailable = isUpdateAvailable(cached.remoteVersion, getInstalledVersion(cached.id)),
+                    contentType = cached.contentType
                 )
             }
             val langs = list.groupBy { it.language }
@@ -277,7 +281,8 @@ class ExtensionsManagerViewModel @Inject constructor(
                 remoteVersion = ext.remoteVersion,
                 codeUrl = ext.codeUrl,
                 iconUrl = ext.iconUrl,
-                language = ext.language
+                language = ext.language,
+                contentType = ext.contentType
             )
         }
         appPreferences.EXTENSIONS_AVAILABLE_CACHE.value = cached
@@ -314,9 +319,9 @@ class ExtensionsManagerViewModel @Inject constructor(
                     imageUrl = extInfo.iconUrl,
                     codeUrl  = extInfo.codeUrl
                 )
-                // Шаг 2б: Сохранить codeUrl в settings как JSON,
+                // Шаг 2б: Сохранить codeUrl и content_type в settings как JSON,
                 // чтобы LuaSourceLoader знал откуда перескачать при следующем запуске
-                val settingsJson = Gson().toJson(mapOf("codeUrl" to extInfo.codeUrl))
+                val settingsJson = Gson().toJson(mapOf("codeUrl" to extInfo.codeUrl, "content_type" to extInfo.contentType))
                 extensionManager.updateExtensionSettings(extensionId, settingsJson)
 
                 Timber.d("Installed extension: ${extInfo.name}")
@@ -330,6 +335,15 @@ class ExtensionsManagerViewModel @Inject constructor(
                 luaSourceLoader.removeScript(extensionId)
             } finally {
                 setInstalling(extensionId, false)
+            }
+        }
+    }
+
+    private fun updateAllExtensions() {
+        viewModelScope.launch {
+            val extensionsToUpdate = _state.value.availableExtensions.filter { it.isUpdateAvailable }
+            extensionsToUpdate.forEach { ext ->
+                installExtension(ext.id)
             }
         }
     }
@@ -435,11 +449,13 @@ class ExtensionsManagerViewModel @Inject constructor(
             val version = luaField(finalCode, "version", "1.0.0")
             val language = luaField(finalCode, "language", "en")
             val icon = luaField(finalCode, "icon")
+            val contentType = luaField(finalCode, "content_type", "novel")
 
             if (extensionManager.isExtensionInstalled(storageId)) {
                 // Идемпотентный реимпорт того же файла — обновляем скрипт без создания дубля.
                 luaSourceLoader.saveScript(storageId, finalCode)
-                extensionManager.updateExtensionSettings(storageId, """{"sourceType": "local"}""")
+                val settingsJson = Gson().toJson(mapOf("sourceType" to "local", "content_type" to contentType))
+                extensionManager.updateExtensionSettings(storageId, settingsJson)
                 luaSourceProvider.reload()
                 return@withLock
             }
@@ -464,7 +480,8 @@ class ExtensionsManagerViewModel @Inject constructor(
                 imageUrl = icon.ifBlank { null },
                 codeUrl = null
             )
-            extensionManager.updateExtensionSettings(storageId, """{"sourceType": "local"}""")
+            val localSettings = Gson().toJson(mapOf("sourceType" to "local", "content_type" to contentType))
+            extensionManager.updateExtensionSettings(storageId, localSettings)
             luaSourceProvider.reload()
         }
     }
@@ -520,6 +537,7 @@ class ExtensionsManagerViewModel @Inject constructor(
         val newVersion = luaField(code, "version", "1.0.0")
         val newLanguage = luaField(code, "language", "en")
         val newIcon = luaField(code, "icon")
+        val newContentType = luaField(code, "content_type", "novel")
         val oldCodeUrl = getCodeUrl(id)
 
         extensionManager.installExtensionFromInfo(
@@ -530,6 +548,10 @@ class ExtensionsManagerViewModel @Inject constructor(
             imageUrl = newIcon.ifBlank { null },
             codeUrl = oldCodeUrl
         )
+        val settingsMap = mutableMapOf<String, Any>()
+        if (!oldCodeUrl.isNullOrBlank()) settingsMap["codeUrl"] = oldCodeUrl
+        settingsMap["content_type"] = newContentType
+        extensionManager.updateExtensionSettings(id, Gson().toJson(settingsMap))
         luaSourceProvider.reload()
         closeLuaEditor()
     }
@@ -686,6 +708,12 @@ class ExtensionsManagerViewModel @Inject constructor(
     private fun clearLanguageFilter(code: String?) {
         _state.update { it.copy(selectedLanguages = if (code == null) emptySet() else it.selectedLanguages - code) }
         appPreferences.EXTENSIONS_LANGUAGES_FILTER.value = _state.value.selectedLanguages
+    }
+
+    private fun toggleContentTypeFilter(contentType: String) {
+        _state.update { state ->
+            state.copy(selectedContentType = if (state.selectedContentType == contentType) "" else contentType)
+        }
     }
 
     private fun refreshAll() = loadAllAvailableExtensions(forceRefresh = true)
