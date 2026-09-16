@@ -1,5 +1,6 @@
 package my.noveldokusha.extensions
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -538,8 +539,13 @@ private fun ExtensionListItem(
                     .clip(RoundedCornerShape(4.dp))
             ) {
                 if (extension.iconUrl.isNotBlank()) {
+                    val iconUrlWithCacheBuster = Uri.parse(extension.iconUrl)
+                        .buildUpon()
+                        .appendQueryParameter("v", extension.version)
+                        .build()
+                        .toString()
                     ImageView(
-                        imageModel = "${extension.iconUrl}",
+                        imageModel = iconUrlWithCacheBuster,
                         modifier = Modifier.fillMaxSize(),
                         error = R.drawable.default_icon,
                         placeholder = R.drawable.default_icon

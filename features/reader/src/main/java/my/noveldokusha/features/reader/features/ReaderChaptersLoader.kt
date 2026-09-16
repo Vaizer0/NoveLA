@@ -852,21 +852,25 @@ internal class ReaderChaptersLoader(
                         orderedChaptersIndex = chapterIndex
                     )
                     hasLoadingError = true
-                    Timber.w("Chapter load error: ${res.message}, stopping further auto-loading")
                 }
                 maintainPosition {
                     remove(itemProgressBar)
                     remove(itemTitle)
                     items.removeAll { it is ReaderItem.Divider && it.chapterIndex == chapterIndex }
-                    val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
-                    val detail = ERROR_DETAIL_PATTERN
-                        .find(rawDetail)?.groupValues?.get(1)?.trim()
-                        ?: rawDetail.lines().lastOrNull { it.isNotBlank() }?.trim()
-                        ?: rawDetail
-                    val userMessage = if (java.util.Locale.getDefault().language == "ru")
-                        "Ошибка загрузки: $detail\n\nВозможные причины: защита Cloudflare, требуется авторизация или проблема с источником. Попробуйте открыть в браузере."
-                    else
-                        "Load error: $detail\n\nPossible causes: Cloudflare protection, login required, or source issue. Try opening in browser."
+                    val userMessage: String = if (res.pluginErrorTitle != null) {
+                        val msg = res.pluginErrorMessage
+                        if (msg != null) "${res.pluginErrorTitle}\n\n$msg" else res.pluginErrorTitle!!
+                    } else {
+                        val rawDetail = res.exception.message?.takeIf { it.isNotBlank() } ?: res.message
+                        val detail = ERROR_DETAIL_PATTERN
+                            .find(rawDetail)?.groupValues?.get(1)?.trim()
+                            ?: rawDetail.lines().lastOrNull { it.isNotBlank() }?.trim()
+                            ?: rawDetail
+                        if (java.util.Locale.getDefault().language == "ru")
+                            "Ошибка загрузки: $detail\n\nВозможные причины: защита Cloudflare, требуется авторизация или проблема с источником. Попробуйте открыть в браузере."
+                        else
+                            "Load error: $detail\n\nPossible causes: Cloudflare protection, login required, or source issue. Try opening in browser."
+                    }
                     insert(ReaderItem.Error(chapterIndex = chapterIndex, chapterUrl = chapter.url, text = userMessage))
                     readerViewHandlersActions.doForceUpdateListViewState()
                 }

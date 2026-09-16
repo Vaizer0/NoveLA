@@ -233,8 +233,16 @@ class ChapterBodyRepository @Inject constructor(
         }.onError {
             Timber.w("FetchPages: network ERROR url=$urlChapter error=${it.message}")
         }.map { chapterDownload ->
-            val pages = chapterDownload.pages ?: emptyList()
-            chapterPagesDao.insertReplace(ChapterPages(url = urlChapter, pages = encodePages(pages)))
+            val pages = chapterDownload.pages
+            // ponytail: pages=null → текстовая глава (legitimately), кэшируем "[]";
+            // pages=[] → источник вернул пустой список страниц, НЕ кэшируем —
+            // иначе повторное чтение получает pageCount=0 и крашится в вьюере.
+            if (pages != null && pages.isEmpty()) {
+                Timber.w("FetchPages: empty pages from source for $urlChapter — not caching")
+                return@map emptyList<String>()
+            }
+            val safePages = pages ?: emptyList()
+            chapterPagesDao.insertReplace(ChapterPages(url = urlChapter, pages = encodePages(safePages)))
             // Страничные главы: тело пустое и в кэш тела не пишется
             // (isValidChapterContent его всё равно отверг бы).
             if (chapterDownload.body.isNotBlank() && isValidChapterContent(chapterDownload.body)) {
@@ -243,7 +251,7 @@ class ChapterBodyRepository @Inject constructor(
                     title = chapterDownload.title
                 )
             }
-            pages
+            safePages
         }
     }
 }

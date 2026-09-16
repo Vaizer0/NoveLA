@@ -601,6 +601,7 @@ internal class MangaWebtoonViewer(
         val count = appPreferences.READER_PAGE_PREFETCH_COUNT.value
         if (count <= 0) return
         for ((chapterPos, chapter) in window.chapters.withIndex()) {
+            if (chapter.pageCount <= 0) continue // ponytail: skip empty chapters,avoid coerceIn пустой диапазон
             val first = window.firstPagePositionOf(chapterPos)
             // Страницы главы, близкие к текущей позиции (окно в обе стороны).
             val startPage = (current - first - count).coerceIn(0, chapter.pageCount - 1)

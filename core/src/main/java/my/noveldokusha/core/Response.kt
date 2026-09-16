@@ -9,7 +9,12 @@ import javax.net.ssl.SSLException
 
 sealed class Response<out T> {
     data class Success<out T>(val data: T) : Response<T>()
-    data class Error(val message: String, val exception: Exception) : Response<Nothing>()
+    data class Error(
+        val message: String,
+        val exception: Exception,
+        val pluginErrorTitle: String? = null,
+        val pluginErrorMessage: String? = null
+    ) : Response<Nothing>()
 
     fun toSuccessOrNull(): Success<T>? = when (this) {
         is Error -> null

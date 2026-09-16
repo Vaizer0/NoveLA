@@ -52,7 +52,10 @@ internal sealed interface MangaReaderUiState {
 /** Одноразовые события экрана. */
 internal sealed interface MangaReaderEvent {
     data object EndOfBook : MangaReaderEvent
-    data object InvalidChapter : MangaReaderEvent
+    data class InvalidChapter(
+        val title: String? = null,
+        val message: String? = null
+    ) : MangaReaderEvent
 }
 
 /**
@@ -159,7 +162,7 @@ internal class MangaReaderViewModel @Inject constructor(
             // Главы нет в списке книги — такой главы не существует (текстовая глава
             // в манга-ридере или битая ссылка). Ничего не открываем, без фолбэка на главу 1.
             Timber.w("MangaReaderLoad: InvalidChapter — url not in chapters list: %s", url)
-            _events.tryEmit(MangaReaderEvent.InvalidChapter)
+            _events.tryEmit(MangaReaderEvent.InvalidChapter())
             return
         }
         val index = chapters.indexOfFirst { it.url == url }
@@ -171,9 +174,8 @@ internal class MangaReaderViewModel @Inject constructor(
                 val pages = response.data
                 Timber.d("MangaReaderLoad: fetchPages OK url=%s pages=%d", url, pages.size)
                 if (pages.isEmpty()) {
-                    // getPageList вернул пусто — текстовая глава попала в манга-ридер.
                     Timber.w("MangaReaderLoad: InvalidChapter — empty pages: %s", url)
-                    _events.tryEmit(MangaReaderEvent.InvalidChapter)
+                    _events.tryEmit(MangaReaderEvent.InvalidChapter())
                     return
                 }
                 val savedPage = meta.lastReadPosition
@@ -216,10 +218,17 @@ internal class MangaReaderViewModel @Inject constructor(
                 }
             }
             is Response.Error -> {
-                // 6.5: сетевая ошибка не роняет последнее успешное состояние.
-                Timber.w("MangaReaderLoad: Error url=%s exception=%s", url, response.exception)
-                if (_uiState.value !is MangaReaderUiState.Ready) {
-                    _uiState.value = MangaReaderUiState.Error
+                if (response.pluginErrorTitle != null) {
+                    Timber.w("MangaReaderLoad: PluginError title=%s message=%s url=%s", response.pluginErrorTitle, response.pluginErrorMessage, url)
+                    _events.tryEmit(MangaReaderEvent.InvalidChapter(
+                        title = response.pluginErrorTitle,
+                        message = response.pluginErrorMessage
+                    ))
+                } else {
+                    Timber.w("MangaReaderLoad: Error url=%s exception=%s", url, response.exception)
+                    if (_uiState.value !is MangaReaderUiState.Ready) {
+                        _uiState.value = MangaReaderUiState.Error
+                    }
                 }
             }
         }
@@ -301,6 +310,10 @@ internal class MangaReaderViewModel @Inject constructor(
         val urls = runCatching { appRepository.chapterBody.fetchPages(url) }
             .getOrNull()?.toSuccessOrNull()?.data ?: run {
             Timber.w("MangaReaderLoad: buildChapter fetchPages failed url=%s", url)
+            return null
+        }
+        if (urls.isEmpty()) {
+            Timber.w("MangaReaderLoad: buildChapter empty pages url=%s", url)
             return null
         }
         Timber.d("MangaReaderLoad: buildChapter url=%s index=%d pages=%d", url, index, urls.size)

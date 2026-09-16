@@ -457,14 +457,19 @@ open class LuaSourceAdapter(
     override suspend fun getChapterText(doc: Document): String? =
         withContext(Dispatchers.IO) {
             mutex.withLock {
+                luaEngine.resetShowError()
                 withSourceContext {
                     val html = doc.outerHtml()
                     val url  = doc.location()
                     Timber.d("LuaSourceAdapter: url='$url'")
-                    luaScript.get("getChapterText").call(
+                    val result = luaScript.get("getChapterText").call(
                         LuaValue.valueOf(html),
                         LuaValue.valueOf(url)
-                    ).optjstring(null)
+                    )
+                    luaEngine.getPendingShowError()?.let { (title, message) ->
+                        throw my.noveldokusha.scraper.domain.PluginShowErrorException(title, message)
+                    }
+                    result.optjstring(null)
                 }
             }
         }
@@ -478,6 +483,7 @@ open class LuaSourceAdapter(
     override suspend fun getChapterPages(doc: Document): List<String>? =
         withContext(Dispatchers.IO) {
             mutex.withLock {
+                luaEngine.resetShowError()
                 withSourceContext {
                     val fn = luaScript.get("getPageList")
                     if (fn.isnil()) return@withSourceContext null
@@ -487,9 +493,16 @@ open class LuaSourceAdapter(
                             LuaValue.valueOf(doc.location())
                         )
                     } catch (e: Exception) {
+                    luaEngine.getPendingShowError()?.let { (title, message) ->
+                            throw my.noveldokusha.scraper.domain.PluginShowErrorException(title, message)
+                        }
                         Timber.e(e, "Lua getPageList [${metadata.id}]")
                         return@withSourceContext emptyList()
                     }
+                    luaEngine.getPendingShowError()?.let { (title, message) ->
+                        throw my.noveldokusha.scraper.domain.PluginShowErrorException(title, message)
+                    }
+                    Timber.d("Lua getPageList [${metadata.id}] doc.location=${doc.location()} result.istable=${result.istable()} result=${if (result.isstring()) result.tojstring().take(200) else result.toString().take(200)}")
                     if (!result.istable()) return@withSourceContext emptyList()
                     val table = result.checktable()
                     val pages = mutableListOf<String>()
@@ -497,6 +510,7 @@ open class LuaSourceAdapter(
                         val v = table.get(LuaValue.valueOf(i)).optjstring(null)
                         if (!v.isNullOrBlank()) pages.add(v)
                     }
+                    Timber.d("Lua getPageList [${metadata.id}] pages.size=${pages.size}")
                     pages
                 }
             }

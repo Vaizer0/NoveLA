@@ -23,6 +23,7 @@ import my.noveldokusha.network.interceptors.CloudflareBypassSignal
 import my.noveldokusha.network.interceptors.PluginUARegistry
 import my.noveldokusha.network.interceptors.resolveUserAgent
 import my.noveldokusha.text_translator.domain.TranslationManager
+import org.json.JSONTokener
 import timber.log.Timber
 import java.util.Locale
 import javax.inject.Inject
@@ -118,6 +119,10 @@ class WebViewActivity : ComponentActivity() {
                     // are already in CookieManager by onPageFinished; Turnstile JS cookies
                     // are caught by the polling fallback below.
                     if (isBypassMode) autoCloseOnClearance()
+                    // Извлечение localStorage для плагинов (Bearer Token и т.д.)
+                    if (!isBypassMode && url != null) {
+                        extractLocalStorage(url)
+                    }
                 }
 
                 // ✅ ИСПРАВЛЕНИЕ: логируем HTTP ошибки для диагностики
@@ -170,11 +175,21 @@ class WebViewActivity : ComponentActivity() {
             }
 
             // ponytail: polling fallback for Turnstile JS cookies (set AFTER onPageFinished)
+            // + localStorage extraction (catches async-written tokens)
             // + update currentUrl for toolbar display
             LaunchedEffect(Unit) {
+                var localStorageTick = 0
                 while (true) {
                     // In bypass mode, auto-close on new clearance (catches JS-set cookies)
                     if (isBypassMode) autoCloseOnClearance()
+                    // Re-extract localStorage every 3s to catch async-written tokens
+                    if (!isBypassMode) {
+                        localStorageTick++
+                        if (localStorageTick >= 6) {
+                            localStorageTick = 0
+                            webView.url?.let { extractLocalStorage(it) }
+                        }
+                    }
                     webView.url?.let { currentUrl = it }
                     delay(500)
                 }
@@ -326,6 +341,19 @@ class WebViewActivity : ComponentActivity() {
         hasAutoClosed = true
         CloudflareBypassSignal.abort(host)
         finish()
+    }
+
+    private fun extractLocalStorage(url: String) {
+        val host = try { Uri.parse(url).host } catch (_: Exception) { null } ?: return
+        val script = """(function(){var r={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);r[k]=localStorage.getItem(k);}return JSON.stringify(r);})()"""
+        webView.evaluateJavascript(script) { value ->
+            if (value.isNullOrBlank() || value == "null") return@evaluateJavascript
+            val json = JSONTokener(value).nextValue() as String
+            if (json.isBlank() || json == "{}") return@evaluateJavascript
+            val prefs = getSharedPreferences("lua_localStorage", Context.MODE_PRIVATE)
+            prefs.edit().putString(host, json).apply()
+            Timber.d("localStorage saved: host=$host, keys=${json.length} chars")
+        }
     }
 
     override fun onDestroy() {

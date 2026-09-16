@@ -100,12 +100,14 @@ import my.noveldokusha.coreui.theme.LocalIsDark
 import my.noveldokusha.coreui.theme.Theme
 import my.noveldokusha.coreui.theme.colorAccent
 import my.noveldokusha.feature.local_database.tables.Chapter
+import my.noveldokusha.navigation.NavigationRoutes
 import my.noveldokusha.features.reader.manga.setting.MangaReadingMode
 import my.noveldokusha.features.reader.manga.ui.MangaReaderSettingsSheet
 import my.noveldokusha.features.reader.manga.viewer.Viewer
 import my.noveldokusha.features.reader.manga.viewer.pager.createPagerViewer
 import my.noveldokusha.features.reader.manga.viewer.webtoon.MangaWebtoonViewer
 import my.noveldokusha.features.reader.tools.PageImageLoader
+import my.noveldokusha.features.reader.ui.PluginErrorDialog
 import my.noveldokusha.reader.R
 import timber.log.Timber
 import javax.inject.Inject
@@ -164,6 +166,9 @@ internal class MangaReaderActivity : ComponentActivity() {
     @Inject
     lateinit var pageImageLoader: PageImageLoader
 
+    @Inject
+    lateinit var navigationRoutes: NavigationRoutes
+
     private val viewModel by viewModels<MangaReaderViewModel>()
 
     /** Android-хост вьюера: AndroidView оборачивает FrameLayout, в который ensureViewer кладёт view. */
@@ -192,6 +197,11 @@ internal class MangaReaderActivity : ComponentActivity() {
 
     /** Диалог «невалидная глава» открыт. */
     private val showInvalidChapterDialog = mutableStateOf(false)
+
+    /** Диалог ошибки плагина открыт. */
+    private val showPluginErrorDialog = mutableStateOf(false)
+    private val pluginErrorTitle = mutableStateOf("")
+    private val pluginErrorMessage = mutableStateOf("")
 
     /**
      * Переход между главами пейджера в процессе: спиннер поверх вьюера
@@ -530,7 +540,15 @@ internal class MangaReaderActivity : ComponentActivity() {
                         R.string.manga_reader_end_of_book,
                         Toast.LENGTH_SHORT,
                     ).show()
-                    MangaReaderEvent.InvalidChapter -> showInvalidChapterDialog.value = true
+                    is MangaReaderEvent.InvalidChapter -> {
+                        if (event.title != null) {
+                            pluginErrorTitle.value = event.title
+                            pluginErrorMessage.value = event.message ?: ""
+                            showPluginErrorDialog.value = true
+                        } else {
+                            showInvalidChapterDialog.value = true
+                        }
+                    }
                 }
             }
         }
@@ -773,6 +791,17 @@ internal class MangaReaderActivity : ComponentActivity() {
                 showInvalidChapterDialog.value = false
                 finish()
             })
+        }
+
+        if (showPluginErrorDialog.value) {
+            PluginErrorDialog(
+                title = pluginErrorTitle.value,
+                message = pluginErrorMessage.value,
+                onDismiss = {
+                    showPluginErrorDialog.value = false
+                    finish()
+                }
+            )
         }
     }
 
@@ -1067,12 +1096,12 @@ internal class MangaReaderActivity : ComponentActivity() {
         }
     }
 
-    /** Открыть текущую главу в браузере (URL источника, не текст). */
+    /** Открыть текущую главу во вебвьювере (URL источника, не текст). */
     private fun openInBrowser() {
         val ready = viewModel.uiState.value as? MangaReaderUiState.Ready ?: return
         val url = ready.chapter.url
         runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            startActivity(navigationRoutes.webView(this, url))
         }
     }
 

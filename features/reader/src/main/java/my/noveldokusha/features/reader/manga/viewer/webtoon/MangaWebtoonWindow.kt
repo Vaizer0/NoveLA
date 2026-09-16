@@ -132,8 +132,10 @@ internal class MangaWebtoonWindow {
      */
     fun flatPosition(chapterPos: Int, page: Int): Int {
         require(chapterPos in _chapters.indices) { "chapterPos out of range" }
+        val chapter = _chapters[chapterPos]
+        if (chapter.pageCount <= 0) return firstPagePositionOf(chapterPos)
         val off = firstPagePositionOf(chapterPos)
-        val clamped = page.coerceIn(0, _chapters[chapterPos].pageCount - 1)
+        val clamped = page.coerceIn(0, chapter.pageCount - 1)
         return off + clamped
     }
 

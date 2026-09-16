@@ -135,6 +135,7 @@ internal fun StyleSettingDialog(
     ElevatedCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
     ) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         // Text size
         var currentTextSize by remember { mutableFloatStateOf(state.textSize.value) }
         PillSlider(
@@ -717,6 +718,7 @@ internal fun StyleSettingDialog(
             }
         }
         Spacer(Modifier.padding(bottom = 4.dp))
+        }
     }
 }
 

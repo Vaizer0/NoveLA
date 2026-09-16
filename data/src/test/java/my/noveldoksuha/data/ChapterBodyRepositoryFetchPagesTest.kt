@@ -122,4 +122,21 @@ class ChapterBodyRepositoryFetchPagesTest {
             verify(chapterBodyDao).insertReplace(eq(ChapterBody(url = chapterUrl, body = body)))
         }
     }
+
+    @Test
+    fun `fetchPages does not cache empty page list from source`() {
+        runBlocking {
+            whenever(downloaderRepository.bookChapter(chapterUrl)).thenReturn(
+                Response.Success(ChapterDownload(body = "", title = null, pages = emptyList()))
+            )
+
+            val result = repo.fetchPages(chapterUrl)
+
+            assertTrue(result is Response.Success)
+            assertEquals(emptyList<String>(), (result as Response.Success).data)
+            // emptyList() от источника НЕ кэшируется — иначе повторное чтение получает pageCount=0
+            verify(chapterPagesDao, never()).insertReplace(any())
+            verify(chapterBodyDao, never()).insertReplace(any())
+        }
+    }
 }

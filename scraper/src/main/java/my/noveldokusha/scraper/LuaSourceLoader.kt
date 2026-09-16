@@ -64,6 +64,16 @@ class LuaEngine @Inject constructor(
     private val luaPrefs by lazy { context.getSharedPreferences("lua_preferences", Context.MODE_PRIVATE) }
     val currentSourceId = ThreadLocal<String?>()
 
+    private val pendingShowError = ThreadLocal<Pair<String, String>?>()
+
+    fun getPendingShowError(): Pair<String, String>? = pendingShowError.get()
+
+    fun resetShowError() { pendingShowError.set(null) }
+
+    internal fun setPendingShowError(title: String, message: String) {
+        pendingShowError.set(title to message)
+    }
+
     // TTL-кэш ответов http_get: геттеры метаданных одной страницы книги делят один сетевой запрос.
     // Ключ = url|charset|sourceId. Кэшируется ТОЛЬКО успешный ответ (2xx): не кешируем
     // 4xx/5xx и CF-челленджи — иначе просроченная/ложно-негативная 403 отдаётся из кеша
@@ -230,6 +240,7 @@ class LuaEngine @Inject constructor(
         g.set("set_cookies",            SetCookiesFunction()           as LuaValue)
         g.set("get_preference",         GetPreferenceFunction()        as LuaValue)
         g.set("set_preference",         SetPreferenceFunction()        as LuaValue)
+        g.set("get_localStorage",       GetLocalStorageFunction()      as LuaValue)
         // Crypto
         g.set("aes_decrypt",            AesDecryptFunction()           as LuaValue)
         g.set("base64_decode",          Base64DecodeFunction()         as LuaValue)
@@ -266,6 +277,16 @@ class LuaEngine @Inject constructor(
         g.set("log_error",              LogErrorFunction()             as LuaValue)
         g.set("base64_encode",          Base64EncodeFunction()         as LuaValue)
         g.set("os_time",                OsTimeFunction()               as LuaValue)
+        // Plugin error signaling
+        g.set("show_error", object : TwoArgFunction() {
+            override fun call(titleArg: LuaValue, messageArg: LuaValue): LuaValue {
+                val title = titleArg.toString()
+                val message = messageArg.toString()
+                pendingShowError.set(title to message)
+                Timber.d("Lua show_error: title=%s message=%s", title, message)
+                return LuaValue.NIL
+            }
+        })
     }
 
 
@@ -595,6 +616,22 @@ class LuaEngine @Inject constructor(
             }
             networkClient.cookieJar.saveFromResponse(httpUrl, cookies)
             return LuaValue.NIL
+        }
+    }
+
+    private inner class GetLocalStorageFunction : TwoArgFunction() {
+        override fun call(a1: LuaValue, a2: LuaValue): LuaValue {
+            val host = a1.checkjstring().let { url ->
+                try { java.net.URI(url).host ?: url } catch (_: Exception) { url }
+            }
+            val key = a2.checkjstring()
+            val prefs = context.getSharedPreferences("lua_localStorage", Context.MODE_PRIVATE)
+            val json = prefs.getString(host, null) ?: return LuaValue.NIL
+            return try {
+                val map = gson.fromJson(json, Map::class.java)
+                val value = map[key] as? String ?: return LuaValue.NIL
+                LuaValue.valueOf(value)
+            } catch (_: Exception) { LuaValue.NIL }
         }
     }
 
