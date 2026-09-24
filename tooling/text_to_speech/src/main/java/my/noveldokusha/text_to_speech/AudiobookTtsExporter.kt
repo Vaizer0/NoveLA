@@ -369,8 +369,8 @@ class AudiobookTtsExporter(private val context: Context) {
         // synthesizeToFile() only becomes useful to the exporter when its audio callbacks
         // are actually consumed. Keep the file target /dev/null so the TTS engine does not
         // duplicate the PCM onto disk; onAudioAvailable provides the same PCM to our sink.
-        val lastFormat = mutableMapOf<String, Int>()
         var audioBytesReceived = 0L
+        var sliceAudioBytesReceived = 0L
 
         val tts = createTts(request)
         val listener = object : UtteranceProgressListener() {
@@ -408,6 +408,7 @@ class AudiobookTtsExporter(private val context: Context) {
                     sink?.writePcm16(pcm)
                     currentFrames = sink?.totalFrames ?: currentFrames
                     audioBytesReceived += pcm.size.toLong()
+                    sliceAudioBytesReceived += pcm.size.toLong()
                 }.onFailure {
                     error = it
                 }
@@ -512,6 +513,7 @@ class AudiobookTtsExporter(private val context: Context) {
                     for ((sliceIndex, slice) in slices.withIndex()) {
                         currentSliceId = "audiobook-" + System.nanoTime() + "-" + sliceIndex
                         error = null
+                        sliceAudioBytesReceived = 0L
                         latch = CountDownLatch(1)
 
                         val synthesisPfd = ParcelFileDescriptor.open(
@@ -519,6 +521,7 @@ class AudiobookTtsExporter(private val context: Context) {
                             ParcelFileDescriptor.MODE_WRITE_ONLY,
                         )
                         try {
+                            Timber.d("AudiobookTTS: synthesize slice id=%s chars=%d format=%s", currentSliceId, slice.length, request.outputFormat)
                             val synthesisResult = tts.synthesizeToFile(
                                 slice,
                                 Bundle().apply {
@@ -530,10 +533,11 @@ class AudiobookTtsExporter(private val context: Context) {
                                 synthesisPfd,
                                 currentSliceId,
                             )
+                            Timber.d("AudiobookTTS: synthesizeToFile returned %d id=%s", synthesisResult, currentSliceId)
                             check(synthesisResult == TextToSpeech.SUCCESS) {
                                 "TTS synthesis failed: " + synthesisResult
                             }
-                            val synthesisDeadline = SystemClock.elapsedRealtime() + 5 * 60_000L
+                            val synthesisDeadline = SystemClock.elapsedRealtime() + 10 * 60_000L
                             while (!latch.await(500L, TimeUnit.MILLISECONDS)) {
                                 if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
                                     throw IllegalStateException("TTS synthesis timeout")
@@ -570,8 +574,8 @@ class AudiobookTtsExporter(private val context: Context) {
                         check(sink != null && sampleRate > 0 && channels > 0) {
                             "TTS produced no audio format"
                         }
-                        check(audioBytesReceived > 0L) {
-                            "TTS produced no audio data"
+                        check(sliceAudioBytesReceived > 0L) {
+                            "TTS produced no audio data for the current segment"
                         }
                         completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
                         val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
