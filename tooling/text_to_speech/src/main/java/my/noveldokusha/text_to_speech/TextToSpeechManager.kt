@@ -813,11 +813,15 @@ class TextToSpeechManager<T : Utterance<T>>(
                 // длительность абзаца).
                 if (sliceLastFrame != null) {
                     val sliceMarkerMs = (sliceLastFrame / sliceSampleRate * 1000).toLong()
+                    val correctedSliceMs =
+                        (sliceMarkerMs * _audioToMarkerRatio).toLong().coerceAtLeast(sliceMarkerMs)
                     _itemMarkerMs[itemUtteranceId] =
                         (_itemMarkerMs[itemUtteranceId] ?: 0L) + sliceMarkerMs
+                    // Keep a corrected, playback-aligned timeline for persisted word timings.
+                    // This is deliberately separate from _itemMarkerMs, which is retained for
+                    // the Reader's calibration regression.
                     _itemTimingSliceBaseMs[itemUtteranceId] =
-                        (_itemTimingSliceBaseMs[itemUtteranceId] ?: 0L) +
-                            (sliceMarkerMs * _audioToMarkerRatio).toLong().coerceAtLeast(sliceMarkerMs)
+                        (_itemTimingSliceBaseMs[itemUtteranceId] ?: 0L) + correctedSliceMs
                 }
                 if (itemSize != subItemUtteranceIndex) return
 
@@ -830,7 +834,8 @@ class TextToSpeechManager<T : Utterance<T>>(
                 if (totalMarkerMs != null && wallStart != null && totalMarkerMs > 0) {
                     addCalibrationSample(itemUtteranceId, totalMarkerMs, wall - wallStart)
                     if (finalRange != null && finalStartMs >= 0L) {
-                        val finalDurationMs = totalMarkerMs - finalStartMs
+                        val correctedTotalMs = _itemTimingSliceBaseMs[itemUtteranceId] ?: 0L
+                        val finalDurationMs = correctedTotalMs - finalStartMs
                         if (finalDurationMs in 40L..15_000L) {
                             persistWordTiming(
                                 _itemTimingKey[itemUtteranceId]
