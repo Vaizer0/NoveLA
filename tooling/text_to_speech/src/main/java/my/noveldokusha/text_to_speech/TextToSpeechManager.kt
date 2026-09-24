@@ -196,7 +196,7 @@ class TextToSpeechManager<T : Utterance<T>>(
     }
 
     private fun persistWordTiming(cacheKey: String, range: IntRange, startMs: Long, durationMs: Long) {
-        if (range.isEmpty || startMs < 0L || durationMs !in 40L..15_000L || voiceSpeed.floatValue <= 0f) return
+        if (range.isEmpty() || startMs < 0L || durationMs !in 40L..15_000L || voiceSpeed.floatValue <= 0f) return
         runCatching {
             val root = JSONObject(
                 ttsPrefs.getString("tts_word_highlight_timing_json_v2", "{}") ?: "{}"
