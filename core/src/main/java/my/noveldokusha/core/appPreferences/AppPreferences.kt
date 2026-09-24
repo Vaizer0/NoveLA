@@ -411,6 +411,10 @@ class AppPreferences @Inject constructor(
         }
 
     // Audiobook export defaults. Reader TTS preferences remain independent.
+    val AUDIOBOOK_USE_READER_TTS =
+        object : Preference<Boolean>("AUDIOBOOK_USE_READER_TTS") {
+            override var value by SharedPreference_Boolean(name, preferences, true)
+        }
     val AUDIOBOOK_TTS_VOICE_ID =
         object : Preference<String>("AUDIOBOOK_TTS_VOICE_ID") {
             override var value by SharedPreference_String(name, preferences, "")
@@ -427,12 +431,26 @@ class AppPreferences @Inject constructor(
         object : Preference<Float>("AUDIOBOOK_TTS_VOICE_PITCH") {
             override var value by SharedPreference_Float(name, preferences, 1f)
         }
+    val AUDIOBOOK_FAVORITE_VOICE_KEYS =
+        object : Preference<List<String>>("AUDIOBOOK_FAVORITE_VOICE_KEYS") {
+            override var value by SharedPreference_Serializable<List<String>>(
+                name = name,
+                sharedPreferences = preferences,
+                defaultValue = emptyList(),
+                encode = { Json.encodeToString(it) },
+                decode = { Json.decodeFromString(it) },
+            )
+        }
     val AUDIOBOOK_OUTPUT_FORMAT =
         object : Preference<String>("AUDIOBOOK_OUTPUT_FORMAT") {
             override var value by SharedPreference_String(name, preferences, "WAV")
         }
     val AUDIOBOOK_VISUAL_URI =
         object : Preference<String>("AUDIOBOOK_VISUAL_URI") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+    val AUDIOBOOK_EXPORT_DIRECTORY_URI =
+        object : Preference<String>("AUDIOBOOK_EXPORT_DIRECTORY_URI") {
             override var value by SharedPreference_String(name, preferences, "")
         }
 
