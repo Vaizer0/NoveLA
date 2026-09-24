@@ -72,8 +72,8 @@ class AudiobookExportWorker(
             directoryUri: String,
         ) {
             val data = workDataOf(
-                BOOK_URL to request.bookTitle.substringBefore('\u0000'),
-                BOOK_TITLE to request.bookTitle.substringAfter('\u0000'),
+                BOOK_URL to bookUrl,
+                BOOK_TITLE to request.bookTitle,
                 MODE to request.contentMode,
                 SOURCE to request.sourceLang,
                 TARGET to request.targetLang,
