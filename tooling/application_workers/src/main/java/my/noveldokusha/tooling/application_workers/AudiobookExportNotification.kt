@@ -21,9 +21,13 @@ class AudiobookExportNotification(
     val notificationId: Int = idCounter.getAndIncrement()
     private var builder: NotificationCompat.Builder? = null
 
-    fun showProgress(progress: my.noveldokusha.text_to_speech.AudiobookExportProgress) {
+    fun showProgress(percent: Int) {
         if (!allowed()) return
-        val text = buildProgressText(progress)
+        val safePercent = percent.coerceIn(0, 100)
+        val text = context.getString(
+            StringsR.string.audiobook_export_progress,
+            safePercent,
+        )
         val current = builder
         if (current == null) {
             builder = notifyCenter().showNotification(
@@ -34,14 +38,14 @@ class AudiobookExportNotification(
             ) {
                 setContentTitle(bookTitle)
                 setContentText(text)
-                setProgress(100, progress.percent, false)
+                setProgress(100, safePercent, false)
                 setOngoing(true)
                 addCancel(this)
             }
         } else {
             notifyCenter().modifyNotification(current, notificationId) {
                 setContentText(text)
-                setProgress(100, progress.percent, false)
+                setProgress(100, safePercent, false)
             }
         }
     }
@@ -74,29 +78,8 @@ class AudiobookExportNotification(
         }
     }
 
-    fun showFinalizing() {
-        if (!allowed()) return
-        val current = builder
-        if (current == null) {
-            builder = notifyCenter().showNotification(
-                channelId = CHANNEL_ID,
-                channelName = context.getString(StringsR.string.book_export_channel_name),
-                notificationId = notificationId,
-                importance = NotificationManager.IMPORTANCE_LOW,
-            ) {
-                setContentTitle(bookTitle)
-                setContentText(context.getString(StringsR.string.audiobook_export_finalizing))
-                setProgress(100, 99, false)
-                setOngoing(true)
-                addCancel(this)
-            }
-        } else {
-            notifyCenter().modifyNotification(current, notificationId) {
-                setContentText(context.getString(StringsR.string.audiobook_export_finalizing))
-                setProgress(100, 99, false)
-                setOngoing(true)
-            }
-        }
+    fun showFinalizing(percent: Int = 90) {
+        showProgress(percent)
     }
 
     fun showError(message: String) {
@@ -116,34 +99,6 @@ class AudiobookExportNotification(
     fun close() {
         notifyCenter().close(notificationId)
         builder = null
-    }
-
-    private fun buildProgressText(progress: my.noveldokusha.text_to_speech.AudiobookExportProgress): String {
-        val eta = progress.estimatedRemainingMs?.let(::formatDuration)
-            ?: "calculating…"
-        val generated = formatDuration(progress.generatedAudioMs)
-        return context.getString(
-            StringsR.string.audiobook_export_progress,
-            progress.percent,
-            progress.currentChapter,
-            progress.totalChapters,
-            progress.chapterTitle,
-            formatDuration(progress.elapsedMs),
-            generated,
-            eta,
-        )
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
-        val hours = totalSeconds / 3600L
-        val minutes = (totalSeconds % 3600L) / 60L
-        val seconds = totalSeconds % 60L
-        return when {
-            hours > 0L -> "%dh %02dm".format(hours, minutes)
-            minutes > 0L -> "%dm %02ds".format(minutes, seconds)
-            else -> "%ds".format(seconds)
-        }
     }
 
     private fun addCancel(builder: NotificationCompat.Builder) {
