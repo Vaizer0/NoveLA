@@ -123,6 +123,7 @@ internal fun SettingsScreenBody(
     }
 
     val showNovelPromptsDialog = remember { mutableStateOf(false) }
+    val appContext = LocalContext.current
 
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
@@ -171,7 +172,7 @@ internal fun SettingsScreenBody(
         )
         HorizontalDivider()
         SettingsAudiobook(
-            prefs = remember { AppPreferences(LocalContext.current) },
+            prefs = remember(appContext) { AppPreferences(appContext) },
         )
         HorizontalDivider()
         SettingsBackup(
