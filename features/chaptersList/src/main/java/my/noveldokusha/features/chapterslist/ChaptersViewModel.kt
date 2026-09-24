@@ -188,10 +188,12 @@ internal class ChaptersViewModel @Inject constructor(
                 availableTranslations = pairs,
                 exportDirectoryName = directoryName,
                 directoryUri = directoryUri,
-                defaultVoiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value,
-                defaultEnginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
-                defaultSpeed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
-                defaultPitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
+                defaultVoiceId = appPreferences.AUDIOBOOK_TTS_VOICE_ID.value.ifBlank { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value },
+                defaultEnginePackage = appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value.ifBlank { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value },
+                defaultSpeed = appPreferences.AUDIOBOOK_TTS_VOICE_SPEED.value,
+                defaultPitch = appPreferences.AUDIOBOOK_TTS_VOICE_PITCH.value,
+                defaultOutputFormat = appPreferences.AUDIOBOOK_OUTPUT_FORMAT.value,
+                defaultVisualUri = appPreferences.AUDIOBOOK_VISUAL_URI.value,
             )
         }
     }
