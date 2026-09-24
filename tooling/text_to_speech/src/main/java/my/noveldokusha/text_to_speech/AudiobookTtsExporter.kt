@@ -114,7 +114,7 @@ private class WavSink(
         repeat(44) { raf.write(0) }
     }
 
-    override fun writePcm16(bytes: ByteArray) {
+    @Synchronized\n    override fun writePcm16(bytes: ByteArray) {
         raf.write(bytes)
         dataBytes += bytes.size
         totalFrames += bytes.size.toLong() / (channels * 2L)
