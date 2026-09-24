@@ -492,12 +492,6 @@ class AudiobookTtsExporter(private val context: Context) {
                     // export, but do not invent false word timings for it when no Reader cache
                     // exists. Paragraphs remain strict: exported word timings are exact cached
                     // Reader onRangeStart timings, not estimates.
-                    if (segment.type != "title") {
-                        check(cachedTimings.isNotEmpty()) {
-                            "Reader word timing is not cached for this text. Read/play this text once with TTS highlight enabled before exporting."
-                        }
-                    }
-
                     val requestedSpeed = request.speed.coerceIn(0.1f, 5f)
                     val speedScaledTimings = cachedTimings.map { timing ->
                         val speedScale = timing.speed.toDouble() / requestedSpeed.toDouble()
@@ -537,12 +531,6 @@ class AudiobookTtsExporter(private val context: Context) {
                                 it.endMs >= it.startMs
                         }
                         .sortedBy { it.startMs }
-
-                    if (segment.type != "title") {
-                        check(wordTimings.isNotEmpty()) {
-                            "Reader word timing cache contains no usable ranges for this text."
-                        }
-                    }
 
                     val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
                     wordTimings.forEach { w ->
@@ -643,6 +631,7 @@ class AudiobookTtsExporter(private val context: Context) {
         outputMp4: File,
         visualUri: Uri?,
         durationMs: Long,
+        onProgress: (Int) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
         val visual = visualUri ?: fallbackVisual()
         val mime = context.contentResolver.getType(visual).orEmpty().lowercase()
@@ -696,6 +685,7 @@ class AudiobookTtsExporter(private val context: Context) {
                     visualUri = visualForMux,
                     outputMp4 = outputMp4,
                     durationMs = durationMs,
+                    onProgress = onProgress,
                 )
             ) {
                 "Unable to create MP4 using the fast remux path. Use an H.264 MP4 visual or a supported image."
@@ -818,6 +808,7 @@ class AudiobookTtsExporter(private val context: Context) {
         visualUri: Uri,
         outputMp4: File,
         durationMs: Long,
+        onProgress: (Int) -> Unit = {},
     ): Boolean {
         val audioExtractor = MediaExtractor()
         val videoExtractor = MediaExtractor()
@@ -855,6 +846,17 @@ class AudiobookTtsExporter(private val context: Context) {
             muxer.start()
 
             val targetUs = durationMs.coerceAtLeast(1L) * 1000L
+            var lastProgress = -1
+            fun reportVisualProgress(completedUs: Long) {
+                val percent = ((completedUs.coerceIn(0L, targetUs) * 100L) / targetUs)
+                    .toInt()
+                    .coerceIn(0, 100)
+                if (percent != lastProgress) {
+                    lastProgress = percent
+                    onProgress(percent)
+                }
+            }
+            onProgress(0)
             val buffer = ByteBuffer.allocateDirect(2 * 1024 * 1024)
 
             while (true) {
@@ -879,6 +881,9 @@ class AudiobookTtsExporter(private val context: Context) {
                 audioExtractor.advance()
             }
 
+            // Audio is already 90% of the overall job; this callback reports the video
+            // portion from 0..100 without re-encoding the long visual track.
+            onProgress(0)
             var videoOffsetUs = 0L
             while (videoOffsetUs < targetUs) {
                 videoExtractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
@@ -901,12 +906,14 @@ class AudiobookTtsExporter(private val context: Context) {
                     }
                     muxer.writeSampleData(outVideoTrack, buffer, info)
                     sawSample = true
+                    reportVisualProgress(pts)
                     videoExtractor.advance()
                 }
                 if (!sawSample) return false
                 videoOffsetUs += videoDurationUs
             }
 
+            reportVisualProgress(targetUs)
             muxer.stop()
             true
         } catch (e: Throwable) {
