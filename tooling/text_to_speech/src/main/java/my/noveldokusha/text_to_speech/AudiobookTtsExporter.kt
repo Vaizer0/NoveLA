@@ -302,7 +302,7 @@ class AudiobookTtsExporter(private val context: Context) {
             }
 
             override fun onAudioAvailable(id: String?, audio: ByteArray?) {
-                if (id != currentSliceId || audio.isNullOrEmpty() || error != null) return
+                if (id != currentSliceId || audio == null || audio.isEmpty() || error != null) return
                 val format = lastFormat[id] ?: return
                 runCatching {
                     sink?.writePcm16(normalizePcm16(audio, format))
