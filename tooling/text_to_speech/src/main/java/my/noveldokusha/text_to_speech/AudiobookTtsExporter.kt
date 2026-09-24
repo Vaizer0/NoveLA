@@ -111,50 +111,63 @@ private class WavSink(
     override val sampleRate: Int,
     override val channels: Int,
 ) : AudioSink {
-    private val raf = RandomAccessFile(file, "rw")
+    private val out = java.io.BufferedOutputStream(FileOutputStream(file, false), 256 * 1024)
     private var dataBytes = 0L
     override var totalFrames = 0L
+    private var finished = false
 
     init {
-        raf.setLength(0L)
-        repeat(44) { raf.write(0) }
+        repeat(44) { out.write(0) }
     }
 
     @Synchronized
     override fun writePcm16(bytes: ByteArray) {
-        raf.write(bytes)
+        check(!finished)
+        out.write(bytes)
         dataBytes += bytes.size
         totalFrames += bytes.size.toLong() / (channels * 2L)
     }
 
+    @Synchronized
     override fun finish() {
+        if (finished) return
         require(dataBytes <= 0xFFFF_FFFFL - 36L) { "WAV exceeds RIFF size limit" }
-        raf.seek(0)
-        ascii("RIFF")
-        u32(36L + dataBytes)
-        ascii("WAVEfmt ")
-        u32(16)
-        u16(1)
-        u16(channels)
-        u32(sampleRate.toLong())
-        u32(sampleRate.toLong() * channels * 2L)
-        u16(channels * 2)
-        u16(16)
-        ascii("data")
-        u32(dataBytes)
-        raf.seek(raf.length())
+        out.flush()
+        out.close()
+
+        RandomAccessFile(file, "rw").use { raf ->
+            raf.seek(0)
+            fun ascii(value: String) = raf.write(value.toByteArray(Charsets.US_ASCII))
+            fun u16(value: Int) {
+                raf.write(value and 255)
+                raf.write((value ushr 8) and 255)
+            }
+            fun u32(value: Long) {
+                raf.write((value and 255).toInt())
+                raf.write(((value ushr 8) and 255).toInt())
+                raf.write(((value ushr 16) and 255).toInt())
+                raf.write(((value ushr 24) and 255).toInt())
+            }
+            ascii("RIFF")
+            u32(36L + dataBytes)
+            ascii("WAVEfmt ")
+            u32(16)
+            u16(1)
+            u16(channels)
+            u32(sampleRate.toLong())
+            u32(sampleRate.toLong() * channels * 2L)
+            u16(channels * 2)
+            u16(16)
+            ascii("data")
+            u32(dataBytes)
+        }
+        finished = true
     }
 
-    private fun ascii(value: String) = raf.write(value.toByteArray(Charsets.US_ASCII))
-    private fun u16(value: Int) { raf.write(value and 255); raf.write((value ushr 8) and 255) }
-    private fun u32(value: Long) {
-        raf.write((value and 255).toInt())
-        raf.write(((value ushr 8) and 255).toInt())
-        raf.write(((value ushr 16) and 255).toInt())
-        raf.write(((value ushr 24) and 255).toInt())
+    override fun close() {
+        runCatching { finish() }
+        runCatching { out.close() }
     }
-
-    override fun close() { runCatching { raf.close() } }
 }
 
 private class AacMp4Sink(
@@ -856,6 +869,7 @@ suspend fun muxVisual(
                 ",\"pitch\": " + request.pitch + "},\n")
             out.write("  \"audio\": {\"sampleRate\": " + sampleRate +
                 ",\"channels\": " + channels + ",\"durationMs\": " + durationMs + "},\n")
+            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true},\n")
             out.write("  \"chapters\": [\n")
             chapters.forEachIndexed { index, c ->
                 out.write("    " + JSONObject().apply {
