@@ -24,6 +24,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -770,7 +771,11 @@ class AudiobookTtsExporter(private val context: Context) {
                     "audiobook-visual-normalized-" + System.nanoTime() + ".mp4",
                 )
                 // Transcode only the short visual once. Never transcode to the audiobook length.
-                transcodeVisualOnce(actualVisual, normalizedVideo!!)
+                transcodeVisualOnce(
+                    source = actualVisual,
+                    output = normalizedVideo!!,
+                    onProgress = { percent -> onProgress(percent / 2) },
+                )
                 Uri.fromFile(normalizedVideo!!)
             }
         } else {
@@ -780,7 +785,11 @@ class AudiobookTtsExporter(private val context: Context) {
             )
             val preparedImage = prepareStaticImage(actualVisual)
             try {
-                encodeImageCycle(Uri.fromFile(preparedImage), normalizedVideo!!)
+                encodeImageCycle(
+                    imageUri = Uri.fromFile(preparedImage),
+                    output = normalizedVideo!!,
+                    onProgress = { percent -> onProgress(percent / 2) },
+                )
             } finally {
                 preparedImage.delete()
             }
@@ -794,7 +803,9 @@ class AudiobookTtsExporter(private val context: Context) {
                     visualUri = visualForMux,
                     outputMp4 = outputMp4,
                     durationMs = durationMs,
-                    onProgress = onProgress,
+                    onProgress = { percent ->
+                        onProgress(50 + percent / 2)
+                    },
                 )
             ) {
                 "Unable to create MP4 using the fast remux path. Use an H.264 MP4 visual or a supported image."
@@ -809,13 +820,20 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
-    private suspend fun transcodeVisualOnce(source: Uri, output: File) {
+    private suspend fun transcodeVisualOnce(
+        source: Uri,
+        output: File,
+        onProgress: (Int) -> Unit,
+    ) {
         withContext(Dispatchers.Main.immediate) {
             val edited = EditedMediaItem.Builder(MediaItem.fromUri(source))
                 .setRemoveAudio(true)
                 .build()
 
             suspendCancellableCoroutine<Unit> { cont ->
+                val progressHolder = ProgressHolder()
+                val handler = Handler(Looper.getMainLooper())
+                lateinit var progressRunnable: Runnable
                 val transformer = Transformer.Builder(context.applicationContext)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .addListener(object : Transformer.Listener {
@@ -823,6 +841,8 @@ class AudiobookTtsExporter(private val context: Context) {
                             composition: Composition,
                             exportResult: androidx.media3.transformer.ExportResult,
                         ) {
+                            handler.removeCallbacks(progressRunnable)
+                            onProgress(100)
                             if (cont.isActive) cont.resume(Unit)
                         }
 
@@ -831,19 +851,40 @@ class AudiobookTtsExporter(private val context: Context) {
                             exportResult: androidx.media3.transformer.ExportResult,
                             exportException: androidx.media3.transformer.ExportException,
                         ) {
+                            handler.removeCallbacks(progressRunnable)
                             if (cont.isActive) cont.resumeWithException(exportException)
                         }
                     })
                     .build()
+
+                progressRunnable = object : Runnable {
+                    override fun run() {
+                        if (!cont.isActive) return
+                        val state = transformer.getProgress(progressHolder)
+                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                            onProgress(progressHolder.progress.coerceIn(0, 100))
+                        }
+                        if (state != Transformer.PROGRESS_STATE_NOT_STARTED) {
+                            handler.postDelayed(this, 500L)
+                        }
+                    }
+                }
+
                 cont.invokeOnCancellation {
+                    handler.removeCallbacks(progressRunnable)
                     Handler(Looper.getMainLooper()).post { transformer.cancel() }
                 }
                 transformer.start(edited, output.absolutePath)
+                handler.post(progressRunnable)
             }
         }
     }
 
-    private suspend fun encodeImageCycle(imageUri: Uri, output: File) {
+    private suspend fun encodeImageCycle(
+        imageUri: Uri,
+        output: File,
+        onProgress: (Int) -> Unit,
+    ) {
         withContext(Dispatchers.Main.immediate) {
             val edited = EditedMediaItem.Builder(
                 MediaItem.Builder()
@@ -853,6 +894,9 @@ class AudiobookTtsExporter(private val context: Context) {
             ).setFrameRate(1).build()
 
             suspendCancellableCoroutine<Unit> { cont ->
+                val progressHolder = ProgressHolder()
+                val handler = Handler(Looper.getMainLooper())
+                lateinit var progressRunnable: Runnable
                 val transformer = Transformer.Builder(context.applicationContext)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .addListener(object : Transformer.Listener {
@@ -860,6 +904,8 @@ class AudiobookTtsExporter(private val context: Context) {
                             composition: Composition,
                             exportResult: androidx.media3.transformer.ExportResult,
                         ) {
+                            handler.removeCallbacks(progressRunnable)
+                            onProgress(100)
                             if (cont.isActive) cont.resume(Unit)
                         }
 
@@ -868,14 +914,31 @@ class AudiobookTtsExporter(private val context: Context) {
                             exportResult: androidx.media3.transformer.ExportResult,
                             exportException: androidx.media3.transformer.ExportException,
                         ) {
+                            handler.removeCallbacks(progressRunnable)
                             if (cont.isActive) cont.resumeWithException(exportException)
                         }
                     })
                     .build()
+
+                progressRunnable = object : Runnable {
+                    override fun run() {
+                        if (!cont.isActive) return
+                        val state = transformer.getProgress(progressHolder)
+                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                            onProgress(progressHolder.progress.coerceIn(0, 100))
+                        }
+                        if (state != Transformer.PROGRESS_STATE_NOT_STARTED) {
+                            handler.postDelayed(this, 500L)
+                        }
+                    }
+                }
+
                 cont.invokeOnCancellation {
+                    handler.removeCallbacks(progressRunnable)
                     Handler(Looper.getMainLooper()).post { transformer.cancel() }
                 }
                 transformer.start(edited, output.absolutePath)
+                handler.post(progressRunnable)
             }
         }
     }
