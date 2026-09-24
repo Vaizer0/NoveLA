@@ -487,8 +487,15 @@ class AudiobookTtsExporter(private val context: Context) {
                         text = segment.text,
                     )
                     val cachedTimings = readReaderWordTimings(context, timingKey)
-                    check(cachedTimings.isNotEmpty()) {
-                        "Reader word timing is not cached for this text. Read/play this text once with TTS highlight enabled before exporting."
+                    // Reader speaks ReaderItem.Text paragraphs, not the synthetic audiobook
+                    // intro line ("book title + chapter title"). Keep the title audio in the
+                    // export, but do not invent false word timings for it when no Reader cache
+                    // exists. Paragraphs remain strict: exported word timings are exact cached
+                    // Reader onRangeStart timings, not estimates.
+                    if (segment.type != "title") {
+                        check(cachedTimings.isNotEmpty()) {
+                            "Reader word timing is not cached for this text. Read/play this text once with TTS highlight enabled before exporting."
+                        }
                     }
 
                     val requestedSpeed = request.speed.coerceIn(0.1f, 5f)
@@ -531,8 +538,10 @@ class AudiobookTtsExporter(private val context: Context) {
                         }
                         .sortedBy { it.startMs }
 
-                    check(wordTimings.isNotEmpty()) {
-                        "Reader word timing cache contains no usable ranges for this text."
+                    if (segment.type != "title") {
+                        check(wordTimings.isNotEmpty()) {
+                            "Reader word timing cache contains no usable ranges for this text."
+                        }
                     }
 
                     val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
@@ -556,6 +565,7 @@ class AudiobookTtsExporter(private val context: Context) {
                         put("chapterUrl", segment.chapterUrl)
                         put("type", segment.type)
                         put("text", segment.text)
+                        put("timingAvailable", wordTimings.isNotEmpty())
                         put("startMs", segmentStartMs)
                         put("endMs", segmentEndMs)
                     }
@@ -566,6 +576,7 @@ class AudiobookTtsExporter(private val context: Context) {
                             put("chapterUrl", segment.chapterUrl)
                             put("type", segment.type)
                             put("text", segment.text)
+                            put("timingAvailable", wordTimings.isNotEmpty())
                             put("startMs", segmentStartMs)
                             put("endMs", segmentEndMs)
                             put("words", JSONArray().apply {
