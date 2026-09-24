@@ -54,18 +54,15 @@ internal data class ChaptersScreenState(
     }
 }
 
-/** Пара языков перевода, доступная для экспорта, с числом переведённых глав. */
 data class LangPair(
     val sourceLang: String,
     val targetLang: String,
     val translatedChapters: Int,
 )
 
-/** Состояние диалога экспорта книги в EPUB. */
 sealed interface ExportDialogState {
     data object Hidden : ExportDialogState
 
-    /** Выбор контента для экспорта: оригинал или один из переводов. */
     data class ContentChoice(
         val bookUrl: String,
         val bookTitle: String,
@@ -75,6 +72,30 @@ sealed interface ExportDialogState {
         val exportDirectoryName: String?,
     ) : ExportDialogState
 
-    /** Папка экспорта не выбрана — UI открывает SAF-пикер. */
     data object NeedDirectory : ExportDialogState
+}
+
+data class AudiobookChapterOption(
+    val position: Int,
+    val url: String,
+    val title: String,
+)
+
+sealed interface AudiobookDialogState {
+    data object Hidden : AudiobookDialogState
+
+    data class ContentChoice(
+        val bookUrl: String,
+        val bookTitle: String,
+        val chapters: List<AudiobookChapterOption>,
+        val availableTranslations: List<LangPair>,
+        val exportDirectoryName: String?,
+        val directoryUri: String,
+        val defaultVoiceId: String,
+        val defaultEnginePackage: String,
+        val defaultSpeed: Float,
+        val defaultPitch: Float,
+    ) : AudiobookDialogState
+
+    data object NeedDirectory : AudiobookDialogState
 }
