@@ -15,4 +15,7 @@ dependencies {
     implementation(libs.test.junit)
 
     implementation(libs.timber)
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.common)
+    implementation(libs.media3.effect)
 }
