@@ -48,6 +48,7 @@ import my.noveldokusha.coreui.theme.PreviewThemes
 import my.noveldokusha.core.appPreferences.AppLanguage
 import my.noveldokusha.core.appPreferences.AppLanguageProvider
 import my.noveldokusha.core.appPreferences.NovelPromptData
+import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.settings.sections.AppUpdates
 import my.noveldokusha.settings.sections.LibraryAutoUpdate
 import my.noveldokusha.settings.sections.SettingsBackup
@@ -60,6 +61,7 @@ import my.noveldokusha.settings.sections.SettingsTheme
 import my.noveldokusha.settings.sections.SettingsRegexCleanup
 import my.noveldokusha.settings.sections.SettingsSupport
 import my.noveldokusha.settings.sections.SettingsAbout
+import my.noveldokusha.settings.sections.SettingsAudiobook
 
 @Composable
 internal fun SettingsScreenBody(
@@ -166,6 +168,10 @@ internal fun SettingsScreenBody(
             onMassAddDelayChange = onMassAddDelayChange,
             downloadDelayMs = state.downloadDelayMs,
             onDownloadDelayChange = onDownloadDelayChange
+        )
+        HorizontalDivider()
+        SettingsAudiobook(
+            prefs = remember { AppPreferences(LocalContext.current) },
         )
         HorizontalDivider()
         SettingsBackup(
