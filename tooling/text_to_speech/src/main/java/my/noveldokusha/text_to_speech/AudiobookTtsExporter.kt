@@ -578,7 +578,7 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
-suspend fun muxVisual(
+    suspend fun muxVisual(
         audioMp4: File,
         outputMp4: File,
         visualUri: Uri?,
@@ -589,95 +589,97 @@ suspend fun muxVisual(
         val actualVisual = if (mime == "image/gif") firstGifFrame(visual) else visual
         val actualMime = if (mime == "image/gif") "image/jpeg" else mime
 
-        // Fast path:
-        //  * H.264 visual video: copy compressed video samples and repeat timestamps.
-        //  * Image/GIF: encode only ONE SECOND of visual, then repeat that compressed
-        //    H.264 cycle for the entire audiobook.
-        //
-        // The old implementation asked Media3 Transformer to encode the visual for the
-        // entire audiobook. For very long exports that second pass dominates CPU/heat.
-        val fastResult = if (actualMime.startsWith("video/")) {
-            fastLoopMuxEncodedVideo(
-                audioMp4 = audioMp4,
-                visualUri = actualVisual,
-                outputMp4 = outputMp4,
-                durationMs = durationMs,
-            )
+        var normalizedVideo: File? = null
+        val visualForMux = if (actualMime.startsWith("video/")) {
+            val sourceIsAvc = runCatching {
+                val extractor = MediaExtractor()
+                try {
+                    extractor.setDataSource(context, actualVisual, null)
+                    val track = findTrack(extractor, "video/")
+                    track >= 0 &&
+                        extractor.getTrackFormat(track).getString(MediaFormat.KEY_MIME) ==
+                        MediaFormat.MIMETYPE_VIDEO_AVC
+                } finally {
+                    extractor.release()
+                }
+            }.getOrDefault(false)
+
+            if (sourceIsAvc) {
+                actualVisual
+            } else {
+                normalizedVideo = File(
+                    context.cacheDir,
+                    "audiobook-visual-normalized-" + System.nanoTime() + ".mp4",
+                )
+                // Transcode only the short visual once. Never transcode to the audiobook length.
+                transcodeVisualOnce(actualVisual, normalizedVideo!!)
+                Uri.fromFile(normalizedVideo!!)
+            }
         } else {
-            val preparedImage = prepareStaticImage(actualVisual)
-            val oneSecondVideo = File(
+            normalizedVideo = File(
                 context.cacheDir,
                 "audiobook-visual-cycle-" + System.nanoTime() + ".mp4",
             )
+            val preparedImage = prepareStaticImage(actualVisual)
             try {
-                encodeImageCycle(preparedImage, oneSecondVideo)
+                encodeImageCycle(Uri.fromFile(preparedImage), normalizedVideo!!)
+            } finally {
+                preparedImage.delete()
+            }
+            Uri.fromFile(normalizedVideo!!)
+        }
+
+        try {
+            check(
                 fastLoopMuxEncodedVideo(
                     audioMp4 = audioMp4,
-                    visualUri = Uri.fromFile(oneSecondVideo),
+                    visualUri = visualForMux,
                     outputMp4 = outputMp4,
                     durationMs = durationMs,
                 )
-            } finally {
-                preparedImage.delete()
-                oneSecondVideo.delete()
+            ) {
+                "Unable to create MP4 using the fast remux path. Use an H.264 MP4 visual or a supported image."
             }
-        }
-
-        if (!fastResult) {
-            Timber.w("Audiobook fast visual mux unavailable; falling back to Media3 Transformer")
-            withContext(Dispatchers.Main.immediate) {
-                val editedVideo = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
-                    EditedMediaItem.Builder(
-                        MediaItem.Builder().setUri(actualVisual)
-                            .setImageDurationMs(durationMs.coerceAtLeast(1000L))
-                            .build()
-                    ).setFrameRate(1).build()
-                } else {
-                    EditedMediaItem.Builder(MediaItem.fromUri(actualVisual))
-                        .setRemoveAudio(true)
-                        .build()
-                }
-                val video = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
-                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo))
-                } else {
-                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo)).buildUpon().setIsLooping(true).build()
-                }
-                val audio = EditedMediaItemSequence.withAudioFrom(
-                    listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioMp4))).build())
-                )
-                val composition = Composition.Builder(video, audio).build()
-                suspendCancellableCoroutine<Unit> { cont ->
-                    val transformer = Transformer.Builder(context.applicationContext)
-                        .setVideoMimeType(MimeTypes.VIDEO_H264)
-                        .setAudioMimeType(MimeTypes.AUDIO_AAC)
-                        .addListener(object : Transformer.Listener {
-                            override fun onCompleted(
-                                composition: Composition,
-                                exportResult: androidx.media3.transformer.ExportResult,
-                            ) {
-                                if (cont.isActive) cont.resume(Unit)
-                            }
-
-                            override fun onError(
-                                composition: Composition,
-                                exportResult: androidx.media3.transformer.ExportResult,
-                                exportException: androidx.media3.transformer.ExportException,
-                            ) {
-                                if (cont.isActive) cont.resumeWithException(exportException)
-                            }
-                        })
-                        .build()
-                    cont.invokeOnCancellation {
-                        Handler(Looper.getMainLooper()).post { transformer.cancel() }
-                    }
-                    transformer.start(composition, outputMp4.absolutePath)
+        } finally {
+            normalizedVideo?.delete()
+            if (actualVisual != visual && actualVisual.toString().startsWith("file:")) {
+                actualVisual.path?.let { path ->
+                    if (path.contains(context.cacheDir.path)) File(path).delete()
                 }
             }
         }
+    }
 
-        if (actualVisual.toString().startsWith("file:")) {
-            actualVisual.path?.let { path ->
-                if (path.contains(context.cacheDir.path)) File(path).delete()
+    private suspend fun transcodeVisualOnce(source: Uri, output: File) {
+        withContext(Dispatchers.Main.immediate) {
+            val edited = EditedMediaItem.Builder(MediaItem.fromUri(source))
+                .setRemoveAudio(true)
+                .build()
+
+            suspendCancellableCoroutine<Unit> { cont ->
+                val transformer = Transformer.Builder(context.applicationContext)
+                    .setVideoMimeType(MimeTypes.VIDEO_H264)
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(
+                            composition: Composition,
+                            exportResult: androidx.media3.transformer.ExportResult,
+                        ) {
+                            if (cont.isActive) cont.resume(Unit)
+                        }
+
+                        override fun onError(
+                            composition: Composition,
+                            exportResult: androidx.media3.transformer.ExportResult,
+                            exportException: androidx.media3.transformer.ExportException,
+                        ) {
+                            if (cont.isActive) cont.resumeWithException(exportException)
+                        }
+                    })
+                    .build()
+                cont.invokeOnCancellation {
+                    Handler(Looper.getMainLooper()).post { transformer.cancel() }
+                }
+                transformer.start(edited, output.absolutePath)
             }
         }
     }
