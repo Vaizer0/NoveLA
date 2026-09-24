@@ -134,7 +134,9 @@ private fun readReaderWordTimings(
     runCatching {
         val prefs = context.getSharedPreferences(READER_TIMING_PREFS, Context.MODE_PRIVATE)
         val root = JSONObject(prefs.getString(READER_TIMING_STORE, "{}") ?: "{}")
-        val array = root.optJSONArray(cacheKey) ?: return@runCatching emptyList()
+        val array = root.optJSONArray(cacheKey)
+            ?: root.optJSONObject(cacheKey)?.optJSONArray("timings")
+            ?: return@runCatching emptyList()
         buildList {
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
@@ -353,7 +355,6 @@ class AudiobookTtsExporter(private val context: Context) {
         // TTS instances and audio sinks are initialized below.
         var currentSliceId = ""
         var currentFrames = 0L
-        var currentSliceStartMs = 0L
         var sampleRate = 0
         var channels = 0
         var sink: AudioSink? = null
@@ -434,11 +435,9 @@ class AudiobookTtsExporter(private val context: Context) {
                         maxSliceLength = TextToSpeech.getMaxSpeechInputLength(),
                         charDelimiter = '.',
                     ).filter(String::isNotBlank)
-                    var charOffset = 0
 
                     for ((sliceIndex, slice) in slices.withIndex()) {
                         currentSliceId = "audiobook-" + System.nanoTime() + "-" + sliceIndex
-                        currentSliceStartMs = durationMs(currentFrames, sampleRate)
                         error = null
                         latch = CountDownLatch(1)
 
@@ -476,7 +475,6 @@ class AudiobookTtsExporter(private val context: Context) {
                                 chapters.first { it.position == segment.chapterPosition },
                             )
                         }
-                        charOffset += slice.length
                     }
 
                     val segmentEndMs = durationMs(currentFrames, sampleRate)
