@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -254,18 +255,9 @@ class AudiobookExportWorker(
     }
 
     private fun isDirectoryAccessible(uriString: String): Boolean = runCatching {
-        val tree = Uri.parse(uriString)
-        val doc = DocumentsContract.buildDocumentUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree),
-        )
-        applicationContext.contentResolver.query(
-            doc,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-            null,
-            null,
-            null,
-        )?.use { true } ?: false
+        val directory = DocumentFile.fromTreeUri(applicationContext, Uri.parse(uriString))
+            ?: return@runCatching false
+        directory.isDirectory && directory.canWrite()
     }.getOrElse { false }
 
     private fun createAndCopy(
@@ -274,23 +266,35 @@ class AudiobookExportWorker(
         mime: String,
         source: File,
     ): Uri {
-        val resolver = applicationContext.contentResolver
-        val tree = Uri.parse(directoryUri)
-        val doc = DocumentsContract.buildDocumentUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree),
-        )
-        val uri = DocumentsContract.createDocument(resolver, doc, mime, displayName)
+        val directory = DocumentFile.fromTreeUri(applicationContext, Uri.parse(directoryUri))
+            ?: error("Unable to open export folder")
+        if (!directory.isDirectory || !directory.canWrite()) {
+            error("Export folder is not writable")
+        }
+
+        directory.listFiles()
+            .firstOrNull { it.name == displayName }
+            ?.let { existing ->
+                if (!existing.delete()) error("Unable to replace existing " + displayName)
+            }
+
+        val target = directory.createFile(mime, displayName)
             ?: error("Unable to create " + displayName)
         try {
-            resolver.openOutputStream(uri)?.use { output ->
-                source.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
+            applicationContext.contentResolver.openOutputStream(target.uri)?.use { output ->
+                source.inputStream().use { input ->
+                    input.copyTo(output, 64 * 1024)
+                }
             } ?: error("Unable to open " + displayName)
+
+            if (!target.exists()) {
+                error("Exported file is no longer accessible: " + displayName)
+            }
         } catch (e: Throwable) {
-            runCatching { resolver.delete(uri, null, null) }
+            runCatching { target.delete() }
             throw e
         }
-        return uri
+        return target.uri
     }
 
     private fun buildFileName(
