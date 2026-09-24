@@ -245,12 +245,6 @@ class AudiobookExportWorker(
                         .coerceIn(90, 100)
                     if (overallPercent == 100 || now - lastProgressNotificationMs >= 250L) {
                         notification.showProgress(overallPercent)
-                        setProgress(
-                            workDataOf(
-                                "percent" to overallPercent,
-                                "stage" to "video",
-                            )
-                        )
                         lastProgressNotificationMs = now
                     }
                 }
