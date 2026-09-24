@@ -74,6 +74,31 @@ class AudiobookExportNotification(
         }
     }
 
+    fun showFinalizing() {
+        if (!allowed()) return
+        val current = builder
+        if (current == null) {
+            builder = notifyCenter().showNotification(
+                channelId = CHANNEL_ID,
+                channelName = context.getString(StringsR.string.book_export_channel_name),
+                notificationId = notificationId,
+                importance = NotificationManager.IMPORTANCE_LOW,
+            ) {
+                setContentTitle(bookTitle)
+                setContentText(context.getString(StringsR.string.audiobook_export_finalizing))
+                setProgress(100, 99, false)
+                setOngoing(true)
+                addCancel(this)
+            }
+        } else {
+            notifyCenter().modifyNotification(current, notificationId) {
+                setContentText(context.getString(StringsR.string.audiobook_export_finalizing))
+                setProgress(100, 99, false)
+                setOngoing(true)
+            }
+        }
+    }
+
     fun showError(message: String) {
         if (!allowed()) return
         notifyCenter().showNotification(
@@ -103,6 +128,7 @@ class AudiobookExportNotification(
             progress.currentChapter,
             progress.totalChapters,
             progress.chapterTitle,
+            formatDuration(progress.elapsedMs),
             generated,
             eta,
         )
