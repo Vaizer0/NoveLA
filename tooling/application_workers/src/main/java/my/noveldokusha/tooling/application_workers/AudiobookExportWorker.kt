@@ -216,20 +216,16 @@ class AudiobookExportWorker(
                 mediaFile = audioTemp,
                 jsonFile = jsonTemp,
             ) { progress ->
-                // Throttle notification / WorkManager progress updates to avoid excessive
-                // IPC while still presenting a smooth percentage + ETA to the user.
+                // Audio generation occupies 0..90% of the overall job. Keep the user-facing
+                // notification intentionally minimal; detailed progress remains in WorkManager.
                 val now = SystemClock.elapsedRealtime()
-                if (progress.percent == 100 || now - lastProgressNotificationMs >= 500L) {
-                    notification.showProgress(progress)
+                val overallPercent = (progress.percent * 90 / 100).coerceIn(0, 90)
+                if (overallPercent == 90 || now - lastProgressNotificationMs >= 500L) {
+                    notification.showProgress(overallPercent)
                     setProgress(
                         workDataOf(
-                            "chapter" to progress.currentChapter,
-                            "total" to progress.totalChapters,
-                            "title" to progress.chapterTitle,
-                            "percent" to progress.percent,
-                            "elapsedMs" to progress.elapsedMs,
-                            "etaMs" to (progress.estimatedRemainingMs ?: -1L),
-                            "generatedAudioMs" to progress.generatedAudioMs,
+                            "percent" to overallPercent,
+                            "stage" to "audio",
                         )
                     )
                     lastProgressNotificationMs = now
@@ -237,15 +233,40 @@ class AudiobookExportWorker(
             }
 
             val outputMedia = if (format == OutputFormat.MP4) {
-                notification.showFinalizing()
+                notification.showFinalizing(90)
                 exporter.muxVisual(
                     audioMp4 = audioTemp,
                     outputMp4 = finalMp4,
                     visualUri = visual,
                     durationMs = durationMs,
-                )
+                ) { videoPercent ->
+                    val now = SystemClock.elapsedRealtime()
+                    val overallPercent = (90 + (videoPercent.coerceIn(0, 100) * 10 / 100))
+                        .coerceIn(90, 100)
+                    if (overallPercent == 100 || now - lastProgressNotificationMs >= 250L) {
+                        notification.showProgress(overallPercent)
+                        setProgress(
+                            workDataOf(
+                                "percent" to overallPercent,
+                                "stage" to "video",
+                            )
+                        )
+                        lastProgressNotificationMs = now
+                    }
+                }
+                notification.showProgress(100)
                 finalMp4
-            } else audioTemp
+            } else {
+                notification.showProgress(100)
+                audioTemp
+            }
+
+            check(outputMedia.exists() && outputMedia.length() > 0L) {
+                "Audiobook media generation produced no output file"
+            }
+            check(jsonTemp.exists() && jsonTemp.length() > 0L) {
+                "Audiobook metadata generation produced no output file"
+            }
 
             val finalMediaName = buildFileName(bookTitle, start, end, mode, targetLang, format)
             val finalJsonName = finalMediaName.substringBeforeLast('.') + ".json"
