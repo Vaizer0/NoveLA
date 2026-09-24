@@ -11,6 +11,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    implementation(libs.compose.material3.android)
+    implementation(libs.compose.androidx.material.icons.extended)
+    implementation(projects.strings)
 
     implementation(libs.test.junit)
 
