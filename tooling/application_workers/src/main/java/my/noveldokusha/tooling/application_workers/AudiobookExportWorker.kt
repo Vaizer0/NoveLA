@@ -197,6 +197,7 @@ class AudiobookExportWorker(
         val finalMp4 = File(tempDir, "final.mp4")
         val jsonTemp = File(tempDir, "metadata.json")
         val notification = AudiobookExportNotification(bookTitle, applicationContext)
+        var lastProgressNotificationMs = 0L
 
         return try {
             val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -215,14 +216,24 @@ class AudiobookExportWorker(
                 mediaFile = audioTemp,
                 jsonFile = jsonTemp,
             ) { progress ->
-                notification.showProgress(progress)
-                setProgress(
-                    workDataOf(
-                        "chapter" to progress.currentChapter,
-                        "total" to progress.totalChapters,
-                        "title" to progress.chapterTitle,
+                // Throttle notification / WorkManager progress updates to avoid excessive
+                // IPC while still presenting a smooth percentage + ETA to the user.
+                val now = SystemClock.elapsedRealtime()
+                if (progress.percent == 100 || now - lastProgressNotificationMs >= 500L) {
+                    notification.showProgress(progress)
+                    setProgress(
+                        workDataOf(
+                            "chapter" to progress.currentChapter,
+                            "total" to progress.totalChapters,
+                            "title" to progress.chapterTitle,
+                            "percent" to progress.percent,
+                            "elapsedMs" to progress.elapsedMs,
+                            "etaMs" to (progress.estimatedRemainingMs ?: -1L),
+                            "generatedAudioMs" to progress.generatedAudioMs,
+                        )
                     )
-                )
+                    lastProgressNotificationMs = now
+                }
             }
 
             val outputMedia = if (format == OutputFormat.MP4) {
