@@ -18,6 +18,7 @@ dependencies {
     implementation(projects.tooling.localDatabase)
     implementation(projects.tooling.backupCreate)
     implementation(projects.tooling.epubParser)
+    implementation(projects.tooling.textToSpeech)
 
     implementation(libs.timber)
     implementation(libs.androidx.workmanager)
@@ -28,4 +29,7 @@ dependencies {
     implementation(libs.coil)
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.common)
+    implementation(libs.media3.effect)
 }
