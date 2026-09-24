@@ -827,6 +827,11 @@
     <string name="book_export_cancel">Cancel</string>
     <string name="book_export_no_chapters">No chapters to export</string>
     <string name="book_export_failed">Export failed</string>
+    <string name="audiobook_select_voice">Select TTS voice</string>
+    <string name="audiobook_search_voices">Search by language, voice, or engine</string>
+    <string name="audiobook_no_voices">No voices found</string>
+    <string name="audiobook_pin_voice">Pin as favourite</string>
+    <string name="audiobook_unpin_voice">Remove favourite pin</string>
 
     <!-- Per-plugin translation settings -->
     <string name="extension_translation_settings">Open translation settings</string>
