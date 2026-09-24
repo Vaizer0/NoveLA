@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
@@ -71,6 +72,10 @@ data class AudiobookExportProgress(
     val currentChapter: Int,
     val totalChapters: Int,
     val chapterTitle: String,
+    val percent: Int,
+    val elapsedMs: Long,
+    val estimatedRemainingMs: Long?,
+    val generatedAudioMs: Long,
 )
 
 private data class SpeechSegment(
@@ -336,6 +341,45 @@ class AudiobookTtsExporter(private val context: Context) {
         var activeChapter = -1
         var chapterStartMs = 0L
         var completedChapters = 0
+        val totalWorkUnits = segments.sumOf { it.text.length.coerceAtLeast(1) }.toLong()
+        var completedWorkUnits = 0L
+        val exportStartedAt = SystemClock.elapsedRealtime()
+
+        suspend fun publishProgress(chapter: AudiobookChapterData, force: Boolean = false) {
+            val elapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
+            val percent = ((completedWorkUnits * 100L) / totalWorkUnits.coerceAtLeast(1L))
+                .toInt()
+                .coerceIn(0, 100)
+            val eta = if (completedWorkUnits > 0L && percent < 100) {
+                (elapsed.toDouble() * (totalWorkUnits - completedWorkUnits).toDouble() /
+                    completedWorkUnits.toDouble()).toLong().coerceAtLeast(0L)
+            } else null
+            onProgress(
+                AudiobookExportProgress(
+                    currentChapter = completedChapters,
+                    totalChapters = chapters.size,
+                    chapterTitle = chapter.title,
+                    percent = percent,
+                    elapsedMs = elapsed,
+                    estimatedRemainingMs = eta,
+                    generatedAudioMs = durationMs(currentFrames, sampleRate),
+                )
+            )
+        }
+
+        // Initial progress is emitted before the first TTS synthesis.
+        onProgress(
+            AudiobookExportProgress(
+                currentChapter = 0,
+                totalChapters = chapters.size,
+                chapterTitle = chapters.first().title,
+                percent = 0,
+                elapsedMs = 0L,
+                estimatedRemainingMs = null,
+                generatedAudioMs = 0L,
+            )
+        )
+
         BufferedWriter(OutputStreamWriter(FileOutputStream(segmentFile), Charsets.UTF_8), 32768).use { segmentOut ->
             try {
                 for (segment in segments) {
@@ -345,7 +389,7 @@ class AudiobookTtsExporter(private val context: Context) {
                             val endMs = durationMs(currentFrames, sampleRate)
                             chapterTimings += ChapterTiming(previous, chapterStartMs, endMs)
                             completedChapters++
-                            onProgress(AudiobookExportProgress(completedChapters, chapters.size, previous.title))
+                            publishProgress(previous, force = true)
                         }
                         activeChapter = segment.chapterPosition
                         chapterStartMs = durationMs(currentFrames, sampleRate)
@@ -381,6 +425,13 @@ class AudiobookTtsExporter(private val context: Context) {
                             pfd.close()
                         }
                         error?.let { throw it }
+                        completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
+                        val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
+                        if (currentElapsed >= 350L) {
+                            publishProgress(
+                                chapters.first { it.position == segment.chapterPosition },
+                            )
+                        }
                         val sliceEndMs = durationMs(currentFrames, sampleRate)
                         val ordered = sliceRanges.sortedBy { it.second }
                         ordered.forEachIndexed { index, entry ->
@@ -405,11 +456,20 @@ class AudiobookTtsExporter(private val context: Context) {
                             put("endMs", segmentEndMs)
                             put("words", JSONArray().apply {
                                 wordTimings.forEach { w ->
+                                    val safeEndMs = min(w.endMs, segmentEndMs)
                                     put(JSONObject().apply {
+                                        // Same range/timing field names used by the Reader's
+                                        // persisted TTS word-timing data, plus the existing
+                                        // camelCase fields retained for audiobook consumers.
+                                        put("start", w.startChar)
+                                        put("end", w.endChar)
+                                        put("start_ms", w.startMs)
+                                        put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
+                                        put("speed", request.speed.toDouble())
                                         put("startChar", w.startChar)
                                         put("endChar", w.endChar)
                                         put("startMs", w.startMs)
-                                        put("endMs", min(w.endMs, segmentEndMs))
+                                        put("endMs", safeEndMs)
                                     })
                                 }
                             })
@@ -423,7 +483,8 @@ class AudiobookTtsExporter(private val context: Context) {
                     val endMs = durationMs(currentFrames, sampleRate)
                     chapterTimings += ChapterTiming(last, chapterStartMs, endMs)
                     completedChapters++
-                    onProgress(AudiobookExportProgress(completedChapters, chapters.size, last.title))
+                    completedWorkUnits = totalWorkUnits
+                    publishProgress(last, force = true)
                 }
 
                 sink?.finish()
@@ -438,7 +499,7 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
-    suspend fun muxVisual(
+suspend fun muxVisual(
         audioMp4: File,
         outputMp4: File,
         visualUri: Uri?,
@@ -449,33 +510,111 @@ class AudiobookTtsExporter(private val context: Context) {
         val actualVisual = if (mime == "image/gif") firstGifFrame(visual) else visual
         val actualMime = if (mime == "image/gif") "image/jpeg" else mime
 
-        withContext(Dispatchers.Main.immediate) {
-            val editedVideo = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
-                EditedMediaItem.Builder(
-                    MediaItem.Builder().setUri(actualVisual)
-                        .setImageDurationMs(durationMs.coerceAtLeast(1000L))
-                        .build()
-                ).setFrameRate(1).build()
-            } else {
-                EditedMediaItem.Builder(MediaItem.fromUri(actualVisual))
-                    .setRemoveAudio(true)
-                    .build()
-            }
-
-            val video = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
-                EditedMediaItemSequence.withVideoFrom(listOf(editedVideo))
-            } else {
-                EditedMediaItemSequence.withVideoFrom(listOf(editedVideo)).buildUpon().setIsLooping(true).build()
-            }
-            val audio = EditedMediaItemSequence.withAudioFrom(
-                listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioMp4))).build())
+        // Fast path:
+        //  * H.264 visual video: copy compressed video samples and repeat timestamps.
+        //  * Image/GIF: encode only ONE SECOND of visual, then repeat that compressed
+        //    H.264 cycle for the entire audiobook.
+        //
+        // The old implementation asked Media3 Transformer to encode the visual for the
+        // entire audiobook. For very long exports that second pass dominates CPU/heat.
+        val fastResult = if (actualMime.startsWith("video/")) {
+            fastLoopMuxEncodedVideo(
+                audioMp4 = audioMp4,
+                visualUri = actualVisual,
+                outputMp4 = outputMp4,
+                durationMs = durationMs,
             )
-            val composition = Composition.Builder(video, audio).build()
+        } else {
+            val preparedImage = prepareStaticImage(actualVisual)
+            val oneSecondVideo = File(
+                context.cacheDir,
+                "audiobook-visual-cycle-" + System.nanoTime() + ".mp4",
+            )
+            try {
+                encodeImageCycle(preparedImage, oneSecondVideo)
+                fastLoopMuxEncodedVideo(
+                    audioMp4 = audioMp4,
+                    visualUri = Uri.fromFile(oneSecondVideo),
+                    outputMp4 = outputMp4,
+                    durationMs = durationMs,
+                )
+            } finally {
+                preparedImage.delete()
+                oneSecondVideo.delete()
+            }
+        }
+
+        if (!fastResult) {
+            Timber.w("Audiobook fast visual mux unavailable; falling back to Media3 Transformer")
+            withContext(Dispatchers.Main.immediate) {
+                val editedVideo = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
+                    EditedMediaItem.Builder(
+                        MediaItem.Builder().setUri(actualVisual)
+                            .setImageDurationMs(durationMs.coerceAtLeast(1000L))
+                            .build()
+                    ).setFrameRate(1).build()
+                } else {
+                    EditedMediaItem.Builder(MediaItem.fromUri(actualVisual))
+                        .setRemoveAudio(true)
+                        .build()
+                }
+                val video = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
+                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo))
+                } else {
+                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo)).buildUpon().setIsLooping(true).build()
+                }
+                val audio = EditedMediaItemSequence.withAudioFrom(
+                    listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioMp4))).build())
+                )
+                val composition = Composition.Builder(video, audio).build()
+                suspendCancellableCoroutine<Unit> { cont ->
+                    val transformer = Transformer.Builder(context.applicationContext)
+                        .setVideoMimeType(MimeTypes.VIDEO_H264)
+                        .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                        .addListener(object : Transformer.Listener {
+                            override fun onCompleted(
+                                composition: Composition,
+                                exportResult: androidx.media3.transformer.ExportResult,
+                            ) {
+                                if (cont.isActive) cont.resume(Unit)
+                            }
+
+                            override fun onError(
+                                composition: Composition,
+                                exportResult: androidx.media3.transformer.ExportResult,
+                                exportException: androidx.media3.transformer.ExportException,
+                            ) {
+                                if (cont.isActive) cont.resumeWithException(exportException)
+                            }
+                        })
+                        .build()
+                    cont.invokeOnCancellation {
+                        Handler(Looper.getMainLooper()).post { transformer.cancel() }
+                    }
+                    transformer.start(composition, outputMp4.absolutePath)
+                }
+            }
+        }
+
+        if (actualVisual.toString().startsWith("file:")) {
+            actualVisual.path?.let { path ->
+                if (path.contains(context.cacheDir.path)) File(path).delete()
+            }
+        }
+    }
+
+    private suspend fun encodeImageCycle(imageUri: Uri, output: File) {
+        withContext(Dispatchers.Main.immediate) {
+            val edited = EditedMediaItem.Builder(
+                MediaItem.Builder()
+                    .setUri(imageUri)
+                    .setImageDurationMs(1000L)
+                    .build()
+            ).setFrameRate(1).build()
 
             suspendCancellableCoroutine<Unit> { cont ->
                 val transformer = Transformer.Builder(context.applicationContext)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
-                    .setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(
                             composition: Composition,
@@ -493,17 +632,160 @@ class AudiobookTtsExporter(private val context: Context) {
                         }
                     })
                     .build()
-                cont.invokeOnCancellation { Handler(Looper.getMainLooper()).post { transformer.cancel() } }
-                transformer.start(composition, outputMp4.absolutePath)
-            }
-        }
-
-        if (actualVisual.toString().startsWith("file:")) {
-            actualVisual.path?.let { path ->
-                if (path.contains(context.cacheDir.path)) File(path).delete()
+                cont.invokeOnCancellation {
+                    Handler(Looper.getMainLooper()).post { transformer.cancel() }
+                }
+                transformer.start(edited, output.absolutePath)
             }
         }
     }
+
+    private fun prepareStaticImage(source: Uri): File {
+        val bitmap = context.contentResolver.openInputStream(source).use { input ->
+            requireNotNull(BitmapFactory.decodeStream(input)) { "Unable to decode visual image" }
+        }
+        val maxWidth = 1280
+        val maxHeight = 720
+        val scale = min(
+            1f,
+            min(
+                maxWidth.toFloat() / bitmap.width.toFloat(),
+                maxHeight.toFloat() / bitmap.height.toFloat(),
+            )
+        )
+        val prepared = if (scale < 1f) {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        } else bitmap
+        val file = File(context.cacheDir, "audiobook-image-" + System.nanoTime() + ".jpg")
+        FileOutputStream(file).use {
+            check(prepared.compress(Bitmap.CompressFormat.JPEG, 88, it)) {
+                "Unable to prepare visual image"
+            }
+        }
+        if (prepared !== bitmap) prepared.recycle()
+        bitmap.recycle()
+        return file
+    }
+
+    private fun fastLoopMuxEncodedVideo(
+        audioMp4: File,
+        visualUri: Uri,
+        outputMp4: File,
+        durationMs: Long,
+    ): Boolean {
+        val audioExtractor = MediaExtractor()
+        val videoExtractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        return try {
+            audioExtractor.setDataSource(audioMp4.absolutePath)
+            videoExtractor.setDataSource(context, visualUri, null)
+
+            val audioTrack = findTrack(audioExtractor, "audio/")
+            val videoTrack = findTrack(videoExtractor, "video/")
+            if (audioTrack < 0 || videoTrack < 0) return false
+
+            val audioFormat = audioExtractor.getTrackFormat(audioTrack)
+            val videoFormat = videoExtractor.getTrackFormat(videoTrack)
+            val videoMime = videoFormat.getString(MediaFormat.KEY_MIME).orEmpty()
+            if (videoMime != MediaFormat.MIMETYPE_VIDEO_AVC) return false
+
+            audioExtractor.selectTrack(audioTrack)
+            videoExtractor.selectTrack(videoTrack)
+
+            val videoDurationUs = videoFormat.getLongOrDefault(
+                MediaFormat.KEY_DURATION,
+                0L,
+            )
+            if (videoDurationUs <= 0L) return false
+
+            outputMp4.parentFile?.mkdirs()
+            if (outputMp4.exists()) outputMp4.delete()
+            muxer = MediaMuxer(
+                outputMp4.absolutePath,
+                MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
+            )
+            val outAudioTrack = muxer.addTrack(audioFormat)
+            val outVideoTrack = muxer.addTrack(videoFormat)
+            muxer.start()
+
+            val targetUs = durationMs.coerceAtLeast(1L) * 1000L
+            val buffer = ByteBuffer.allocateDirect(2 * 1024 * 1024)
+
+            while (true) {
+                val size = audioExtractor.sampleSize
+                val time = audioExtractor.sampleTime
+                if (size < 0 || time < 0 || time >= targetUs) break
+                if (size > buffer.capacity()) {
+                    // Audio samples are normally tiny; fail the fast path instead of
+                    // repeatedly allocating huge direct buffers.
+                    return false
+                }
+                buffer.clear()
+                val read = audioExtractor.readSampleData(buffer, 0)
+                if (read <= 0) break
+                val info = MediaCodec.BufferInfo().apply {
+                    offset = 0
+                    this.size = read
+                    presentationTimeUs = time
+                    flags = audioExtractor.sampleFlags
+                }
+                muxer.writeSampleData(outAudioTrack, buffer, info)
+                audioExtractor.advance()
+            }
+
+            var videoOffsetUs = 0L
+            while (videoOffsetUs < targetUs) {
+                videoExtractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                var sawSample = false
+                while (true) {
+                    val time = videoExtractor.sampleTime
+                    val size = videoExtractor.sampleSize
+                    if (size < 0 || time < 0 || time >= videoDurationUs) break
+                    val pts = videoOffsetUs + time
+                    if (pts >= targetUs) break
+                    if (size > buffer.capacity()) return false
+                    buffer.clear()
+                    val read = videoExtractor.readSampleData(buffer, 0)
+                    if (read <= 0) break
+                    val info = MediaCodec.BufferInfo().apply {
+                        offset = 0
+                        this.size = read
+                        presentationTimeUs = pts
+                        flags = videoExtractor.sampleFlags
+                    }
+                    muxer.writeSampleData(outVideoTrack, buffer, info)
+                    sawSample = true
+                    videoExtractor.advance()
+                }
+                if (!sawSample) return false
+                videoOffsetUs += videoDurationUs
+            }
+
+            muxer.stop()
+            true
+        } catch (e: Throwable) {
+            Timber.w(e, "Fast audiobook visual mux failed")
+            false
+        } finally {
+            runCatching { muxer?.release() }
+            runCatching { audioExtractor.release() }
+            runCatching { videoExtractor.release() }
+            if (outputMp4.exists() && outputMp4.length() == 0L) outputMp4.delete()
+        }
+    }
+
+    private fun findTrack(extractor: MediaExtractor, prefix: String): Int =
+        (0 until extractor.trackCount).firstOrNull {
+            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty().startsWith(prefix)
+        } ?: -1
+
+    private fun MediaFormat.getLongOrDefault(key: String, defaultValue: Long): Long =
+        if (containsKey(key)) getLong(key) else defaultValue
 
     private fun createTts(request: AudiobookExportRequest): TextToSpeech {
         val latch = CountDownLatch(1)
