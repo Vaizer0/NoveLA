@@ -36,7 +36,7 @@ class AudiobookExportNotification(
                 setContentText(text)
                 setProgress(progress.totalChapters, progress.currentChapter, false)
                 setOngoing(true)
-                addCancel()
+                addCancel(this)
             }
         } else {
             notifyCenter().modifyNotification(current, notificationId) {
