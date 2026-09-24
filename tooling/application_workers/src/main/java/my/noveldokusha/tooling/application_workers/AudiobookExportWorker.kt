@@ -239,7 +239,7 @@ class AudiobookExportWorker(
             val mediaUri = createAndCopy(directory, finalMediaName, if (format == OutputFormat.MP4) "video/mp4" else "audio/wav", outputMedia)
             createAndCopy(directory, finalJsonName, "application/json", jsonTemp)
 
-            notification.showComplete(finalMediaName, mediaUri)
+            notification.showComplete(finalMediaName)
             Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
             notification.close()
