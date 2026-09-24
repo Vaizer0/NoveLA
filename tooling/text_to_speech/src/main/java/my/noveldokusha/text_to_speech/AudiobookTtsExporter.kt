@@ -492,12 +492,29 @@ class AudiobookTtsExporter(private val context: Context) {
                     }
 
                     val requestedSpeed = request.speed.coerceIn(0.1f, 5f)
-                    val wordTimings = cachedTimings
-                        .map { timing ->
-                            val scale = timing.speed.toDouble() / requestedSpeed.toDouble()
+                    val speedScaledTimings = cachedTimings.map { timing ->
+                        val speedScale = timing.speed.toDouble() / requestedSpeed.toDouble()
+                        val relativeStartMs = (timing.startMs.toDouble() * speedScale)
+                            .toLong().coerceAtLeast(0L)
+                        val durationMs = (timing.durationMs.toDouble() * speedScale)
+                            .toLong().coerceAtLeast(1L)
+                        timing to (relativeStartMs to durationMs)
+                    }
+                    val cachedTimelineEndMs = speedScaledTimings.maxOfOrNull {
+                        it.second.first + it.second.second
+                    }?.coerceAtLeast(1L) ?: 1L
+                    // Reader timing is learned from the reader's onRangeStart playback timeline.
+                    // The exported WAV/AAC has its own measured audio timeline, so normalize the
+                    // cached schedule to the exact duration that was actually written. This keeps
+                    // the fast cached timing path aligned even for engines where playback markers
+                    // and synthesized-file duration differ.
+                    val audioTimelineMs = (segmentEndMs - segmentStartMs).coerceAtLeast(1L)
+                    val audioFitScale = audioTimelineMs.toDouble() / cachedTimelineEndMs.toDouble()
+                    val wordTimings = speedScaledTimings
+                        .map { (timing, relative) ->
                             val startMs = segmentStartMs +
-                                (timing.startMs.toDouble() * scale).toLong().coerceAtLeast(0L)
-                            val durationMs = (timing.durationMs.toDouble() * scale)
+                                (relative.first.toDouble() * audioFitScale).toLong().coerceAtLeast(0L)
+                            val durationMs = (relative.second.toDouble() * audioFitScale)
                                 .toLong().coerceAtLeast(1L)
                             WordTiming(
                                 startChar = timing.start,
