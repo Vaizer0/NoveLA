@@ -130,6 +130,15 @@ internal fun ChaptersScreen(
     onExportDialogDismiss: () -> Unit,
     exportDialogState: ExportDialogState,
     exportMessage: String?,
+    onAudiobookExport: (bookUrl: String, bookTitle: String) -> Unit,
+    onAudiobookConfirmed: (
+        Int, Int, String, String, String, String, String, Float, Float,
+        my.noveldokusha.text_to_speech.OutputFormat, Uri?
+    ) -> Unit,
+    onAudiobookDirectorySaved: (String) -> Unit,
+    onAudiobookDialogDismiss: () -> Unit,
+    audiobookDialogState: AudiobookDialogState,
+    audiobookMessage: String?,
     onExportMessageShown: () -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
@@ -174,6 +183,24 @@ internal fun ChaptersScreen(
                 Timber.w("Не удалось получить persistable permission для $uri: ${e.message}")
             }
             onExportDirectorySaved(uri.toString())
+        }
+    }
+
+    val audiobookDirectoryPicker = rememberLauncherForActivityResult(
+        contract = OpenDocumentTreeReadPersistent()
+    ) { uri ->
+        if (uri == null) {
+            if (audiobookDialogState is AudiobookDialogState.NeedDirectory) {
+                onAudiobookDialogDismiss()
+            }
+        } else {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }.onFailure { e -> Timber.w("Audiobook directory permission failed: " + e.message) }
+            onAudiobookDirectorySaved(uri.toString())
         }
     }
 
@@ -273,6 +300,7 @@ internal fun ChaptersScreen(
                                         onDownloadNext100Chapters = onDownloadNext100Chapters,
                                         onDownloadAllChapters = onDownloadAllChapters,
                                         onExport = onExport,
+                                        onAudiobookExport = onAudiobookExport,
                                         onMigrateBook = onMigrateBook,
                                         onDeleteTranslations = onDeleteTranslations,
                                         onFixBook = onFixBook,
@@ -528,6 +556,23 @@ internal fun ChaptersScreen(
                 }
             }
         )
+    }
+
+    when (val ads = audiobookDialogState) {
+        is AudiobookDialogState.ContentChoice -> {
+            AudiobookExportDialog(
+                state = ads,
+                onConfirm = onAudiobookConfirmed,
+                onDismiss = onAudiobookDialogDismiss,
+                onChangeDirectory = { audiobookDirectoryPicker.launch(null) },
+            )
+        }
+        AudiobookDialogState.NeedDirectory -> {
+            LaunchedEffect(Unit) {
+                audiobookDirectoryPicker.launch(null)
+            }
+        }
+        AudiobookDialogState.Hidden -> Unit
     }
 
     // Export content choice dialog
