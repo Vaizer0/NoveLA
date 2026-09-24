@@ -211,6 +211,10 @@ internal fun ChaptersScreen(
             onExportMessageShown()
         }
     }
+
+    LaunchedEffect(audiobookMessage) {
+        audiobookMessage?.let { snackbarHostState.showSnackbar(it) }
+    }
     val areSelectedChaptersRead by remember {
         derivedStateOf {
             val readUrls = state.chapters.asSequence()
