@@ -94,10 +94,63 @@ private data class WordTiming(
     val endMs: Long,
 )
 
-private data class TimingRange(
-    val range: IntRange,
-    val relativeStartMs: Long,
+private data class CachedReaderWordTiming(
+    val start: Int,
+    val end: Int,
+    val startMs: Long,
+    val durationMs: Long,
+    val speed: Float,
 )
+
+private const val READER_TIMING_PREFS = "tts_preferences"
+private const val READER_TIMING_STORE = "tts_word_highlight_timing_json_v2"
+
+private fun readerWordTimingCacheKey(
+    enginePackage: String,
+    voiceId: String,
+    needsInternet: Boolean,
+    language: String,
+    pitch: Float,
+    text: String,
+): String {
+    val material = buildString {
+        append("word_timing_v2|")
+        append(enginePackage).append('|')
+        append(voiceId).append('|')
+        append(needsInternet).append('|')
+        append(language).append('|')
+        append(pitch).append('|')
+        append(text)
+    }
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(material.toByteArray(Charsets.UTF_8))
+    return "word_timing_v2_" + digest.joinToString("") { "%02x".format(it) }
+}
+
+private fun readReaderWordTimings(
+    context: Context,
+    cacheKey: String,
+): List<CachedReaderWordTiming> =
+    runCatching {
+        val prefs = context.getSharedPreferences(READER_TIMING_PREFS, Context.MODE_PRIVATE)
+        val root = JSONObject(prefs.getString(READER_TIMING_STORE, "{}") ?: "{}")
+        val array = root.optJSONArray(cacheKey) ?: return@runCatching emptyList()
+        buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val start = item.optInt("start", -1)
+                val end = item.optInt("end", -1)
+                val startMs = item.optLong("start_ms", -1L)
+                val durationMs = item.optLong("duration_ms", -1L)
+                val speed = item.optDouble("speed", Double.NaN).toFloat()
+                if (start >= 0 && end > start && startMs >= 0L &&
+                    durationMs in 40L..15_000L && speed.isFinite() && speed > 0f
+                ) {
+                    add(CachedReaderWordTiming(start, end, startMs, durationMs, speed))
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
 
 private data class ChapterTiming(
     val chapter: AudiobookChapterData,
@@ -335,116 +388,10 @@ class AudiobookTtsExporter(private val context: Context) {
         val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
 
         val tts = createTts(request)
-        // Android's synthesizeToFile() callback reports unusable onRangeStart(frame)
-        // values for some engines (Google TTS on Android 16 reported 71 for the full
-        // 71-character test). The Reader uses TextToSpeech.speak(), whose onRangeStart()
-        // frame values are real positions in the synthesized speech timeline.
-        //
-        // Keep a second TTS instance exclusively for timing extraction. It uses the exact
-        // same engine, voice, speed, and pitch as the audio synthesizer, but volume=0 so
-        // the device remains silent. The exported timestamps are therefore derived from
-        // the same speak()/onRangeStart() mechanism used by the Reader.
-        val timingTts = createTts(request)
+        // Audio is generated once with synthesizeToFile(). Word timings come from
+        // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
         val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
         val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
-        var timingSliceId = ""
-        var timingSliceOffset = 0
-        var timingSampleRate = 0
-        var timingRanges = mutableListOf<TimingRange>()
-        var timingError: Throwable? = null
-        var timingLatch = CountDownLatch(0)
-
-        val synthesisListener = object : UtteranceProgressListener() {
-            override fun onBeginSynthesis(id: String?, rate: Int, format: Int, count: Int) {
-                if (id != currentSliceId) return
-                if (rate <= 0 || count <= 0) {
-                    error = IllegalStateException("Invalid TTS audio format")
-                    return
-                }
-                lastFormat[id] = format
-                if (sink == null) {
-                    sampleRate = rate
-                    channels = count
-                    sink = when (request.outputFormat) {
-                        OutputFormat.WAV -> WavSink(mediaFile, rate, count)
-                        OutputFormat.MP4 -> AacMp4Sink(mediaFile, rate, count)
-                    }
-                } else if (sampleRate != rate || channels != count) {
-                    error = IllegalStateException("TTS audio format changed")
-                }
-            }
-
-            override fun onAudioAvailable(id: String?, audio: ByteArray?) {
-                if (id != currentSliceId || error != null) return
-                val bytes = audio ?: return
-                if (bytes.isEmpty()) return
-                val format = lastFormat[id] ?: return
-                runCatching {
-                    sink?.writePcm16(normalizePcm16(bytes, format))
-                    currentFrames = sink?.totalFrames ?: currentFrames
-                }.onFailure { error = it }
-            }
-
-            override fun onStart(id: String?) = Unit
-            override fun onDone(id: String?) {
-                if (id == currentSliceId) latch.countDown()
-            }
-            override fun onError(id: String?, code: Int) {
-                if (id == currentSliceId) {
-                    error = IllegalStateException("TTS error " + code)
-                    latch.countDown()
-                }
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) {
-                if (id == currentSliceId) {
-                    error = IllegalStateException("TTS error")
-                    latch.countDown()
-                }
-            }
-
-            // IMPORTANT: do not use synthesizeToFile()'s onRangeStart(frame) for exported
-            // word timing. It is not equivalent to speak() on the tested Google engine.
-            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) = Unit
-        }
-        tts.setOnUtteranceProgressListener(synthesisListener)
-
-        val timingListener = object : UtteranceProgressListener() {
-            override fun onBeginSynthesis(id: String?, rate: Int, format: Int, count: Int) {
-                if (id == timingSliceId && rate > 0) timingSampleRate = rate
-            }
-
-            override fun onAudioAvailable(id: String?, audio: ByteArray?) = Unit
-
-            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
-                if (id != timingSliceId || start < 0 || end <= start) return
-                val rate = timingSampleRate
-                if (rate <= 0) return
-                timingRanges += TimingRange(
-                    range = (start + timingSliceOffset) until (end + timingSliceOffset),
-                    relativeStartMs = frame.toLong() * 1000L / rate.toLong(),
-                )
-            }
-
-            override fun onStart(id: String?) = Unit
-            override fun onDone(id: String?) {
-                if (id == timingSliceId) timingLatch.countDown()
-            }
-            override fun onError(id: String?, code: Int) {
-                if (id == timingSliceId) {
-                    timingError = IllegalStateException("Timing TTS error " + code)
-                    timingLatch.countDown()
-                }
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) {
-                if (id == timingSliceId) {
-                    timingError = IllegalStateException("Timing TTS error")
-                    timingLatch.countDown()
-                }
-            }
-        }
-        timingTts.setOnUtteranceProgressListener(timingListener)
 
         var activeChapter = -1
         var chapterStartMs = 0L
@@ -518,16 +465,6 @@ class AudiobookTtsExporter(private val context: Context) {
                         error = null
                         latch = CountDownLatch(1)
 
-                        timingSliceId = "timing-" + System.nanoTime() + "-" + sliceIndex
-                        timingSliceOffset = charOffset
-                        // Synthesis has already reported the real output sample rate for
-                        // this slice. Use it as the fallback for speak() in case this
-                        // engine does not emit onBeginSynthesis on the playback instance.
-                        timingSampleRate = sampleRate
-                        timingRanges = mutableListOf()
-                        timingError = null
-                        timingLatch = CountDownLatch(1)
-
                         val synthesisPfd = ParcelFileDescriptor.open(
                             File("/dev/null"),
                             ParcelFileDescriptor.MODE_WRITE_ONLY,
@@ -547,41 +484,14 @@ class AudiobookTtsExporter(private val context: Context) {
                             check(synthesisResult == TextToSpeech.SUCCESS) {
                                 "TTS synthesis failed: " + synthesisResult
                             }
-
-                            val timingResult = timingTts.speak(
-                                slice,
-                                TextToSpeech.QUEUE_FLUSH,
-                                Bundle().apply {
-                                    // Same timing path as the Reader diagnostic:
-                                    // callbacks are generated by speak(), not synthesizeToFile().
-                                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0.0f)
-                                    putString(
-                                        TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                        timingSliceId,
-                                    )
-                                },
-                                timingSliceId,
-                            )
-                            check(timingResult == TextToSpeech.SUCCESS) {
-                                "TTS timing playback failed: " + timingResult
-                            }
-
                             check(latch.await(60, TimeUnit.SECONDS)) {
                                 "TTS synthesis timeout"
-                            }
-                            check(timingLatch.await(60, TimeUnit.SECONDS)) {
-                                "TTS timing callback timeout"
                             }
                         } finally {
                             synthesisPfd.close()
                         }
 
                         error?.let { throw it }
-                        timingError?.let { throw it }
-                        check(timingRanges.isNotEmpty()) {
-                            "TTS engine did not provide onRangeStart word timing callbacks"
-                        }
-
                         completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
                         val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
                         if (currentElapsed >= 350L) {
@@ -589,43 +499,51 @@ class AudiobookTtsExporter(private val context: Context) {
                                 chapters.first { it.position == segment.chapterPosition },
                             )
                         }
-                        val sliceEndMs = durationMs(currentFrames, sampleRate)
-                        val ordered = timingRanges
-                            .sortedBy { it.relativeStartMs }
-                            .map {
-                                WordTiming(
-                                    startChar = it.range.first,
-                                    endChar = it.range.last + 1,
-                                    startMs = currentSliceStartMs + it.relativeStartMs,
-                                    endMs = 0L,
-                                )
-                            }
-
-                        ordered.forEachIndexed { index, word ->
-                            val endMs = ordered
-                                .getOrNull(index + 1)
-                                ?.startMs
-                                ?.coerceAtMost(sliceEndMs)
-                                ?: sliceEndMs
-                            wordTimings += word.copy(
-                                endMs = maxOf(word.startMs, endMs),
-                            )
-                        }
                         charOffset += slice.length
                     }
 
                     val segmentEndMs = durationMs(currentFrames, sampleRate)
-                    val timingKey = readerTimingCacheKey(
-                        // Use the effective engine/voice, not blank "Default" request
-                        // fields, so the exported cache key follows the Reader's key model.
+                    val timingKey = readerWordTimingCacheKey(
                         enginePackage = effectiveEnginePackage,
                         voiceId = effectiveVoiceId,
-                        needsInternet = tts.voice?.isNetworkConnectionRequired,
-                        language = tts.voice?.locale?.toLanguageTag(),
+                        needsInternet = tts.voice?.isNetworkConnectionRequired == true,
+                        language = tts.voice?.locale?.displayLanguage.orEmpty(),
                         pitch = request.pitch,
                         text = segment.text,
                     )
-                    val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
+                    val cachedTimings = readReaderWordTimings(context, timingKey)
+                    check(cachedTimings.isNotEmpty()) {
+                        "Reader word timing is not cached for this text. Read/play this text once with TTS highlight enabled before exporting."
+                    }
+
+                    val requestedSpeed = request.speed.coerceIn(0.1f, 5f)
+                    val wordTimings = cachedTimings
+                        .map { timing ->
+                            val scale = timing.speed.toDouble() / requestedSpeed.toDouble()
+                            val startMs = segmentStartMs +
+                                (timing.startMs.toDouble() * scale).toLong().coerceAtLeast(0L)
+                            val durationMs = (timing.durationMs.toDouble() * scale)
+                                .toLong().coerceAtLeast(1L)
+                            WordTiming(
+                                startChar = timing.start,
+                                endChar = timing.end,
+                                startMs = startMs,
+                                endMs = startMs + durationMs,
+                            )
+                        }
+                        .filter {
+                            it.startChar >= 0 &&
+                                it.endChar <= segment.text.length &&
+                                it.endChar > it.startChar &&
+                                it.endMs >= it.startMs
+                        }
+                        .sortedBy { it.startMs }
+
+                    check(wordTimings.isNotEmpty()) {
+                        "Reader word timing cache contains no usable ranges for this text."
+                    }
+
+                    $endLine { mutableListOf() }
                     wordTimings.forEach { w ->
                         val safeEndMs = min(w.endMs, segmentEndMs)
                         // Reader's persisted timing store is relative to the text item.
@@ -713,7 +631,6 @@ class AudiobookTtsExporter(private val context: Context) {
                 runCatching { sink?.close() }
                 runCatching { segmentFile.delete() }
                 runCatching { tts.stop(); tts.shutdown() }
-                runCatching { timingTts.stop(); timingTts.shutdown() }
             }
         }
     }
