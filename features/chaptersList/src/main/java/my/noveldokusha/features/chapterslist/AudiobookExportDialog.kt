@@ -27,12 +27,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.text_to_speech.OutputFormat
 
@@ -57,17 +54,17 @@ internal fun AudiobookExportDialog(
 ) {
     val context = LocalContext.current
     val chapterPositions = remember(state.chapters) { state.chapters.map { it.position } }
-    var mode by rememberSaveable(state.bookUrl) { mutableStateOf("original") }
-    var startText by rememberSaveable(state.bookUrl) { mutableStateOf(chapterPositions.firstOrNull()?.toString().orEmpty()) }
-    var endText by rememberSaveable(state.bookUrl) { mutableStateOf(chapterPositions.lastOrNull()?.toString().orEmpty()) }
-    var source by rememberSaveable(state.bookUrl) { mutableStateOf(state.availableTranslations.firstOrNull()?.sourceLang.orEmpty()) }
-    var target by rememberSaveable(state.bookUrl) { mutableStateOf(state.availableTranslations.firstOrNull()?.targetLang.orEmpty()) }
-    var voiceId by rememberSaveable(state.bookUrl) { mutableStateOf(state.defaultVoiceId) }
-    var engine by rememberSaveable(state.bookUrl) { mutableStateOf(state.defaultEnginePackage) }
-    var speed by rememberSaveable(state.bookUrl) { mutableFloatStateOf(state.defaultSpeed) }
-    var pitch by rememberSaveable(state.bookUrl) { mutableFloatStateOf(state.defaultPitch) }
-    var formatName by rememberSaveable(state.bookUrl) { mutableStateOf(state.defaultOutputFormat.ifBlank { "WAV" }) }
-    var visualUri by rememberSaveable(state.bookUrl) { mutableStateOf(state.defaultVisualUri.takeIf(String::isNotBlank)) }
+    var mode by remember(state.bookUrl) { mutableStateOf("original") }
+    var startText by remember(state.bookUrl) { mutableStateOf(chapterPositions.firstOrNull()?.toString().orEmpty()) }
+    var endText by remember(state.bookUrl) { mutableStateOf(chapterPositions.lastOrNull()?.toString().orEmpty()) }
+    var source by remember(state.bookUrl) { mutableStateOf(state.availableTranslations.firstOrNull()?.sourceLang.orEmpty()) }
+    var target by remember(state.bookUrl) { mutableStateOf(state.availableTranslations.firstOrNull()?.targetLang.orEmpty()) }
+    var voiceId by remember(state.bookUrl) { mutableStateOf(state.defaultVoiceId) }
+    var engine by remember(state.bookUrl) { mutableStateOf(state.defaultEnginePackage) }
+    var speed by remember(state.bookUrl) { mutableFloatStateOf(state.defaultSpeed) }
+    var pitch by remember(state.bookUrl) { mutableFloatStateOf(state.defaultPitch) }
+    var formatName by remember(state.bookUrl) { mutableStateOf(state.defaultOutputFormat.ifBlank { "WAV" }) }
+    var visualUri by remember(state.bookUrl) { mutableStateOf(state.defaultVisualUri.takeIf(String::isNotBlank)) }
     var pairExpanded by remember { mutableStateOf(false) }
     var visualMenu by remember { mutableStateOf(false) }
 
@@ -157,7 +154,6 @@ internal fun AudiobookExportDialog(
                         onValueChange = { startText = it.filter(Char::isDigit) },
                         modifier = Modifier.weight(1f),
                         label = { Text("Start") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                     )
                     OutlinedTextField(
@@ -165,7 +161,6 @@ internal fun AudiobookExportDialog(
                         onValueChange = { endText = it.filter(Char::isDigit) },
                         modifier = Modifier.weight(1f),
                         label = { Text("End") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                     )
                 }
