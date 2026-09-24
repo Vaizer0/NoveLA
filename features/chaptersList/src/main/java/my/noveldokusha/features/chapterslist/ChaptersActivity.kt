@@ -95,6 +95,7 @@ class ChaptersActivity : BaseActivity() {
                     onAudiobookDialogDismiss = viewModel::onAudiobookDialogDismiss,
                     audiobookDialogState = viewModel.audiobookDialogState.value,
                     audiobookMessage = viewModel.audiobookMessage.value,
+                    onAudiobookFavoriteVoiceKeysChanged = viewModel::onAudiobookFavoriteVoiceKeysChanged,
                     onExportMessageShown = { viewModel.exportMessage.value = null },
                     onMigrateBook = {
                         navigationRoutes.novelMigration(
