@@ -18,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.core.appPreferences.AppPreferences
 
@@ -37,11 +38,15 @@ internal fun SettingsAudiobook(
         .collectAsState(initial = prefs.AUDIOBOOK_OUTPUT_FORMAT.value)
     val visual by prefs.AUDIOBOOK_VISUAL_URI.flow()
         .collectAsState(initial = prefs.AUDIOBOOK_VISUAL_URI.value)
+    val context = LocalContext.current
 
     val visualPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
-                prefs.javaClass // keep preference ownership in this process
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
             }
             prefs.AUDIOBOOK_VISUAL_URI.value = uri.toString()
         }
