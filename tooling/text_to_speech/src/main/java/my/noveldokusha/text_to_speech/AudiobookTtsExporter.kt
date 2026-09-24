@@ -303,10 +303,12 @@ private class AacMp4Sink(
             }
 
             override fun onAudioAvailable(id: String?, audio: ByteArray?) {
-                if (id != currentSliceId || audio == null || audio.isEmpty() || error != null) return
+                if (id != currentSliceId || error != null) return
+                val bytes = audio ?: return
+                if (bytes.isEmpty()) return
                 val format = lastFormat[id] ?: return
                 runCatching {
-                    sink?.writePcm16(normalizePcm16(audio, format))
+                    sink?.writePcm16(normalizePcm16(bytes, format))
                     currentFrames = sink?.totalFrames ?: currentFrames
                 }.onFailure { error = it }
             }
