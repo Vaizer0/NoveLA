@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
+import java.security.MessageDigest
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
@@ -98,6 +99,28 @@ private data class ChapterTiming(
     val startMs: Long,
     val endMs: Long,
 )
+
+private fun readerTimingCacheKey(
+    enginePackage: String,
+    voiceId: String,
+    needsInternet: Boolean?,
+    language: String?,
+    pitch: Float,
+    text: String,
+): String {
+    val material = buildString {
+        append("word_timing_v2|")
+        append(enginePackage).append('|')
+        append(voiceId).append('|')
+        append(needsInternet ?: false).append('|')
+        append(language ?: "").append('|')
+        append(pitch).append('|')
+        append(text)
+    }
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(material.toByteArray(Charsets.UTF_8))
+    return "word_timing_v2_" + digest.joinToString("") { "%02x".format(it) }
+}
 
 private interface AudioSink : AutoCloseable {
     val sampleRate: Int
@@ -304,6 +327,8 @@ class AudiobookTtsExporter(private val context: Context) {
         var latch = CountDownLatch(0)
         val lastFormat = mutableMapOf<String, Int>()
         val chapterTimings = mutableListOf<ChapterTiming>()
+        val exportedTimingStore = linkedMapOf<String, MutableList<JSONObject>>()
+        val exportedTimingSegments = mutableListOf<JSONObject>()
         val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
 
         val listener = object : UtteranceProgressListener() {
@@ -460,6 +485,36 @@ class AudiobookTtsExporter(private val context: Context) {
                     }
 
                     val segmentEndMs = durationMs(currentFrames, sampleRate)
+                    val timingKey = readerTimingCacheKey(
+                        enginePackage = request.enginePackage,
+                        voiceId = request.voiceId,
+                        needsInternet = tts.voice?.isNetworkConnectionRequired,
+                        language = tts.voice?.locale?.toLanguageTag(),
+                        pitch = request.pitch,
+                        text = segment.text,
+                    )
+                    val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
+                    wordTimings.forEach { w ->
+                        val safeEndMs = min(w.endMs, segmentEndMs)
+                        timingEntries += JSONObject().apply {
+                            put("start", w.startChar)
+                            put("end", w.endChar)
+                            put("start_ms", w.startMs)
+                            put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
+                            put("speed", request.speed.toDouble())
+                        }
+                    }
+
+                    exportedTimingSegments += JSONObject().apply {
+                        put("cacheKey", timingKey)
+                        put("chapterPosition", segment.chapterPosition)
+                        put("chapterUrl", segment.chapterUrl)
+                        put("type", segment.type)
+                        put("text", segment.text)
+                        put("startMs", segmentStartMs)
+                        put("endMs", segmentEndMs)
+                    }
+
                     segmentOut.write(
                         JSONObject().apply {
                             put("chapterPosition", segment.chapterPosition)
@@ -503,7 +558,17 @@ class AudiobookTtsExporter(private val context: Context) {
 
                 sink?.finish()
                 val totalDuration = durationMs(currentFrames, sampleRate)
-                writeJson(jsonFile, request, chapterTimings, segmentFile, totalDuration, sampleRate, channels)
+                writeJson(
+                    jsonFile,
+                    request,
+                    chapterTimings,
+                    segmentFile,
+                    totalDuration,
+                    sampleRate,
+                    channels,
+                    exportedTimingStore,
+                    exportedTimingSegments,
+                )
                 totalDuration
             } finally {
                 runCatching { sink?.close() }
@@ -853,6 +918,8 @@ suspend fun muxVisual(
         durationMs: Long,
         sampleRate: Int,
         channels: Int,
+        exportedTimingStore: Map<String, List<JSONObject>>,
+        exportedTimingSegments: List<JSONObject>,
     ) {
         BufferedWriter(OutputStreamWriter(FileOutputStream(file), Charsets.UTF_8), 32768).use { out ->
             out.write("{\n")
@@ -870,7 +937,17 @@ suspend fun muxVisual(
                 ",\"pitch\": " + request.pitch + "},\n")
             out.write("  \"audio\": {\"sampleRate\": " + sampleRate +
                 ",\"channels\": " + channels + ",\"durationMs\": " + durationMs + "},\n")
-            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true},\n")
+            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true,\"units\": \"ms\",\"segments\": ")
+            out.write(JSONArray(exportedTimingSegments).toString())
+            out.write("},\n")
+            out.write("  \"tts_word_highlight_timing_json_v2\": {\n")
+            val timingKeys = exportedTimingStore.keys.toList()
+            timingKeys.forEachIndexed { index, key ->
+                out.write("    " + JSONObject.quote(key) + ": " + JSONArray(exportedTimingStore[key]).toString())
+                if (index != timingKeys.lastIndex) out.write(",")
+                out.write("\n")
+            }
+            out.write("  },\n")
             out.write("  \"chapters\": [\n")
             chapters.forEachIndexed { index, c ->
                 out.write("    " + JSONObject().apply {
