@@ -67,6 +67,7 @@ class AudiobookExportWorker(
 
         fun enqueue(
             context: Context,
+            bookUrl: String,
             request: AudiobookExportRequest,
             directoryUri: String,
         ) {
