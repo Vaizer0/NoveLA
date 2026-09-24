@@ -14,6 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import my.noveldokusha.core.appPreferences.AppPreferences
@@ -32,6 +35,17 @@ internal fun SettingsAudiobook(
         .collectAsState(initial = prefs.AUDIOBOOK_TTS_VOICE_PITCH.value)
     val output by prefs.AUDIOBOOK_OUTPUT_FORMAT.flow()
         .collectAsState(initial = prefs.AUDIOBOOK_OUTPUT_FORMAT.value)
+    val visual by prefs.AUDIOBOOK_VISUAL_URI.flow()
+        .collectAsState(initial = prefs.AUDIOBOOK_VISUAL_URI.value)
+
+    val visualPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                prefs.javaClass // keep preference ownership in this process
+            }
+            prefs.AUDIOBOOK_VISUAL_URI.value = uri.toString()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -86,6 +100,37 @@ internal fun SettingsAudiobook(
                 modifier = Modifier.padding(start = 12.dp),
             )
             Text("MP4 + JSON", modifier = Modifier.padding(top = 12.dp))
+        }
+
+        if (visual.isNotBlank()) {
+            Text("Default video visual: " + (visual.substringAfterLast('/').ifBlank { "selected" }))
+            Text(
+                "The file is stored by URI; the original image/video is not copied into settings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                "No default video visual selected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = {
+                    visualPicker.launch(arrayOf("image/*", "video/*"))
+                },
+            ) {
+                Text("Choose video visual")
+            }
+            if (visual.isNotBlank()) {
+                FilledTonalButton(
+                    onClick = { prefs.AUDIOBOOK_VISUAL_URI.value = "" },
+                ) {
+                    Text("Clear")
+                }
+            }
         }
 
         FilledTonalButton(
