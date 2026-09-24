@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Collections
+import java.security.MessageDigest
+import org.json.JSONArray
+import org.json.JSONObject
 import my.noveldokusha.text_to_speech.delimiterAwareTextSplitter
 
 interface Utterance<T : Utterance<T>> {
@@ -137,6 +140,139 @@ class TextToSpeechManager<T : Utterance<T>>(
     private var _audioToMarkerRatio = 1f
     private val ttsPrefs by lazy {
         context.getSharedPreferences("tts_preferences", Context.MODE_PRIVATE)
+    }
+
+    private data class CachedWordTiming(
+        val start: Int,
+        val end: Int,
+        val startMs: Long,
+        val durationMs: Long,
+        val speed: Float,
+    )
+
+    private val _itemTimingKey = Collections.synchronizedMap(mutableMapOf<String, String>())
+    private val _itemTimingCache = Collections.synchronizedMap(mutableMapOf<String, List<CachedWordTiming>>())
+    private val _itemTimingSliceBaseMs = Collections.synchronizedMap(mutableMapOf<String, Long>())
+    private val _itemTimingLastRange = Collections.synchronizedMap(mutableMapOf<String, IntRange>())
+    private val _itemTimingLastMarkerMs = Collections.synchronizedMap(mutableMapOf<String, Long>())
+
+    private fun wordTimingCacheKey(text: String): String {
+        val material = buildString {
+            append("word_timing_v2|")
+            append(currentEnginePackage).append('|')
+            append(activeVoice.value?.id ?: "").append('|')
+            append(activeVoice.value?.needsInternet ?: false).append('|')
+            append(activeVoice.value?.language ?: "").append('|')
+            append(voicePitch.floatValue).append('|')
+            append(text)
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(material.toByteArray(Charsets.UTF_8))
+        return "word_timing_v2_" + digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun readPersistedWordTimings(cacheKey: String): List<CachedWordTiming> {
+        return runCatching {
+            val root = JSONObject(
+                ttsPrefs.getString("tts_word_highlight_timing_json_v2", "{}") ?: "{}"
+            )
+            val array = root.optJSONArray(cacheKey) ?: return emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val start = item.optInt("start", -1)
+                    val end = item.optInt("end", -1)
+                    val startMs = item.optLong("start_ms", -1L)
+                    val durationMs = item.optLong("duration_ms", -1L)
+                    val speed = item.optDouble("speed", Double.NaN).toFloat()
+                    if (start >= 0 && end > start && startMs >= 0L &&
+                        durationMs in 40L..15_000L && speed.isFinite() && speed > 0f
+                    ) {
+                        add(CachedWordTiming(start, end, startMs, durationMs, speed))
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun persistWordTiming(cacheKey: String, range: IntRange, startMs: Long, durationMs: Long) {
+        if (range.isEmpty || startMs < 0L || durationMs !in 40L..15_000L || voiceSpeed.floatValue <= 0f) return
+        runCatching {
+            val root = JSONObject(
+                ttsPrefs.getString("tts_word_highlight_timing_json_v2", "{}") ?: "{}"
+            )
+            val existing = root.optJSONArray(cacheKey) ?: JSONArray()
+            val merged = mutableListOf<CachedWordTiming>()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                val start = item.optInt("start", -1)
+                val end = item.optInt("end", -1)
+                val oldStartMs = item.optLong("start_ms", -1L)
+                val oldDurationMs = item.optLong("duration_ms", -1L)
+                val oldSpeed = item.optDouble("speed", Double.NaN).toFloat()
+                if (start >= 0 && end > start && oldStartMs >= 0L &&
+                    oldDurationMs in 40L..15_000L && oldSpeed.isFinite() && oldSpeed > 0f &&
+                    (start != range.first || end != range.last + 1 || oldSpeed != voiceSpeed.floatValue)
+                ) {
+                    merged += CachedWordTiming(start, end, oldStartMs, oldDurationMs, oldSpeed)
+                }
+            }
+            merged += CachedWordTiming(range.first, range.last + 1, startMs, durationMs, voiceSpeed.floatValue)
+            val array = JSONArray()
+            merged.takeLast(768).forEach { timing ->
+                array.put(JSONObject().apply {
+                    put("start", timing.start)
+                    put("end", timing.end)
+                    put("start_ms", timing.startMs)
+                    put("duration_ms", timing.durationMs)
+                    put("speed", timing.speed.toDouble())
+                })
+            }
+            root.put(cacheKey, array)
+            val keys = root.keys().asSequence().toList()
+            if (keys.size > 96) keys.take(keys.size - 96).forEach(root::remove)
+            ttsPrefs.edit().putString("tts_word_highlight_timing_json_v2", root.toString()).apply()
+        }.onFailure { Timber.w(it, "Failed to persist TTS word timing") }
+    }
+
+    private fun prepareWordTiming(itemUtteranceId: String, text: String) {
+        val key = wordTimingCacheKey(text)
+        _itemTimingKey[itemUtteranceId] = key
+        _itemTimingCache[itemUtteranceId] = readPersistedWordTimings(key)
+        _itemTimingSliceBaseMs[itemUtteranceId] = 0L
+        _itemTimingLastRange.remove(itemUtteranceId)
+        _itemTimingLastMarkerMs.remove(itemUtteranceId)
+    }
+
+    private fun rememberCompletedWordTiming(itemUtteranceId: String, range: IntRange, markerMs: Long) {
+        val previousRange = _itemTimingLastRange[itemUtteranceId] ?: return
+        val previousStartMs = _itemTimingLastMarkerMs[itemUtteranceId] ?: return
+        val durationMs = markerMs - previousStartMs
+        val key = _itemTimingKey[itemUtteranceId] ?: return
+        if (durationMs in 40L..15_000L) {
+            persistWordTiming(key, previousRange, previousStartMs, durationMs)
+            _itemTimingCache[itemUtteranceId] = readPersistedWordTimings(key)
+        }
+    }
+
+    private fun currentScaledCachedTiming(itemUtteranceId: String, range: IntRange): Pair<Long, Long>? {
+        val timing = _itemTimingCache[itemUtteranceId]
+            ?.filter { it.start == range.first && it.end == range.last + 1 }
+            ?.minByOrNull { kotlin.math.abs(it.speed - voiceSpeed.floatValue) }
+            ?: return null
+        val currentSpeed = voiceSpeed.floatValue
+        if (timing.speed <= 0f || currentSpeed <= 0f) return null
+        val scale = timing.speed.toDouble() / currentSpeed.toDouble()
+        return (timing.startMs * scale).toLong().coerceAtLeast(0L) to
+            (timing.durationMs * scale).toLong().coerceAtLeast(1L)
+    }
+
+    private fun forgetWordTiming(itemUtteranceId: String) {
+        _itemTimingKey.remove(itemUtteranceId)
+        _itemTimingCache.remove(itemUtteranceId)
+        _itemTimingSliceBaseMs.remove(itemUtteranceId)
+        _itemTimingLastRange.remove(itemUtteranceId)
+        _itemTimingLastMarkerMs.remove(itemUtteranceId)
     }
 
     private fun calibrationKey(): String {
@@ -370,6 +506,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         )
         _queueList[textSynthesis.utteranceId] = textSynthesis
         _queueListItemSize[textSynthesis.utteranceId] = subItems.size
+        prepareWordTiming(textSynthesis.utteranceId, text)
         val sliceBounds = buildList {
             var offset = leadingOffset
             subItems.forEach { slice ->
@@ -411,6 +548,7 @@ class TextToSpeechManager<T : Utterance<T>>(
         _queueListItemSize.remove(item.utteranceId)
         _itemStartWall.remove(item.utteranceId)
         _itemMarkerMs.remove(item.utteranceId)
+        forgetWordTiming(item.utteranceId)
         currentActiveItemState.value = item
         scope.launch { _currentTextSpeakFlow.emit(item) }
     }
@@ -548,6 +686,17 @@ class TextToSpeechManager<T : Utterance<T>>(
                 // куска, поэтому и время его звучания считаем от старта этого куска.
                 val sliceWall = _sliceStartWall[utteranceId]
                 val range = (start + offset) until (end + offset)
+                val markerMs = if (sliceWall != null) {
+                    (frame / (_sliceSampleRate[utteranceId] ?: FALLBACK_SAMPLE_RATE) *
+                        _audioToMarkerRatio * 1000).toLong()
+                } else {
+                    0L
+                }
+                val baseMs = _itemTimingSliceBaseMs[itemUtteranceId] ?: 0L
+                val absoluteMarkerMs = baseMs + markerMs
+                rememberCompletedWordTiming(itemUtteranceId, range, absoluteMarkerMs)
+                _itemTimingLastRange[itemUtteranceId] = range
+                _itemTimingLastMarkerMs[itemUtteranceId] = absoluteMarkerMs
                 // Запоминаем последний frame куска: это маркерная длина куска, которая на
                 // onFinished последнего куска абзаца переводится в мс и суммируется в _itemMarkerMs.
                 _sliceLastFrame[utteranceId] = frame
@@ -555,7 +704,13 @@ class TextToSpeechManager<T : Utterance<T>>(
                 // но сетевые голоса синтезируют аудио заранее и реально проигрывают его
                 // медленнее, поэтому маркер приходит раньше, чем слово звучит.
                 // Масштабируем frame->время на измеренный _audioToMarkerRatio и задерживаем показ.
-                val delayMs = if (sliceWall != null) {
+                val cachedTiming = currentScaledCachedTiming(itemUtteranceId, range)
+                val cachedStartWall = cachedTiming?.first?.let {
+                    _itemStartWall[itemUtteranceId]?.plus(it)
+                }
+                val delayMs = if (cachedStartWall != null) {
+                    (cachedStartWall - wall).coerceAtLeast(0L)
+                } else if (sliceWall != null) {
                     // Считаем дельту маркера отдельно в Long: смешение Long и Float в одном
                     // выражении даёт Float-квантование (ULP 256 мс при wall ~2.5e9), из-за
                     // чего задержка прыгала ступенями вместо непрерывных миллисекунд.
@@ -660,14 +815,32 @@ class TextToSpeechManager<T : Utterance<T>>(
                     val sliceMarkerMs = (sliceLastFrame / sliceSampleRate * 1000).toLong()
                     _itemMarkerMs[itemUtteranceId] =
                         (_itemMarkerMs[itemUtteranceId] ?: 0L) + sliceMarkerMs
+                    _itemTimingSliceBaseMs[itemUtteranceId] =
+                        (_itemTimingSliceBaseMs[itemUtteranceId] ?: 0L) +
+                            (sliceMarkerMs * _audioToMarkerRatio).toLong().coerceAtLeast(sliceMarkerMs)
                 }
                 if (itemSize != subItemUtteranceIndex) return
+
+                val finalRange = _itemTimingLastRange[itemUtteranceId]
+                val finalStartMs = _itemTimingLastMarkerMs[itemUtteranceId]
 
                 // Абзац завершён: (маркерная длительность абзаца, реальное время от onStart до onFinished).
                 val wallStart = _itemStartWall[itemUtteranceId]
                 val totalMarkerMs = _itemMarkerMs.remove(itemUtteranceId)
                 if (totalMarkerMs != null && wallStart != null && totalMarkerMs > 0) {
                     addCalibrationSample(itemUtteranceId, totalMarkerMs, wall - wallStart)
+                    if (finalRange != null && finalStartMs >= 0L) {
+                        val finalDurationMs = totalMarkerMs - finalStartMs
+                        if (finalDurationMs in 40L..15_000L) {
+                            persistWordTiming(
+                                _itemTimingKey[itemUtteranceId]
+                                    ?: wordTimingCacheKey(currentSpeakingText.value),
+                                finalRange,
+                                finalStartMs,
+                                finalDurationMs,
+                            )
+                        }
+                    }
                 }
 
                 val res: T = _queueList[itemUtteranceId]
