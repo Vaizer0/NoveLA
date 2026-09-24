@@ -937,13 +937,17 @@ suspend fun muxVisual(
                 ",\"pitch\": " + request.pitch + "},\n")
             out.write("  \"audio\": {\"sampleRate\": " + sampleRate +
                 ",\"channels\": " + channels + ",\"durationMs\": " + durationMs + "},\n")
+            val timingSegmentsJson = JSONArray()
+            exportedTimingSegments.forEach(timingSegmentsJson::put)
             out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true,\"units\": \"ms\",\"segments\": ")
-            out.write(JSONArray(exportedTimingSegments).toString())
+            out.write(timingSegmentsJson.toString())
             out.write("},\n")
             out.write("  \"tts_word_highlight_timing_json_v2\": {\n")
             val timingKeys = exportedTimingStore.keys.toList()
             timingKeys.forEachIndexed { index, key ->
-                out.write("    " + JSONObject.quote(key) + ": " + JSONArray(exportedTimingStore[key]).toString())
+                val entriesJson = JSONArray()
+                exportedTimingStore[key].orEmpty().forEach(entriesJson::put)
+                out.write("    " + JSONObject.quote(key) + ": " + entriesJson.toString())
                 if (index != timingKeys.lastIndex) out.write(",")
                 out.write("\n")
             }
