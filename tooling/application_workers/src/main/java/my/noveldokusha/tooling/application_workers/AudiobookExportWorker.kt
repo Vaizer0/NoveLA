@@ -237,6 +237,7 @@ class AudiobookExportWorker(
             }
 
             val outputMedia = if (format == OutputFormat.MP4) {
+                notification.showFinalizing()
                 exporter.muxVisual(
                     audioMp4 = audioTemp,
                     outputMp4 = finalMp4,
