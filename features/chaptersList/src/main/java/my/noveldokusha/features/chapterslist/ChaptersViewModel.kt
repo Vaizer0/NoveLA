@@ -177,7 +177,12 @@ internal class ChaptersViewModel @Inject constructor(
             val pairs = chapterTranslationDao.getTranslationGroups(bookUrl).map {
                 LangPair(it.sourceLang, it.targetLang, it.count)
             }
-            val directoryUri = appPreferences.EXPORT_DIRECTORY_URI.value
+            val directoryUri = appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value
+                .ifBlank { appPreferences.EXPORT_DIRECTORY_URI.value }
+            val readerVoiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value
+            val readerEnginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value
+            val readerSpeed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value
+            val readerPitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value
             val directoryName = directoryUri.takeIf(String::isNotBlank)?.let {
                 resolveExportDirectoryName(context.contentResolver, it)
             }
@@ -188,10 +193,16 @@ internal class ChaptersViewModel @Inject constructor(
                 availableTranslations = pairs,
                 exportDirectoryName = directoryName,
                 directoryUri = directoryUri,
-                defaultVoiceId = appPreferences.AUDIOBOOK_TTS_VOICE_ID.value.ifBlank { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value },
-                defaultEnginePackage = appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value.ifBlank { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value },
+                defaultUseReaderTts = appPreferences.AUDIOBOOK_USE_READER_TTS.value,
+                defaultVoiceId = appPreferences.AUDIOBOOK_TTS_VOICE_ID.value.ifBlank { readerVoiceId },
+                defaultEnginePackage = appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value.ifBlank { readerEnginePackage },
                 defaultSpeed = appPreferences.AUDIOBOOK_TTS_VOICE_SPEED.value,
                 defaultPitch = appPreferences.AUDIOBOOK_TTS_VOICE_PITCH.value,
+                readerVoiceId = readerVoiceId,
+                readerEnginePackage = readerEnginePackage,
+                readerSpeed = readerSpeed,
+                readerPitch = readerPitch,
+                favoriteVoiceKeys = appPreferences.AUDIOBOOK_FAVORITE_VOICE_KEYS.value,
                 defaultOutputFormat = appPreferences.AUDIOBOOK_OUTPUT_FORMAT.value,
                 defaultVisualUri = appPreferences.AUDIOBOOK_VISUAL_URI.value,
             )
@@ -204,6 +215,7 @@ internal class ChaptersViewModel @Inject constructor(
         mode: String,
         sourceLang: String,
         targetLang: String,
+        useReaderTts: Boolean,
         voiceId: String,
         enginePackage: String,
         speed: Float,
@@ -230,45 +242,43 @@ internal class ChaptersViewModel @Inject constructor(
                 return
             }
         }
+        val resolvedVoiceId = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value else voiceId
+        val resolvedEnginePackage = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value else enginePackage
+        val resolvedSpeed = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value else speed
+        val resolvedPitch = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value else pitch
+
+        appPreferences.AUDIOBOOK_USE_READER_TTS.value = useReaderTts
+        appPreferences.AUDIOBOOK_OUTPUT_FORMAT.value = outputFormat.name
+        appPreferences.AUDIOBOOK_VISUAL_URI.value = visualUri?.toString().orEmpty()
+        appPreferences.AUDIOBOOK_TTS_VOICE_ID.value = resolvedVoiceId
+        appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value = resolvedEnginePackage
+        appPreferences.AUDIOBOOK_TTS_VOICE_SPEED.value = resolvedSpeed
+        appPreferences.AUDIOBOOK_TTS_VOICE_PITCH.value = resolvedPitch
+
+        val request = my.noveldokusha.text_to_speech.AudiobookExportRequest(
+            bookTitle = choice.bookTitle,
+            contentMode = mode,
+            sourceLang = sourceLang,
+            targetLang = targetLang,
+            startPosition = startPosition,
+            endPosition = endPosition,
+            enginePackage = resolvedEnginePackage,
+            voiceId = resolvedVoiceId,
+            speed = resolvedSpeed,
+            pitch = resolvedPitch,
+            outputFormat = outputFormat,
+            visualUri = visualUri,
+        )
+
         if (choice.directoryUri.isBlank()) {
             pendingAudiobook = PendingAudiobook(
-                request = my.noveldokusha.text_to_speech.AudiobookExportRequest(
-                    bookTitle = choice.bookTitle,
-                    contentMode = mode,
-                    sourceLang = sourceLang,
-                    targetLang = targetLang,
-                    startPosition = startPosition,
-                    endPosition = endPosition,
-                    enginePackage = enginePackage,
-                    voiceId = voiceId,
-                    speed = speed,
-                    pitch = pitch,
-                    outputFormat = outputFormat,
-                    visualUri = visualUri,
-                ),
+                request = request,
                 bookUrl = choice.bookUrl,
             )
             audiobookDialogState.value = AudiobookDialogState.NeedDirectory
             return
         }
-        enqueueAudiobook(
-            choice.bookUrl,
-            my.noveldokusha.text_to_speech.AudiobookExportRequest(
-                bookTitle = choice.bookTitle,
-                contentMode = mode,
-                sourceLang = sourceLang,
-                targetLang = targetLang,
-                startPosition = startPosition,
-                endPosition = endPosition,
-                enginePackage = enginePackage,
-                voiceId = voiceId,
-                speed = speed,
-                pitch = pitch,
-                outputFormat = outputFormat,
-                visualUri = visualUri,
-            ),
-            choice.directoryUri,
-        )
+        enqueueAudiobook(choice.bookUrl, request, choice.directoryUri)
     }
 
     private fun enqueueAudiobook(bookUrl: String, request: my.noveldokusha.text_to_speech.AudiobookExportRequest, directoryUri: String) {
@@ -277,8 +287,12 @@ internal class ChaptersViewModel @Inject constructor(
         audiobookDialogState.value = AudiobookDialogState.Hidden
     }
 
+    fun onAudiobookFavoriteVoiceKeysChanged(keys: Set<String>) {
+        appPreferences.AUDIOBOOK_FAVORITE_VOICE_KEYS.value = keys.toList()
+    }
+
     fun onAudiobookDirectorySaved(uri: String) {
-        appPreferences.EXPORT_DIRECTORY_URI.value = uri
+        appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value = uri
         val pending = pendingAudiobook
         if (pending != null) {
             pendingAudiobook = null
