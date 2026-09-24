@@ -366,7 +366,80 @@ class AudiobookTtsExporter(private val context: Context) {
         val exportedTimingSegments = mutableListOf<JSONObject>()
         val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
 
+        // synthesizeToFile() only becomes useful to the exporter when its audio callbacks
+        // are actually consumed. Keep the file target /dev/null so the TTS engine does not
+        // duplicate the PCM onto disk; onAudioAvailable provides the same PCM to our sink.
+        val lastFormat = mutableMapOf<String, Int>()
+        var audioBytesReceived = 0L
+
         val tts = createTts(request)
+        val listener = object : UtteranceProgressListener() {
+            override fun onBeginSynthesis(
+                id: String?,
+                rate: Int,
+                format: Int,
+                count: Int,
+            ) {
+                if (id != currentSliceId) return
+                if (rate <= 0 || count <= 0) {
+                    error = IllegalStateException("Invalid TTS audio format: rate=$rate channels=$count")
+                    return
+                }
+                lastFormat[id] = format
+                if (sink == null) {
+                    sampleRate = rate
+                    channels = count
+                    sink = when (request.outputFormat) {
+                        OutputFormat.WAV -> WavSink(mediaFile, rate, count)
+                        OutputFormat.MP4 -> AacMp4Sink(mediaFile, rate, count)
+                    }
+                } else if (sampleRate != rate || channels != count) {
+                    error = IllegalStateException("TTS audio format changed during export")
+                }
+            }
+
+            override fun onAudioAvailable(id: String?, audio: ByteArray?) {
+                if (id != currentSliceId || error != null) return
+                val bytes = audio ?: return
+                if (bytes.isEmpty()) return
+                val format = lastFormat[id] ?: return
+                runCatching {
+                    val pcm = normalizePcm16(bytes, format)
+                    sink?.writePcm16(pcm)
+                    currentFrames = sink?.totalFrames ?: currentFrames
+                    audioBytesReceived += pcm.size.toLong()
+                }.onFailure {
+                    error = it
+                }
+            }
+
+            override fun onStart(id: String?) = Unit
+
+            override fun onDone(id: String?) {
+                if (id == currentSliceId) latch.countDown()
+            }
+
+            override fun onError(id: String?, code: Int) {
+                if (id == currentSliceId) {
+                    error = IllegalStateException("TTS error $code")
+                    latch.countDown()
+                }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) {
+                if (id == currentSliceId) {
+                    error = IllegalStateException("TTS error")
+                    latch.countDown()
+                }
+            }
+
+            // IMPORTANT: do not use synthesizeToFile() onRangeStart(frame) for exported
+            // word timing. On Google TTS/Android 16 those frames are not the Reader timing
+            // positions; word timings come from the persisted Reader cache instead.
+            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) = Unit
+        }
+        tts.setOnUtteranceProgressListener(listener)
         // Audio is generated once with synthesizeToFile(). Word timings come from
         // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
         val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
@@ -460,14 +533,46 @@ class AudiobookTtsExporter(private val context: Context) {
                             check(synthesisResult == TextToSpeech.SUCCESS) {
                                 "TTS synthesis failed: " + synthesisResult
                             }
-                            check(latch.await(60, TimeUnit.SECONDS)) {
-                                "TTS synthesis timeout"
+                            val synthesisDeadline = SystemClock.elapsedRealtime() + 5 * 60_000L
+                            while (!latch.await(500L, TimeUnit.MILLISECONDS)) {
+                                if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
+                                    throw IllegalStateException("TTS synthesis timeout")
+                                }
+                                val elapsed = SystemClock.elapsedRealtime() - exportStartedAt
+                                val completed = completedWorkUnits.toDouble()
+                                val total = totalWorkUnits.toDouble().coerceAtLeast(1.0)
+                                val basePercent = ((completed * 100.0) / total).toInt()
+                                // Report 1% as soon as real PCM has arrived, even before the
+                                // first slice completes. This prevents a legitimate long
+                                // synthesis operation from looking like a dead 0% worker.
+                                val livePercent = if (audioBytesReceived > 0L) {
+                                    maxOf(basePercent, 1)
+                                } else {
+                                    basePercent
+                                }
+                                onProgress(
+                                    AudiobookExportProgress(
+                                        currentChapter = completedChapters,
+                                        totalChapters = chapters.size,
+                                        chapterTitle = chapters.first { it.position == segment.chapterPosition }.title,
+                                        percent = livePercent.coerceIn(0, 100),
+                                        elapsedMs = elapsed.coerceAtLeast(0L),
+                                        estimatedRemainingMs = null,
+                                        generatedAudioMs = durationMs(currentFrames, sampleRate),
+                                    )
+                                )
                             }
                         } finally {
                             synthesisPfd.close()
                         }
 
                         error?.let { throw it }
+                        check(sink != null && sampleRate > 0 && channels > 0) {
+                            "TTS produced no audio format"
+                        }
+                        check(audioBytesReceived > 0L) {
+                            "TTS produced no audio data"
+                        }
                         completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
                         val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
                         if (currentElapsed >= 350L) {
