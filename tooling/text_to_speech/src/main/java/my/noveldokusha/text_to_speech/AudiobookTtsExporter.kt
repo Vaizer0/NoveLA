@@ -158,28 +158,6 @@ private data class ChapterTiming(
     val endMs: Long,
 )
 
-private fun readerTimingCacheKey(
-    enginePackage: String,
-    voiceId: String,
-    needsInternet: Boolean?,
-    language: String?,
-    pitch: Float,
-    text: String,
-): String {
-    val material = buildString {
-        append("word_timing_v2|")
-        append(enginePackage).append('|')
-        append(voiceId).append('|')
-        append(needsInternet ?: false).append('|')
-        append(language ?: "").append('|')
-        append(pitch).append('|')
-        append(text)
-    }
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(material.toByteArray(Charsets.UTF_8))
-    return "word_timing_v2_" + digest.joinToString("") { "%02x".format(it) }
-}
-
 private interface AudioSink : AutoCloseable {
     val sampleRate: Int
     val channels: Int
@@ -451,7 +429,6 @@ class AudiobookTtsExporter(private val context: Context) {
                     }
 
                     val segmentStartMs = durationMs(currentFrames, sampleRate)
-                    val wordTimings = mutableListOf<WordTiming>()
                     val slices = delimiterAwareTextSplitter(
                         fullText = segment.text,
                         maxSliceLength = TextToSpeech.getMaxSpeechInputLength(),
@@ -543,7 +520,7 @@ class AudiobookTtsExporter(private val context: Context) {
                         "Reader word timing cache contains no usable ranges for this text."
                     }
 
-                    $endLine { mutableListOf() }
+                    val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
                     wordTimings.forEach { w ->
                         val safeEndMs = min(w.endMs, segmentEndMs)
                         // Reader's persisted timing store is relative to the text item.
