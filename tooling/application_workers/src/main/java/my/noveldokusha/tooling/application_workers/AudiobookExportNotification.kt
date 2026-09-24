@@ -57,7 +57,7 @@ class AudiobookExportNotification(
             setContentText(context.getString(StringsR.string.book_export_progress, 0, total))
             setProgress(total, 0, false)
             setOngoing(true)
-            addCancel()
+            addCancel(this)
         }.build()
 
     fun showComplete(name: String) {
