@@ -28,6 +28,7 @@ androidx-fragment-ktx = "1.9.0"
 androidx-material = "1.14.0"
 androidx-documentfile = "1.0.1"
 androidx-media = "1.7.0"
+media3 = "1.10.1"
 androidx-lifecycle = "2.8.7"
 androidx-workmanager = "2.11.2"
 androidx-startup = "1.2.0"
@@ -145,6 +146,9 @@ androidx-startup = { module = "androidx.startup:startup-runtime", version.ref = 
 androidx-workmanager = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-workmanager" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }
 androidx-media = { module = "androidx.media:media", version.ref = "androidx-media" }
+media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "media3" }
+media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
+media3-effect = { module = "androidx.media3:media3-effect", version.ref = "media3" }
 androidx-navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx", version.ref = "androidx-navigation-ui-ktx" }
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "androidx-navigation-fragment-ktx" }
 androidx-preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "androidx-preference-ktx" }
