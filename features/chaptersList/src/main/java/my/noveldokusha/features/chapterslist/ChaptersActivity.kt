@@ -89,6 +89,12 @@ class ChaptersActivity : BaseActivity() {
                     onExportDialogDismiss = viewModel::onExportDialogDismiss,
                     exportDialogState = viewModel.exportDialogState.value,
                     exportMessage = viewModel.exportMessage.value,
+                    onAudiobookExport = viewModel::onAudiobookClicked,
+                    onAudiobookConfirmed = viewModel::onAudiobookConfirmed,
+                    onAudiobookDirectorySaved = viewModel::onAudiobookDirectorySaved,
+                    onAudiobookDialogDismiss = viewModel::onAudiobookDialogDismiss,
+                    audiobookDialogState = viewModel.audiobookDialogState.value,
+                    audiobookMessage = viewModel.audiobookMessage.value,
                     onExportMessageShown = { viewModel.exportMessage.value = null },
                     onMigrateBook = {
                         navigationRoutes.novelMigration(
