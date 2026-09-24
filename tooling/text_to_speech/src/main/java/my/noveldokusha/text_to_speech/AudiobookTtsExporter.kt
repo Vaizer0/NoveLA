@@ -18,6 +18,7 @@ import android.text.Html
 import androidx.annotation.WorkerThread
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -249,7 +250,7 @@ private class AacMp4Sink(
     }
 }
 
-class AudiobookTtsExporter(private val context: Context) {
+@OptIn(UnstableApi::class)\nclass AudiobookTtsExporter(private val context: Context) {
     @WorkerThread
     suspend fun export(
         request: AudiobookExportRequest,
