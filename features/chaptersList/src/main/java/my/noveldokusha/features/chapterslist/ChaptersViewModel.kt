@@ -62,6 +62,8 @@ import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
+import my.noveldokusha.tooling.application_workers.AudiobookExportWorker
+import my.noveldokusha.text_to_speech.OutputFormat
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -154,6 +156,147 @@ internal class ChaptersViewModel @Inject constructor(
     val exportMessage = mutableStateOf<String?>(null)
 
     private var pendingExport: PendingExport? = null
+
+    val audiobookDialogState = mutableStateOf<AudiobookDialogState>(AudiobookDialogState.Hidden)
+    val audiobookMessage = mutableStateOf<String?>(null)
+
+    private data class PendingAudiobook(
+        val request: my.noveldokusha.text_to_speech.AudiobookExportRequest,
+        val bookUrl: String,
+    )
+
+    private var pendingAudiobook: PendingAudiobook? = null
+
+    fun onAudiobookClicked(bookUrl: String, bookTitle: String) {
+        viewModelScope.launch {
+            val chapters = chapterDao.chapters(bookUrl).sortedBy { it.position }
+            if (chapters.isEmpty()) {
+                audiobookMessage.value = context.getString(StringsR.string.export_no_chapters)
+                return@launch
+            }
+            val pairs = chapterTranslationDao.getTranslationGroups(bookUrl).map {
+                LangPair(it.sourceLang, it.targetLang, it.count)
+            }
+            val directoryUri = appPreferences.EXPORT_DIRECTORY_URI.value
+            val directoryName = directoryUri.takeIf(String::isNotBlank)?.let {
+                resolveExportDirectoryName(context.contentResolver, it)
+            }
+            audiobookDialogState.value = AudiobookDialogState.ContentChoice(
+                bookUrl = bookUrl,
+                bookTitle = bookTitle,
+                chapters = chapters.map { AudiobookChapterOption(it.position, it.url, it.title) },
+                availableTranslations = pairs,
+                exportDirectoryName = directoryName,
+                directoryUri = directoryUri,
+                defaultVoiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value,
+                defaultEnginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
+                defaultSpeed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
+                defaultPitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
+            )
+        }
+    }
+
+    fun onAudiobookConfirmed(
+        startPosition: Int,
+        endPosition: Int,
+        mode: String,
+        sourceLang: String,
+        targetLang: String,
+        voiceId: String,
+        enginePackage: String,
+        speed: Float,
+        pitch: Float,
+        outputFormat: OutputFormat,
+        visualUri: Uri?,
+    ) {
+        val choice = audiobookDialogState.value as? AudiobookDialogState.ContentChoice ?: return
+        val chapterCount = endPosition - startPosition + 1
+        if (startPosition > endPosition || choice.chapters.none { it.position == startPosition } || choice.chapters.none { it.position == endPosition }) {
+            audiobookMessage.value = "Invalid chapter range"
+            return
+        }
+        if (mode == "translation") {
+            if (sourceLang.isBlank() || targetLang.isBlank()) {
+                audiobookMessage.value = "Select a translation language pair"
+                return
+            }
+            val available = choice.availableTranslations.firstOrNull {
+                it.sourceLang == sourceLang && it.targetLang == targetLang
+            }?.translatedChapters ?: 0
+            if (available < chapterCount) {
+                audiobookMessage.value = context.getString(StringsR.string.export_no_translated_chapters)
+                return
+            }
+        }
+        if (choice.directoryUri.isBlank()) {
+            pendingAudiobook = PendingAudiobook(
+                request = my.noveldokusha.text_to_speech.AudiobookExportRequest(
+                    bookTitle = choice.bookTitle,
+                    contentMode = mode,
+                    sourceLang = sourceLang,
+                    targetLang = targetLang,
+                    startPosition = startPosition,
+                    endPosition = endPosition,
+                    enginePackage = enginePackage,
+                    voiceId = voiceId,
+                    speed = speed,
+                    pitch = pitch,
+                    outputFormat = outputFormat,
+                    visualUri = visualUri,
+                ),
+                bookUrl = choice.bookUrl,
+            )
+            audiobookDialogState.value = AudiobookDialogState.NeedDirectory
+            return
+        }
+        enqueueAudiobook(
+            choice.bookUrl,
+            my.noveldokusha.text_to_speech.AudiobookExportRequest(
+                bookTitle = choice.bookTitle,
+                contentMode = mode,
+                sourceLang = sourceLang,
+                targetLang = targetLang,
+                startPosition = startPosition,
+                endPosition = endPosition,
+                enginePackage = enginePackage,
+                voiceId = voiceId,
+                speed = speed,
+                pitch = pitch,
+                outputFormat = outputFormat,
+                visualUri = visualUri,
+            ),
+            choice.directoryUri,
+        )
+    }
+
+    private fun enqueueAudiobook(bookUrl: String, request: my.noveldokusha.text_to_speech.AudiobookExportRequest, directoryUri: String) {
+        AudiobookExportWorker.enqueue(context, bookUrl, request, directoryUri)
+        audiobookMessage.value = context.getString(StringsR.string.export_started)
+        audiobookDialogState.value = AudiobookDialogState.Hidden
+    }
+
+    fun onAudiobookDirectorySaved(uri: String) {
+        appPreferences.EXPORT_DIRECTORY_URI.value = uri
+        val pending = pendingAudiobook
+        if (pending != null) {
+            pendingAudiobook = null
+            enqueueAudiobook(pending.bookUrl, pending.request, uri)
+        } else {
+            viewModelScope.launch {
+                val name = resolveExportDirectoryName(context.contentResolver, uri)
+                val current = audiobookDialogState.value
+                if (current is AudiobookDialogState.ContentChoice) {
+                    audiobookDialogState.value = current.copy(directoryUri = uri, exportDirectoryName = name)
+                }
+            }
+        }
+    }
+
+    fun onAudiobookDialogDismiss() {
+        pendingAudiobook = null
+        audiobookDialogState.value = AudiobookDialogState.Hidden
+    }
+
 
     // Инжектируемая точка вызова воркера: тесты подменяют её лямбдой-шпионом.
     var enqueue: (Context, String, String, ExportMode, String, String, Int, String) -> Unit =
