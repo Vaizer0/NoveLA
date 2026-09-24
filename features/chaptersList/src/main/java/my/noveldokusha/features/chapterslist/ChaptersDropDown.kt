@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.filled.Build
@@ -101,6 +102,16 @@ internal fun ChaptersDropDown(
             Icon(
                 Icons.Filled.CloudDownload,
                 stringResource(R.string.download_all_chapters),
+            )
+        }
+    )
+    DropdownMenuItem(
+        onClick = { onAudiobookExport(bookUrl, bookTitle) },
+        text = { Text(text = "Download audiobook") },
+        leadingIcon = {
+            Icon(
+                Icons.Filled.RecordVoiceOver,
+                contentDescription = "Download audiobook",
             )
         }
     )
