@@ -157,9 +157,10 @@ internal fun SettingsAudiobook(prefs: AppPreferences) {
             Text("MP4 + JSON")
         }
 
-        Text("Audiobook save folder", style = MaterialTheme.typography.titleSmall)
+        Text("Audiobook root folder", style = MaterialTheme.typography.titleSmall)
         Text(
-            folderName ?: "No folder selected — choose a folder before the first download.",
+            folderName?.let { it + "/<Novel Name>/" }
+                ?: "No folder selected — choose a root folder before the first download.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -169,6 +170,12 @@ internal fun SettingsAudiobook(prefs: AppPreferences) {
                 TextButton(onClick = { prefs.AUDIOBOOK_EXPORT_DIRECTORY_URI.value = "" }) { Text("Clear") }
             }
         }
+
+        Text(
+            "Each novel gets its own folder under this root; all WAV/MP4 + JSON files for that novel stay together.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         if (output == "MP4") {
             Text("Default video visual", style = MaterialTheme.typography.titleSmall)
