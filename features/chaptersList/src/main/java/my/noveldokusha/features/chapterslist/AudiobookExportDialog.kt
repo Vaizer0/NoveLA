@@ -204,9 +204,19 @@ internal fun AudiobookExportDialog(
                     }
                 }
 
-                Text("Save folder", style = MaterialTheme.typography.titleSmall)
-                Text(state.exportDirectoryName ?: "No folder selected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = onChangeDirectory) { Text("Choose / change folder") }
+                Text("Save location", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    state.exportDirectoryName?.let { it + "/" + state.bookTitle + "/" }
+                        ?: "No root folder selected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "All audiobook files for this novel are kept inside its own folder.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onChangeDirectory) { Text("Choose / change root folder") }
             }
         },
         confirmButton = {
