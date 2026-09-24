@@ -345,6 +345,8 @@ class AudiobookTtsExporter(private val context: Context) {
         // the device remains silent. The exported timestamps are therefore derived from
         // the same speak()/onRangeStart() mechanism used by the Reader.
         val timingTts = createTts(request)
+        val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
+        val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
         var timingSliceId = ""
         var timingSliceOffset = 0
         var timingSampleRate = 0
@@ -518,7 +520,10 @@ class AudiobookTtsExporter(private val context: Context) {
 
                         timingSliceId = "timing-" + System.nanoTime() + "-" + sliceIndex
                         timingSliceOffset = charOffset
-                        timingSampleRate = 0
+                        // Synthesis has already reported the real output sample rate for
+                        // this slice. Use it as the fallback for speak() in case this
+                        // engine does not emit onBeginSynthesis on the playback instance.
+                        timingSampleRate = sampleRate
                         timingRanges = mutableListOf()
                         timingError = null
                         timingLatch = CountDownLatch(1)
@@ -611,8 +616,10 @@ class AudiobookTtsExporter(private val context: Context) {
 
                     val segmentEndMs = durationMs(currentFrames, sampleRate)
                     val timingKey = readerTimingCacheKey(
-                        enginePackage = request.enginePackage,
-                        voiceId = request.voiceId,
+                        // Use the effective engine/voice, not blank "Default" request
+                        // fields, so the exported cache key follows the Reader's key model.
+                        enginePackage = effectiveEnginePackage,
+                        voiceId = effectiveVoiceId,
                         needsInternet = tts.voice?.isNetworkConnectionRequired,
                         language = tts.voice?.locale?.toLanguageTag(),
                         pitch = request.pitch,
