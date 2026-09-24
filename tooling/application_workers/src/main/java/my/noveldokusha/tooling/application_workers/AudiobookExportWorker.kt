@@ -197,7 +197,7 @@ class AudiobookExportWorker(
         val jsonTemp = File(tempDir, "metadata.json")
         val notification = AudiobookExportNotification(bookTitle, applicationContext)
 
-        try {
+        return try {
             val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             } else 0
