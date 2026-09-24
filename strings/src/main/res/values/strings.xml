@@ -824,7 +824,8 @@
     <string name="book_export_channel_name">Book export</string>
     <string name="book_export_progress">Exporting: %1$d/%2$d chapters</string>
     <string name="audiobook_export_starting">Starting audiobook generation…</string>
-    <string name="audiobook_export_progress">%1$d%% • Chapter %2$d/%3$d • %4$s • Generated %5$s • ETA %6$s</string>
+    <string name="audiobook_export_progress">%1$d%% • Chapter %2$d/%3$d • %4$s • Elapsed %5$s • Generated %6$s • ETA %7$s</string>
+    <string name="audiobook_export_finalizing">99% • Finalizing MP4 video…</string>
     <string name="book_export_complete">Exported: %1$s</string>
     <string name="book_export_cancel">Cancel</string>
     <string name="book_export_no_chapters">No chapters to export</string>
