@@ -237,10 +237,19 @@ class AudiobookExportWorker(
 
             val finalMediaName = buildFileName(bookTitle, start, end, mode, targetLang, format)
             val finalJsonName = finalMediaName.substringBeforeLast('.') + ".json"
-            val mediaUri = createAndCopy(directory, finalMediaName, if (format == OutputFormat.MP4) "video/mp4" else "audio/wav", outputMedia)
-            createAndCopy(directory, finalJsonName, "application/json", jsonTemp)
 
-            notification.showComplete(finalMediaName)
+            // The selected SAF folder is the audiobook root. Each novel gets its
+            // own child folder, and all audiobook files for that novel stay there.
+            val novelDirectory = getOrCreateNovelDirectory(directory, bookTitle)
+            createAndCopy(
+                novelDirectory,
+                finalMediaName,
+                if (format == OutputFormat.MP4) "video/mp4" else "audio/wav",
+                outputMedia,
+            )
+            createAndCopy(novelDirectory, finalJsonName, "application/json", jsonTemp)
+
+            notification.showComplete(bookTitle + "/" + finalMediaName)
             Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
             notification.close()
@@ -260,8 +269,25 @@ class AudiobookExportWorker(
         directory.isDirectory && directory.canWrite()
     }.getOrElse { false }
 
+    private fun getOrCreateNovelDirectory(
+        rootUri: String,
+        bookTitle: String,
+    ): DocumentFile {
+        val root = DocumentFile.fromTreeUri(applicationContext, Uri.parse(rootUri))
+            ?: error("Unable to open audiobook root folder")
+        if (!root.isDirectory || !root.canWrite()) {
+            error("Audiobook root folder is not writable")
+        }
+
+        val folderName = sanitize(bookTitle).take(80).ifBlank { "audiobook" }
+        return root.listFiles()
+            .firstOrNull { it.isDirectory && it.name == folderName }
+            ?: root.createDirectory(folderName)
+            ?: error("Unable to create novel folder: " + folderName)
+    }
+
     private fun createAndCopy(
-        directoryUri: String,
+        directory: DocumentFile,
         displayName: String,
         mime: String,
         source: File,
