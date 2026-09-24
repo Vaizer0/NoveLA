@@ -95,6 +95,8 @@ sealed interface AudiobookDialogState {
         val defaultEnginePackage: String,
         val defaultSpeed: Float,
         val defaultPitch: Float,
+        val defaultOutputFormat: String,
+        val defaultVisualUri: String,
     ) : AudiobookDialogState
 
     data object NeedDirectory : AudiobookDialogState
