@@ -292,10 +292,8 @@ class AudiobookExportWorker(
         mime: String,
         source: File,
     ): Uri {
-        val directory = DocumentFile.fromTreeUri(applicationContext, Uri.parse(directoryUri))
-            ?: error("Unable to open export folder")
         if (!directory.isDirectory || !directory.canWrite()) {
-            error("Export folder is not writable")
+            error("Novel audiobook folder is not writable")
         }
 
         directory.listFiles()
