@@ -23,7 +23,7 @@ class AudiobookExportNotification(
 
     fun showProgress(progress: my.noveldokusha.text_to_speech.AudiobookExportProgress) {
         if (!allowed()) return
-        val text = context.getString(StringsR.string.book_export_progress, progress.currentChapter, progress.totalChapters)
+        val text = buildProgressText(progress)
         val current = builder
         if (current == null) {
             builder = notifyCenter().showNotification(
@@ -34,14 +34,14 @@ class AudiobookExportNotification(
             ) {
                 setContentTitle(bookTitle)
                 setContentText(text)
-                setProgress(progress.totalChapters, progress.currentChapter, false)
+                setProgress(100, progress.percent, false)
                 setOngoing(true)
                 addCancel(this)
             }
         } else {
             notifyCenter().modifyNotification(current, notificationId) {
                 setContentText(text)
-                setProgress(progress.totalChapters, progress.currentChapter, false)
+                setProgress(100, progress.percent, false)
             }
         }
     }
@@ -54,8 +54,8 @@ class AudiobookExportNotification(
             importance = NotificationManager.IMPORTANCE_LOW,
         ) {
             setContentTitle(bookTitle)
-            setContentText(context.getString(StringsR.string.book_export_progress, 0, total))
-            setProgress(total, 0, false)
+            setContentText(context.getString(StringsR.string.audiobook_export_starting))
+            setProgress(100, 0, false)
             setOngoing(true)
             addCancel(this)
         }.build()
@@ -91,6 +91,33 @@ class AudiobookExportNotification(
     fun close() {
         notifyCenter().close(notificationId)
         builder = null
+    }
+
+    private fun buildProgressText(progress: my.noveldokusha.text_to_speech.AudiobookExportProgress): String {
+        val eta = progress.estimatedRemainingMs?.let(::formatDuration)
+            ?: "calculating…"
+        val generated = formatDuration(progress.generatedAudioMs)
+        return context.getString(
+            StringsR.string.audiobook_export_progress,
+            progress.percent,
+            progress.currentChapter,
+            progress.totalChapters,
+            progress.chapterTitle,
+            generated,
+            eta,
+        )
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
+        return when {
+            hours > 0L -> "%dh %02dm".format(hours, minutes)
+            minutes > 0L -> "%dm %02ds".format(minutes, seconds)
+            else -> "%ds".format(seconds)
+        }
     }
 
     private fun addCancel(builder: NotificationCompat.Builder) {
