@@ -132,13 +132,14 @@ internal fun ChaptersScreen(
     exportMessage: String?,
     onAudiobookExport: (bookUrl: String, bookTitle: String) -> Unit,
     onAudiobookConfirmed: (
-        Int, Int, String, String, String, String, String, Float, Float,
+        Int, Int, String, String, String, Boolean, String, String, Float, Float,
         my.noveldokusha.text_to_speech.OutputFormat, Uri?
     ) -> Unit,
     onAudiobookDirectorySaved: (String) -> Unit,
     onAudiobookDialogDismiss: () -> Unit,
     audiobookDialogState: AudiobookDialogState,
     audiobookMessage: String?,
+    onAudiobookFavoriteVoiceKeysChanged: (Set<String>) -> Unit,
     onExportMessageShown: () -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
@@ -567,6 +568,7 @@ internal fun ChaptersScreen(
             AudiobookExportDialog(
                 state = ads,
                 onConfirm = onAudiobookConfirmed,
+                onFavoriteKeysChanged = onAudiobookFavoriteVoiceKeysChanged,
                 onDismiss = onAudiobookDialogDismiss,
                 onChangeDirectory = { audiobookDirectoryPicker.launch(null) },
             )
