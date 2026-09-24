@@ -30,6 +30,7 @@ internal fun ChaptersDropDown(
     onDownloadNext100Chapters: () -> Unit,
     onDownloadAllChapters: () -> Unit,
     onExport: (bookUrl: String, bookTitle: String) -> Unit,
+    onAudiobookExport: (bookUrl: String, bookTitle: String) -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
     onFixBook: () -> Unit = {},
