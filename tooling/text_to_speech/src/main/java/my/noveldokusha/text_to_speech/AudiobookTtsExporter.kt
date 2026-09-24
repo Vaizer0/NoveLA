@@ -628,10 +628,13 @@ class AudiobookTtsExporter(private val context: Context) {
                     val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
                     wordTimings.forEach { w ->
                         val safeEndMs = min(w.endMs, segmentEndMs)
+                        // Reader's persisted timing store is relative to the text item.
+                        // The merged audiobook timeline is kept separately in segments/words.
+                        val relativeStartMs = (w.startMs - segmentStartMs).coerceAtLeast(0L)
                         timingEntries += JSONObject().apply {
                             put("start", w.startChar)
                             put("end", w.endChar)
-                            put("start_ms", w.startMs)
+                            put("start_ms", relativeStartMs)
                             put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
                             put("speed", request.speed.toDouble())
                         }
@@ -664,11 +667,15 @@ class AudiobookTtsExporter(private val context: Context) {
                                         // camelCase fields retained for audiobook consumers.
                                         put("start", w.startChar)
                                         put("end", w.endChar)
-                                        put("start_ms", w.startMs)
+                                        // snake_case fields mirror the Reader timing store
+                                        // and are relative to this text segment.
+                                        put("start_ms", (w.startMs - segmentStartMs).coerceAtLeast(0L))
                                         put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
                                         put("speed", request.speed.toDouble())
                                         put("startChar", w.startChar)
                                         put("endChar", w.endChar)
+                                        // camelCase timestamps are absolute positions in the
+                                        // merged audiobook timeline.
                                         put("startMs", w.startMs)
                                         put("endMs", safeEndMs)
                                     })
