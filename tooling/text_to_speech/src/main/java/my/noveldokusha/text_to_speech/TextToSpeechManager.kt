@@ -833,7 +833,7 @@ class TextToSpeechManager<T : Utterance<T>>(
                 val totalMarkerMs = _itemMarkerMs.remove(itemUtteranceId)
                 if (totalMarkerMs != null && wallStart != null && totalMarkerMs > 0) {
                     addCalibrationSample(itemUtteranceId, totalMarkerMs, wall - wallStart)
-                    if (finalRange != null && finalStartMs >= 0L) {
+                    if (finalRange != null && finalStartMs != null && finalStartMs >= 0L) {
                         val correctedTotalMs = _itemTimingSliceBaseMs[itemUtteranceId] ?: 0L
                         val finalDurationMs = correctedTotalMs - finalStartMs
                         if (finalDurationMs in 40L..15_000L) {
