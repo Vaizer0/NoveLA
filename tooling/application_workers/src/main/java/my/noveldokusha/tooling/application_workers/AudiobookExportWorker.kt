@@ -353,13 +353,10 @@ class AudiobookExportWorker(
                             overallPercent == 100 ||
                             now - lastProgressNotificationMs >= 250L
                         ) {
+                            // muxVisual() reports progress through a non-suspending callback.
+                            // Only update the notification here; WorkManager progress is
+                            // already updated during the suspendable TTS stage.
                             notification!!.showProgress(overallPercent)
-                            setProgress(
-                                workDataOf(
-                                    "percent" to overallPercent,
-                                    "stage" to "video",
-                                )
-                            )
                             lastProgressNotificationMs = now
                         }
                     }
