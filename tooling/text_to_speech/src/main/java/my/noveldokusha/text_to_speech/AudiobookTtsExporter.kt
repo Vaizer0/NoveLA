@@ -540,32 +540,50 @@ class AudiobookTtsExporter(private val context: Context) {
                             "TTS exporter internal error: another slice is active"
                         }
 
+                        // Keep /dev/null as the fast path. If an engine rejects the
+                        // ParcelFileDescriptor overload with ERROR (-1), retry using the
+                        // File overload inside app-private cache. This preserves the fast
+                        // callback-driven PCM export path while handling device/engine quirks.
                         val synthesisPfd = ParcelFileDescriptor.open(
                             File("/dev/null"),
                             ParcelFileDescriptor.MODE_WRITE_ONLY,
                         )
+                        val fallbackSynthesisFile = File(
+                            context.cacheDir,
+                            "audiobook-synthesis-" + System.nanoTime() + ".wav",
+                        )
                         var writerJob: kotlinx.coroutines.Job? = null
                         try {
                             Timber.d(
-                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s",
-                                state.id,
-                                slice.length,
-                                request.outputFormat,
+                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s engine=%s voice=%s",
+                                state.id, slice.length, request.outputFormat,
+                                effectiveEnginePackage, effectiveVoiceId,
                             )
 
-                            val synthesisResult = tts.synthesizeToFile(
-                                slice,
-                                Bundle().apply {
-                                    putString(
-                                        TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                        state.id,
-                                    )
-                                },
-                                synthesisPfd,
-                                state.id,
+                            var synthesisResult = tts.synthesizeToFile(
+                                slice, Bundle(), synthesisPfd, state.id,
                             )
+                            if (synthesisResult != TextToSpeech.SUCCESS) {
+                                Timber.w(
+                                    "AudiobookTTS: PFD synthesis returned %d; retrying File overload",
+                                    synthesisResult,
+                                )
+                                tts.stop()
+                                fallbackSynthesisFile.delete()
+                                synthesisResult = tts.synthesizeToFile(
+                                    slice, Bundle(), fallbackSynthesisFile, state.id,
+                                )
+                            }
+                            if (synthesisResult != TextToSpeech.SUCCESS) {
+                                Timber.e(
+                                    "AudiobookTTS: File synthesis returned %d; file=%s length=%d engine=%s voice=%s chars=%d",
+                                    synthesisResult, fallbackSynthesisFile.exists(),
+                                    fallbackSynthesisFile.length(), effectiveEnginePackage,
+                                    effectiveVoiceId, slice.length,
+                                )
+                            }
                             check(synthesisResult == TextToSpeech.SUCCESS) {
-                                "TTS synthesis failed: $synthesisResult"
+                                "TTS synthesis failed: $synthesisResult (engine=$effectiveEnginePackage voice=$effectiveVoiceId chars=${slice.length})"
                             }
 
                             check(state.formatReady.await(10, TimeUnit.SECONDS)) {
@@ -645,6 +663,8 @@ class AudiobookTtsExporter(private val context: Context) {
                                 "TTS produced no audio data for the current slice"
                             }
                         } finally {
+                            runCatching { fallbackSynthesisFile.delete() }
+                            runCatching { synthesisPfd.close() }
                             runCatching { state.pcmQueue.close() }
                             if (writerJob != null) {
                                 try {
@@ -652,7 +672,7 @@ class AudiobookTtsExporter(private val context: Context) {
                                 } catch (_: Throwable) {
                                 }
                             }
-                            synthesisPfd.close()
+                            fallbackSynthesisFile.delete()
                             activeSlice.compareAndSet(state, null)
                         }
 
@@ -798,7 +818,8 @@ class AudiobookTtsExporter(private val context: Context) {
                     request,
                     chapterTimings,
                     segmentFile,
-                    totalDuration,
+                    validateExportJson(jsonFile, chapterTimings, totalDuration)
+                totalDuration,
                     sampleRate,
                     channels,
                     exportedTimingStore,
@@ -1342,6 +1363,54 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
+
+    private fun validateExportJson(
+        file: File,
+        chapters: List<ChapterTiming>,
+        durationMs: Long,
+    ) {
+        check(file.exists() && file.length() > 0L) { "Audiobook JSON is missing or empty" }
+        val root = JSONObject(file.readText(Charsets.UTF_8))
+        check(root.optInt("schemaVersion", 0) == 1) { "Unsupported audiobook JSON schema" }
+        val audio = root.optJSONObject("audio") ?: error("JSON audio metadata missing")
+        check(audio.optLong("durationMs", -1L) == durationMs) { "JSON duration does not match exported audio" }
+        check(audio.optInt("sampleRate", 0) > 0) { "JSON sample rate is invalid" }
+        check(audio.optInt("channels", 0) > 0) { "JSON channel count is invalid" }
+        val chapterArray = root.optJSONArray("chapters") ?: error("JSON chapters missing")
+        check(chapterArray.length() == chapters.size) { "JSON chapter count mismatch" }
+        var previousChapterEnd = 0L
+        chapters.forEachIndexed { index, chapter ->
+            val item = chapterArray.getJSONObject(index)
+            check(item.optInt("position", -1) == chapter.chapter.position) { "JSON chapter position mismatch" }
+            val startMs = item.optLong("startMs", -1L)
+            val endMs = item.optLong("endMs", -1L)
+            check(startMs >= previousChapterEnd && endMs >= startMs && endMs <= durationMs) { "Invalid chapter timeline" }
+            previousChapterEnd = endMs
+        }
+        val segments = root.optJSONArray("segments") ?: error("JSON segments missing")
+        val wordTiming = root.optJSONObject("wordTiming") ?: error("JSON wordTiming missing")
+        val timingSegments = wordTiming.optJSONArray("segments") ?: error("JSON wordTiming segments missing")
+        check(timingSegments.length() == segments.length()) { "JSON wordTiming segment count mismatch" }
+        for (i in 0 until segments.length()) {
+            val segment = segments.getJSONObject(i)
+            val textValue = segment.optString("text", "")
+            val startMs = segment.optLong("startMs", -1L)
+            val endMs = segment.optLong("endMs", -1L)
+            check(startMs >= 0L && endMs >= startMs && endMs <= durationMs) { "Invalid segment timeline at index " + i }
+            val words = segment.optJSONArray("words") ?: JSONArray()
+            var previousWordStart = startMs
+            for (j in 0 until words.length()) {
+                val word = words.getJSONObject(j)
+                val startChar = word.optInt("startChar", -1)
+                val endChar = word.optInt("endChar", -1)
+                val wordStart = word.optLong("startMs", -1L)
+                val wordEnd = word.optLong("endMs", -1L)
+                check(startChar >= 0 && endChar > startChar && endChar <= textValue.length) { "Invalid word character range" }
+                check(wordStart >= startMs && wordEnd >= wordStart && wordEnd <= endMs && wordStart >= previousWordStart) { "Invalid word timeline" }
+                previousWordStart = wordStart
+            }
+        }
+    }
     private fun durationMs(frames: Long, sampleRate: Int): Long =
         if (sampleRate > 0) frames * 1000L / sampleRate else 0L
 
