@@ -444,6 +444,7 @@ class AudiobookTtsExporter(private val context: Context) {
             override fun onError(id: String?, code: Int) {
                 stateFor(id)?.let {
                     it.error.compareAndSet(null, IllegalStateException("TTS error $code"))
+                    it.formatReady.countDown()
                     it.done.countDown()
                 }
             }
@@ -452,6 +453,7 @@ class AudiobookTtsExporter(private val context: Context) {
             override fun onError(id: String?) {
                 stateFor(id)?.let {
                     it.error.compareAndSet(null, IllegalStateException("TTS error"))
+                    it.formatReady.countDown()
                     it.done.countDown()
                 }
             }
@@ -514,16 +516,16 @@ class AudiobookTtsExporter(private val context: Context) {
                     if (segment.chapterPosition != activeChapter) {
                         if (activeChapter >= 0) {
                             val previous = chapters.first { it.position == activeChapter }
-                            val endMs = durationMs(currentFrames, sampleRate)
+                            val endMs = durationMs(totalFramesWritten.get(), sampleRate)
                             chapterTimings += ChapterTiming(previous, chapterStartMs, endMs)
                             completedChapters++
                             publishProgress(previous, force = true)
                         }
                         activeChapter = segment.chapterPosition
-                        chapterStartMs = durationMs(currentFrames, sampleRate)
+                        chapterStartMs = durationMs(totalFramesWritten.get(), sampleRate)
                     }
 
-                    val segmentStartMs = durationMs(currentFrames, sampleRate)
+                    val segmentStartMs = durationMs(totalFramesWritten.get(), sampleRate)
                     val slices = delimiterAwareTextSplitter(
                         fullText = segment.text,
                         maxSliceLength = TextToSpeech.getMaxSpeechInputLength(),
@@ -645,7 +647,10 @@ class AudiobookTtsExporter(private val context: Context) {
                         } finally {
                             runCatching { state.pcmQueue.close() }
                             if (writerJob != null) {
-                                runCatching { writerJob!!.join() }
+                                try {
+                                    writerJob!!.join()
+                                } catch (_: Throwable) {
+                                }
                             }
                             synthesisPfd.close()
                             activeSlice.compareAndSet(state, null)
@@ -659,7 +664,7 @@ class AudiobookTtsExporter(private val context: Context) {
                         }
                     }
 
-                    val segmentEndMs = durationMs(currentFrames, sampleRate)
+                    val segmentEndMs = durationMs(totalFramesWritten.get(), sampleRate)
                     val timingKey = readerWordTimingCacheKey(
                         enginePackage = effectiveEnginePackage,
                         voiceId = effectiveVoiceId,
@@ -779,7 +784,7 @@ class AudiobookTtsExporter(private val context: Context) {
 
                 if (activeChapter >= 0) {
                     val last = chapters.first { it.position == activeChapter }
-                    val endMs = durationMs(currentFrames, sampleRate)
+                    val endMs = durationMs(totalFramesWritten.get(), sampleRate)
                     chapterTimings += ChapterTiming(last, chapterStartMs, endMs)
                     completedChapters++
                     completedWorkUnits = totalWorkUnits
@@ -787,7 +792,7 @@ class AudiobookTtsExporter(private val context: Context) {
                 }
 
                 sink?.finish()
-                val totalDuration = durationMs(currentFrames, sampleRate)
+                val totalDuration = durationMs(totalFramesWritten.get(), sampleRate)
                 writeJson(
                     jsonFile,
                     request,
