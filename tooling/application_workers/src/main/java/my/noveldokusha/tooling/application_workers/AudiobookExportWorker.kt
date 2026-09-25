@@ -38,6 +38,7 @@ import my.noveldokusha.text_to_speech.buildTranslatedAudiobookChapter
 import org.json.JSONArray
 import timber.log.Timber
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 
 class AudiobookExportWorker(
@@ -76,6 +77,17 @@ class AudiobookExportWorker(
         const val PROGRESS_STAGE = "stage"
         const val OUTPUT_ERROR = "error"
         const val OUTPUT_REQUEST_ID = "requestId"
+
+        fun tagForBook(bookUrl: String): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(bookUrl.toByteArray(Charsets.UTF_8))
+            return "AudiobookExportBook-" +
+                digest.joinToString("") { "%02x".format(it) }.take(48)
+        }
+
+        private fun uniqueWorkName(bookUrl: String): String =
+            "AudiobookExport-" +
+                tagForBook(bookUrl).removePrefix("AudiobookExportBook-")
 
         private const val BOOK_URL = INPUT_BOOK_URL
         private const val BOOK_TITLE = INPUT_BOOK_TITLE
@@ -117,12 +129,22 @@ class AudiobookExportWorker(
             val requestWork = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
                 .setInputData(data)
                 .addTag(TAG)
+                .addTag(tagForBook(bookUrl))
                 .build()
-            WorkManager.getInstance(context).enqueue(requestWork)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                uniqueWorkName(bookUrl),
+                androidx.work.ExistingWorkPolicy.KEEP,
+                requestWork,
+            )
         }
 
-        fun cancelTask(context: Context) {
-            WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
+        fun cancelTask(context: Context, bookUrl: String? = null) {
+            val manager = WorkManager.getInstance(context)
+            if (bookUrl.isNullOrBlank()) {
+                manager.cancelAllWorkByTag(TAG)
+            } else {
+                manager.cancelAllWorkByTag(tagForBook(bookUrl))
+            }
         }
     }
 
