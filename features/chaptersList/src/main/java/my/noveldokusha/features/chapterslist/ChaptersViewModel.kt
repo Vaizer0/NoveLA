@@ -64,6 +64,7 @@ import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
 import my.noveldokusha.tooling.application_workers.AudiobookExportWorker
 import my.noveldokusha.text_to_speech.OutputFormat
+import org.json.JSONArray
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -223,62 +224,126 @@ internal class ChaptersViewModel @Inject constructor(
         outputFormat: OutputFormat,
         visualUri: Uri?,
     ) {
-        val choice = audiobookDialogState.value as? AudiobookDialogState.ContentChoice ?: return
-        val chapterCount = endPosition - startPosition + 1
-        if (startPosition > endPosition || choice.chapters.none { it.position == startPosition } || choice.chapters.none { it.position == endPosition }) {
-            audiobookMessage.value = "Invalid chapter range"
-            return
-        }
-        if (mode == "translation") {
-            if (sourceLang.isBlank() || targetLang.isBlank()) {
-                audiobookMessage.value = "Select a translation language pair"
-                return
+        val choice = audiobookDialogState.value as? AudiobookDialogState.ContentChoice
+            ?: return
+
+        viewModelScope.launch {
+            val chapterCount = endPosition - startPosition + 1
+            if (startPosition > endPosition || chapterCount <= 0) {
+                audiobookMessage.value = "Invalid chapter range"
+                return@launch
             }
-            val available = choice.availableTranslations.firstOrNull {
-                it.sourceLang == sourceLang && it.targetLang == targetLang
-            }?.translatedChapters ?: 0
-            if (available < chapterCount) {
-                audiobookMessage.value = context.getString(StringsR.string.export_no_translated_chapters)
-                return
+
+            val selectedChapters = chapterDao.chapters(choice.bookUrl)
+                .filter { it.position in startPosition..endPosition }
+                .sortedBy { it.position }
+
+            if (selectedChapters.size != chapterCount) {
+                audiobookMessage.value = "Selected chapter range is not contiguous or some chapters are missing"
+                return@launch
             }
-        }
-        val resolvedVoiceId = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value else voiceId
-        val resolvedEnginePackage = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value else enginePackage
-        val resolvedSpeed = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value else speed
-        val resolvedPitch = if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value else pitch
 
-        appPreferences.AUDIOBOOK_USE_READER_TTS.value = useReaderTts
-        appPreferences.AUDIOBOOK_OUTPUT_FORMAT.value = outputFormat.name
-        appPreferences.AUDIOBOOK_VISUAL_URI.value = visualUri?.toString().orEmpty()
-        appPreferences.AUDIOBOOK_TTS_VOICE_ID.value = resolvedVoiceId
-        appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value = resolvedEnginePackage
-        appPreferences.AUDIOBOOK_TTS_VOICE_SPEED.value = resolvedSpeed
-        appPreferences.AUDIOBOOK_TTS_VOICE_PITCH.value = resolvedPitch
+            if (mode != "original" && mode != "translation") {
+                audiobookMessage.value = "Unsupported audiobook content mode"
+                return@launch
+            }
 
-        val request = my.noveldokusha.text_to_speech.AudiobookExportRequest(
-            bookTitle = choice.bookTitle,
-            contentMode = mode,
-            sourceLang = sourceLang,
-            targetLang = targetLang,
-            startPosition = startPosition,
-            endPosition = endPosition,
-            enginePackage = resolvedEnginePackage,
-            voiceId = resolvedVoiceId,
-            speed = resolvedSpeed,
-            pitch = resolvedPitch,
-            outputFormat = outputFormat,
-            visualUri = visualUri,
-        )
+            if (mode == "translation") {
+                if (sourceLang.isBlank() || targetLang.isBlank()) {
+                    audiobookMessage.value = "Select a translation language pair"
+                    return@launch
+                }
 
-        if (choice.directoryUri.isBlank()) {
-            pendingAudiobook = PendingAudiobook(
-                request = request,
-                bookUrl = choice.bookUrl,
+                val translations = chapterTranslationDao
+                    .getTranslationsByChapterUrls(
+                        selectedChapters.map { it.url },
+                        sourceLang,
+                        targetLang,
+                    )
+                    .associateBy { it.chapterUrl }
+
+                val missing = selectedChapters.filter { it.url !in translations }
+                if (missing.isNotEmpty()) {
+                    audiobookMessage.value =
+                        "Selected translation is missing for chapters: " +
+                            missing.joinToString { it.position.toString() }
+                    return@launch
+                }
+
+                val empty = selectedChapters.filter { chapter ->
+                    val tr = translations[chapter.url] ?: return@filter true
+                    val paragraphsJson = runCatching {
+                        JSONArray(tr.translatedParagraphs)
+                    }.getOrNull() ?: return@filter true
+                    (0 until paragraphsJson.length()).none {
+                        paragraphsJson.optString(it, "").isNotBlank()
+                    }
+                }
+                if (empty.isNotEmpty()) {
+                    audiobookMessage.value =
+                        "Selected translation has no text for chapters: " +
+                            empty.joinToString { it.position.toString() }
+                    return@launch
+                }
+            } else {
+                val bodies = chapterBodyDao
+                    .getBodiesByUrls(selectedChapters.map { it.url })
+                    .associateBy { it.url }
+
+                val missing = selectedChapters.filter {
+                    bodies[it.url]?.body.isNullOrBlank()
+                }
+                if (missing.isNotEmpty()) {
+                    audiobookMessage.value =
+                        "Chapter text is missing for chapters: " +
+                            missing.joinToString { it.position.toString() }
+                    return@launch
+                }
+            }
+
+            val resolvedVoiceId =
+                if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value else voiceId
+            val resolvedEnginePackage =
+                if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value else enginePackage
+            val resolvedSpeed =
+                if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value else speed
+            val resolvedPitch =
+                if (useReaderTts) appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value else pitch
+
+            appPreferences.AUDIOBOOK_USE_READER_TTS.value = useReaderTts
+            appPreferences.AUDIOBOOK_OUTPUT_FORMAT.value = outputFormat.name
+            appPreferences.AUDIOBOOK_VISUAL_URI.value = visualUri?.toString().orEmpty()
+            appPreferences.AUDIOBOOK_TTS_VOICE_ID.value = resolvedVoiceId
+            appPreferences.AUDIOBOOK_TTS_VOICE_ENGINE.value = resolvedEnginePackage
+            appPreferences.AUDIOBOOK_TTS_VOICE_SPEED.value = resolvedSpeed
+            appPreferences.AUDIOBOOK_TTS_VOICE_PITCH.value = resolvedPitch
+
+            val request = my.noveldokusha.text_to_speech.AudiobookExportRequest(
+                bookTitle = choice.bookTitle,
+                contentMode = mode,
+                sourceLang = sourceLang,
+                targetLang = targetLang,
+                startPosition = startPosition,
+                endPosition = endPosition,
+                enginePackage = resolvedEnginePackage,
+                voiceId = resolvedVoiceId,
+                speed = resolvedSpeed,
+                pitch = resolvedPitch,
+                outputFormat = outputFormat,
+                visualUri = visualUri,
             )
-            audiobookDialogState.value = AudiobookDialogState.NeedDirectory
-            return
+
+            if (choice.directoryUri.isBlank()) {
+                pendingAudiobook = PendingAudiobook(
+                    request = request,
+                    bookUrl = choice.bookUrl,
+                )
+                audiobookDialogState.value = AudiobookDialogState.NeedDirectory
+                return@launch
+            }
+
+            enqueueAudiobook(choice.bookUrl, request, choice.directoryUri)
         }
-        enqueueAudiobook(choice.bookUrl, request, choice.directoryUri)
     }
 
     private fun enqueueAudiobook(bookUrl: String, request: my.noveldokusha.text_to_speech.AudiobookExportRequest, directoryUri: String) {

@@ -21,8 +21,16 @@ jobs:
           java-version: 21
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Run text-to-speech unit tests
+        run: ./gradlew :tooling:text_to_speech:test --no-daemon --console=plain
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --console=plain
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon --console=plain
+      - name: Verify APK artifacts
+        run: |
+          test -n "$(find app/build/outputs/apk/debug -name '*.apk' -type f -print -quit)"
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:

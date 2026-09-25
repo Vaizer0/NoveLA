@@ -27,6 +27,9 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -42,6 +45,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
@@ -160,6 +165,20 @@ private data class ChapterTiming(
     val startMs: Long,
     val endMs: Long,
 )
+
+private class ExportSliceState(
+    val id: String,
+) {
+    val pcmQueue = Channel<ByteArray>(Channel.UNLIMITED)
+    val formatReady = CountDownLatch(1)
+    val done = CountDownLatch(1)
+    val error = AtomicReference<Throwable?>(null)
+    val audioBytesReceived = AtomicLong(0L)
+
+    @Volatile var sampleRate: Int = 0
+    @Volatile var audioFormat: Int = 0
+    @Volatile var channels: Int = 0
+}
 
 private interface AudioSink : AutoCloseable {
     val sampleRate: Int
@@ -342,7 +361,8 @@ class AudiobookTtsExporter(private val context: Context) {
         jsonFile: File,
         onProgress: suspend (AudiobookExportProgress) -> Unit = {},
     ): Long = withContext(Dispatchers.IO) {
-        require(chapters.isNotEmpty())
+        coroutineScope {
+            require(chapters.isNotEmpty())
         val segments = chapters.flatMap { chapter ->
             buildList {
                 add(SpeechSegment(chapter.position, chapter.url, "title", chapter.speechTitle))
@@ -353,92 +373,91 @@ class AudiobookTtsExporter(private val context: Context) {
         }
         require(segments.isNotEmpty()) { "No spoken text" }
 
-        // TTS instances and audio sinks are initialized below.
-        var currentSliceId = ""
-        var currentFrames = 0L
-        var sampleRate = 0
-        var channels = 0
-        var sink: AudioSink? = null
-        var error: Throwable? = null
-        var latch = CountDownLatch(0)
-        val lastFormat = mutableMapOf<String, Int>()
+        // TTS callbacks only enqueue/copy PCM. Encoding happens off the callback thread.
+        val activeSlice = AtomicReference<ExportSliceState?>(null)
         val chapterTimings = mutableListOf<ChapterTiming>()
         val exportedTimingStore = linkedMapOf<String, MutableList<JSONObject>>()
         val exportedTimingSegments = mutableListOf<JSONObject>()
-        val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
+        val segmentFile = File(
+            jsonFile.parentFile ?: context.cacheDir,
+            "segments-" + System.nanoTime() + ".jsonl",
+        )
+        val totalAudioBytesReceived = AtomicLong(0L)
+        val totalFramesWritten = AtomicLong(0L)
 
-        // synthesizeToFile() only becomes useful to the exporter when its audio callbacks
-        // are actually consumed. Keep the file target /dev/null so the TTS engine does not
-        // duplicate the PCM onto disk; onAudioAvailable provides the same PCM to our sink.
-        var audioBytesReceived = 0L
-        var sliceAudioBytesReceived = 0L
+        var sampleRate = 0
+        var channels = 0
+        var sink: AudioSink? = null
 
         val tts = createTts(request)
         val listener = object : UtteranceProgressListener() {
+            private fun stateFor(id: String?): ExportSliceState? {
+                val state = activeSlice.get() ?: return null
+                return if (id != null && id == state.id) state else null
+            }
+
             override fun onBeginSynthesis(
                 id: String?,
                 rate: Int,
                 format: Int,
                 count: Int,
             ) {
-                if (id != currentSliceId) return
+                val state = stateFor(id) ?: return
                 if (rate <= 0 || count <= 0) {
-                    error = IllegalStateException("Invalid TTS audio format: rate=$rate channels=$count")
-                    return
+                    state.error.compareAndSet(
+                        null,
+                        IllegalStateException("Invalid TTS audio format: rate=$rate channels=$count"),
+                    )
+                } else {
+                    state.sampleRate = rate
+                    state.audioFormat = format
+                    state.channels = count
                 }
-                lastFormat[id] = format
-                if (sink == null) {
-                    sampleRate = rate
-                    channels = count
-                    sink = when (request.outputFormat) {
-                        OutputFormat.WAV -> WavSink(mediaFile, rate, count)
-                        OutputFormat.MP4 -> AacMp4Sink(mediaFile, rate, count)
-                    }
-                } else if (sampleRate != rate || channels != count) {
-                    error = IllegalStateException("TTS audio format changed during export")
-                }
+                state.formatReady.countDown()
             }
 
             override fun onAudioAvailable(id: String?, audio: ByteArray?) {
-                if (id != currentSliceId || error != null) return
+                val state = stateFor(id) ?: return
+                if (state.error.get() != null) return
                 val bytes = audio ?: return
                 if (bytes.isEmpty()) return
-                val format = lastFormat[id] ?: return
-                runCatching {
-                    val pcm = normalizePcm16(bytes, format)
-                    sink?.writePcm16(pcm)
-                    currentFrames = sink?.totalFrames ?: currentFrames
-                    audioBytesReceived += pcm.size.toLong()
-                    sliceAudioBytesReceived += pcm.size.toLong()
-                }.onFailure {
-                    error = it
+
+                // Never block the TTS callback on disk or MediaCodec.
+                val copy = bytes.copyOf()
+                if (state.pcmQueue.trySend(copy).isSuccess) {
+                    state.audioBytesReceived.addAndGet(copy.size.toLong())
+                    totalAudioBytesReceived.addAndGet(copy.size.toLong())
+                } else {
+                    state.error.compareAndSet(
+                        null,
+                        IllegalStateException("Unable to queue TTS PCM for slice " + state.id),
+                    )
                 }
             }
 
             override fun onStart(id: String?) = Unit
 
             override fun onDone(id: String?) {
-                if (id == currentSliceId) latch.countDown()
+                stateFor(id)?.done?.countDown()
             }
 
             override fun onError(id: String?, code: Int) {
-                if (id == currentSliceId) {
-                    error = IllegalStateException("TTS error $code")
-                    latch.countDown()
+                stateFor(id)?.let {
+                    it.error.compareAndSet(null, IllegalStateException("TTS error $code"))
+                    it.done.countDown()
                 }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) {
-                if (id == currentSliceId) {
-                    error = IllegalStateException("TTS error")
-                    latch.countDown()
+                stateFor(id)?.let {
+                    it.error.compareAndSet(null, IllegalStateException("TTS error"))
+                    it.done.countDown()
                 }
             }
 
-            // IMPORTANT: do not use synthesizeToFile() onRangeStart(frame) for exported
-            // word timing. On Google TTS/Android 16 those frames are not the Reader timing
-            // positions; word timings come from the persisted Reader cache instead.
+            // synthesizeToFile() range callbacks are intentionally not used as authoritative
+            // exported word timings. Reader-persisted timing data is used when available.
             override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) = Unit
         }
         tts.setOnUtteranceProgressListener(listener)
@@ -471,7 +490,7 @@ class AudiobookTtsExporter(private val context: Context) {
                     percent = percent,
                     elapsedMs = elapsed,
                     estimatedRemainingMs = eta,
-                    generatedAudioMs = durationMs(currentFrames, sampleRate),
+                    generatedAudioMs = durationMs(totalFramesWritten.get(), sampleRate),
                 )
             )
         }
@@ -512,45 +531,88 @@ class AudiobookTtsExporter(private val context: Context) {
                     ).filter(String::isNotBlank)
 
                     for ((sliceIndex, slice) in slices.withIndex()) {
-                        currentSliceId = "audiobook-" + System.nanoTime() + "-" + sliceIndex
-                        error = null
-                        sliceAudioBytesReceived = 0L
-                        latch = CountDownLatch(1)
+                        val state = ExportSliceState(
+                            "audiobook-" + System.nanoTime() + "-" + sliceIndex,
+                        )
+                        check(activeSlice.compareAndSet(null, state)) {
+                            "TTS exporter internal error: another slice is active"
+                        }
 
                         val synthesisPfd = ParcelFileDescriptor.open(
                             File("/dev/null"),
                             ParcelFileDescriptor.MODE_WRITE_ONLY,
                         )
+                        var writerJob: kotlinx.coroutines.Job? = null
                         try {
-                            Timber.d("AudiobookTTS: synthesize slice id=%s chars=%d format=%s", currentSliceId, slice.length, request.outputFormat)
+                            Timber.d(
+                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s",
+                                state.id,
+                                slice.length,
+                                request.outputFormat,
+                            )
+
                             val synthesisResult = tts.synthesizeToFile(
                                 slice,
                                 Bundle().apply {
                                     putString(
                                         TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                        currentSliceId,
+                                        state.id,
                                     )
                                 },
                                 synthesisPfd,
-                                currentSliceId,
+                                state.id,
                             )
-                            Timber.d("AudiobookTTS: synthesizeToFile returned %d id=%s", synthesisResult, currentSliceId)
                             check(synthesisResult == TextToSpeech.SUCCESS) {
-                                "TTS synthesis failed: " + synthesisResult
+                                "TTS synthesis failed: $synthesisResult"
                             }
+
+                            check(state.formatReady.await(10, TimeUnit.SECONDS)) {
+                                "TTS synthesis did not report its audio format"
+                            }
+                            state.error.get()?.let { throw it }
+                            check(state.sampleRate > 0 && state.channels > 0) {
+                                "TTS produced an invalid audio format"
+                            }
+
+                            if (sink == null) {
+                                sampleRate = state.sampleRate
+                                channels = state.channels
+                                sink = when (request.outputFormat) {
+                                    OutputFormat.WAV -> WavSink(mediaFile, sampleRate, channels)
+                                    OutputFormat.MP4 -> AacMp4Sink(mediaFile, sampleRate, channels)
+                                }
+                            } else {
+                                check(sampleRate == state.sampleRate && channels == state.channels) {
+                                    "TTS audio format changed during export"
+                                }
+                            }
+
+                            // Consume queued PCM on a coroutine. TTS callback threads never touch
+                            // the actual file writer or MediaCodec.
+                            writerJob = launch(Dispatchers.IO) {
+                                try {
+                                    for (pcm in state.pcmQueue) {
+                                        val pcm16 = normalizePcm16(pcm, state.audioFormat)
+                                        val audioSink = sink ?: error("Audio sink was not initialized")
+                                        audioSink.writePcm16(pcm16)
+                                        totalFramesWritten.set(audioSink.totalFrames)
+                                    }
+                                } catch (t: Throwable) {
+                                    state.error.compareAndSet(null, t)
+                                }
+                            }
+
                             val synthesisDeadline = SystemClock.elapsedRealtime() + 10 * 60_000L
-                            while (!latch.await(500L, TimeUnit.MILLISECONDS)) {
+                            while (!state.done.await(500L, TimeUnit.MILLISECONDS)) {
                                 if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
                                     throw IllegalStateException("TTS synthesis timeout")
                                 }
+
                                 val elapsed = SystemClock.elapsedRealtime() - exportStartedAt
                                 val completed = completedWorkUnits.toDouble()
                                 val total = totalWorkUnits.toDouble().coerceAtLeast(1.0)
                                 val basePercent = ((completed * 100.0) / total).toInt()
-                                // Report 1% as soon as real PCM has arrived, even before the
-                                // first slice completes. This prevents a legitimate long
-                                // synthesis operation from looking like a dead 0% worker.
-                                val livePercent = if (audioBytesReceived > 0L) {
+                                val livePercent = if (totalAudioBytesReceived.get() > 0L) {
                                     maxOf(basePercent, 1)
                                 } else {
                                     basePercent
@@ -559,26 +621,36 @@ class AudiobookTtsExporter(private val context: Context) {
                                     AudiobookExportProgress(
                                         currentChapter = completedChapters,
                                         totalChapters = chapters.size,
-                                        chapterTitle = chapters.first { it.position == segment.chapterPosition }.title,
+                                        chapterTitle = chapters.first {
+                                            it.position == segment.chapterPosition
+                                        }.title,
                                         percent = livePercent.coerceIn(0, 100),
                                         elapsedMs = elapsed.coerceAtLeast(0L),
                                         estimatedRemainingMs = null,
-                                        generatedAudioMs = durationMs(currentFrames, sampleRate),
+                                        generatedAudioMs = durationMs(
+                                            totalFramesWritten.get(),
+                                            sampleRate,
+                                        ),
                                     )
                                 )
                             }
+
+                            state.pcmQueue.close()
+                            writerJob.join()
+                            state.error.get()?.let { throw it }
+
+                            check(state.audioBytesReceived.get() > 0L) {
+                                "TTS produced no audio data for the current slice"
+                            }
                         } finally {
+                            runCatching { state.pcmQueue.close() }
+                            if (writerJob != null) {
+                                runCatching { writerJob!!.join() }
+                            }
                             synthesisPfd.close()
+                            activeSlice.compareAndSet(state, null)
                         }
 
-                        error?.let { throw it }
-                        check(sink != null && sampleRate > 0 && channels > 0) {
-                            "TTS produced no audio format"
-                        }
-                        check(sliceAudioBytesReceived > 0L) {
-                            "TTS produced no audio data for the current segment"
-                        }
-                        completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
                         val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
                         if (currentElapsed >= 350L) {
                             publishProgress(
@@ -733,6 +805,7 @@ class AudiobookTtsExporter(private val context: Context) {
                 runCatching { segmentFile.delete() }
                 runCatching { tts.stop(); tts.shutdown() }
             }
+            }
         }
     }
 
@@ -797,19 +870,16 @@ class AudiobookTtsExporter(private val context: Context) {
         }
 
         try {
-            check(
-                fastLoopMuxEncodedVideo(
-                    audioMp4 = audioMp4,
-                    visualUri = visualForMux,
-                    outputMp4 = outputMp4,
-                    durationMs = durationMs,
-                    onProgress = { percent ->
-                        onProgress(50 + percent / 2)
-                    },
-                )
-            ) {
-                "Unable to create MP4 using the fast remux path. Use an H.264 MP4 visual or a supported image."
-            }
+            fastLoopMuxEncodedVideo(
+                audioMp4 = audioMp4,
+                visualUri = visualForMux,
+                outputMp4 = outputMp4,
+                durationMs = durationMs,
+                onProgress = { percent ->
+                    onProgress(50 + percent / 2)
+                },
+            )
+            validateMp4Output(outputMp4, durationMs)
         } finally {
             normalizedVideo?.delete()
             if (actualVisual != visual && actualVisual.toString().startsWith("file:")) {
@@ -981,34 +1051,43 @@ class AudiobookTtsExporter(private val context: Context) {
         outputMp4: File,
         durationMs: Long,
         onProgress: (Int) -> Unit = {},
-    ): Boolean {
+    ) {
         val audioExtractor = MediaExtractor()
         val videoExtractor = MediaExtractor()
         var muxer: MediaMuxer? = null
-        return try {
+        var stage = "OPEN_INPUTS"
+        var success = false
+
+        try {
             audioExtractor.setDataSource(audioMp4.absolutePath)
+
+            stage = "OPEN_VISUAL"
             videoExtractor.setDataSource(context, visualUri, null)
 
+            stage = "FIND_TRACKS"
             val audioTrack = findTrack(audioExtractor, "audio/")
             val videoTrack = findTrack(videoExtractor, "video/")
-            if (audioTrack < 0 || videoTrack < 0) return false
+            check(audioTrack >= 0) { "AAC audio track not found" }
+            check(videoTrack >= 0) { "H264 visual track not found" }
 
             val audioFormat = audioExtractor.getTrackFormat(audioTrack)
             val videoFormat = videoExtractor.getTrackFormat(videoTrack)
             val videoMime = videoFormat.getString(MediaFormat.KEY_MIME).orEmpty()
-            if (videoMime != MediaFormat.MIMETYPE_VIDEO_AVC) return false
+            check(videoMime == MediaFormat.MIMETYPE_VIDEO_AVC) {
+                "Fast mux requires H264/AVC visual, got $videoMime"
+            }
+
+            val videoDurationUs = videoFormat.getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
+            check(videoDurationUs > 0L) {
+                "Visual video duration is unavailable"
+            }
 
             audioExtractor.selectTrack(audioTrack)
             videoExtractor.selectTrack(videoTrack)
 
-            val videoDurationUs = videoFormat.getLongOrDefault(
-                MediaFormat.KEY_DURATION,
-                0L,
-            )
-            if (videoDurationUs <= 0L) return false
-
+            stage = "CREATE_MUXER"
             outputMp4.parentFile?.mkdirs()
-            if (outputMp4.exists()) outputMp4.delete()
+            outputMp4.delete()
             muxer = MediaMuxer(
                 outputMp4.absolutePath,
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
@@ -1028,21 +1107,20 @@ class AudiobookTtsExporter(private val context: Context) {
                     onProgress(percent)
                 }
             }
-            onProgress(0)
+
             val buffer = ByteBuffer.allocateDirect(2 * 1024 * 1024)
 
+            stage = "COPY_AUDIO"
             while (true) {
                 val size = audioExtractor.sampleSize
                 val time = audioExtractor.sampleTime
                 if (size < 0 || time < 0 || time >= targetUs) break
-                if (size > buffer.capacity()) {
-                    // Audio samples are normally tiny; fail the fast path instead of
-                    // repeatedly allocating huge direct buffers.
-                    return false
+                check(size <= buffer.capacity()) {
+                    "Audio sample exceeds mux buffer: $size bytes"
                 }
                 buffer.clear()
                 val read = audioExtractor.readSampleData(buffer, 0)
-                if (read <= 0) break
+                check(read > 0) { "Unable to read AAC audio sample" }
                 val info = MediaCodec.BufferInfo().apply {
                     offset = 0
                     this.size = read
@@ -1053,23 +1131,30 @@ class AudiobookTtsExporter(private val context: Context) {
                 audioExtractor.advance()
             }
 
-            // Audio is already 90% of the overall job; this callback reports the video
-            // portion from 0..100 without re-encoding the long visual track.
-            onProgress(0)
+            stage = "LOOP_VIDEO"
             var videoOffsetUs = 0L
+            reportVisualProgress(0L)
             while (videoOffsetUs < targetUs) {
                 videoExtractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
                 var sawSample = false
+                var lastPtsUs = Long.MIN_VALUE
+
                 while (true) {
                     val time = videoExtractor.sampleTime
                     val size = videoExtractor.sampleSize
                     if (size < 0 || time < 0 || time >= videoDurationUs) break
+
                     val pts = videoOffsetUs + time
                     if (pts >= targetUs) break
-                    if (size > buffer.capacity()) return false
+                    check(pts >= lastPtsUs) { "Visual timestamps are not monotonic" }
+                    lastPtsUs = pts
+                    check(size <= buffer.capacity()) {
+                        "Video sample exceeds mux buffer: $size bytes"
+                    }
+
                     buffer.clear()
                     val read = videoExtractor.readSampleData(buffer, 0)
-                    if (read <= 0) break
+                    check(read > 0) { "Unable to read H264 video sample" }
                     val info = MediaCodec.BufferInfo().apply {
                         offset = 0
                         this.size = read
@@ -1081,21 +1166,56 @@ class AudiobookTtsExporter(private val context: Context) {
                     reportVisualProgress(pts)
                     videoExtractor.advance()
                 }
-                if (!sawSample) return false
+
+                check(sawSample) { "Visual loop iteration produced no samples" }
                 videoOffsetUs += videoDurationUs
             }
 
             reportVisualProgress(targetUs)
+            stage = "STOP_MUXER"
             muxer.stop()
-            true
+            success = true
         } catch (e: Throwable) {
-            Timber.w(e, "Fast audiobook visual mux failed")
-            false
+            throw IllegalStateException(
+                "Fast MP4 mux failed at $stage: ${e.message}",
+                e,
+            )
         } finally {
             runCatching { muxer?.release() }
             runCatching { audioExtractor.release() }
             runCatching { videoExtractor.release() }
-            if (outputMp4.exists() && outputMp4.length() == 0L) outputMp4.delete()
+            if (!success) outputMp4.delete()
+        }
+    }
+
+    private fun validateMp4Output(file: File, audioDurationMs: Long) {
+        check(file.exists() && file.length() > 0L) {
+            "Final MP4 does not exist or is empty"
+        }
+
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val audioTrack = findTrack(extractor, "audio/")
+            val videoTrack = findTrack(extractor, "video/")
+            check(audioTrack >= 0) { "Final MP4 has no audio track" }
+            check(videoTrack >= 0) { "Final MP4 has no video track" }
+
+            val audioDurationUs = extractor.getTrackFormat(audioTrack)
+                .getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
+            val videoDurationUs = extractor.getTrackFormat(videoTrack)
+                .getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
+            check(audioDurationUs > 0L && videoDurationUs > 0L) {
+                "Final MP4 has invalid track duration"
+            }
+
+            val outputDurationMs = maxOf(audioDurationUs, videoDurationUs) / 1000L
+            val toleranceMs = maxOf(2000L, audioDurationMs / 50L)
+            check(kotlin.math.abs(outputDurationMs - audioDurationMs) <= toleranceMs) {
+                "Final MP4 duration mismatch: output=${outputDurationMs}ms audio=${audioDurationMs}ms tolerance=${toleranceMs}ms"
+            }
+        } finally {
+            extractor.release()
         }
     }
 

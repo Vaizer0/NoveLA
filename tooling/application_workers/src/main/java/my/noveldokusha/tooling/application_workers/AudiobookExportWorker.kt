@@ -6,8 +6,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.content.pm.ServiceInfo
-import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
@@ -20,6 +18,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import my.noveldokusha.core.appPreferences.AppPreferences
@@ -41,6 +40,18 @@ class AudiobookExportWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
+
+    @Volatile
+    private var currentStage: String = "INITIALIZING"
+
+    override fun onStopped() {
+        Timber.w(
+            "Audiobook export worker stopped: id=%s stage=%s",
+            id,
+            currentStage,
+        )
+        super.onStopped()
+    }
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -88,207 +99,359 @@ class AudiobookExportWorker(
                 VISUAL to (request.visualUri?.toString() ?: ""),
                 DIRECTORY to directoryUri,
             )
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                TAG,
-                ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequestBuilder<AudiobookExportWorker>()
-                    .setInputData(data)
-                    .build()
-            )
+            val requestWork = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
+                .setInputData(data)
+                .addTag(TAG)
+                .build()
+            WorkManager.getInstance(context).enqueue(requestWork)
         }
 
         fun cancelTask(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(TAG)
+            WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
         }
     }
 
     override suspend fun doWork(): Result {
-        val entry = EntryPointAccessors.fromApplication(
-            applicationContext,
-            Entry::class.java,
-        )
-        val db = entry.appDatabase()
-        val prefs = entry.appPreferences()
-
-        val bookUrl = inputData.getString(BOOK_URL) ?: return Result.failure()
-        val bookTitle = inputData.getString(BOOK_TITLE) ?: return Result.failure()
-        val mode = inputData.getString(MODE) ?: "original"
-        val sourceLang = inputData.getString(SOURCE).orEmpty()
-        val targetLang = inputData.getString(TARGET).orEmpty()
-        val start = inputData.getInt(START, Int.MIN_VALUE)
-        val end = inputData.getInt(END, Int.MIN_VALUE)
-        val format = runCatching { OutputFormat.valueOf(inputData.getString(FORMAT) ?: "WAV") }.getOrDefault(OutputFormat.WAV)
-        val visual = inputData.getString(VISUAL).orEmpty().takeIf { it.isNotBlank() }?.let(Uri::parse)
-        val directory = inputData.getString(DIRECTORY).orEmpty()
-        if (start == Int.MIN_VALUE || end == Int.MIN_VALUE || directory.isBlank()) return Result.failure()
-        if (!isDirectoryAccessible(directory)) return Result.failure()
-
-        val chapters = db.chapterDao().chapters(bookUrl)
-            .filter { it.position in start..end }
-            .sortedBy { it.position }
-        if (chapters.size != end - start + 1) {
-            Timber.w("Audiobook: requested range is not contiguous")
-            return Result.failure()
-        }
-
-        val chapterData = if (mode == "translation") {
-            require(sourceLang.isNotBlank() && targetLang.isNotBlank())
-            val translations = db.chapterTranslationDao()
-                .getTranslationsByChapterUrls(chapters.map(Chapter::url), sourceLang, targetLang)
-                .associateBy { it.chapterUrl }
-            chapters.map { chapter ->
-                val tr = translations[chapter.url] ?: error("Missing translation: " + chapter.title)
-                val paragraphsJson = JSONArray(tr.translatedParagraphs)
-                val paragraphs = buildList {
-                    for (i in 0 until paragraphsJson.length()) {
-                        val text = paragraphsJson.optString(i, "")
-                        if (text.isNotBlank()) add(text)
-                    }
-                }
-                buildTranslatedAudiobookChapter(
-                    position = chapter.position,
-                    url = chapter.url,
-                    originalTitle = chapter.title,
-                    translatedTitle = tr.titleTranslation,
-                    translatedParagraphs = paragraphs,
-                    bookTitle = bookTitle,
-                )
-            }
-        } else {
-            val bodies = db.chapterBodyDao()
-                .getBodiesByUrls(chapters.map(Chapter::url))
-                .associateBy { it.url }
-            chapters.map { chapter ->
-                val body = bodies[chapter.url]?.body ?: error("Missing chapter body: " + chapter.title)
-                buildOriginalAudiobookChapter(
-                    position = chapter.position,
-                    url = chapter.url,
-                    title = chapter.title,
-                    body = body,
-                    bookTitle = bookTitle,
-                )
-            }
-        }
-
-        val engine = inputData.getString(ENGINE).orEmpty()
-        val voice = inputData.getString(VOICE).orEmpty()
-        val speed = inputData.getFloat(SPEED, prefs.READER_TEXT_TO_SPEECH_VOICE_SPEED.value)
-        val pitch = inputData.getFloat(PITCH, prefs.READER_TEXT_TO_SPEECH_VOICE_PITCH.value)
-
-        val request = AudiobookExportRequest(
-            bookTitle = bookTitle,
-            contentMode = mode,
-            sourceLang = sourceLang,
-            targetLang = targetLang,
-            startPosition = start,
-            endPosition = end,
-            enginePackage = engine,
-            voiceId = voice,
-            speed = speed,
-            pitch = pitch,
-            outputFormat = format,
-            visualUri = visual,
-        )
-
-        val id = UUID.randomUUID().toString()
-        val tempDir = File(applicationContext.cacheDir, "audiobook-" + id)
-        tempDir.mkdirs()
-        val audioTemp = File(tempDir, "audio." + if (format == OutputFormat.WAV) "wav" else "mp4")
-        val finalMp4 = File(tempDir, "final.mp4")
-        val jsonTemp = File(tempDir, "metadata.json")
-        val notification = AudiobookExportNotification(bookTitle, applicationContext)
-        var lastProgressNotificationMs = 0L
+        val requestId = id.toString()
+        var notification: AudiobookExportNotification? = null
 
         return try {
+            currentStage = "INITIALIZE"
+            val entry = EntryPointAccessors.fromApplication(
+                applicationContext,
+                Entry::class.java,
+            )
+            val db = entry.appDatabase()
+            val prefs = entry.appPreferences()
+
+            currentStage = "READ_INPUT"
+            val bookUrl = inputData.getString(BOOK_URL)
+                ?: error("Missing book URL")
+            val bookTitle = inputData.getString(BOOK_TITLE)
+                ?: error("Missing book title")
+            val mode = inputData.getString(MODE) ?: "original"
+            val sourceLang = inputData.getString(SOURCE).orEmpty()
+            val targetLang = inputData.getString(TARGET).orEmpty()
+            val start = inputData.getInt(START, Int.MIN_VALUE)
+            val end = inputData.getInt(END, Int.MIN_VALUE)
+            val format = runCatching {
+                OutputFormat.valueOf(inputData.getString(FORMAT) ?: "WAV")
+            }.getOrElse {
+                error("Unsupported audiobook output format")
+            }
+            val visual = inputData.getString(VISUAL)
+                .orEmpty()
+                .takeIf { it.isNotBlank() }
+                ?.let(Uri::parse)
+            val directory = inputData.getString(DIRECTORY).orEmpty()
+
+            notification = AudiobookExportNotification(bookTitle, applicationContext)
+
+            currentStage = "FOREGROUND"
             val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            } else 0
-            setForeground(ForegroundInfo(
-                notification.notificationId,
-                notification.foregroundNotification(chapters.size),
-                foregroundType,
-            ))
+            } else {
+                0
+            }
+            setForeground(
+                ForegroundInfo(
+                    notification!!.notificationId,
+                    notification!!.foregroundNotification(0),
+                    foregroundType,
+                )
+            )
 
-            val exporter = AudiobookTtsExporter(applicationContext)
-            val durationMs = exporter.export(
-                request = request,
-                chapters = chapterData,
-                mediaFile = audioTemp,
-                jsonFile = jsonTemp,
-            ) { progress ->
-                // Audio generation occupies 0..90% of the overall job. Keep the user-facing
-                // notification intentionally minimal; detailed progress remains in WorkManager.
-                val now = SystemClock.elapsedRealtime()
-                val overallPercent = (progress.percent * 90 / 100).coerceIn(0, 90)
-                if (overallPercent == 90 || now - lastProgressNotificationMs >= 500L) {
-                    notification.showProgress(overallPercent)
-                    setProgress(
-                        workDataOf(
-                            "percent" to overallPercent,
-                            "stage" to "audio",
-                        )
-                    )
-                    lastProgressNotificationMs = now
+            currentStage = "PREFLIGHT"
+            require(start != Int.MIN_VALUE && end != Int.MIN_VALUE) {
+                "Invalid chapter range"
+            }
+            require(start <= end) {
+                "Chapter range is reversed"
+            }
+            require(directory.isNotBlank()) {
+                "No audiobook export folder selected"
+            }
+            require(isDirectoryAccessible(directory)) {
+                "Audiobook export folder is not accessible or writable"
+            }
+            require(mode == "original" || mode == "translation") {
+                "Unsupported audiobook content mode: " + mode
+            }
+            if (format == OutputFormat.MP4) {
+                visual?.let {
+                    require(isVisualUriReadable(it)) {
+                        "Selected visual cannot be read"
+                    }
                 }
             }
 
-            val outputMedia = if (format == OutputFormat.MP4) {
-                notification.showFinalizing(90)
-                exporter.muxVisual(
-                    audioMp4 = audioTemp,
-                    outputMp4 = finalMp4,
-                    visualUri = visual,
-                    durationMs = durationMs,
-                ) { videoPercent ->
+            currentStage = "LOAD_CHAPTERS"
+            val chapters = db.chapterDao()
+                .chapters(bookUrl)
+                .filter { it.position in start..end }
+                .sortedBy { it.position }
+            require(chapters.isNotEmpty()) {
+                "No chapters found in selected range"
+            }
+            require(chapters.size == end - start + 1) {
+                "Selected chapter range is not contiguous or some chapters are missing"
+            }
+
+            currentStage = "LOAD_CONTENT"
+            val chapterData = if (mode == "translation") {
+                require(sourceLang.isNotBlank() && targetLang.isNotBlank()) {
+                    "Translation source/target language is missing"
+                }
+                val translations = db.chapterTranslationDao()
+                    .getTranslationsByChapterUrls(
+                        chapters.map(Chapter::url),
+                        sourceLang,
+                        targetLang,
+                    )
+                    .associateBy { it.chapterUrl }
+
+                val missing = chapters.filter { it.url !in translations }
+                require(missing.isEmpty()) {
+                    "Missing translation for chapters: " +
+                        missing.joinToString { it.position.toString() }
+                }
+
+                chapters.map { chapter ->
+                    val tr = translations.getValue(chapter.url)
+                    val paragraphsJson = JSONArray(tr.translatedParagraphs)
+                    val paragraphs = buildList {
+                        for (i in 0 until paragraphsJson.length()) {
+                            val text = paragraphsJson.optString(i, "")
+                            if (text.isNotBlank()) add(text)
+                        }
+                    }
+                    require(paragraphs.isNotEmpty()) {
+                        "Translation has no text for chapter " + chapter.position
+                    }
+                    buildTranslatedAudiobookChapter(
+                        position = chapter.position,
+                        url = chapter.url,
+                        originalTitle = chapter.title,
+                        translatedTitle = tr.titleTranslation,
+                        translatedParagraphs = paragraphs,
+                        bookTitle = bookTitle,
+                    )
+                }
+            } else {
+                val bodies = db.chapterBodyDao()
+                    .getBodiesByUrls(chapters.map(Chapter::url))
+                    .associateBy { it.url }
+
+                val missing = chapters.filter {
+                    it.url !in bodies || bodies[it.url]?.body.isNullOrBlank()
+                }
+                require(missing.isEmpty()) {
+                    "Missing chapter body for chapters: " +
+                        missing.joinToString { it.position.toString() }
+                }
+
+                chapters.map { chapter ->
+                    val body = bodies.getValue(chapter.url).body
+                    buildOriginalAudiobookChapter(
+                        position = chapter.position,
+                        url = chapter.url,
+                        title = chapter.title,
+                        body = body,
+                        bookTitle = bookTitle,
+                    )
+                }
+            }
+
+            val engine = inputData.getString(ENGINE).orEmpty()
+            val voice = inputData.getString(VOICE).orEmpty()
+            val speed = inputData.getFloat(
+                SPEED,
+                prefs.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
+            )
+            val pitch = inputData.getFloat(
+                PITCH,
+                prefs.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
+            )
+
+            currentStage = "SYNTHESIZE_AUDIO"
+            val request = AudiobookExportRequest(
+                bookTitle = bookTitle,
+                contentMode = mode,
+                sourceLang = sourceLang,
+                targetLang = targetLang,
+                startPosition = start,
+                endPosition = end,
+                enginePackage = engine,
+                voiceId = voice,
+                speed = speed,
+                pitch = pitch,
+                outputFormat = format,
+                visualUri = visual,
+            )
+
+            val tempId = UUID.randomUUID().toString()
+            val tempDir = File(applicationContext.cacheDir, "audiobook-" + tempId)
+            require(tempDir.mkdirs() || tempDir.isDirectory) {
+                "Unable to create temporary audiobook directory"
+            }
+
+            val audioTemp = File(
+                tempDir,
+                "audio." + if (format == OutputFormat.WAV) "wav" else "mp4",
+            )
+            val finalMp4 = File(tempDir, "final.mp4")
+            val jsonTemp = File(tempDir, "metadata.json")
+            var lastProgressNotificationMs = 0L
+
+            try {
+                val exporter = AudiobookTtsExporter(applicationContext)
+
+                val durationMs = exporter.export(
+                    request = request,
+                    chapters = chapterData,
+                    mediaFile = audioTemp,
+                    jsonFile = jsonTemp,
+                ) { progress ->
                     val now = SystemClock.elapsedRealtime()
-                    val overallPercent = (90 + (videoPercent.coerceIn(0, 100) * 10 / 100))
-                        .coerceIn(90, 100)
-                    if (overallPercent == 100 || now - lastProgressNotificationMs >= 250L) {
-                        notification.showProgress(overallPercent)
+                    val overallPercent = (progress.percent * 90 / 100)
+                        .coerceIn(0, 90)
+                    if (
+                        overallPercent == 90 ||
+                        now - lastProgressNotificationMs >= 500L
+                    ) {
+                        notification!!.showProgress(overallPercent)
+                        setProgress(
+                            workDataOf(
+                                "percent" to overallPercent,
+                                "stage" to "audio",
+                            )
+                        )
                         lastProgressNotificationMs = now
                     }
                 }
-                notification.showProgress(100)
-                finalMp4
-            } else {
-                notification.showProgress(100)
-                audioTemp
-            }
 
-            check(outputMedia.exists() && outputMedia.length() > 0L) {
-                "Audiobook media generation produced no output file"
-            }
-            check(jsonTemp.exists() && jsonTemp.length() > 0L) {
-                "Audiobook metadata generation produced no output file"
-            }
+                require(audioTemp.exists() && audioTemp.length() > 0L) {
+                    "Generated audio file is missing or empty"
+                }
+                require(durationMs > 0L) {
+                    "Generated audio duration is zero"
+                }
 
-            val finalMediaName = buildFileName(bookTitle, start, end, mode, targetLang, format)
-            val finalJsonName = finalMediaName.substringBeforeLast('.') + ".json"
+                val outputMedia = if (format == OutputFormat.MP4) {
+                    currentStage = "MUX_MP4"
+                    notification!!.showFinalizing(90)
+                    exporter.muxVisual(
+                        audioMp4 = audioTemp,
+                        outputMp4 = finalMp4,
+                        visualUri = visual,
+                        durationMs = durationMs,
+                    ) { videoPercent ->
+                        val now = SystemClock.elapsedRealtime()
+                        val overallPercent =
+                            90 + (videoPercent.coerceIn(0, 100) * 10 / 100)
+                        if (
+                            overallPercent == 100 ||
+                            now - lastProgressNotificationMs >= 250L
+                        ) {
+                            notification!!.showProgress(overallPercent)
+                            setProgress(
+                                workDataOf(
+                                    "percent" to overallPercent,
+                                    "stage" to "video",
+                                )
+                            )
+                            lastProgressNotificationMs = now
+                        }
+                    }
+                    finalMp4
+                } else {
+                    audioTemp
+                }
 
-            // The selected SAF folder is the audiobook root. Each novel gets its
-            // own child folder, and all audiobook files for that novel stay there.
-            val novelDirectory = getOrCreateNovelDirectory(directory, bookTitle)
-            createAndCopy(
-                novelDirectory,
-                finalMediaName,
-                if (format == OutputFormat.MP4) "video/mp4" else "audio/wav",
-                outputMedia,
+                currentStage = "VALIDATE_OUTPUT"
+                require(outputMedia.exists() && outputMedia.length() > 0L) {
+                    "Audiobook output file is missing or empty"
+                }
+                require(jsonTemp.exists() && jsonTemp.length() > 0L) {
+                    "Audiobook JSON file is missing or empty"
+                }
+
+                currentStage = "SAVE_OUTPUT"
+                val finalMediaName = buildFileName(
+                    bookTitle,
+                    start,
+                    end,
+                    mode,
+                    targetLang,
+                    format,
+                )
+                val finalJsonName =
+                    finalMediaName.substringBeforeLast('.') + ".json"
+
+                val novelDirectory = getOrCreateNovelDirectory(
+                    directory,
+                    bookTitle,
+                )
+                createAndCopy(
+                    novelDirectory,
+                    finalMediaName,
+                    if (format == OutputFormat.MP4) "video/mp4" else "audio/wav",
+                    outputMedia,
+                )
+                createAndCopy(
+                    novelDirectory,
+                    finalJsonName,
+                    "application/json",
+                    jsonTemp,
+                )
+
+                currentStage = "COMPLETE"
+                notification!!.showProgress(100)
+                notification!!.showComplete(bookTitle + "/" + finalMediaName)
+                Result.success(
+                    workDataOf(
+                        "percent" to 100,
+                        "stage" to "complete",
+                        "requestId" to requestId,
+                    )
+                )
+            } finally {
+                tempDir.deleteRecursively()
+            }
+        } catch (e: CancellationException) {
+            Timber.i(
+                "Audiobook export cancelled: id=%s stage=%s",
+                requestId,
+                currentStage,
             )
-            createAndCopy(novelDirectory, finalJsonName, "application/json", jsonTemp)
-
-            notification.showComplete(bookTitle + "/" + finalMediaName)
-            Result.success()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            notification.close()
+            notification?.close()
             throw e
         } catch (e: Throwable) {
-            Timber.e(e, "Audiobook export failed")
-            notification.showError(e.message ?: "Audiobook export failed")
-            Result.failure()
-        } finally {
-            tempDir.deleteRecursively()
+            Timber.e(
+                e,
+                "Audiobook export failed: id=%s stage=%s",
+                requestId,
+                currentStage,
+            )
+            notification?.showError(
+                currentStage + ": " + (e.message ?: e::class.java.simpleName),
+            )
+            Result.failure(
+                workDataOf(
+                    "percent" to 0,
+                    "stage" to currentStage,
+                    "error" to (e.message ?: e::class.java.simpleName),
+                    "requestId" to requestId,
+                )
+            )
         }
     }
+
+    private fun isVisualUriReadable(uri: Uri): Boolean = runCatching {
+        applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+            it.length < 0L || it.length > 0L
+        } ?: false
+    }.getOrElse { false }
 
     private fun isDirectoryAccessible(uriString: String): Boolean = runCatching {
         val directory = DocumentFile.fromTreeUri(applicationContext, Uri.parse(uriString))
