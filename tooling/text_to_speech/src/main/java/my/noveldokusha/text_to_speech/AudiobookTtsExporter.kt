@@ -460,9 +460,6 @@ class AudiobookTtsExporter(private val context: Context) {
             request.speed,
             request.pitch,
         )
-        val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
-        val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
-
         var activeChapter = -1
         var chapterStartMs = 0L
         var completedChapters = 0
@@ -623,7 +620,7 @@ class AudiobookTtsExporter(private val context: Context) {
                             check(sampleRate == pcm16.sampleRate && channels == pcm16.channels) {
                                 "TTS audio format changed during export: " +
                                     sampleRate + "x" + channels + " -> " +
-                                    pcm16.sampleRate + "x" + pcm16.channels,
+                                    pcm16.sampleRate + "x" + pcm16.channels
                             }
                             if (sink == null) {
                                 sink = when (request.outputFormat) {
