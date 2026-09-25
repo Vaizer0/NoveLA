@@ -1305,7 +1305,7 @@ class AudiobookTtsExporter(private val context: Context) {
                 ",\"channels\": " + channels + ",\"durationMs\": " + durationMs + "},\n")
             val timingSegmentsJson = JSONArray()
             exportedTimingSegments.forEach(timingSegmentsJson::put)
-            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true,\"units\": \"ms\",\"timingSource\": \"TextToSpeech.speak.onRangeStart\",\"segments\": ")
+            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true,\"units\": \"ms\",\"timingSource\": \"reader_persisted_onRangeStart\",\"segments\": ")
             out.write(timingSegmentsJson.toString())
             out.write("},\n")
             out.write("  \"tts_word_highlight_timing_json_v2\": {\n")

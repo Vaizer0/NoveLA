@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -139,20 +140,6 @@ internal fun ChaptersScreenBody(
             state = lazyListState,
             contentPadding = PaddingValues(bottom = 300.dp),
         ) {
-            state.audiobookExportStatus.value?.let { exportStatus ->
-                item(
-                    key = "audiobook_export_status",
-                    contentType = { 3 },
-                ) {
-                    AudiobookExportStatusCard(
-                        status = exportStatus,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
-                }
-            }
-
             item(
                 key = "header",
                 contentType = { 0 },
@@ -188,6 +175,19 @@ internal fun ChaptersScreenBody(
                 )
             }
 
+            state.audiobookExportStatus.value?.let { exportStatus ->
+                item(
+                    key = "audiobook_export_status",
+                    contentType = { 3 },
+                ) {
+                    AudiobookExportStatusBar(
+                        status = exportStatus,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
+            }
             items(
                 items = state.chapters,
                 key = { "_" + it.chapter.url },
@@ -217,84 +217,72 @@ internal fun ChaptersScreenBody(
 }
 
 @Composable
-private fun AudiobookExportStatusCard(
+private fun AudiobookExportStatusBar(
     status: AudiobookExportUiState,
     modifier: Modifier = Modifier,
 ) {
     val active = status.state == AudiobookExportWorkState.ENQUEUED ||
         status.state == AudiobookExportWorkState.RUNNING ||
         status.state == AudiobookExportWorkState.BLOCKED
-    val stopped = status.state == AudiobookExportWorkState.FAILED ||
+    val failed = status.state == AudiobookExportWorkState.FAILED ||
         status.state == AudiobookExportWorkState.CANCELLED
+    val percent = status.percent.coerceIn(0, 100)
 
-    val title = when {
-        active -> "Audiobook export"
-        status.state == AudiobookExportWorkState.SUCCEEDED -> "Audiobook export complete"
-        stopped -> "Audiobook export stopped"
-        else -> "Audiobook export"
-    }
-
-    val subtitle = when {
-        active -> {
-            val range = if (status.startChapter > 0 && status.endChapter > 0) {
-                "Chapters ${status.startChapter}–${status.endChapter}"
-            } else {
-                "Selected chapters"
-            }
-            "${status.format} • ${range}"
-        }
-        stopped -> status.error?.takeIf(String::isNotBlank) ?: "Export stopped before completion"
-        else -> "The exported file is ready"
-    }
-
-    Card(
+    Column(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "${status.percent}%",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-
-            if (active) {
-                LinearProgressIndicator(
-                    progress = { status.percent / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (status.stage.isNotBlank()) {
-                    Text(
-                        text = status.stage.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = when {
+                    active -> "Audiobook export"
+                    status.state == AudiobookExportWorkState.SUCCEEDED -> "Audiobook export complete"
+                    failed -> "Audiobook export stopped"
+                    else -> "Audiobook export"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${percent}%",
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
+
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp),
+        )
+
+        Text(
+            text = when {
+                active -> {
+                    val range = if (status.startChapter > 0 && status.endChapter > 0) {
+                        "Chapters ${status.startChapter}–${status.endChapter}"
+                    } else {
+                        "Selected chapters"
+                    }
+                    val stage = status.stage
+                        .replace('_', ' ')
+                        .lowercase()
+                        .replaceFirstChar { it.uppercase() }
+                    "${status.format} • $range${if (stage.isNotBlank()) " • $stage" else ""}"
+                }
+                failed -> status.error?.takeIf(String::isNotBlank)
+                    ?: "Export stopped before completion"
+                status.state == AudiobookExportWorkState.SUCCEEDED ->
+                    "${status.format} • Chapters ${status.startChapter}–${status.endChapter}"
+                else -> "Audiobook export"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (failed) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
