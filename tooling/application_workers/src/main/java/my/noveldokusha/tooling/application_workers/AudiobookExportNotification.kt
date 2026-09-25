@@ -66,6 +66,7 @@ class AudiobookExportNotification(
 
     fun showComplete(name: String) {
         if (!allowed()) return
+        close()
         notifyCenter().showNotification(
             channelId = CHANNEL_ID,
             channelName = context.getString(StringsR.string.book_export_channel_name),

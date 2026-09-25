@@ -448,8 +448,8 @@ class AudiobookExportWorker(
     }
 
     private fun isVisualUriReadable(uri: Uri): Boolean = runCatching {
-        applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
-            it.length < 0L || it.length > 0L
+        applicationContext.contentResolver.openInputStream(uri)?.use { input ->
+            input.read() >= 0
         } ?: false
     }.getOrElse { false }
 
