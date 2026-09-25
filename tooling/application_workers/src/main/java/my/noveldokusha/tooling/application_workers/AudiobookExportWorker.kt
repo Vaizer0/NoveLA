@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.content.pm.ServiceInfo
+import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
@@ -40,6 +41,7 @@ import timber.log.Timber
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class AudiobookExportWorker(
     appContext: Context,
@@ -128,6 +130,11 @@ class AudiobookExportWorker(
             )
             val requestWork = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
                 .setInputData(data)
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    5_000L,
+                    TimeUnit.MILLISECONDS,
+                )
                 .addTag(TAG)
                 .addTag(tagForBook(bookUrl))
                 .build()
@@ -496,17 +503,42 @@ class AudiobookExportWorker(
                 requestId,
                 currentStage,
             )
-            notification?.showError(
-                currentStage + ": " + (e.message ?: e::class.java.simpleName),
+            val message = e.message ?: e::class.java.simpleName
+            // Validation/content/permission errors are deterministic and must surface
+            // immediately. TTS/codec/foreground failures can be transient, so retry them
+            // a small number of times instead of making the export appear to abort.
+            val retryableStage = currentStage in setOf(
+                "INITIALIZE",
+                "FOREGROUND",
+                "SYNTHESIZE_AUDIO",
+                "MUX_MP4",
             )
-            Result.failure(
-                workDataOf(
-                    PROGRESS_PERCENT to 0,
-                    PROGRESS_STAGE to currentStage,
-                    OUTPUT_ERROR to (e.message ?: e::class.java.simpleName),
-                    OUTPUT_REQUEST_ID to requestId,
+            val retryableException = e !is IllegalArgumentException &&
+                e !is SecurityException
+            if (retryableStage && retryableException && runAttemptCount < 2) {
+                notification?.showProgress(0)
+                setProgress(
+                    workDataOf(
+                        PROGRESS_PERCENT to 0,
+                        PROGRESS_STAGE to "retrying",
+                        "format" to inputData.getString(INPUT_FORMAT).orEmpty(),
+                        "mode" to inputData.getString(INPUT_MODE).orEmpty(),
+                        "startChapter" to inputData.getInt(INPUT_START, 0),
+                        "endChapter" to inputData.getInt(INPUT_END, 0),
+                    )
                 )
-            )
+                Result.retry()
+            } else {
+                notification?.showError(currentStage + ": " + message)
+                Result.failure(
+                    workDataOf(
+                        PROGRESS_PERCENT to 0,
+                        PROGRESS_STAGE to currentStage,
+                        OUTPUT_ERROR to message,
+                        OUTPUT_REQUEST_ID to requestId,
+                    )
+                )
+            }
         }
     }
 
