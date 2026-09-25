@@ -447,6 +447,10 @@ class AudiobookTtsExporter(private val context: Context) {
         withContext(Dispatchers.Main.immediate) {
             tts.setOnUtteranceProgressListener(listener)
         }
+        // Audio is generated once with synthesizeToFile(). Word timings come from
+        // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
+        val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
+        val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
         Timber.d(
             "AudiobookTTS: ready engine=%s voice=%s locale=%s network=%s speed=%.2f pitch=%.2f",
             effectiveEnginePackage,
@@ -456,8 +460,6 @@ class AudiobookTtsExporter(private val context: Context) {
             request.speed,
             request.pitch,
         )
-        // Audio is generated once with synthesizeToFile(). Word timings come from
-        // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
         val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
         val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
 
@@ -598,7 +600,7 @@ class AudiobookTtsExporter(private val context: Context) {
 
                             val filePcmResult = runCatching { readWavPcm16(synthesisFile) }
                             val pcm16 = filePcmResult.getOrElse {
-                                val fallback = currentSlicePcmFallback?.toByteArray().orEmpty()
+                                val fallback = currentSlicePcmFallback?.toByteArray() ?: ByteArray(0)
                                 if (fallback.isEmpty()) {
                                     throw IllegalStateException(
                                         "TTS produced an unreadable WAV and no PCM callback data: " +
@@ -1120,17 +1122,18 @@ class AudiobookTtsExporter(private val context: Context) {
             val tts = suspendCancellableCoroutine<TextToSpeech> { continuation ->
                 lateinit var instance: TextToSpeech
                 val listener = TextToSpeech.OnInitListener { status ->
-                    if (!continuation.isActive) return@OnInitListener
-                    if (status == TextToSpeech.SUCCESS) {
-                        continuation.resume(instance)
-                    } else {
-                        continuation.resumeWithException(
-                            IllegalStateException(
-                                "Unable to initialize TTS engine=" +
-                                    request.enginePackage.ifBlank { "system-default" } +
-                                    " result=" + status,
-                            ),
-                        )
+                    if (continuation.isActive) {
+                        if (status == TextToSpeech.SUCCESS) {
+                            continuation.resume(instance)
+                        } else {
+                            continuation.resumeWithException(
+                                IllegalStateException(
+                                    "Unable to initialize TTS engine=" +
+                                        request.enginePackage.ifBlank { "system-default" } +
+                                        " result=" + status,
+                                ),
+                            )
+                        }
                     }
                 }
                 instance = if (request.enginePackage.isBlank()) {
