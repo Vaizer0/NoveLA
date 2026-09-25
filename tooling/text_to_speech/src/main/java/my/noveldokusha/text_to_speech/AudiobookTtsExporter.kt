@@ -378,9 +378,9 @@ class AudiobookTtsExporter(private val context: Context) {
         val exportedTimingSegments = mutableListOf<JSONObject>()
         val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
 
-        // synthesizeToFile() only becomes useful to the exporter when its audio callbacks
-        // are actually consumed. Keep the file target /dev/null so the TTS engine does not
-        // duplicate the PCM onto disk; onAudioAvailable provides the same PCM to our sink.
+        // The fast synthesis path renders each slice once to the app cache. We then append
+        // the WAV PCM to the final sink. onAudioAvailable is retained only as an engine
+        // compatibility fallback; it is never required for the normal export path.
         var audioBytesReceived = 0L
         var sliceAudioBytesReceived = 0L
 
@@ -1117,25 +1117,30 @@ class AudiobookTtsExporter(private val context: Context) {
 
     private suspend fun createTts(request: AudiobookExportRequest): TextToSpeech =
         withContext(Dispatchers.Main.immediate) {
-            val latch = CountDownLatch(1)
-            var result = TextToSpeech.ERROR
-            val tts = if (request.enginePackage.isBlank()) {
-                TextToSpeech(context) { status ->
-                    result = status
-                    latch.countDown()
+            val tts = suspendCancellableCoroutine<TextToSpeech> { continuation ->
+                lateinit var instance: TextToSpeech
+                val listener = TextToSpeech.OnInitListener { status ->
+                    if (!continuation.isActive) return@OnInitListener
+                    if (status == TextToSpeech.SUCCESS) {
+                        continuation.resume(instance)
+                    } else {
+                        continuation.resumeWithException(
+                            IllegalStateException(
+                                "Unable to initialize TTS engine=" +
+                                    request.enginePackage.ifBlank { "system-default" } +
+                                    " result=" + status,
+                            ),
+                        )
+                    }
                 }
-            } else {
-                TextToSpeech(context, { status ->
-                    result = status
-                    latch.countDown()
-                }, request.enginePackage)
-            }
-
-            check(
-                latch.await(10, TimeUnit.SECONDS) && result == TextToSpeech.SUCCESS
-            ) {
-                "Unable to initialize TTS engine=" +
-                    request.enginePackage.ifBlank { "system-default" }
+                instance = if (request.enginePackage.isBlank()) {
+                    TextToSpeech(context, listener)
+                } else {
+                    TextToSpeech(context, listener, request.enginePackage)
+                }
+                continuation.invokeOnCancellation {
+                    runCatching { instance.shutdown() }
+                }
             }
 
             if (request.voiceId.isNotBlank()) {
@@ -1173,7 +1178,12 @@ class AudiobookTtsExporter(private val context: Context) {
             withContext(Dispatchers.Main.immediate) {
                 tts.synthesizeToFile(
                     text,
-                    Bundle(),
+                    Bundle().apply {
+                        putString(
+                            TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
+                            utteranceId,
+                        )
+                    },
                     outputFile,
                     utteranceId,
                 )
