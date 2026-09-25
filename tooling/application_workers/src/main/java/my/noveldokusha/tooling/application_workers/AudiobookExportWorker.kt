@@ -44,14 +44,6 @@ class AudiobookExportWorker(
     @Volatile
     private var currentStage: String = "INITIALIZING"
 
-    override fun onStopped() {
-        Timber.w(
-            "Audiobook export worker stopped: id=%s stage=%s",
-            id,
-            currentStage,
-        )
-        super.onStopped()
-    }
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
