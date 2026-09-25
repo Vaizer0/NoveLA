@@ -728,7 +728,7 @@ internal class ChaptersViewModel @Inject constructor(
                             // Input data is not exposed by WorkInfo in this WorkManager
                             // version, so terminal jobs are ordered using their persisted
                             // output enqueue timestamp.
-                            info.getOutputData().getLong(AudiobookExportWorker.ENQUEUED_AT, 0L)
+                            info.outputData.getLong(AudiobookExportWorker.ENQUEUED_AT, 0L)
                         }
                     state.audiobookExportStatus.value = info?.let { workInfo ->
                         val workState = when (workInfo.state) {
