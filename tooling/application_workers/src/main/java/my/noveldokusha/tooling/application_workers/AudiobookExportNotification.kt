@@ -121,7 +121,7 @@ class AudiobookExportNotification(
         if (Build.VERSION.SDK_INT < 33) return true
         val permission = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
         if (permission != PackageManager.PERMISSION_GRANTED) {
-            Timber.w("POST_NOTIFICATIONS denied; skipping audiobook notification")
+            Timber.w("POST_NOTIFICATIONS denied; audiobook progress drawer notification is unavailable; in-app export status remains authoritative")
             return false
         }
         return true

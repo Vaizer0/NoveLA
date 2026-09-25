@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.SystemClock
 import android.content.pm.ServiceInfo
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -20,7 +19,12 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 import my.noveldokusha.core.appPreferences.AppPreferences
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Chapter
@@ -54,20 +58,39 @@ class AudiobookExportWorker(
 
     companion object {
         const val TAG = "AudiobookExport"
-        private const val BOOK_URL = "book_url"
-        private const val BOOK_TITLE = "book_title"
-        private const val MODE = "mode"
-        private const val SOURCE = "source"
-        private const val TARGET = "target"
-        private const val START = "start"
-        private const val END = "end"
-        private const val ENGINE = "engine"
-        private const val VOICE = "voice"
-        private const val SPEED = "speed"
-        private const val PITCH = "pitch"
-        private const val FORMAT = "format"
-        private const val VISUAL = "visual"
-        private const val DIRECTORY = "directory"
+        const val INPUT_BOOK_URL = "book_url"
+        const val INPUT_BOOK_TITLE = "book_title"
+        const val INPUT_MODE = "mode"
+        const val INPUT_SOURCE = "source"
+        const val INPUT_TARGET = "target"
+        const val INPUT_START = "start"
+        const val INPUT_END = "end"
+        const val INPUT_ENGINE = "engine"
+        const val INPUT_VOICE = "voice"
+        const val INPUT_SPEED = "speed"
+        const val INPUT_PITCH = "pitch"
+        const val INPUT_FORMAT = "format"
+        const val INPUT_VISUAL = "visual"
+        const val INPUT_DIRECTORY = "directory"
+        const val PROGRESS_PERCENT = "percent"
+        const val PROGRESS_STAGE = "stage"
+        const val OUTPUT_ERROR = "error"
+        const val OUTPUT_REQUEST_ID = "requestId"
+
+        private const val BOOK_URL = INPUT_BOOK_URL
+        private const val BOOK_TITLE = INPUT_BOOK_TITLE
+        private const val MODE = INPUT_MODE
+        private const val SOURCE = INPUT_SOURCE
+        private const val TARGET = INPUT_TARGET
+        private const val START = INPUT_START
+        private const val END = INPUT_END
+        private const val ENGINE = INPUT_ENGINE
+        private const val VOICE = INPUT_VOICE
+        private const val SPEED = INPUT_SPEED
+        private const val PITCH = INPUT_PITCH
+        private const val FORMAT = INPUT_FORMAT
+        private const val VISUAL = INPUT_VISUAL
+        private const val DIRECTORY = INPUT_DIRECTORY
 
         fun enqueue(
             context: Context,
@@ -154,6 +177,7 @@ class AudiobookExportWorker(
             )
 
             currentStage = "PREFLIGHT"
+            setProgress(workDataOf(PROGRESS_PERCENT to 0, PROGRESS_STAGE to "preflight"))
             require(start != Int.MIN_VALUE && end != Int.MIN_VALUE) {
                 "Invalid chapter range"
             }
@@ -314,8 +338,8 @@ class AudiobookExportWorker(
                         notification!!.showProgress(overallPercent)
                         setProgress(
                             workDataOf(
-                                "percent" to overallPercent,
-                                "stage" to "audio",
+                                PROGRESS_PERCENT to overallPercent,
+                                PROGRESS_STAGE to "audio",
                             )
                         )
                         lastProgressNotificationMs = now
@@ -332,24 +356,39 @@ class AudiobookExportWorker(
                 val outputMedia = if (format == OutputFormat.MP4) {
                     currentStage = "MUX_MP4"
                     notification!!.showFinalizing(90)
-                    exporter.muxVisual(
-                        audioMp4 = audioTemp,
-                        outputMp4 = finalMp4,
-                        visualUri = visual,
-                        durationMs = durationMs,
-                    ) { videoPercent ->
-                        val now = SystemClock.elapsedRealtime()
-                        val overallPercent =
-                            90 + (videoPercent.coerceIn(0, 100) * 10 / 100)
-                        if (
-                            overallPercent == 100 ||
-                            now - lastProgressNotificationMs >= 250L
-                        ) {
-                            // muxVisual() reports progress through a non-suspending callback.
-                            // Only update the notification here; WorkManager progress is
-                            // already updated during the suspendable TTS stage.
-                            notification!!.showProgress(overallPercent)
-                            lastProgressNotificationMs = now
+                    val videoProgress = AtomicInteger(0)
+                    coroutineScope {
+                        val progressJob = launch {
+                            var last = -1
+                            while (isActive) {
+                                val p = videoProgress.get().coerceIn(0, 100)
+                                if (p != last) {
+                                    notification!!.showProgress(90 + p * 10 / 100)
+                                    setProgress(
+                                        workDataOf(
+                                            PROGRESS_PERCENT to (90 + p * 10 / 100),
+                                            PROGRESS_STAGE to "video",
+                                        )
+                                    )
+                                    last = p
+                                }
+                                if (p >= 100) break
+                                delay(250L)
+                            }
+                        }
+
+                        try {
+                            exporter.muxVisual(
+                                audioMp4 = audioTemp,
+                                outputMp4 = finalMp4,
+                                visualUri = visual,
+                                durationMs = durationMs,
+                            ) { videoPercent ->
+                                videoProgress.set(videoPercent.coerceIn(0, 100))
+                            }
+                            videoProgress.set(100)
+                        } finally {
+                            progressJob.join()
                         }
                     }
                     finalMp4
@@ -399,9 +438,9 @@ class AudiobookExportWorker(
                 notification!!.showComplete(bookTitle + "/" + finalMediaName)
                 Result.success(
                     workDataOf(
-                        "percent" to 100,
-                        "stage" to "complete",
-                        "requestId" to requestId,
+                        PROGRESS_PERCENT to 100,
+                        PROGRESS_STAGE to "complete",
+                        OUTPUT_REQUEST_ID to requestId,
                     )
                 )
             } finally {
@@ -427,10 +466,10 @@ class AudiobookExportWorker(
             )
             Result.failure(
                 workDataOf(
-                    "percent" to 0,
-                    "stage" to currentStage,
-                    "error" to (e.message ?: e::class.java.simpleName),
-                    "requestId" to requestId,
+                    PROGRESS_PERCENT to 0,
+                    PROGRESS_STAGE to currentStage,
+                    OUTPUT_ERROR to (e.message ?: e::class.java.simpleName),
+                    OUTPUT_REQUEST_ID to requestId,
                 )
             )
         }

@@ -27,6 +27,7 @@ internal data class ChaptersScreenState(
     val translatedChapterTitles: MutableState<Map<String, String>>,
     val chapterSizes: MutableState<Map<String, ChapterSize>>,
     val downloadTask: MutableState<DownloadTaskState?>,
+    val audiobookExportStatus: MutableState<AudiobookExportUiState?>,
 ) {
 
     val isInSelectionMode = derivedStateOf { selectedChaptersUrl.size != 0 }
@@ -79,6 +80,27 @@ data class AudiobookChapterOption(
     val position: Int,
     val url: String,
     val title: String,
+)
+
+enum class AudiobookExportWorkState {
+    ENQUEUED,
+    RUNNING,
+    SUCCEEDED,
+    FAILED,
+    CANCELLED,
+    BLOCKED,
+}
+
+data class AudiobookExportUiState(
+    val workId: String,
+    val state: AudiobookExportWorkState,
+    val percent: Int,
+    val stage: String,
+    val format: String,
+    val mode: String,
+    val startChapter: Int,
+    val endChapter: Int,
+    val error: String? = null,
 )
 
 sealed interface AudiobookDialogState {

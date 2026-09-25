@@ -22,6 +22,7 @@ dependencies {
     implementation(projects.tooling.novelMigration)
     implementation(libs.material)
     implementation(libs.androidx.lifecycle.livedata.ktx)
+    implementation(libs.androidx.workmanager)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

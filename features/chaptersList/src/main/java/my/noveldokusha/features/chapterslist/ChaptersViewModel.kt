@@ -21,10 +21,13 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import my.noveldokusha.core.Response
 import androidx.lifecycle.ViewModel
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import my.noveldokusha.data.AppRepository
 import my.noveldokusha.data.DownloadManager
 import my.noveldokusha.data.EnqueueResult
@@ -149,6 +152,7 @@ internal class ChaptersViewModel @Inject constructor(
         translatedChapterTitles = mutableStateOf(emptyMap()),
         chapterSizes = mutableStateOf(emptyMap()),
         downloadTask = mutableStateOf(null),
+        audiobookExportStatus = mutableStateOf(null),
     )
 
     // ─── Экспорт книги ───────────────────────────────────────────────────────
@@ -698,6 +702,56 @@ internal class ChaptersViewModel @Inject constructor(
         viewModelScope.launch {
             downloadManager.tasks.collect { tasks ->
                 state.downloadTask.value = tasks.find { it.bookUrl == bookUrlFlow.value }
+            }
+        }
+
+        // Audiobook export status is observed in-app, independently of the
+        // notification drawer. This remains visible when POST_NOTIFICATIONS is denied
+        // or the user dismisses the notification.
+        viewModelScope.launch {
+            combine(
+                bookUrlFlow,
+                WorkManager.getInstance(context).getWorkInfosByTagFlow(AudiobookExportWorker.TAG),
+            ) { currentUrl, infos ->
+                currentUrl to infos
+            }.collectLatest { (currentUrl, infos) ->
+                val relevant = infos
+                    .filter {
+                        it.inputData.getString(AudiobookExportWorker.INPUT_BOOK_URL) == currentUrl
+                    }
+                    .maxByOrNull { it.lastEnqueueTime }
+
+                state.audiobookExportStatus.value = relevant?.let { info ->
+                    val workState = when (info.state) {
+                        WorkInfo.State.ENQUEUED -> AudiobookExportWorkState.ENQUEUED
+                        WorkInfo.State.RUNNING -> AudiobookExportWorkState.RUNNING
+                        WorkInfo.State.SUCCEEDED -> AudiobookExportWorkState.SUCCEEDED
+                        WorkInfo.State.FAILED -> AudiobookExportWorkState.FAILED
+                        WorkInfo.State.CANCELLED -> AudiobookExportWorkState.CANCELLED
+                        WorkInfo.State.BLOCKED -> AudiobookExportWorkState.BLOCKED
+                    }
+                    val progressPercent = info.progress
+                        .getInt(AudiobookExportWorker.PROGRESS_PERCENT, -1)
+                        .takeIf { it >= 0 }
+                        ?: if (workState == AudiobookExportWorkState.SUCCEEDED) 100 else 0
+                    val stage = info.progress
+                        .getString(AudiobookExportWorker.PROGRESS_STAGE)
+                        ?: ""
+                    val error = info.outputData
+                        .getString(AudiobookExportWorker.OUTPUT_ERROR)
+
+                    AudiobookExportUiState(
+                        workId = info.id.toString(),
+                        state = workState,
+                        percent = progressPercent.coerceIn(0, 100),
+                        stage = stage,
+                        format = info.inputData.getString(AudiobookExportWorker.INPUT_FORMAT) ?: "WAV",
+                        mode = info.inputData.getString(AudiobookExportWorker.INPUT_MODE) ?: "original",
+                        startChapter = info.inputData.getInt(AudiobookExportWorker.INPUT_START, 0),
+                        endChapter = info.inputData.getInt(AudiobookExportWorker.INPUT_END, 0),
+                        error = error,
+                    )
+                }
             }
         }
 
