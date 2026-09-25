@@ -711,15 +711,14 @@ internal class ChaptersViewModel @Inject constructor(
         // or the user dismisses the notification.
         viewModelScope.launch {
             bookUrlFlow
-                .map(AudiobookExportWorker::tagForBook)
-                .distinctUntilChanged()
-                .flatMapLatest { tag ->
-                    WorkManager.getInstance(context).getWorkInfosByTagFlow(tag)
+                .flatMapLatest { url ->
+                    WorkManager.getInstance(context)
+                        .getWorkInfosByTagFlow(AudiobookExportWorker.tagForBook(url))
                 }
                 .collectLatest { infos ->
                     val info = infos.firstOrNull()
-                    state.audiobookExportStatus.value = info?.let {
-                        val workState = when (it.state) {
+                    state.audiobookExportStatus.value = info?.let { workInfo ->
+                        val workState = when (workInfo.state) {
                             WorkInfo.State.ENQUEUED -> AudiobookExportWorkState.ENQUEUED
                             WorkInfo.State.RUNNING -> AudiobookExportWorkState.RUNNING
                             WorkInfo.State.SUCCEEDED -> AudiobookExportWorkState.SUCCEEDED
@@ -727,28 +726,28 @@ internal class ChaptersViewModel @Inject constructor(
                             WorkInfo.State.CANCELLED -> AudiobookExportWorkState.CANCELLED
                             WorkInfo.State.BLOCKED -> AudiobookExportWorkState.BLOCKED
                         }
-                        val progressPercent = it.progress
+                        val progressPercent = workInfo.progress
                             .getInt(AudiobookExportWorker.PROGRESS_PERCENT, -1)
                             .takeIf { percent -> percent >= 0 }
                             ?: if (workState == AudiobookExportWorkState.SUCCEEDED) 100 else 0
-                        val stage = it.progress
+                        val stage = workInfo.progress
                             .getString(AudiobookExportWorker.PROGRESS_STAGE)
                             ?: ""
-                        val metadataFormat = it.progress
+                        val metadataFormat = workInfo.progress
                             .getString("format")
                             ?: "WAV"
-                        val metadataMode = it.progress
+                        val metadataMode = workInfo.progress
                             .getString("mode")
                             ?: "original"
-                        val metadataStart = it.progress
+                        val metadataStart = workInfo.progress
                             .getInt("startChapter", 0)
-                        val metadataEnd = it.progress
+                        val metadataEnd = workInfo.progress
                             .getInt("endChapter", 0)
-                        val error = it.outputData
+                        val error = workInfo.outputData
                             .getString(AudiobookExportWorker.OUTPUT_ERROR)
 
                         AudiobookExportUiState(
-                            workId = it.id.toString(),
+                            workId = workInfo.id.toString(),
                             state = workState,
                             percent = progressPercent.coerceIn(0, 100),
                             stage = stage,
