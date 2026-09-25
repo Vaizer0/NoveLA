@@ -717,9 +717,9 @@ internal class ChaptersViewModel @Inject constructor(
             }.collectLatest { (currentUrl, infos) ->
                 val relevant = infos
                     .filter {
-                        it.inputData.getString(AudiobookExportWorker.INPUT_BOOK_URL) == currentUrl
+                        it.getInputData().getString(AudiobookExportWorker.INPUT_BOOK_URL) == currentUrl
                     }
-                    .maxByOrNull { it.lastEnqueueTime }
+                    .maxByOrNull { it.getLastEnqueueTime() }
 
                 state.audiobookExportStatus.value = relevant?.let { info ->
                     val workState = when (info.state) {
@@ -745,10 +745,10 @@ internal class ChaptersViewModel @Inject constructor(
                         state = workState,
                         percent = progressPercent.coerceIn(0, 100),
                         stage = stage,
-                        format = info.inputData.getString(AudiobookExportWorker.INPUT_FORMAT) ?: "WAV",
-                        mode = info.inputData.getString(AudiobookExportWorker.INPUT_MODE) ?: "original",
-                        startChapter = info.inputData.getInt(AudiobookExportWorker.INPUT_START, 0),
-                        endChapter = info.inputData.getInt(AudiobookExportWorker.INPUT_END, 0),
+                        format = info.getInputData().getString(AudiobookExportWorker.INPUT_FORMAT) ?: "WAV",
+                        mode = info.getInputData().getString(AudiobookExportWorker.INPUT_MODE) ?: "original",
+                        startChapter = info.getInputData().getInt(AudiobookExportWorker.INPUT_START, 0),
+                        endChapter = info.getInputData().getInt(AudiobookExportWorker.INPUT_END, 0),
                         error = error,
                     )
                 }
