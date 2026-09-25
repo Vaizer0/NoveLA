@@ -818,13 +818,13 @@ class AudiobookTtsExporter(private val context: Context) {
                     request,
                     chapterTimings,
                     segmentFile,
-                    validateExportJson(jsonFile, chapterTimings, totalDuration)
-                totalDuration,
+                    totalDuration,
                     sampleRate,
                     channels,
                     exportedTimingStore,
                     exportedTimingSegments,
                 )
+                validateExportJson(jsonFile, chapterTimings, totalDuration)
                 totalDuration
             } finally {
                 runCatching { sink?.close() }
