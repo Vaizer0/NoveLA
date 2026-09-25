@@ -606,6 +606,11 @@ class AudiobookExportWorker(
             if (!target.exists()) {
                 error("Exported file is no longer accessible: " + displayName)
             }
+            applicationContext.contentResolver.openInputStream(target.uri)?.use { input ->
+                check(input.read() >= 0) {
+                    "Exported file is empty or unreadable: " + displayName
+                }
+            } ?: error("Unable to reopen " + displayName)
         } catch (e: Throwable) {
             runCatching { target.delete() }
             throw e

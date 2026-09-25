@@ -279,15 +279,23 @@ private class AacMp4Sink(
     @Synchronized
     override fun writePcm16(bytes: ByteArray) {
         check(!closed)
-        var offset = 0
         val frameSize = channels * 2
+        check(frameSize > 0)
+        var offset = 0
+        val deadline = SystemClock.elapsedRealtime() + 30_000L
+
         while (offset < bytes.size) {
+            check(SystemClock.elapsedRealtime() < deadline) {
+                "AAC encoder input timed out"
+            }
             drain(false)
-            val inputIndex = codec.dequeueInputBuffer(10000L)
+            val inputIndex = codec.dequeueInputBuffer(50_000L)
             if (inputIndex < 0) continue
-            val input = codec.getInputBuffer(inputIndex) ?: error("AAC input buffer unavailable")
+            val input = codec.getInputBuffer(inputIndex)
+                ?: error("AAC input buffer unavailable")
             input.clear()
             val size = min(input.remaining(), bytes.size - offset)
+            check(size > 0) { "AAC encoder accepted zero-byte input" }
             input.put(bytes, offset, size)
             val frames = size.toLong() / frameSize.toLong()
             val ptsUs = inputFrames * 1_000_000L / sampleRate
@@ -297,27 +305,46 @@ private class AacMp4Sink(
             offset += size
         }
     }
-
     @Synchronized
     override fun finish() {
         if (closed) return
-        while (true) {
+
+        val deadline = SystemClock.elapsedRealtime() + 30_000L
+        var eosQueued = false
+        while (!eosQueued) {
+            check(SystemClock.elapsedRealtime() < deadline) {
+                "AAC encoder EOS input timed out"
+            }
             drain(false)
-            val inputIndex = codec.dequeueInputBuffer(10000L)
+            val inputIndex = codec.dequeueInputBuffer(50_000L)
             if (inputIndex >= 0) {
                 val ptsUs = inputFrames * 1_000_000L / sampleRate
-                codec.queueInputBuffer(inputIndex, 0, 0, ptsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                break
+                codec.queueInputBuffer(
+                    inputIndex,
+                    0,
+                    0,
+                    ptsUs,
+                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                )
+                eosQueued = true
             }
         }
-        while (!drain(true)) { }
-        if (started) runCatching { muxer.stop() }
-        runCatching { muxer.release() }
-        runCatching { codec.stop() }
-        runCatching { codec.release() }
+
+        while (!drain(true)) {
+            check(SystemClock.elapsedRealtime() < deadline) {
+                "AAC encoder EOS output timed out"
+            }
+        }
+
+        check(started && track >= 0) {
+            "AAC encoder produced no muxed audio track"
+        }
+        muxer.stop()
+        muxer.release()
+        codec.stop()
+        codec.release()
         closed = true
     }
-
     override fun close() { runCatching { finish() } }
 
     private fun drain(waitForEos: Boolean): Boolean {
@@ -818,6 +845,9 @@ class AudiobookTtsExporter(private val context: Context) {
                     exportedTimingSegments,
                 )
                 validateExportJson(jsonFile, chapterTimings, totalDuration)
+                if (request.outputFormat == OutputFormat.WAV) {
+                    validateWavOutput(mediaFile, sampleRate, channels, totalDuration)
+                }
                 totalDuration
             } finally {
                 runCatching { sink?.close() }
@@ -1207,6 +1237,34 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
+    private fun validateWavOutput(
+        file: File,
+        sampleRate: Int,
+        channels: Int,
+        durationMs: Long,
+    ) {
+        check(file.exists() && file.length() > 44L) {
+            "Final WAV does not exist or is empty"
+        }
+        RandomAccessFile(file, "r").use { raf ->
+            val riff = ByteArray(4).also { raf.readFully(it) }
+            raf.seek(8)
+            val wave = ByteArray(4).also { raf.readFully(it) }
+            check(String(riff, Charsets.US_ASCII) == "RIFF") { "Final WAV has no RIFF header" }
+            check(String(wave, Charsets.US_ASCII) == "WAVE") { "Final WAV has no WAVE header" }
+        }
+        val frameBytes = channels.toLong() * 2L
+        val actualPcmBytes = file.length() - 44L
+        check(frameBytes > 0L && actualPcmBytes % frameBytes == 0L) {
+            "Final WAV PCM data is not aligned to whole frames"
+        }
+        val expectedPcmBytes = durationMs.coerceAtLeast(0L) *
+            sampleRate.toLong() * frameBytes / 1000L
+        val tolerance = maxOf(frameBytes, sampleRate.toLong() * frameBytes / 100L)
+        check(kotlin.math.abs(actualPcmBytes - expectedPcmBytes) <= tolerance) {
+            "Final WAV duration mismatch"
+        }
+    }
     private fun validateMp4Output(file: File, audioDurationMs: Long) {
         check(file.exists() && file.length() > 0L) {
             "Final MP4 does not exist or is empty"
