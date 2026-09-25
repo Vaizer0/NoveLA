@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
@@ -709,50 +710,56 @@ internal class ChaptersViewModel @Inject constructor(
         // notification drawer. This remains visible when POST_NOTIFICATIONS is denied
         // or the user dismisses the notification.
         viewModelScope.launch {
-            combine(
-                bookUrlFlow,
-                WorkManager.getInstance(context).getWorkInfosByTagFlow(AudiobookExportWorker.TAG),
-            ) { currentUrl, infos ->
-                currentUrl to infos
-            }.collectLatest { (currentUrl, infos) ->
-                val relevant = infos
-                    .filter {
-                        it.getInputData().getString(AudiobookExportWorker.INPUT_BOOK_URL) == currentUrl
-                    }
-                    .maxByOrNull { it.getLastEnqueueTime() }
-
-                state.audiobookExportStatus.value = relevant?.let { info ->
-                    val workState = when (info.state) {
-                        WorkInfo.State.ENQUEUED -> AudiobookExportWorkState.ENQUEUED
-                        WorkInfo.State.RUNNING -> AudiobookExportWorkState.RUNNING
-                        WorkInfo.State.SUCCEEDED -> AudiobookExportWorkState.SUCCEEDED
-                        WorkInfo.State.FAILED -> AudiobookExportWorkState.FAILED
-                        WorkInfo.State.CANCELLED -> AudiobookExportWorkState.CANCELLED
-                        WorkInfo.State.BLOCKED -> AudiobookExportWorkState.BLOCKED
-                    }
-                    val progressPercent = info.progress
-                        .getInt(AudiobookExportWorker.PROGRESS_PERCENT, -1)
-                        .takeIf { it >= 0 }
-                        ?: if (workState == AudiobookExportWorkState.SUCCEEDED) 100 else 0
-                    val stage = info.progress
-                        .getString(AudiobookExportWorker.PROGRESS_STAGE)
-                        ?: ""
-                    val error = info.outputData
-                        .getString(AudiobookExportWorker.OUTPUT_ERROR)
-
-                    AudiobookExportUiState(
-                        workId = info.id.toString(),
-                        state = workState,
-                        percent = progressPercent.coerceIn(0, 100),
-                        stage = stage,
-                        format = info.getInputData().getString(AudiobookExportWorker.INPUT_FORMAT) ?: "WAV",
-                        mode = info.getInputData().getString(AudiobookExportWorker.INPUT_MODE) ?: "original",
-                        startChapter = info.getInputData().getInt(AudiobookExportWorker.INPUT_START, 0),
-                        endChapter = info.getInputData().getInt(AudiobookExportWorker.INPUT_END, 0),
-                        error = error,
-                    )
+            bookUrlFlow
+                .map(AudiobookExportWorker::tagForBook)
+                .distinctUntilChanged()
+                .flatMapLatest { tag ->
+                    WorkManager.getInstance(context).getWorkInfosByTagFlow(tag)
                 }
-            }
+                .collectLatest { infos ->
+                    val info = infos.firstOrNull()
+                    state.audiobookExportStatus.value = info?.let {
+                        val workState = when (it.state) {
+                            WorkInfo.State.ENQUEUED -> AudiobookExportWorkState.ENQUEUED
+                            WorkInfo.State.RUNNING -> AudiobookExportWorkState.RUNNING
+                            WorkInfo.State.SUCCEEDED -> AudiobookExportWorkState.SUCCEEDED
+                            WorkInfo.State.FAILED -> AudiobookExportWorkState.FAILED
+                            WorkInfo.State.CANCELLED -> AudiobookExportWorkState.CANCELLED
+                            WorkInfo.State.BLOCKED -> AudiobookExportWorkState.BLOCKED
+                        }
+                        val progressPercent = it.progress
+                            .getInt(AudiobookExportWorker.PROGRESS_PERCENT, -1)
+                            .takeIf { percent -> percent >= 0 }
+                            ?: if (workState == AudiobookExportWorkState.SUCCEEDED) 100 else 0
+                        val stage = it.progress
+                            .getString(AudiobookExportWorker.PROGRESS_STAGE)
+                            ?: ""
+                        val metadataFormat = it.progress
+                            .getString("format")
+                            ?: "WAV"
+                        val metadataMode = it.progress
+                            .getString("mode")
+                            ?: "original"
+                        val metadataStart = it.progress
+                            .getInt("startChapter", 0)
+                        val metadataEnd = it.progress
+                            .getInt("endChapter", 0)
+                        val error = it.outputData
+                            .getString(AudiobookExportWorker.OUTPUT_ERROR)
+
+                        AudiobookExportUiState(
+                            workId = it.id.toString(),
+                            state = workState,
+                            percent = progressPercent.coerceIn(0, 100),
+                            stage = stage,
+                            format = metadataFormat,
+                            mode = metadataMode,
+                            startChapter = metadataStart,
+                            endChapter = metadataEnd,
+                            error = error,
+                        )
+                    }
+                }
         }
 
         // Подписываемся на переведённые названия глав из БД.

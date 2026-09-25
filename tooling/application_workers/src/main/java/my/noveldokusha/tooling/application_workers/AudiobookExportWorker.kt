@@ -177,7 +177,16 @@ class AudiobookExportWorker(
             )
 
             currentStage = "PREFLIGHT"
-            setProgress(workDataOf(PROGRESS_PERCENT to 0, PROGRESS_STAGE to "preflight"))
+            setProgress(
+                workDataOf(
+                    PROGRESS_PERCENT to 0,
+                    PROGRESS_STAGE to "preflight",
+                    "format" to format.name,
+                    "mode" to mode,
+                    "startChapter" to start,
+                    "endChapter" to end,
+                )
+            )
             require(start != Int.MIN_VALUE && end != Int.MIN_VALUE) {
                 "Invalid chapter range"
             }
@@ -340,6 +349,10 @@ class AudiobookExportWorker(
                             workDataOf(
                                 PROGRESS_PERCENT to overallPercent,
                                 PROGRESS_STAGE to "audio",
+                                "format" to format.name,
+                                "mode" to mode,
+                                "startChapter" to start,
+                                "endChapter" to end,
                             )
                         )
                         lastProgressNotificationMs = now
