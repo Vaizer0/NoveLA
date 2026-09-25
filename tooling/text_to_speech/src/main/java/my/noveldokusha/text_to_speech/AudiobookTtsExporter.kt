@@ -13,7 +13,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.Html
@@ -26,6 +25,7 @@ import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -33,6 +33,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import java.security.MessageDigest
 import java.io.BufferedWriter
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
@@ -101,6 +102,13 @@ private data class CachedReaderWordTiming(
     val durationMs: Long,
     val speed: Float,
 )
+
+private data class WavPcm16(
+    val sampleRate: Int,
+    val channels: Int,
+    val pcm16: ByteArray,
+)
+
 
 private const val READER_TIMING_PREFS = "tts_preferences"
 private const val READER_TIMING_STORE = "tts_word_highlight_timing_json_v2"
@@ -360,6 +368,10 @@ class AudiobookTtsExporter(private val context: Context) {
         var sink: AudioSink? = null
         var error: Throwable? = null
         var latch = CountDownLatch(0)
+        // File-backed synthesis is the primary fast path. Callback PCM is kept only as
+        // an emergency fallback for engines that return a valid status but do not leave
+        // a readable WAV file behind.
+        var currentSlicePcmFallback: ByteArrayOutputStream? = null
         val lastFormat = mutableMapOf<String, Int>()
         val chapterTimings = mutableListOf<ChapterTiming>()
         val exportedTimingStore = linkedMapOf<String, MutableList<JSONObject>>()
@@ -386,13 +398,9 @@ class AudiobookTtsExporter(private val context: Context) {
                     return
                 }
                 lastFormat[id] = format
-                if (sink == null) {
+                if (sampleRate == 0) {
                     sampleRate = rate
                     channels = count
-                    sink = when (request.outputFormat) {
-                        OutputFormat.WAV -> WavSink(mediaFile, rate, count)
-                        OutputFormat.MP4 -> AacMp4Sink(mediaFile, rate, count)
-                    }
                 } else if (sampleRate != rate || channels != count) {
                     error = IllegalStateException("TTS audio format changed during export")
                 }
@@ -404,11 +412,7 @@ class AudiobookTtsExporter(private val context: Context) {
                 if (bytes.isEmpty()) return
                 val format = lastFormat[id] ?: return
                 runCatching {
-                    val pcm = normalizePcm16(bytes, format)
-                    sink?.writePcm16(pcm)
-                    currentFrames = sink?.totalFrames ?: currentFrames
-                    audioBytesReceived += pcm.size.toLong()
-                    sliceAudioBytesReceived += pcm.size.toLong()
+                    currentSlicePcmFallback?.write(normalizePcm16(bytes, format))
                 }.onFailure {
                     error = it
                 }
@@ -440,7 +444,18 @@ class AudiobookTtsExporter(private val context: Context) {
             // positions; word timings come from the persisted Reader cache instead.
             override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) = Unit
         }
-        tts.setOnUtteranceProgressListener(listener)
+        withContext(Dispatchers.Main.immediate) {
+            tts.setOnUtteranceProgressListener(listener)
+        }
+        Timber.d(
+            "AudiobookTTS: ready engine=%s voice=%s locale=%s network=%s speed=%.2f pitch=%.2f",
+            effectiveEnginePackage,
+            effectiveVoiceId,
+            tts.voice?.locale?.toLanguageTag().orEmpty(),
+            tts.voice?.isNetworkConnectionRequired == true,
+            request.speed,
+            request.pitch,
+        )
         // Audio is generated once with synthesizeToFile(). Word timings come from
         // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
         val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
@@ -514,29 +529,41 @@ class AudiobookTtsExporter(private val context: Context) {
                         currentSliceId = "audiobook-" + System.nanoTime() + "-" + sliceIndex
                         error = null
                         sliceAudioBytesReceived = 0L
+                        currentSlicePcmFallback = ByteArrayOutputStream(256 * 1024)
                         latch = CountDownLatch(1)
 
-                        val synthesisPfd = ParcelFileDescriptor.open(
-                            File("/dev/null"),
-                            ParcelFileDescriptor.MODE_WRITE_ONLY,
+                        val synthesisFile = File(
+                            context.cacheDir,
+                            "audiobook-tts-slice-" + System.nanoTime() + "-" + sliceIndex + ".wav",
                         )
                         try {
-                            Timber.d("AudiobookTTS: synthesize slice id=%s chars=%d format=%s", currentSliceId, slice.length, request.outputFormat)
-                            val synthesisResult = tts.synthesizeToFile(
-                                slice,
-                                Bundle().apply {
-                                    putString(
-                                        TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                        currentSliceId,
-                                    )
-                                },
-                                synthesisPfd,
+                            Timber.d(
+                                "AudiobookTTS: synthesize slice id=%s chars=%d file=%s thread=%s",
                                 currentSliceId,
+                                slice.length,
+                                synthesisFile.name,
+                                Thread.currentThread().name,
                             )
-                            Timber.d("AudiobookTTS: synthesizeToFile returned %d id=%s", synthesisResult, currentSliceId)
+
+                            val synthesisResult = synthesizeSliceWithRecovery(
+                                tts = tts,
+                                request = request,
+                                text = slice,
+                                utteranceId = currentSliceId,
+                                outputFile = synthesisFile,
+                            )
+                            Timber.d(
+                                "AudiobookTTS: synthesizeToFile returned %d id=%s exists=%s bytes=%d",
+                                synthesisResult,
+                                currentSliceId,
+                                synthesisFile.exists(),
+                                synthesisFile.length(),
+                            )
                             check(synthesisResult == TextToSpeech.SUCCESS) {
-                                "TTS synthesis failed: " + synthesisResult
+                                "TTS synthesis failed: " + synthesisResult +
+                                    " (engine=" + effectiveEnginePackage + ", voice=" + effectiveVoiceId + ")"
                             }
+
                             val synthesisDeadline = SystemClock.elapsedRealtime() + 10 * 60_000L
                             while (!latch.await(500L, TimeUnit.MILLISECONDS)) {
                                 if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
@@ -546,10 +573,10 @@ class AudiobookTtsExporter(private val context: Context) {
                                 val completed = completedWorkUnits.toDouble()
                                 val total = totalWorkUnits.toDouble().coerceAtLeast(1.0)
                                 val basePercent = ((completed * 100.0) / total).toInt()
-                                // Report 1% as soon as real PCM has arrived, even before the
-                                // first slice completes. This prevents a legitimate long
-                                // synthesis operation from looking like a dead 0% worker.
-                                val livePercent = if (audioBytesReceived > 0L) {
+                                val hasLiveAudio =
+                                    synthesisFile.length() > 44L ||
+                                        (currentSlicePcmFallback?.size() ?: 0) > 0
+                                val livePercent = if (hasLiveAudio) {
                                     maxOf(basePercent, 1)
                                 } else {
                                     basePercent
@@ -566,11 +593,52 @@ class AudiobookTtsExporter(private val context: Context) {
                                     )
                                 )
                             }
+
+                            error?.let { throw it }
+
+                            val filePcmResult = runCatching { readWavPcm16(synthesisFile) }
+                            val pcm16 = filePcmResult.getOrElse {
+                                val fallback = currentSlicePcmFallback?.toByteArray().orEmpty()
+                                if (fallback.isEmpty()) {
+                                    throw IllegalStateException(
+                                        "TTS produced an unreadable WAV and no PCM callback data: " +
+                                            (it.message ?: it::class.java.simpleName),
+                                    )
+                                }
+                                Timber.w(
+                                    it,
+                                    "AudiobookTTS: using onAudioAvailable PCM fallback for " + currentSliceId,
+                                )
+                                WavPcm16(
+                                    sampleRate = sampleRate,
+                                    channels = channels,
+                                    pcm16 = fallback,
+                                )
+                            }
+
+                            if (sampleRate == 0) sampleRate = pcm16.sampleRate
+                            if (channels == 0) channels = pcm16.channels
+                            check(sampleRate == pcm16.sampleRate && channels == pcm16.channels) {
+                                "TTS audio format changed during export: " +
+                                    sampleRate + "x" + channels + " -> " +
+                                    pcm16.sampleRate + "x" + pcm16.channels,
+                            }
+                            if (sink == null) {
+                                sink = when (request.outputFormat) {
+                                    OutputFormat.WAV -> WavSink(mediaFile, sampleRate, channels)
+                                    OutputFormat.MP4 -> AacMp4Sink(mediaFile, sampleRate, channels)
+                                }
+                            }
+
+                            sink?.writePcm16(pcm16.pcm16)
+                            currentFrames = sink?.totalFrames ?: currentFrames
+                            audioBytesReceived += pcm16.pcm16.size.toLong()
+                            sliceAudioBytesReceived += pcm16.pcm16.size.toLong()
                         } finally {
-                            synthesisPfd.close()
+                            currentSlicePcmFallback = null
+                            runCatching { synthesisFile.delete() }
                         }
 
-                        error?.let { throw it }
                         check(sink != null && sampleRate > 0 && channels > 0) {
                             "TTS produced no audio format"
                         }
@@ -730,7 +798,10 @@ class AudiobookTtsExporter(private val context: Context) {
             } finally {
                 runCatching { sink?.close() }
                 runCatching { segmentFile.delete() }
-                runCatching { tts.stop(); tts.shutdown() }
+                withContext(Dispatchers.Main.immediate) {
+                    runCatching { tts.stop() }
+                    runCatching { tts.shutdown() }
+                }
             }
         }
     }
@@ -1044,22 +1115,112 @@ class AudiobookTtsExporter(private val context: Context) {
     private fun MediaFormat.getLongOrDefault(key: String, defaultValue: Long): Long =
         if (containsKey(key)) getLong(key) else defaultValue
 
-    private fun createTts(request: AudiobookExportRequest): TextToSpeech {
-        val latch = CountDownLatch(1)
-        var result = TextToSpeech.ERROR
-        val tts = if (request.enginePackage.isBlank()) {
-            TextToSpeech(context) { result = it; latch.countDown() }
-        } else {
-            TextToSpeech(context, { result = it; latch.countDown() }, request.enginePackage)
+    private suspend fun createTts(request: AudiobookExportRequest): TextToSpeech =
+        withContext(Dispatchers.Main.immediate) {
+            val latch = CountDownLatch(1)
+            var result = TextToSpeech.ERROR
+            val tts = if (request.enginePackage.isBlank()) {
+                TextToSpeech(context) { status ->
+                    result = status
+                    latch.countDown()
+                }
+            } else {
+                TextToSpeech(context, { status ->
+                    result = status
+                    latch.countDown()
+                }, request.enginePackage)
+            }
+
+            check(
+                latch.await(10, TimeUnit.SECONDS) && result == TextToSpeech.SUCCESS
+            ) {
+                "Unable to initialize TTS engine=" +
+                    request.enginePackage.ifBlank { "system-default" }
+            }
+
+            if (request.voiceId.isNotBlank()) {
+                val voice = tts.voices?.firstOrNull { it.name == request.voiceId }
+                    ?: error(
+                        "Selected voice is unavailable: " + request.voiceId +
+                            " (engine=" +
+                            request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() } +
+                            ")",
+                    )
+                tts.voice = voice
+            }
+
+            check(
+                tts.setSpeechRate(request.speed.coerceIn(0.1f, 5f)) == TextToSpeech.SUCCESS
+            ) {
+                "Unable to set TTS speech rate " + request.speed
+            }
+            check(
+                tts.setPitch(request.pitch.coerceIn(0.1f, 2f)) == TextToSpeech.SUCCESS
+            ) {
+                "Unable to set TTS pitch " + request.pitch
+            }
+            tts
         }
-        check(latch.await(10, TimeUnit.SECONDS) && result == TextToSpeech.SUCCESS) { "Unable to initialize TTS" }
-        if (request.voiceId.isNotBlank()) {
-            tts.voice = tts.voices?.firstOrNull { it.name == request.voiceId }
-                ?: error("Selected voice is unavailable")
+
+    private suspend fun synthesizeSliceWithRecovery(
+        tts: TextToSpeech,
+        request: AudiobookExportRequest,
+        text: String,
+        utteranceId: String,
+        outputFile: File,
+    ): Int {
+        suspend fun queueFile(): Int =
+            withContext(Dispatchers.Main.immediate) {
+                tts.synthesizeToFile(
+                    text,
+                    Bundle(),
+                    outputFile,
+                    utteranceId,
+                )
+            }
+
+        fun reapplySettings() {
+            if (request.voiceId.isNotBlank()) {
+                tts.voices?.firstOrNull { it.name == request.voiceId }?.let {
+                    tts.voice = it
+                }
+            }
+            tts.setSpeechRate(request.speed.coerceIn(0.1f, 5f))
+            tts.setPitch(request.pitch.coerceIn(0.1f, 2f))
         }
-        check(tts.setSpeechRate(request.speed.coerceIn(0.1f, 5f)) == TextToSpeech.SUCCESS)
-        check(tts.setPitch(request.pitch.coerceIn(0.1f, 2f)) == TextToSpeech.SUCCESS)
-        return tts
+
+        var result = queueFile()
+        if (result == TextToSpeech.SUCCESS) return result
+
+        Timber.w(
+            "AudiobookTTS: primary synth enqueue failed result=%d; retrying after stop/reapply",
+            result,
+        )
+        withContext(Dispatchers.Main.immediate) {
+            runCatching { tts.stop() }
+            reapplySettings()
+        }
+        delay(60L)
+        runCatching { outputFile.delete() }
+        result = queueFile()
+        if (result == TextToSpeech.SUCCESS) return result
+
+        Timber.w(
+            "AudiobookTTS: second synth enqueue failed result=%d; trying legacy file API",
+            result,
+        )
+        runCatching { outputFile.delete() }
+        result = withContext(Dispatchers.Main.immediate) {
+            runCatching { tts.stop() }
+            reapplySettings()
+            @Suppress("DEPRECATION")
+            tts.synthesizeToFile(
+                text,
+                hashMapOf(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID to utteranceId),
+                outputFile.absolutePath,
+            )
+        }
+        return result
     }
 
     private fun normalizePcm16(audio: ByteArray, format: Int): ByteArray = when (format) {
@@ -1156,6 +1317,101 @@ class AudiobookTtsExporter(private val context: Context) {
 
     private fun durationMs(frames: Long, sampleRate: Int): Long =
         if (sampleRate > 0) frames * 1000L / sampleRate else 0L
+
+    private fun readWavPcm16(file: File): WavPcm16 {
+        RandomAccessFile(file, "r").use { raf ->
+            require(raf.length() >= 44L) {
+                "WAV file is too small: " + raf.length() + " bytes"
+            }
+
+            fun readAscii(length: Int): String =
+                ByteArray(length).also(raf::readFully).toString(Charsets.US_ASCII)
+
+            fun readU16(): Int {
+                val lo = raf.read()
+                val hi = raf.read()
+                check(lo >= 0 && hi >= 0) { "Unexpected end of WAV header" }
+                return lo or (hi shl 8)
+            }
+
+            fun readU32(): Long {
+                val b0 = raf.read()
+                val b1 = raf.read()
+                val b2 = raf.read()
+                val b3 = raf.read()
+                check(b0 >= 0 && b1 >= 0 && b2 >= 0 && b3 >= 0) {
+                    "Unexpected end of WAV header"
+                }
+                return b0.toLong() or
+                    (b1.toLong() shl 8) or
+                    (b2.toLong() shl 16) or
+                    (b3.toLong() shl 24)
+            }
+
+            require(readAscii(4) == "RIFF") { "Unsupported TTS file container (not RIFF)" }
+            readU32()
+            require(readAscii(4) == "WAVE") { "Unsupported TTS file container (not WAVE)" }
+
+            var audioFormat = -1
+            var channels = 0
+            var sampleRate = 0
+            var bitsPerSample = 0
+            var dataOffset = -1L
+            var dataSize = -1L
+
+            while (raf.filePointer + 8L <= raf.length()) {
+                val chunkId = readAscii(4)
+                val chunkSize = readU32().coerceAtMost(raf.length() - raf.filePointer)
+                when (chunkId) {
+                    "fmt " -> {
+                        audioFormat = readU16()
+                        channels = readU16()
+                        sampleRate = readU32().toInt()
+                        readU32()
+                        readU16()
+                        bitsPerSample = readU16()
+                        val consumed = 16L
+                        if (chunkSize > consumed) {
+                            raf.skipBytes(
+                                (chunkSize - consumed)
+                                    .coerceAtMost(Int.MAX_VALUE.toLong())
+                                    .toInt(),
+                            )
+                        }
+                    }
+                    "data" -> {
+                        dataOffset = raf.filePointer
+                        dataSize = chunkSize
+                        break
+                    }
+                    else -> {
+                        raf.seek((raf.filePointer + chunkSize).coerceAtMost(raf.length()))
+                    }
+                }
+                if ((chunkSize and 1L) != 0L && raf.filePointer < raf.length()) {
+                    raf.skipBytes(1)
+                }
+            }
+
+            check(audioFormat == 1) {
+                "Unsupported TTS WAV encoding: " + audioFormat
+            }
+            check(channels > 0 && sampleRate > 0) {
+                "Invalid TTS WAV format: rate=" + sampleRate + " channels=" + channels
+            }
+            check(bitsPerSample == 16) {
+                "Unsupported TTS WAV bit depth: " + bitsPerSample
+            }
+            check(dataOffset >= 0L && dataSize > 0L) {
+                "TTS WAV contains no audio data"
+            }
+
+            raf.seek(dataOffset)
+            val pcm = ByteArray(dataSize.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            raf.readFully(pcm)
+            return WavPcm16(sampleRate, channels, pcm)
+        }
+    }
 
     private fun firstGifFrame(uri: Uri): Uri {
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
