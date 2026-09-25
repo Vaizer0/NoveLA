@@ -560,19 +560,39 @@ class AudiobookTtsExporter(private val context: Context) {
                                 effectiveEnginePackage, effectiveVoiceId,
                             )
 
-                            var synthesisResult = tts.synthesizeToFile(
-                                slice, Bundle(), synthesisPfd, state.id,
-                            )
+                            var synthesisResult = withContext(Dispatchers.Main.immediate) {
+                                tts.synthesizeToFile(
+                                    slice,
+                                    Bundle().apply {
+                                        putString(
+                                            TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
+                                            state.id,
+                                        )
+                                    },
+                                    synthesisPfd,
+                                    state.id,
+                                )
+                            }
                             if (synthesisResult != TextToSpeech.SUCCESS) {
                                 Timber.w(
                                     "AudiobookTTS: PFD synthesis returned %d; retrying File overload",
                                     synthesisResult,
                                 )
-                                tts.stop()
+                                withContext(Dispatchers.Main.immediate) { tts.stop() }
                                 fallbackSynthesisFile.delete()
-                                synthesisResult = tts.synthesizeToFile(
-                                    slice, Bundle(), fallbackSynthesisFile, state.id,
-                                )
+                                synthesisResult = withContext(Dispatchers.Main.immediate) {
+                                    tts.synthesizeToFile(
+                                        slice,
+                                        Bundle().apply {
+                                            putString(
+                                                TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
+                                                state.id,
+                                            )
+                                        },
+                                        fallbackSynthesisFile,
+                                        state.id,
+                                    )
+                                }
                             }
                             if (synthesisResult != TextToSpeech.SUCCESS) {
                                 Timber.e(
@@ -1253,23 +1273,66 @@ class AudiobookTtsExporter(private val context: Context) {
     private fun MediaFormat.getLongOrDefault(key: String, defaultValue: Long): Long =
         if (containsKey(key)) getLong(key) else defaultValue
 
-    private fun createTts(request: AudiobookExportRequest): TextToSpeech {
-        val latch = CountDownLatch(1)
-        var result = TextToSpeech.ERROR
-        val tts = if (request.enginePackage.isBlank()) {
-            TextToSpeech(context) { result = it; latch.countDown() }
-        } else {
-            TextToSpeech(context, { result = it; latch.countDown() }, request.enginePackage)
+    private suspend fun createTts(request: AudiobookExportRequest): TextToSpeech =
+        withContext(Dispatchers.Main.immediate) {
+            suspendCancellableCoroutine { cont ->
+                var tts: TextToSpeech? = null
+                try {
+                    val listener = TextToSpeech.OnInitListener { result ->
+                        val instance = tts
+                        if (result == TextToSpeech.SUCCESS && instance != null) {
+                            try {
+                                if (request.voiceId.isNotBlank()) {
+                                    val voice = instance.voices?.firstOrNull {
+                                        it.name == request.voiceId
+                                    } ?: error("Selected voice is unavailable")
+                                    check(instance.setVoice(voice) == TextToSpeech.SUCCESS) {
+                                        "Unable to set selected TTS voice"
+                                    }
+                                }
+                                check(
+                                    instance.setSpeechRate(
+                                        request.speed.coerceIn(0.1f, 5f),
+                                    ) == TextToSpeech.SUCCESS
+                                ) {
+                                    "Unable to set TTS speech rate"
+                                }
+                                check(
+                                    instance.setPitch(
+                                        request.pitch.coerceIn(0.1f, 2f),
+                                    ) == TextToSpeech.SUCCESS
+                                ) {
+                                    "Unable to set TTS pitch"
+                                }
+                                cont.resume(instance)
+                            } catch (t: Throwable) {
+                                runCatching { instance.shutdown() }
+                                if (cont.isActive) cont.resumeWithException(t)
+                            }
+                        } else if (cont.isActive) {
+                            tts?.shutdown()
+                            cont.resumeWithException(
+                                IllegalStateException(
+                                    "Unable to initialize TTS: result=$result",
+                                )
+                            )
+                        }
+                    }
+                    tts = if (request.enginePackage.isBlank()) {
+                        TextToSpeech(context, listener)
+                    } else {
+                        TextToSpeech(context, listener, request.enginePackage)
+                    }
+                    cont.invokeOnCancellation {
+                        runCatching { tts?.stop() }
+                        runCatching { tts?.shutdown() }
+                    }
+                } catch (t: Throwable) {
+                    runCatching { tts?.shutdown() }
+                    if (cont.isActive) cont.resumeWithException(t)
+                }
+            }
         }
-        check(latch.await(10, TimeUnit.SECONDS) && result == TextToSpeech.SUCCESS) { "Unable to initialize TTS" }
-        if (request.voiceId.isNotBlank()) {
-            tts.voice = tts.voices?.firstOrNull { it.name == request.voiceId }
-                ?: error("Selected voice is unavailable")
-        }
-        check(tts.setSpeechRate(request.speed.coerceIn(0.1f, 5f)) == TextToSpeech.SUCCESS)
-        check(tts.setPitch(request.pitch.coerceIn(0.1f, 2f)) == TextToSpeech.SUCCESS)
-        return tts
-    }
 
     private fun normalizePcm16(audio: ByteArray, format: Int): ByteArray = when (format) {
         android.media.AudioFormat.ENCODING_PCM_16BIT -> audio
