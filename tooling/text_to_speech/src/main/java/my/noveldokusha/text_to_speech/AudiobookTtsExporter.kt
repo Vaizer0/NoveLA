@@ -12,7 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
+import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.Html
@@ -23,18 +23,13 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
-import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.security.MessageDigest
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
@@ -44,8 +39,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
@@ -99,85 +92,11 @@ private data class WordTiming(
     val endMs: Long,
 )
 
-private data class CachedReaderWordTiming(
-    val start: Int,
-    val end: Int,
-    val startMs: Long,
-    val durationMs: Long,
-    val speed: Float,
-)
-
-private const val READER_TIMING_PREFS = "tts_preferences"
-private const val READER_TIMING_STORE = "tts_word_highlight_timing_json_v2"
-
-private fun readerWordTimingCacheKey(
-    enginePackage: String,
-    voiceId: String,
-    needsInternet: Boolean,
-    language: String,
-    pitch: Float,
-    text: String,
-): String {
-    val material = buildString {
-        append("word_timing_v2|")
-        append(enginePackage).append('|')
-        append(voiceId).append('|')
-        append(needsInternet).append('|')
-        append(language).append('|')
-        append(pitch).append('|')
-        append(text)
-    }
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(material.toByteArray(Charsets.UTF_8))
-    return "word_timing_v2_" + digest.joinToString("") { "%02x".format(it) }
-}
-
-private fun readReaderWordTimings(
-    context: Context,
-    cacheKey: String,
-): List<CachedReaderWordTiming> =
-    runCatching {
-        val prefs = context.getSharedPreferences(READER_TIMING_PREFS, Context.MODE_PRIVATE)
-        val root = JSONObject(prefs.getString(READER_TIMING_STORE, "{}") ?: "{}")
-        val array = root.optJSONArray(cacheKey)
-            ?: root.optJSONObject(cacheKey)?.optJSONArray("timings")
-            ?: return@runCatching emptyList()
-        buildList {
-            for (i in 0 until array.length()) {
-                val item = array.optJSONObject(i) ?: continue
-                val start = item.optInt("start", -1)
-                val end = item.optInt("end", -1)
-                val startMs = item.optLong("start_ms", -1L)
-                val durationMs = item.optLong("duration_ms", -1L)
-                val speed = item.optDouble("speed", Double.NaN).toFloat()
-                if (start >= 0 && end > start && startMs >= 0L &&
-                    durationMs in 40L..15_000L && speed.isFinite() && speed > 0f
-                ) {
-                    add(CachedReaderWordTiming(start, end, startMs, durationMs, speed))
-                }
-            }
-        }
-    }.getOrDefault(emptyList())
-
 private data class ChapterTiming(
     val chapter: AudiobookChapterData,
     val startMs: Long,
     val endMs: Long,
 )
-
-private class ExportSliceState(
-    val id: String,
-) {
-    val pcmQueue = Channel<ByteArray>(Channel.UNLIMITED)
-    val formatReady = CountDownLatch(1)
-    val done = CountDownLatch(1)
-    val error = AtomicReference<Throwable?>(null)
-    val audioBytesReceived = AtomicLong(0L)
-
-    @Volatile var sampleRate: Int = 0
-    @Volatile var audioFormat: Int = 0
-    @Volatile var channels: Int = 0
-}
 
 private interface AudioSink : AutoCloseable {
     val sampleRate: Int
@@ -192,63 +111,50 @@ private class WavSink(
     override val sampleRate: Int,
     override val channels: Int,
 ) : AudioSink {
-    private val out = java.io.BufferedOutputStream(FileOutputStream(file, false), 256 * 1024)
+    private val raf = RandomAccessFile(file, "rw")
     private var dataBytes = 0L
     override var totalFrames = 0L
-    private var finished = false
 
     init {
-        repeat(44) { out.write(0) }
+        raf.setLength(0L)
+        repeat(44) { raf.write(0) }
     }
 
     @Synchronized
     override fun writePcm16(bytes: ByteArray) {
-        check(!finished)
-        out.write(bytes)
+        raf.write(bytes)
         dataBytes += bytes.size
         totalFrames += bytes.size.toLong() / (channels * 2L)
     }
 
-    @Synchronized
     override fun finish() {
-        if (finished) return
         require(dataBytes <= 0xFFFF_FFFFL - 36L) { "WAV exceeds RIFF size limit" }
-        out.flush()
-        out.close()
-
-        RandomAccessFile(file, "rw").use { raf ->
-            raf.seek(0)
-            fun ascii(value: String) = raf.write(value.toByteArray(Charsets.US_ASCII))
-            fun u16(value: Int) {
-                raf.write(value and 255)
-                raf.write((value ushr 8) and 255)
-            }
-            fun u32(value: Long) {
-                raf.write((value and 255).toInt())
-                raf.write(((value ushr 8) and 255).toInt())
-                raf.write(((value ushr 16) and 255).toInt())
-                raf.write(((value ushr 24) and 255).toInt())
-            }
-            ascii("RIFF")
-            u32(36L + dataBytes)
-            ascii("WAVEfmt ")
-            u32(16)
-            u16(1)
-            u16(channels)
-            u32(sampleRate.toLong())
-            u32(sampleRate.toLong() * channels * 2L)
-            u16(channels * 2)
-            u16(16)
-            ascii("data")
-            u32(dataBytes)
-        }
-        finished = true
+        raf.seek(0)
+        ascii("RIFF")
+        u32(36L + dataBytes)
+        ascii("WAVEfmt ")
+        u32(16)
+        u16(1)
+        u16(channels)
+        u32(sampleRate.toLong())
+        u32(sampleRate.toLong() * channels * 2L)
+        u16(channels * 2)
+        u16(16)
+        ascii("data")
+        u32(dataBytes)
+        raf.seek(raf.length())
     }
 
-    override fun close() {
-        runCatching { finish() }
-        runCatching { out.close() }
+    private fun ascii(value: String) = raf.write(value.toByteArray(Charsets.US_ASCII))
+    private fun u16(value: Int) { raf.write(value and 255); raf.write((value ushr 8) and 255) }
+    private fun u32(value: Long) {
+        raf.write((value and 255).toInt())
+        raf.write(((value ushr 8) and 255).toInt())
+        raf.write(((value ushr 16) and 255).toInt())
+        raf.write(((value ushr 24) and 255).toInt())
     }
+
+    override fun close() { runCatching { raf.close() } }
 }
 
 private class AacMp4Sink(
@@ -279,23 +185,15 @@ private class AacMp4Sink(
     @Synchronized
     override fun writePcm16(bytes: ByteArray) {
         check(!closed)
-        val frameSize = channels * 2
-        check(frameSize > 0)
         var offset = 0
-        val deadline = SystemClock.elapsedRealtime() + 30_000L
-
+        val frameSize = channels * 2
         while (offset < bytes.size) {
-            check(SystemClock.elapsedRealtime() < deadline) {
-                "AAC encoder input timed out"
-            }
             drain(false)
-            val inputIndex = codec.dequeueInputBuffer(50_000L)
+            val inputIndex = codec.dequeueInputBuffer(10000L)
             if (inputIndex < 0) continue
-            val input = codec.getInputBuffer(inputIndex)
-                ?: error("AAC input buffer unavailable")
+            val input = codec.getInputBuffer(inputIndex) ?: error("AAC input buffer unavailable")
             input.clear()
             val size = min(input.remaining(), bytes.size - offset)
-            check(size > 0) { "AAC encoder accepted zero-byte input" }
             input.put(bytes, offset, size)
             val frames = size.toLong() / frameSize.toLong()
             val ptsUs = inputFrames * 1_000_000L / sampleRate
@@ -305,46 +203,27 @@ private class AacMp4Sink(
             offset += size
         }
     }
+
     @Synchronized
     override fun finish() {
         if (closed) return
-
-        val deadline = SystemClock.elapsedRealtime() + 30_000L
-        var eosQueued = false
-        while (!eosQueued) {
-            check(SystemClock.elapsedRealtime() < deadline) {
-                "AAC encoder EOS input timed out"
-            }
+        while (true) {
             drain(false)
-            val inputIndex = codec.dequeueInputBuffer(50_000L)
+            val inputIndex = codec.dequeueInputBuffer(10000L)
             if (inputIndex >= 0) {
                 val ptsUs = inputFrames * 1_000_000L / sampleRate
-                codec.queueInputBuffer(
-                    inputIndex,
-                    0,
-                    0,
-                    ptsUs,
-                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                )
-                eosQueued = true
+                codec.queueInputBuffer(inputIndex, 0, 0, ptsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                break
             }
         }
-
-        while (!drain(true)) {
-            check(SystemClock.elapsedRealtime() < deadline) {
-                "AAC encoder EOS output timed out"
-            }
-        }
-
-        check(started && track >= 0) {
-            "AAC encoder produced no muxed audio track"
-        }
-        muxer.stop()
-        muxer.release()
-        codec.stop()
-        codec.release()
+        while (!drain(true)) { }
+        if (started) runCatching { muxer.stop() }
+        runCatching { muxer.release() }
+        runCatching { codec.stop() }
+        runCatching { codec.release() }
         closed = true
     }
+
     override fun close() { runCatching { finish() } }
 
     private fun drain(waitForEos: Boolean): Boolean {
@@ -387,8 +266,7 @@ class AudiobookTtsExporter(private val context: Context) {
         jsonFile: File,
         onProgress: suspend (AudiobookExportProgress) -> Unit = {},
     ): Long = withContext(Dispatchers.IO) {
-        coroutineScope {
-            require(chapters.isNotEmpty())
+        require(chapters.isNotEmpty())
         val segments = chapters.flatMap { chapter ->
             buildList {
                 add(SpeechSegment(chapter.position, chapter.url, "title", chapter.speechTitle))
@@ -399,100 +277,66 @@ class AudiobookTtsExporter(private val context: Context) {
         }
         require(segments.isNotEmpty()) { "No spoken text" }
 
-        // TTS callbacks only enqueue/copy PCM. Encoding happens off the callback thread.
-        val activeSlice = AtomicReference<ExportSliceState?>(null)
-        val chapterTimings = mutableListOf<ChapterTiming>()
-        val exportedTimingStore = linkedMapOf<String, MutableList<JSONObject>>()
-        val exportedTimingSegments = mutableListOf<JSONObject>()
-        val segmentFile = File(
-            jsonFile.parentFile ?: context.cacheDir,
-            "segments-" + System.nanoTime() + ".jsonl",
-        )
-        val totalAudioBytesReceived = AtomicLong(0L)
-        val totalFramesWritten = AtomicLong(0L)
-
+        val tts = createTts(request)
+        var sink: AudioSink? = null
         var sampleRate = 0
         var channels = 0
-        var sink: AudioSink? = null
+        var currentSliceId = ""
+        var currentSliceOffset = 0
+        var currentSliceStartMs = 0L
+        var currentFrames = 0L
+        var sliceRanges = mutableListOf<Pair<IntRange, Long>>()
+        var error: Throwable? = null
+        var latch = CountDownLatch(0)
+        val lastFormat = mutableMapOf<String, Int>()
+        val chapterTimings = mutableListOf<ChapterTiming>()
+        val segmentFile = File(jsonFile.parentFile ?: context.cacheDir, "segments-" + System.nanoTime() + ".jsonl")
 
-        val tts = createTts(request)
         val listener = object : UtteranceProgressListener() {
-            private fun stateFor(id: String?): ExportSliceState? {
-                val state = activeSlice.get() ?: return null
-                return if (id != null && id == state.id) state else null
-            }
-
-            override fun onBeginSynthesis(
-                id: String?,
-                rate: Int,
-                format: Int,
-                count: Int,
-            ) {
-                val state = stateFor(id) ?: return
-                if (rate <= 0 || count <= 0) {
-                    state.error.compareAndSet(
-                        null,
-                        IllegalStateException("Invalid TTS audio format: rate=$rate channels=$count"),
-                    )
-                } else {
-                    state.sampleRate = rate
-                    state.audioFormat = format
-                    state.channels = count
+            override fun onBeginSynthesis(id: String?, rate: Int, format: Int, count: Int) {
+                if (id != currentSliceId) return
+                if (rate <= 0 || count <= 0) { error = IllegalStateException("Invalid TTS audio format"); return }
+                lastFormat[id] = format
+                if (sink == null) {
+                    sampleRate = rate
+                    channels = count
+                    sink = when (request.outputFormat) {
+                        OutputFormat.WAV -> WavSink(mediaFile, rate, count)
+                        OutputFormat.MP4 -> AacMp4Sink(mediaFile, rate, count)
+                    }
+                } else if (sampleRate != rate || channels != count) {
+                    error = IllegalStateException("TTS audio format changed")
                 }
-                state.formatReady.countDown()
             }
 
             override fun onAudioAvailable(id: String?, audio: ByteArray?) {
-                val state = stateFor(id) ?: return
-                if (state.error.get() != null) return
+                if (id != currentSliceId || error != null) return
                 val bytes = audio ?: return
                 if (bytes.isEmpty()) return
+                val format = lastFormat[id] ?: return
+                runCatching {
+                    sink?.writePcm16(normalizePcm16(bytes, format))
+                    currentFrames = sink?.totalFrames ?: currentFrames
+                }.onFailure { error = it }
+            }
 
-                // Never block the TTS callback on disk or MediaCodec.
-                val copy = bytes.copyOf()
-                if (state.pcmQueue.trySend(copy).isSuccess) {
-                    state.audioBytesReceived.addAndGet(copy.size.toLong())
-                    totalAudioBytesReceived.addAndGet(copy.size.toLong())
-                } else {
-                    state.error.compareAndSet(
-                        null,
-                        IllegalStateException("Unable to queue TTS PCM for slice " + state.id),
-                    )
-                }
+            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
+                if (id != currentSliceId || sampleRate <= 0 || start < 0 || end <= start) return
+                val ms = currentSliceStartMs + frame.toLong() * 1000L / sampleRate
+                sliceRanges.add((start + currentSliceOffset until end + currentSliceOffset) to ms)
             }
 
             override fun onStart(id: String?) = Unit
-
-            override fun onDone(id: String?) {
-                stateFor(id)?.done?.countDown()
-            }
-
+            override fun onDone(id: String?) { if (id == currentSliceId) latch.countDown() }
             override fun onError(id: String?, code: Int) {
-                stateFor(id)?.let {
-                    it.error.compareAndSet(null, IllegalStateException("TTS error $code"))
-                    it.formatReady.countDown()
-                    it.done.countDown()
-                }
+                if (id == currentSliceId) { error = IllegalStateException("TTS error " + code); latch.countDown() }
             }
-
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) {
-                stateFor(id)?.let {
-                    it.error.compareAndSet(null, IllegalStateException("TTS error"))
-                    it.formatReady.countDown()
-                    it.done.countDown()
-                }
+                if (id == currentSliceId) { error = IllegalStateException("TTS error"); latch.countDown() }
             }
-
-            // synthesizeToFile() range callbacks are intentionally not used as authoritative
-            // exported word timings. Reader-persisted timing data is used when available.
-            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) = Unit
         }
         tts.setOnUtteranceProgressListener(listener)
-        // Audio is generated once with synthesizeToFile(). Word timings come from
-        // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
-        val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
-        val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
 
         var activeChapter = -1
         var chapterStartMs = 0L
@@ -518,7 +362,7 @@ class AudiobookTtsExporter(private val context: Context) {
                     percent = percent,
                     elapsedMs = elapsed,
                     estimatedRemainingMs = eta,
-                    generatedAudioMs = durationMs(totalFramesWritten.get(), sampleRate),
+                    generatedAudioMs = durationMs(currentFrames, sampleRate),
                 )
             )
         }
@@ -542,256 +386,72 @@ class AudiobookTtsExporter(private val context: Context) {
                     if (segment.chapterPosition != activeChapter) {
                         if (activeChapter >= 0) {
                             val previous = chapters.first { it.position == activeChapter }
-                            val endMs = durationMs(totalFramesWritten.get(), sampleRate)
+                            val endMs = durationMs(currentFrames, sampleRate)
                             chapterTimings += ChapterTiming(previous, chapterStartMs, endMs)
                             completedChapters++
                             publishProgress(previous, force = true)
                         }
                         activeChapter = segment.chapterPosition
-                        chapterStartMs = durationMs(totalFramesWritten.get(), sampleRate)
+                        chapterStartMs = durationMs(currentFrames, sampleRate)
                     }
 
-                    val segmentStartMs = durationMs(totalFramesWritten.get(), sampleRate)
+                    val segmentStartMs = durationMs(currentFrames, sampleRate)
+                    val wordTimings = mutableListOf<WordTiming>()
                     val slices = delimiterAwareTextSplitter(
                         fullText = segment.text,
                         maxSliceLength = TextToSpeech.getMaxSpeechInputLength(),
                         charDelimiter = '.',
                     ).filter(String::isNotBlank)
+                    var charOffset = 0
 
                     for ((sliceIndex, slice) in slices.withIndex()) {
-                        val state = ExportSliceState(
-                            "audiobook-" + System.nanoTime() + "-" + sliceIndex,
-                        )
-                        check(activeSlice.compareAndSet(null, state)) {
-                            "TTS exporter internal error: another slice is active"
-                        }
-
-                        // Use the same regular File overload that the device diagnostic
-                        // proved successful. The file is disposable; PCM callbacks feed
-                        // the fast WAV/AAC sink, so export never uses real-time playback.
-                        val synthesisFile = File(
-                            context.cacheDir,
-                            "audiobook-synthesis-" + System.nanoTime() + ".wav",
-                        )
-                        synthesisFile.delete()
-                        var writerJob: kotlinx.coroutines.Job? = null
+                        currentSliceId = "audiobook-" + System.nanoTime() + "-" + sliceIndex
+                        currentSliceOffset = charOffset
+                        currentSliceStartMs = durationMs(currentFrames, sampleRate)
+                        sliceRanges = mutableListOf()
+                        error = null
+                        latch = CountDownLatch(1)
+                        val pfd = ParcelFileDescriptor.open(File("/dev/null"), ParcelFileDescriptor.MODE_WRITE_ONLY)
                         try {
-                            Timber.d(
-                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s engine=%s voice=%s file=%s",
-                                state.id,
-                                slice.length,
-                                request.outputFormat,
-                                effectiveEnginePackage,
-                                effectiveVoiceId,
-                                synthesisFile.absolutePath,
+                            val result = tts.synthesizeToFile(
+                                slice,
+                                Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, currentSliceId) },
+                                pfd,
+                                currentSliceId,
                             )
-
-                            val synthesisResult = withContext(Dispatchers.Main.immediate) {
-                                tts.synthesizeToFile(
-                                    slice,
-                                    Bundle(),
-                                    synthesisFile,
-                                    state.id,
-                                )
-                            }
-                            Timber.d(
-                                "AudiobookTTS: File synthesis queued result=%d exists=%s length=%d id=%s",
-                                synthesisResult,
-                                synthesisFile.exists(),
-                                synthesisFile.length(),
-                                state.id,
-                            )
-                            check(synthesisResult == TextToSpeech.SUCCESS) {
-                                "TTS synthesis request failed: " + synthesisResult +
-                                    " (engine=" + effectiveEnginePackage +
-                                    " voice=" + effectiveVoiceId +
-                                    " chars=" + slice.length + ")"
-                            }
-                        check(state.formatReady.await(10, TimeUnit.SECONDS)) {
-                                "TTS synthesis did not report its audio format"
-                            }
-                            state.error.get()?.let { throw it }
-                            check(state.sampleRate > 0 && state.channels > 0) {
-                                "TTS produced an invalid audio format"
-                            }
-
-                            if (sink == null) {
-                                sampleRate = state.sampleRate
-                                channels = state.channels
-                                sink = when (request.outputFormat) {
-                                    OutputFormat.WAV -> WavSink(mediaFile, sampleRate, channels)
-                                    OutputFormat.MP4 -> AacMp4Sink(mediaFile, sampleRate, channels)
-                                }
-                            } else {
-                                check(sampleRate == state.sampleRate && channels == state.channels) {
-                                    "TTS audio format changed during export"
-                                }
-                            }
-
-                            // Consume queued PCM on a coroutine. TTS callback threads never touch
-                            // the actual file writer or MediaCodec.
-                            writerJob = launch(Dispatchers.IO) {
-                                try {
-                                    for (pcm in state.pcmQueue) {
-                                        val pcm16 = normalizePcm16(pcm, state.audioFormat)
-                                        val audioSink = sink ?: error("Audio sink was not initialized")
-                                        audioSink.writePcm16(pcm16)
-                                        totalFramesWritten.set(audioSink.totalFrames)
-                                    }
-                                } catch (t: Throwable) {
-                                    state.error.compareAndSet(null, t)
-                                }
-                            }
-
-                            val synthesisDeadline = SystemClock.elapsedRealtime() + 10 * 60_000L
-                            while (!state.done.await(500L, TimeUnit.MILLISECONDS)) {
-                                if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
-                                    throw IllegalStateException("TTS synthesis timeout")
-                                }
-
-                                val elapsed = SystemClock.elapsedRealtime() - exportStartedAt
-                                val completed = completedWorkUnits.toDouble()
-                                val total = totalWorkUnits.toDouble().coerceAtLeast(1.0)
-                                val basePercent = ((completed * 100.0) / total).toInt()
-                                val livePercent = if (totalAudioBytesReceived.get() > 0L) {
-                                    maxOf(basePercent, 1)
-                                } else {
-                                    basePercent
-                                }
-                                onProgress(
-                                    AudiobookExportProgress(
-                                        currentChapter = completedChapters,
-                                        totalChapters = chapters.size,
-                                        chapterTitle = chapters.first {
-                                            it.position == segment.chapterPosition
-                                        }.title,
-                                        percent = livePercent.coerceIn(0, 100),
-                                        elapsedMs = elapsed.coerceAtLeast(0L),
-                                        estimatedRemainingMs = null,
-                                        generatedAudioMs = durationMs(
-                                            totalFramesWritten.get(),
-                                            sampleRate,
-                                        ),
-                                    )
-                                )
-                            }
-
-                            state.pcmQueue.close()
-                            writerJob.join()
-                            state.error.get()?.let { throw it }
-
-                            check(state.audioBytesReceived.get() > 0L) {
-                                "TTS produced no audio data for the current slice"
-                            }
+                            check(result == TextToSpeech.SUCCESS) { "TTS synthesis failed: " + result }
+                            check(latch.await(60, TimeUnit.SECONDS)) { "TTS synthesis timeout" }
                         } finally {
-                            runCatching { synthesisFile.delete() }
-                            runCatching { state.pcmQueue.close() }
-                            if (writerJob != null) {
-                                try {
-                                    writerJob!!.join()
-                                } catch (_: Throwable) {
-                                }
-                            }
-                            synthesisFile.delete()
-                            activeSlice.compareAndSet(state, null)
+                            pfd.close()
                         }
-
+                        error?.let { throw it }
+                        completedWorkUnits += slice.length.toLong().coerceAtLeast(1L)
                         val currentElapsed = (SystemClock.elapsedRealtime() - exportStartedAt).coerceAtLeast(0L)
                         if (currentElapsed >= 350L) {
                             publishProgress(
                                 chapters.first { it.position == segment.chapterPosition },
                             )
                         }
-                    }
-
-                    val segmentEndMs = durationMs(totalFramesWritten.get(), sampleRate)
-                    val timingKey = readerWordTimingCacheKey(
-                        enginePackage = effectiveEnginePackage,
-                        voiceId = effectiveVoiceId,
-                        needsInternet = tts.voice?.isNetworkConnectionRequired == true,
-                        language = tts.voice?.locale?.displayLanguage.orEmpty(),
-                        pitch = request.pitch,
-                        text = segment.text,
-                    )
-                    val cachedTimings = readReaderWordTimings(context, timingKey)
-                    // Reader speaks ReaderItem.Text paragraphs, not the synthetic audiobook
-                    // intro line ("book title + chapter title"). Keep the title audio in the
-                    // export, but do not invent false word timings for it when no Reader cache
-                    // exists. Paragraphs remain strict: exported word timings are exact cached
-                    // Reader onRangeStart timings, not estimates.
-                    val requestedSpeed = request.speed.coerceIn(0.1f, 5f)
-                    val speedScaledTimings = cachedTimings.map { timing ->
-                        val speedScale = timing.speed.toDouble() / requestedSpeed.toDouble()
-                        val relativeStartMs = (timing.startMs.toDouble() * speedScale)
-                            .toLong().coerceAtLeast(0L)
-                        val durationMs = (timing.durationMs.toDouble() * speedScale)
-                            .toLong().coerceAtLeast(1L)
-                        timing to (relativeStartMs to durationMs)
-                    }
-                    val cachedTimelineEndMs = speedScaledTimings.maxOfOrNull {
-                        it.second.first + it.second.second
-                    }?.coerceAtLeast(1L) ?: 1L
-                    // Reader timing is learned from the reader's onRangeStart playback timeline.
-                    // The exported WAV/AAC has its own measured audio timeline, so normalize the
-                    // cached schedule to the exact duration that was actually written. This keeps
-                    // the fast cached timing path aligned even for engines where playback markers
-                    // and synthesized-file duration differ.
-                    val audioTimelineMs = (segmentEndMs - segmentStartMs).coerceAtLeast(1L)
-                    val audioFitScale = audioTimelineMs.toDouble() / cachedTimelineEndMs.toDouble()
-                    val wordTimings = speedScaledTimings
-                        .map { (timing, relative) ->
-                            val startMs = segmentStartMs +
-                                (relative.first.toDouble() * audioFitScale).toLong().coerceAtLeast(0L)
-                            val durationMs = (relative.second.toDouble() * audioFitScale)
-                                .toLong().coerceAtLeast(1L)
-                            WordTiming(
-                                startChar = timing.start,
-                                endChar = timing.end,
-                                startMs = startMs,
-                                endMs = startMs + durationMs,
+                        val sliceEndMs = durationMs(currentFrames, sampleRate)
+                        val ordered = sliceRanges.sortedBy { it.second }
+                        ordered.forEachIndexed { index, entry ->
+                            wordTimings += WordTiming(
+                                entry.first.first,
+                                entry.first.last + 1,
+                                entry.second,
+                                ordered.getOrNull(index + 1)?.second ?: sliceEndMs,
                             )
                         }
-                        .filter {
-                            it.startChar >= 0 &&
-                                it.endChar <= segment.text.length &&
-                                it.endChar > it.startChar &&
-                                it.endMs >= it.startMs
-                        }
-                        .sortedBy { it.startMs }
-
-                    val timingEntries = exportedTimingStore.getOrPut(timingKey) { mutableListOf() }
-                    wordTimings.forEach { w ->
-                        val safeEndMs = min(w.endMs, segmentEndMs)
-                        // Reader's persisted timing store is relative to the text item.
-                        // The merged audiobook timeline is kept separately in segments/words.
-                        val relativeStartMs = (w.startMs - segmentStartMs).coerceAtLeast(0L)
-                        timingEntries += JSONObject().apply {
-                            put("start", w.startChar)
-                            put("end", w.endChar)
-                            put("start_ms", relativeStartMs)
-                            put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
-                            put("speed", request.speed.toDouble())
-                        }
+                        charOffset += slice.length
                     }
 
-                    exportedTimingSegments += JSONObject().apply {
-                        put("cacheKey", timingKey)
-                        put("chapterPosition", segment.chapterPosition)
-                        put("chapterUrl", segment.chapterUrl)
-                        put("type", segment.type)
-                        put("text", segment.text)
-                        put("timingAvailable", wordTimings.isNotEmpty())
-                        put("startMs", segmentStartMs)
-                        put("endMs", segmentEndMs)
-                    }
-
+                    val segmentEndMs = durationMs(currentFrames, sampleRate)
                     segmentOut.write(
                         JSONObject().apply {
                             put("chapterPosition", segment.chapterPosition)
                             put("chapterUrl", segment.chapterUrl)
                             put("type", segment.type)
                             put("text", segment.text)
-                            put("timingAvailable", wordTimings.isNotEmpty())
                             put("startMs", segmentStartMs)
                             put("endMs", segmentEndMs)
                             put("words", JSONArray().apply {
@@ -803,15 +463,11 @@ class AudiobookTtsExporter(private val context: Context) {
                                         // camelCase fields retained for audiobook consumers.
                                         put("start", w.startChar)
                                         put("end", w.endChar)
-                                        // snake_case fields mirror the Reader timing store
-                                        // and are relative to this text segment.
-                                        put("start_ms", (w.startMs - segmentStartMs).coerceAtLeast(0L))
+                                        put("start_ms", w.startMs)
                                         put("duration_ms", (safeEndMs - w.startMs).coerceAtLeast(1L))
                                         put("speed", request.speed.toDouble())
                                         put("startChar", w.startChar)
                                         put("endChar", w.endChar)
-                                        // camelCase timestamps are absolute positions in the
-                                        // merged audiobook timeline.
                                         put("startMs", w.startMs)
                                         put("endMs", safeEndMs)
                                     })
@@ -824,7 +480,7 @@ class AudiobookTtsExporter(private val context: Context) {
 
                 if (activeChapter >= 0) {
                     val last = chapters.first { it.position == activeChapter }
-                    val endMs = durationMs(totalFramesWritten.get(), sampleRate)
+                    val endMs = durationMs(currentFrames, sampleRate)
                     chapterTimings += ChapterTiming(last, chapterStartMs, endMs)
                     completedChapters++
                     completedWorkUnits = totalWorkUnits
@@ -832,178 +488,122 @@ class AudiobookTtsExporter(private val context: Context) {
                 }
 
                 sink?.finish()
-                val totalDuration = durationMs(totalFramesWritten.get(), sampleRate)
-                writeJson(
-                    jsonFile,
-                    request,
-                    chapterTimings,
-                    segmentFile,
-                    totalDuration,
-                    sampleRate,
-                    channels,
-                    exportedTimingStore,
-                    exportedTimingSegments,
-                )
-                validateExportJson(jsonFile, chapterTimings, totalDuration)
-                if (request.outputFormat == OutputFormat.WAV) {
-                    validateWavOutput(mediaFile, sampleRate, channels, totalDuration)
-                }
+                val totalDuration = durationMs(currentFrames, sampleRate)
+                writeJson(jsonFile, request, chapterTimings, segmentFile, totalDuration, sampleRate, channels)
                 totalDuration
             } finally {
                 runCatching { sink?.close() }
                 runCatching { segmentFile.delete() }
                 runCatching { tts.stop(); tts.shutdown() }
             }
-            }
         }
     }
 
-    suspend fun muxVisual(
+suspend fun muxVisual(
         audioMp4: File,
         outputMp4: File,
         visualUri: Uri?,
         durationMs: Long,
-        onProgress: (Int) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
         val visual = visualUri ?: fallbackVisual()
         val mime = context.contentResolver.getType(visual).orEmpty().lowercase()
         val actualVisual = if (mime == "image/gif") firstGifFrame(visual) else visual
         val actualMime = if (mime == "image/gif") "image/jpeg" else mime
 
-        var normalizedVideo: File? = null
-        val visualForMux = if (actualMime.startsWith("video/")) {
-            val sourceIsAvc = runCatching {
-                val extractor = MediaExtractor()
-                try {
-                    extractor.setDataSource(context, actualVisual, null)
-                    val track = findTrack(extractor, "video/")
-                    track >= 0 &&
-                        extractor.getTrackFormat(track).getString(MediaFormat.KEY_MIME) ==
-                        MediaFormat.MIMETYPE_VIDEO_AVC
-                } finally {
-                    extractor.release()
-                }
-            }.getOrDefault(false)
-
-            if (sourceIsAvc) {
-                actualVisual
-            } else {
-                normalizedVideo = File(
-                    context.cacheDir,
-                    "audiobook-visual-normalized-" + System.nanoTime() + ".mp4",
-                )
-                // Transcode only the short visual once. Never transcode to the audiobook length.
-                transcodeVisualOnce(
-                    source = actualVisual,
-                    output = normalizedVideo!!,
-                    onProgress = { percent -> onProgress(percent / 2) },
-                )
-                Uri.fromFile(normalizedVideo!!)
-            }
+        // Fast path:
+        //  * H.264 visual video: copy compressed video samples and repeat timestamps.
+        //  * Image/GIF: encode only ONE SECOND of visual, then repeat that compressed
+        //    H.264 cycle for the entire audiobook.
+        //
+        // The old implementation asked Media3 Transformer to encode the visual for the
+        // entire audiobook. For very long exports that second pass dominates CPU/heat.
+        val fastResult = if (actualMime.startsWith("video/")) {
+            fastLoopMuxEncodedVideo(
+                audioMp4 = audioMp4,
+                visualUri = actualVisual,
+                outputMp4 = outputMp4,
+                durationMs = durationMs,
+            )
         } else {
-            normalizedVideo = File(
+            val preparedImage = prepareStaticImage(actualVisual)
+            val oneSecondVideo = File(
                 context.cacheDir,
                 "audiobook-visual-cycle-" + System.nanoTime() + ".mp4",
             )
-            val preparedImage = prepareStaticImage(actualVisual)
             try {
-                encodeImageCycle(
-                    imageUri = Uri.fromFile(preparedImage),
-                    output = normalizedVideo!!,
-                    onProgress = { percent -> onProgress(percent / 2) },
+                encodeImageCycle(preparedImage, oneSecondVideo)
+                fastLoopMuxEncodedVideo(
+                    audioMp4 = audioMp4,
+                    visualUri = Uri.fromFile(oneSecondVideo),
+                    outputMp4 = outputMp4,
+                    durationMs = durationMs,
                 )
             } finally {
                 preparedImage.delete()
+                oneSecondVideo.delete()
             }
-            Uri.fromFile(normalizedVideo!!)
         }
 
-        try {
-            fastLoopMuxEncodedVideo(
-                audioMp4 = audioMp4,
-                visualUri = visualForMux,
-                outputMp4 = outputMp4,
-                durationMs = durationMs,
-                onProgress = { percent ->
-                    onProgress(50 + percent / 2)
-                },
-            )
-            validateMp4Output(outputMp4, durationMs)
-        } finally {
-            normalizedVideo?.delete()
-            if (actualVisual != visual && actualVisual.toString().startsWith("file:")) {
-                actualVisual.path?.let { path ->
-                    if (path.contains(context.cacheDir.path)) File(path).delete()
+        if (!fastResult) {
+            Timber.w("Audiobook fast visual mux unavailable; falling back to Media3 Transformer")
+            withContext(Dispatchers.Main.immediate) {
+                val editedVideo = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
+                    EditedMediaItem.Builder(
+                        MediaItem.Builder().setUri(actualVisual)
+                            .setImageDurationMs(durationMs.coerceAtLeast(1000L))
+                            .build()
+                    ).setFrameRate(1).build()
+                } else {
+                    EditedMediaItem.Builder(MediaItem.fromUri(actualVisual))
+                        .setRemoveAudio(true)
+                        .build()
                 }
-            }
-        }
-    }
+                val video = if (actualMime.startsWith("image/") || actualMime.isBlank()) {
+                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo))
+                } else {
+                    EditedMediaItemSequence.withVideoFrom(listOf(editedVideo)).buildUpon().setIsLooping(true).build()
+                }
+                val audio = EditedMediaItemSequence.withAudioFrom(
+                    listOf(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioMp4))).build())
+                )
+                val composition = Composition.Builder(video, audio).build()
+                suspendCancellableCoroutine<Unit> { cont ->
+                    val transformer = Transformer.Builder(context.applicationContext)
+                        .setVideoMimeType(MimeTypes.VIDEO_H264)
+                        .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                        .addListener(object : Transformer.Listener {
+                            override fun onCompleted(
+                                composition: Composition,
+                                exportResult: androidx.media3.transformer.ExportResult,
+                            ) {
+                                if (cont.isActive) cont.resume(Unit)
+                            }
 
-    private suspend fun transcodeVisualOnce(
-        source: Uri,
-        output: File,
-        onProgress: (Int) -> Unit,
-    ) {
-        withContext(Dispatchers.Main.immediate) {
-            val edited = EditedMediaItem.Builder(MediaItem.fromUri(source))
-                .setRemoveAudio(true)
-                .build()
-
-            suspendCancellableCoroutine<Unit> { cont ->
-                val progressHolder = ProgressHolder()
-                val handler = Handler(Looper.getMainLooper())
-                lateinit var progressRunnable: Runnable
-                val transformer = Transformer.Builder(context.applicationContext)
-                    .setVideoMimeType(MimeTypes.VIDEO_H264)
-                    .addListener(object : Transformer.Listener {
-                        override fun onCompleted(
-                            composition: Composition,
-                            exportResult: androidx.media3.transformer.ExportResult,
-                        ) {
-                            handler.removeCallbacks(progressRunnable)
-                            onProgress(100)
-                            if (cont.isActive) cont.resume(Unit)
-                        }
-
-                        override fun onError(
-                            composition: Composition,
-                            exportResult: androidx.media3.transformer.ExportResult,
-                            exportException: androidx.media3.transformer.ExportException,
-                        ) {
-                            handler.removeCallbacks(progressRunnable)
-                            if (cont.isActive) cont.resumeWithException(exportException)
-                        }
-                    })
-                    .build()
-
-                progressRunnable = object : Runnable {
-                    override fun run() {
-                        if (!cont.isActive) return
-                        val state = transformer.getProgress(progressHolder)
-                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
-                            onProgress(progressHolder.progress.coerceIn(0, 100))
-                        }
-                        if (state != Transformer.PROGRESS_STATE_NOT_STARTED) {
-                            handler.postDelayed(this, 500L)
-                        }
+                            override fun onError(
+                                composition: Composition,
+                                exportResult: androidx.media3.transformer.ExportResult,
+                                exportException: androidx.media3.transformer.ExportException,
+                            ) {
+                                if (cont.isActive) cont.resumeWithException(exportException)
+                            }
+                        })
+                        .build()
+                    cont.invokeOnCancellation {
+                        Handler(Looper.getMainLooper()).post { transformer.cancel() }
                     }
+                    transformer.start(composition, outputMp4.absolutePath)
                 }
+            }
+        }
 
-                cont.invokeOnCancellation {
-                    handler.removeCallbacks(progressRunnable)
-                    Handler(Looper.getMainLooper()).post { transformer.cancel() }
-                }
-                transformer.start(edited, output.absolutePath)
-                handler.post(progressRunnable)
+        if (actualVisual.toString().startsWith("file:")) {
+            actualVisual.path?.let { path ->
+                if (path.contains(context.cacheDir.path)) File(path).delete()
             }
         }
     }
 
-    private suspend fun encodeImageCycle(
-        imageUri: Uri,
-        output: File,
-        onProgress: (Int) -> Unit,
-    ) {
+    private suspend fun encodeImageCycle(imageUri: Uri, output: File) {
         withContext(Dispatchers.Main.immediate) {
             val edited = EditedMediaItem.Builder(
                 MediaItem.Builder()
@@ -1013,9 +613,6 @@ class AudiobookTtsExporter(private val context: Context) {
             ).setFrameRate(1).build()
 
             suspendCancellableCoroutine<Unit> { cont ->
-                val progressHolder = ProgressHolder()
-                val handler = Handler(Looper.getMainLooper())
-                lateinit var progressRunnable: Runnable
                 val transformer = Transformer.Builder(context.applicationContext)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .addListener(object : Transformer.Listener {
@@ -1023,8 +620,6 @@ class AudiobookTtsExporter(private val context: Context) {
                             composition: Composition,
                             exportResult: androidx.media3.transformer.ExportResult,
                         ) {
-                            handler.removeCallbacks(progressRunnable)
-                            onProgress(100)
                             if (cont.isActive) cont.resume(Unit)
                         }
 
@@ -1033,31 +628,14 @@ class AudiobookTtsExporter(private val context: Context) {
                             exportResult: androidx.media3.transformer.ExportResult,
                             exportException: androidx.media3.transformer.ExportException,
                         ) {
-                            handler.removeCallbacks(progressRunnable)
                             if (cont.isActive) cont.resumeWithException(exportException)
                         }
                     })
                     .build()
-
-                progressRunnable = object : Runnable {
-                    override fun run() {
-                        if (!cont.isActive) return
-                        val state = transformer.getProgress(progressHolder)
-                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
-                            onProgress(progressHolder.progress.coerceIn(0, 100))
-                        }
-                        if (state != Transformer.PROGRESS_STATE_NOT_STARTED) {
-                            handler.postDelayed(this, 500L)
-                        }
-                    }
-                }
-
                 cont.invokeOnCancellation {
-                    handler.removeCallbacks(progressRunnable)
                     Handler(Looper.getMainLooper()).post { transformer.cancel() }
                 }
                 transformer.start(edited, output.absolutePath)
-                handler.post(progressRunnable)
             }
         }
     }
@@ -1099,44 +677,34 @@ class AudiobookTtsExporter(private val context: Context) {
         visualUri: Uri,
         outputMp4: File,
         durationMs: Long,
-        onProgress: (Int) -> Unit = {},
-    ) {
+    ): Boolean {
         val audioExtractor = MediaExtractor()
         val videoExtractor = MediaExtractor()
         var muxer: MediaMuxer? = null
-        var stage = "OPEN_INPUTS"
-        var success = false
-
-        try {
+        return try {
             audioExtractor.setDataSource(audioMp4.absolutePath)
-
-            stage = "OPEN_VISUAL"
             videoExtractor.setDataSource(context, visualUri, null)
 
-            stage = "FIND_TRACKS"
             val audioTrack = findTrack(audioExtractor, "audio/")
             val videoTrack = findTrack(videoExtractor, "video/")
-            check(audioTrack >= 0) { "AAC audio track not found" }
-            check(videoTrack >= 0) { "H264 visual track not found" }
+            if (audioTrack < 0 || videoTrack < 0) return false
 
             val audioFormat = audioExtractor.getTrackFormat(audioTrack)
             val videoFormat = videoExtractor.getTrackFormat(videoTrack)
             val videoMime = videoFormat.getString(MediaFormat.KEY_MIME).orEmpty()
-            check(videoMime == MediaFormat.MIMETYPE_VIDEO_AVC) {
-                "Fast mux requires H264/AVC visual, got $videoMime"
-            }
-
-            val videoDurationUs = videoFormat.getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
-            check(videoDurationUs > 0L) {
-                "Visual video duration is unavailable"
-            }
+            if (videoMime != MediaFormat.MIMETYPE_VIDEO_AVC) return false
 
             audioExtractor.selectTrack(audioTrack)
             videoExtractor.selectTrack(videoTrack)
 
-            stage = "CREATE_MUXER"
+            val videoDurationUs = videoFormat.getLongOrDefault(
+                MediaFormat.KEY_DURATION,
+                0L,
+            )
+            if (videoDurationUs <= 0L) return false
+
             outputMp4.parentFile?.mkdirs()
-            outputMp4.delete()
+            if (outputMp4.exists()) outputMp4.delete()
             muxer = MediaMuxer(
                 outputMp4.absolutePath,
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
@@ -1146,30 +714,20 @@ class AudiobookTtsExporter(private val context: Context) {
             muxer.start()
 
             val targetUs = durationMs.coerceAtLeast(1L) * 1000L
-            var lastProgress = -1
-            fun reportVisualProgress(completedUs: Long) {
-                val percent = ((completedUs.coerceIn(0L, targetUs) * 100L) / targetUs)
-                    .toInt()
-                    .coerceIn(0, 100)
-                if (percent != lastProgress) {
-                    lastProgress = percent
-                    onProgress(percent)
-                }
-            }
-
             val buffer = ByteBuffer.allocateDirect(2 * 1024 * 1024)
 
-            stage = "COPY_AUDIO"
             while (true) {
                 val size = audioExtractor.sampleSize
                 val time = audioExtractor.sampleTime
                 if (size < 0 || time < 0 || time >= targetUs) break
-                check(size <= buffer.capacity()) {
-                    "Audio sample exceeds mux buffer: $size bytes"
+                if (size > buffer.capacity()) {
+                    // Audio samples are normally tiny; fail the fast path instead of
+                    // repeatedly allocating huge direct buffers.
+                    return false
                 }
                 buffer.clear()
                 val read = audioExtractor.readSampleData(buffer, 0)
-                check(read > 0) { "Unable to read AAC audio sample" }
+                if (read <= 0) break
                 val info = MediaCodec.BufferInfo().apply {
                     offset = 0
                     this.size = read
@@ -1180,30 +738,20 @@ class AudiobookTtsExporter(private val context: Context) {
                 audioExtractor.advance()
             }
 
-            stage = "LOOP_VIDEO"
             var videoOffsetUs = 0L
-            reportVisualProgress(0L)
             while (videoOffsetUs < targetUs) {
                 videoExtractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
                 var sawSample = false
-                var lastPtsUs = Long.MIN_VALUE
-
                 while (true) {
                     val time = videoExtractor.sampleTime
                     val size = videoExtractor.sampleSize
                     if (size < 0 || time < 0 || time >= videoDurationUs) break
-
                     val pts = videoOffsetUs + time
                     if (pts >= targetUs) break
-                    check(pts >= lastPtsUs) { "Visual timestamps are not monotonic" }
-                    lastPtsUs = pts
-                    check(size <= buffer.capacity()) {
-                        "Video sample exceeds mux buffer: $size bytes"
-                    }
-
+                    if (size > buffer.capacity()) return false
                     buffer.clear()
                     val read = videoExtractor.readSampleData(buffer, 0)
-                    check(read > 0) { "Unable to read H264 video sample" }
+                    if (read <= 0) break
                     val info = MediaCodec.BufferInfo().apply {
                         offset = 0
                         this.size = read
@@ -1212,87 +760,22 @@ class AudiobookTtsExporter(private val context: Context) {
                     }
                     muxer.writeSampleData(outVideoTrack, buffer, info)
                     sawSample = true
-                    reportVisualProgress(pts)
                     videoExtractor.advance()
                 }
-
-                check(sawSample) { "Visual loop iteration produced no samples" }
+                if (!sawSample) return false
                 videoOffsetUs += videoDurationUs
             }
 
-            reportVisualProgress(targetUs)
-            stage = "STOP_MUXER"
             muxer.stop()
-            success = true
+            true
         } catch (e: Throwable) {
-            throw IllegalStateException(
-                "Fast MP4 mux failed at $stage: ${e.message}",
-                e,
-            )
+            Timber.w(e, "Fast audiobook visual mux failed")
+            false
         } finally {
             runCatching { muxer?.release() }
             runCatching { audioExtractor.release() }
             runCatching { videoExtractor.release() }
-            if (!success) outputMp4.delete()
-        }
-    }
-
-    private fun validateWavOutput(
-        file: File,
-        sampleRate: Int,
-        channels: Int,
-        durationMs: Long,
-    ) {
-        check(file.exists() && file.length() > 44L) {
-            "Final WAV does not exist or is empty"
-        }
-        RandomAccessFile(file, "r").use { raf ->
-            val riff = ByteArray(4).also { raf.readFully(it) }
-            raf.seek(8)
-            val wave = ByteArray(4).also { raf.readFully(it) }
-            check(String(riff, Charsets.US_ASCII) == "RIFF") { "Final WAV has no RIFF header" }
-            check(String(wave, Charsets.US_ASCII) == "WAVE") { "Final WAV has no WAVE header" }
-        }
-        val frameBytes = channels.toLong() * 2L
-        val actualPcmBytes = file.length() - 44L
-        check(frameBytes > 0L && actualPcmBytes % frameBytes == 0L) {
-            "Final WAV PCM data is not aligned to whole frames"
-        }
-        val expectedPcmBytes = durationMs.coerceAtLeast(0L) *
-            sampleRate.toLong() * frameBytes / 1000L
-        val tolerance = maxOf(frameBytes, sampleRate.toLong() * frameBytes / 100L)
-        check(kotlin.math.abs(actualPcmBytes - expectedPcmBytes) <= tolerance) {
-            "Final WAV duration mismatch"
-        }
-    }
-    private fun validateMp4Output(file: File, audioDurationMs: Long) {
-        check(file.exists() && file.length() > 0L) {
-            "Final MP4 does not exist or is empty"
-        }
-
-        val extractor = MediaExtractor()
-        try {
-            extractor.setDataSource(file.absolutePath)
-            val audioTrack = findTrack(extractor, "audio/")
-            val videoTrack = findTrack(extractor, "video/")
-            check(audioTrack >= 0) { "Final MP4 has no audio track" }
-            check(videoTrack >= 0) { "Final MP4 has no video track" }
-
-            val audioDurationUs = extractor.getTrackFormat(audioTrack)
-                .getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
-            val videoDurationUs = extractor.getTrackFormat(videoTrack)
-                .getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
-            check(audioDurationUs > 0L && videoDurationUs > 0L) {
-                "Final MP4 has invalid track duration"
-            }
-
-            val outputDurationMs = maxOf(audioDurationUs, videoDurationUs) / 1000L
-            val toleranceMs = maxOf(2000L, audioDurationMs / 50L)
-            check(kotlin.math.abs(outputDurationMs - audioDurationMs) <= toleranceMs) {
-                "Final MP4 duration mismatch: output=${outputDurationMs}ms audio=${audioDurationMs}ms tolerance=${toleranceMs}ms"
-            }
-        } finally {
-            extractor.release()
+            if (outputMp4.exists() && outputMp4.length() == 0L) outputMp4.delete()
         }
     }
 
@@ -1304,66 +787,23 @@ class AudiobookTtsExporter(private val context: Context) {
     private fun MediaFormat.getLongOrDefault(key: String, defaultValue: Long): Long =
         if (containsKey(key)) getLong(key) else defaultValue
 
-    private suspend fun createTts(request: AudiobookExportRequest): TextToSpeech =
-        withContext(Dispatchers.Main.immediate) {
-            suspendCancellableCoroutine { cont ->
-                var tts: TextToSpeech? = null
-                try {
-                    val listener = TextToSpeech.OnInitListener { result ->
-                        val instance = tts
-                        if (result == TextToSpeech.SUCCESS && instance != null) {
-                            try {
-                                if (request.voiceId.isNotBlank()) {
-                                    val voice = instance.voices?.firstOrNull {
-                                        it.name == request.voiceId
-                                    } ?: error("Selected voice is unavailable")
-                                    check(instance.setVoice(voice) == TextToSpeech.SUCCESS) {
-                                        "Unable to set selected TTS voice"
-                                    }
-                                }
-                                check(
-                                    instance.setSpeechRate(
-                                        request.speed.coerceIn(0.1f, 5f),
-                                    ) == TextToSpeech.SUCCESS
-                                ) {
-                                    "Unable to set TTS speech rate"
-                                }
-                                check(
-                                    instance.setPitch(
-                                        request.pitch.coerceIn(0.1f, 2f),
-                                    ) == TextToSpeech.SUCCESS
-                                ) {
-                                    "Unable to set TTS pitch"
-                                }
-                                cont.resume(instance)
-                            } catch (t: Throwable) {
-                                runCatching { instance.shutdown() }
-                                if (cont.isActive) cont.resumeWithException(t)
-                            }
-                        } else if (cont.isActive) {
-                            tts?.shutdown()
-                            cont.resumeWithException(
-                                IllegalStateException(
-                                    "Unable to initialize TTS: result=$result",
-                                )
-                            )
-                        }
-                    }
-                    tts = if (request.enginePackage.isBlank()) {
-                        TextToSpeech(context, listener)
-                    } else {
-                        TextToSpeech(context, listener, request.enginePackage)
-                    }
-                    cont.invokeOnCancellation {
-                        runCatching { tts?.stop() }
-                        runCatching { tts?.shutdown() }
-                    }
-                } catch (t: Throwable) {
-                    runCatching { tts?.shutdown() }
-                    if (cont.isActive) cont.resumeWithException(t)
-                }
-            }
+    private fun createTts(request: AudiobookExportRequest): TextToSpeech {
+        val latch = CountDownLatch(1)
+        var result = TextToSpeech.ERROR
+        val tts = if (request.enginePackage.isBlank()) {
+            TextToSpeech(context) { result = it; latch.countDown() }
+        } else {
+            TextToSpeech(context, { result = it; latch.countDown() }, request.enginePackage)
         }
+        check(latch.await(10, TimeUnit.SECONDS) && result == TextToSpeech.SUCCESS) { "Unable to initialize TTS" }
+        if (request.voiceId.isNotBlank()) {
+            tts.voice = tts.voices?.firstOrNull { it.name == request.voiceId }
+                ?: error("Selected voice is unavailable")
+        }
+        check(tts.setSpeechRate(request.speed.coerceIn(0.1f, 5f)) == TextToSpeech.SUCCESS)
+        check(tts.setPitch(request.pitch.coerceIn(0.1f, 2f)) == TextToSpeech.SUCCESS)
+        return tts
+    }
 
     private fun normalizePcm16(audio: ByteArray, format: Int): ByteArray = when (format) {
         android.media.AudioFormat.ENCODING_PCM_16BIT -> audio
@@ -1399,8 +839,6 @@ class AudiobookTtsExporter(private val context: Context) {
         durationMs: Long,
         sampleRate: Int,
         channels: Int,
-        exportedTimingStore: Map<String, List<JSONObject>>,
-        exportedTimingSegments: List<JSONObject>,
     ) {
         BufferedWriter(OutputStreamWriter(FileOutputStream(file), Charsets.UTF_8), 32768).use { out ->
             out.write("{\n")
@@ -1418,21 +856,6 @@ class AudiobookTtsExporter(private val context: Context) {
                 ",\"pitch\": " + request.pitch + "},\n")
             out.write("  \"audio\": {\"sampleRate\": " + sampleRate +
                 ",\"channels\": " + channels + ",\"durationMs\": " + durationMs + "},\n")
-            val timingSegmentsJson = JSONArray()
-            exportedTimingSegments.forEach(timingSegmentsJson::put)
-            out.write("  \"wordTiming\": {\"format\": \"tts_word_highlight_timing_json_v2\",\"rangeEndExclusive\": true,\"units\": \"ms\",\"timingSource\": \"reader_persisted_onRangeStart\",\"segments\": ")
-            out.write(timingSegmentsJson.toString())
-            out.write("},\n")
-            out.write("  \"tts_word_highlight_timing_json_v2\": {\n")
-            val timingKeys = exportedTimingStore.keys.toList()
-            timingKeys.forEachIndexed { index, key ->
-                val entriesJson = JSONArray()
-                exportedTimingStore[key].orEmpty().forEach(entriesJson::put)
-                out.write("    " + JSONObject.quote(key) + ": " + entriesJson.toString())
-                if (index != timingKeys.lastIndex) out.write(",")
-                out.write("\n")
-            }
-            out.write("  },\n")
             out.write("  \"chapters\": [\n")
             chapters.forEachIndexed { index, c ->
                 out.write("    " + JSONObject().apply {
@@ -1457,54 +880,6 @@ class AudiobookTtsExporter(private val context: Context) {
         }
     }
 
-
-    private fun validateExportJson(
-        file: File,
-        chapters: List<ChapterTiming>,
-        durationMs: Long,
-    ) {
-        check(file.exists() && file.length() > 0L) { "Audiobook JSON is missing or empty" }
-        val root = JSONObject(file.readText(Charsets.UTF_8))
-        check(root.optInt("schemaVersion", 0) == 1) { "Unsupported audiobook JSON schema" }
-        val audio = root.optJSONObject("audio") ?: error("JSON audio metadata missing")
-        check(audio.optLong("durationMs", -1L) == durationMs) { "JSON duration does not match exported audio" }
-        check(audio.optInt("sampleRate", 0) > 0) { "JSON sample rate is invalid" }
-        check(audio.optInt("channels", 0) > 0) { "JSON channel count is invalid" }
-        val chapterArray = root.optJSONArray("chapters") ?: error("JSON chapters missing")
-        check(chapterArray.length() == chapters.size) { "JSON chapter count mismatch" }
-        var previousChapterEnd = 0L
-        chapters.forEachIndexed { index, chapter ->
-            val item = chapterArray.getJSONObject(index)
-            check(item.optInt("position", -1) == chapter.chapter.position) { "JSON chapter position mismatch" }
-            val startMs = item.optLong("startMs", -1L)
-            val endMs = item.optLong("endMs", -1L)
-            check(startMs >= previousChapterEnd && endMs >= startMs && endMs <= durationMs) { "Invalid chapter timeline" }
-            previousChapterEnd = endMs
-        }
-        val segments = root.optJSONArray("segments") ?: error("JSON segments missing")
-        val wordTiming = root.optJSONObject("wordTiming") ?: error("JSON wordTiming missing")
-        val timingSegments = wordTiming.optJSONArray("segments") ?: error("JSON wordTiming segments missing")
-        check(timingSegments.length() == segments.length()) { "JSON wordTiming segment count mismatch" }
-        for (i in 0 until segments.length()) {
-            val segment = segments.getJSONObject(i)
-            val textValue = segment.optString("text", "")
-            val startMs = segment.optLong("startMs", -1L)
-            val endMs = segment.optLong("endMs", -1L)
-            check(startMs >= 0L && endMs >= startMs && endMs <= durationMs) { "Invalid segment timeline at index " + i }
-            val words = segment.optJSONArray("words") ?: JSONArray()
-            var previousWordStart = startMs
-            for (j in 0 until words.length()) {
-                val word = words.getJSONObject(j)
-                val startChar = word.optInt("startChar", -1)
-                val endChar = word.optInt("endChar", -1)
-                val wordStart = word.optLong("startMs", -1L)
-                val wordEnd = word.optLong("endMs", -1L)
-                check(startChar >= 0 && endChar > startChar && endChar <= textValue.length) { "Invalid word character range" }
-                check(wordStart >= startMs && wordEnd >= wordStart && wordEnd <= endMs && wordStart >= previousWordStart) { "Invalid word timeline" }
-                previousWordStart = wordStart
-            }
-        }
-    }
     private fun durationMs(frames: Long, sampleRate: Int): Long =
         if (sampleRate > 0) frames * 1000L / sampleRate else 0L
 
