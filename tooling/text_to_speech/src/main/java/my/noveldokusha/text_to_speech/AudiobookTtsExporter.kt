@@ -13,7 +13,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.os.ParcelFileDescriptor
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.Html
@@ -540,73 +539,48 @@ class AudiobookTtsExporter(private val context: Context) {
                             "TTS exporter internal error: another slice is active"
                         }
 
-                        // Keep /dev/null as the fast path. If an engine rejects the
-                        // ParcelFileDescriptor overload with ERROR (-1), retry using the
-                        // File overload inside app-private cache. This preserves the fast
-                        // callback-driven PCM export path while handling device/engine quirks.
-                        val synthesisPfd = ParcelFileDescriptor.open(
-                            File("/dev/null"),
-                            ParcelFileDescriptor.MODE_WRITE_ONLY,
-                        )
-                        val fallbackSynthesisFile = File(
+                        // Use the same regular File overload that the device diagnostic
+                        // proved successful. The file is disposable; PCM callbacks feed
+                        // the fast WAV/AAC sink, so export never uses real-time playback.
+                        val synthesisFile = File(
                             context.cacheDir,
                             "audiobook-synthesis-" + System.nanoTime() + ".wav",
                         )
+                        synthesisFile.delete()
                         var writerJob: kotlinx.coroutines.Job? = null
                         try {
                             Timber.d(
-                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s engine=%s voice=%s",
-                                state.id, slice.length, request.outputFormat,
-                                effectiveEnginePackage, effectiveVoiceId,
+                                "AudiobookTTS: synthesize slice id=%s chars=%d format=%s engine=%s voice=%s file=%s",
+                                state.id,
+                                slice.length,
+                                request.outputFormat,
+                                effectiveEnginePackage,
+                                effectiveVoiceId,
+                                synthesisFile.absolutePath,
                             )
 
-                            var synthesisResult = withContext(Dispatchers.Main.immediate) {
+                            val synthesisResult = withContext(Dispatchers.Main.immediate) {
                                 tts.synthesizeToFile(
                                     slice,
-                                    Bundle().apply {
-                                        putString(
-                                            TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                            state.id,
-                                        )
-                                    },
-                                    synthesisPfd,
+                                    Bundle(),
+                                    synthesisFile,
                                     state.id,
                                 )
                             }
-                            if (synthesisResult != TextToSpeech.SUCCESS) {
-                                Timber.w(
-                                    "AudiobookTTS: PFD synthesis returned %d; retrying File overload",
-                                    synthesisResult,
-                                )
-                                withContext(Dispatchers.Main.immediate) { tts.stop() }
-                                fallbackSynthesisFile.delete()
-                                synthesisResult = withContext(Dispatchers.Main.immediate) {
-                                    tts.synthesizeToFile(
-                                        slice,
-                                        Bundle().apply {
-                                            putString(
-                                                TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
-                                                state.id,
-                                            )
-                                        },
-                                        fallbackSynthesisFile,
-                                        state.id,
-                                    )
-                                }
-                            }
-                            if (synthesisResult != TextToSpeech.SUCCESS) {
-                                Timber.e(
-                                    "AudiobookTTS: File synthesis returned %d; file=%s length=%d engine=%s voice=%s chars=%d",
-                                    synthesisResult, fallbackSynthesisFile.exists(),
-                                    fallbackSynthesisFile.length(), effectiveEnginePackage,
-                                    effectiveVoiceId, slice.length,
-                                )
-                            }
+                            Timber.d(
+                                "AudiobookTTS: File synthesis queued result=%d exists=%s length=%d id=%s",
+                                synthesisResult,
+                                synthesisFile.exists(),
+                                synthesisFile.length(),
+                                state.id,
+                            )
                             check(synthesisResult == TextToSpeech.SUCCESS) {
-                                "TTS synthesis failed: $synthesisResult (engine=$effectiveEnginePackage voice=$effectiveVoiceId chars=${slice.length})"
+                                "TTS synthesis request failed: " + synthesisResult +
+                                    " (engine=" + effectiveEnginePackage +
+                                    " voice=" + effectiveVoiceId +
+                                    " chars=" + slice.length + ")"
                             }
-
-                            check(state.formatReady.await(10, TimeUnit.SECONDS)) {
+                        check(state.formatReady.await(10, TimeUnit.SECONDS)) {
                                 "TTS synthesis did not report its audio format"
                             }
                             state.error.get()?.let { throw it }
@@ -683,8 +657,7 @@ class AudiobookTtsExporter(private val context: Context) {
                                 "TTS produced no audio data for the current slice"
                             }
                         } finally {
-                            runCatching { fallbackSynthesisFile.delete() }
-                            runCatching { synthesisPfd.close() }
+                            runCatching { synthesisFile.delete() }
                             runCatching { state.pcmQueue.close() }
                             if (writerJob != null) {
                                 try {
@@ -692,7 +665,7 @@ class AudiobookTtsExporter(private val context: Context) {
                                 } catch (_: Throwable) {
                                 }
                             }
-                            fallbackSynthesisFile.delete()
+                            synthesisFile.delete()
                             activeSlice.compareAndSet(state, null)
                         }
 

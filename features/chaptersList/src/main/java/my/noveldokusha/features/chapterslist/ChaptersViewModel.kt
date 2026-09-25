@@ -716,7 +716,20 @@ internal class ChaptersViewModel @Inject constructor(
                         .getWorkInfosByTagFlow(AudiobookExportWorker.tagForBook(url))
                 }
                 .collectLatest { infos ->
-                    val info = infos.firstOrNull()
+                    // A per-book tag keeps history; prefer the currently active request.
+                    // If none is active, use the newest request timestamp from its data.
+                    val active = infos.filter {
+                        it.state == WorkInfo.State.RUNNING ||
+                            it.state == WorkInfo.State.ENQUEUED ||
+                            it.state == WorkInfo.State.BLOCKED
+                    }
+                    val info = active.firstOrNull()
+                        ?: infos.maxByOrNull { info ->
+                            info.getInputData().getLong(
+                                AudiobookExportWorker.ENQUEUED_AT,
+                                info.getOutputData().getLong(AudiobookExportWorker.ENQUEUED_AT, 0L),
+                            )
+                        }
                     state.audiobookExportStatus.value = info?.let { workInfo ->
                         val workState = when (workInfo.state) {
                             WorkInfo.State.ENQUEUED -> AudiobookExportWorkState.ENQUEUED
@@ -745,6 +758,31 @@ internal class ChaptersViewModel @Inject constructor(
                             .getInt("endChapter", 0)
                         val error = workInfo.outputData
                             .getString(AudiobookExportWorker.OUTPUT_ERROR)
+                        val stopReason = if (
+                            android.os.Build.VERSION.SDK_INT >= 31 &&
+                            workInfo.runAttemptCount > 0 &&
+                            workState == AudiobookExportWorkState.ENQUEUED &&
+                            workInfo.stopReason != WorkInfo.STOP_REASON_NOT_STOPPED
+                        ) {
+                            when (workInfo.stopReason) {
+                                WorkInfo.STOP_REASON_QUOTA ->
+                                    "System stopped previous attempt: runtime quota"
+                                WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT ->
+                                    "System stopped previous attempt: foreground-service timeout"
+                                WorkInfo.STOP_REASON_BACKGROUND_RESTRICTION ->
+                                    "System stopped previous attempt: background restriction"
+                                WorkInfo.STOP_REASON_APP_STANDBY ->
+                                    "System stopped previous attempt: app standby"
+                                WorkInfo.STOP_REASON_DEVICE_STATE ->
+                                    "System stopped previous attempt: device state"
+                                WorkInfo.STOP_REASON_TIMEOUT ->
+                                    "System stopped previous attempt: timeout"
+                                WorkInfo.STOP_REASON_USER ->
+                                    "Previous attempt was stopped by user"
+                                else ->
+                                    "Previous attempt was stopped by the system (code ${workInfo.stopReason})"
+                            }
+                        } else null
 
                         AudiobookExportUiState(
                             workId = workInfo.id.toString(),
@@ -756,6 +794,7 @@ internal class ChaptersViewModel @Inject constructor(
                             startChapter = metadataStart,
                             endChapter = metadataEnd,
                             error = error,
+                            stopReason = stopReason,
                         )
                     }
                 }

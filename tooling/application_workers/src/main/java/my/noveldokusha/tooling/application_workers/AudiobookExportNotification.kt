@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import my.noveldokusha.coreui.R as CoreUiR
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.strings.R as StringsR
 import timber.log.Timber
@@ -50,19 +51,45 @@ class AudiobookExportNotification(
         }
     }
 
-    fun foregroundNotification(total: Int): Notification =
-        notifyCenter().showNotification(
-            channelId = CHANNEL_ID,
-            channelName = context.getString(StringsR.string.book_export_channel_name),
-            notificationId = notificationId,
-            importance = NotificationManager.IMPORTANCE_LOW,
-        ) {
-            setContentTitle(bookTitle)
-            setContentText(context.getString(StringsR.string.audiobook_export_starting))
-            setProgress(100, 0, false)
-            setOngoing(true)
-            addCancel(this)
-        }.build()
+    fun foregroundNotification(total: Int): Notification {
+        // Do not call notify() here. WorkManager only needs the Notification object.
+        // On Android 13+, drawer visibility depends on POST_NOTIFICATIONS permission.
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                android.app.NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(StringsR.string.book_export_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                )
+            )
+        }
+
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.ic_logo)
+            .setContentTitle(bookTitle)
+            .setContentText(context.getString(StringsR.string.audiobook_export_starting))
+            .setProgress(100, 0, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.getString(StringsR.string.book_export_cancel),
+                PendingIntent.getBroadcast(
+                    context,
+                    notificationId,
+                    android.content.Intent(
+                        context,
+                        AudiobookExportNotificationReceiver::class.java,
+                    ).apply {
+                        action = AudiobookExportNotificationReceiver.ACTION_CANCEL
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .build()
+    }
 
     fun showComplete(name: String) {
         if (!allowed()) return

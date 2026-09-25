@@ -101,6 +101,7 @@ data class AudiobookExportUiState(
     val startChapter: Int,
     val endChapter: Int,
     val error: String? = null,
+    val stopReason: String? = null,
 )
 
 sealed interface AudiobookDialogState {

@@ -79,6 +79,7 @@ class AudiobookExportWorker(
         const val PROGRESS_STAGE = "stage"
         const val OUTPUT_ERROR = "error"
         const val OUTPUT_REQUEST_ID = "requestId"
+        const val ENQUEUED_AT = "enqueuedAt"
 
         fun tagForBook(bookUrl: String): String {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -127,6 +128,7 @@ class AudiobookExportWorker(
                 FORMAT to request.outputFormat.name,
                 VISUAL to (request.visualUri?.toString() ?: ""),
                 DIRECTORY to directoryUri,
+                ENQUEUED_AT to System.currentTimeMillis(),
             )
             val requestWork = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
                 .setInputData(data)
@@ -214,6 +216,7 @@ class AudiobookExportWorker(
                     "mode" to mode,
                     "startChapter" to start,
                     "endChapter" to end,
+                    ENQUEUED_AT to inputData.getLong(ENQUEUED_AT, System.currentTimeMillis()),
                 )
             )
             require(start != Int.MIN_VALUE && end != Int.MIN_VALUE) {
@@ -382,6 +385,7 @@ class AudiobookExportWorker(
                                 "mode" to mode,
                                 "startChapter" to start,
                                 "endChapter" to end,
+                                ENQUEUED_AT to inputData.getLong(ENQUEUED_AT, System.currentTimeMillis()),
                             )
                         )
                         lastProgressNotificationMs = now
@@ -483,6 +487,7 @@ class AudiobookExportWorker(
                         PROGRESS_PERCENT to 100,
                         PROGRESS_STAGE to "complete",
                         OUTPUT_REQUEST_ID to requestId,
+                        ENQUEUED_AT to inputData.getLong(ENQUEUED_AT, System.currentTimeMillis()),
                     )
                 )
             } finally {
@@ -525,6 +530,7 @@ class AudiobookExportWorker(
                         "mode" to inputData.getString(INPUT_MODE).orEmpty(),
                         "startChapter" to inputData.getInt(INPUT_START, 0),
                         "endChapter" to inputData.getInt(INPUT_END, 0),
+                        ENQUEUED_AT to inputData.getLong(ENQUEUED_AT, System.currentTimeMillis()),
                     )
                 )
                 Result.retry()
@@ -536,6 +542,7 @@ class AudiobookExportWorker(
                         PROGRESS_STAGE to currentStage,
                         OUTPUT_ERROR to message,
                         OUTPUT_REQUEST_ID to requestId,
+                        ENQUEUED_AT to inputData.getLong(ENQUEUED_AT, System.currentTimeMillis()),
                     )
                 )
             }

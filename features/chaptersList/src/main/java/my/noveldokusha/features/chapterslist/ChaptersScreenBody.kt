@@ -270,7 +270,8 @@ private fun AudiobookExportStatusBar(
                         .replace('_', ' ')
                         .lowercase()
                         .replaceFirstChar { it.uppercase() }
-                    "${status.format} • $range${if (stage.isNotBlank()) " • $stage" else ""}"
+                    val stop = status.stopReason?.let { " • $it" }.orEmpty()
+                    "${status.format} • $range${if (stage.isNotBlank()) " • $stage" else ""}$stop"
                 }
                 failed -> status.error?.takeIf(String::isNotBlank)
                     ?: "Export stopped before completion"
