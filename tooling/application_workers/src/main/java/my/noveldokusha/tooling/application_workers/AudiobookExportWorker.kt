@@ -142,7 +142,9 @@ class AudiobookExportWorker(
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 uniqueWorkName(bookUrl),
-                androidx.work.ExistingWorkPolicy.KEEP,
+                // A single export is the unit of work for a book. Replace an orphaned/stuck
+                // active job so a fresh Generate action cannot be silently swallowed.
+                androidx.work.ExistingWorkPolicy.REPLACE,
                 requestWork,
             )
         }
@@ -398,6 +400,10 @@ class AudiobookExportWorker(
                 require(durationMs > 0L) {
                     "Generated audio duration is zero"
                 }
+                validateLocalMediaFile(
+                    audioTemp,
+                    if (format == OutputFormat.WAV) OutputFormat.WAV else OutputFormat.MP4,
+                )
 
                 val outputMedia = if (format == OutputFormat.MP4) {
                     currentStage = "MUX_MP4"
@@ -446,8 +452,17 @@ class AudiobookExportWorker(
                 require(outputMedia.exists() && outputMedia.length() > 0L) {
                     "Audiobook output file is missing or empty"
                 }
+                validateLocalMediaFile(
+                    outputMedia,
+                    if (format == OutputFormat.WAV) OutputFormat.WAV else OutputFormat.MP4,
+                )
                 require(jsonTemp.exists() && jsonTemp.length() > 0L) {
                     "Audiobook JSON file is missing or empty"
+                }
+                runCatching {
+                    org.json.JSONObject(jsonTemp.readText(Charsets.UTF_8))
+                }.getOrElse {
+                    error("Audiobook metadata JSON is invalid: " + (it.message ?: "parse error"))
                 }
 
                 currentStage = "SAVE_OUTPUT"
@@ -549,6 +564,49 @@ class AudiobookExportWorker(
         }
     }
 
+    private fun validateLocalMediaFile(file: File, format: OutputFormat) {
+        require(file.exists() && file.length() > 0L) {
+            "Generated media is missing or empty: " + file.name
+        }
+        when (format) {
+            OutputFormat.WAV -> {
+                java.io.RandomAccessFile(file, "r").use { raf ->
+                    require(raf.length() >= 44L) { "Generated WAV is too small" }
+                    val header = ByteArray(4)
+                    raf.readFully(header)
+                    require(header.toString(Charsets.US_ASCII) == "RIFF") {
+                        "Generated WAV is not a RIFF file"
+                    }
+                    raf.seek(8L)
+                    raf.readFully(header)
+                    require(header.toString(Charsets.US_ASCII) == "WAVE") {
+                        "Generated WAV is not a WAVE file"
+                    }
+                }
+            }
+            OutputFormat.MP4 -> {
+                val extractor = android.media.MediaExtractor()
+                try {
+                    extractor.setDataSource(file.absolutePath)
+                    val audioTrack = (0 until extractor.trackCount).firstOrNull {
+                        extractor.getTrackFormat(it)
+                            .getString(android.media.MediaFormat.KEY_MIME)
+                            .orEmpty()
+                            .startsWith("audio/")
+                    } ?: -1
+                    require(audioTrack >= 0) { "Generated MP4 has no audio track" }
+                    val trackFormat = extractor.getTrackFormat(audioTrack)
+                    require(
+                        !trackFormat.containsKey(android.media.MediaFormat.KEY_DURATION) ||
+                            trackFormat.getLong(android.media.MediaFormat.KEY_DURATION) > 0L
+                    ) { "Generated MP4 audio duration is zero" }
+                } finally {
+                    extractor.release()
+                }
+            }
+        }
+    }
+
     private fun isVisualUriReadable(uri: Uri): Boolean = runCatching {
         applicationContext.contentResolver.openInputStream(uri)?.use { input ->
             input.read() >= 0
@@ -599,7 +657,11 @@ class AudiobookExportWorker(
         try {
             applicationContext.contentResolver.openOutputStream(target.uri)?.use { output ->
                 source.inputStream().use { input ->
-                    input.copyTo(output, 64 * 1024)
+                    val copiedBytes = input.copyTo(output, 64 * 1024)
+                    check(copiedBytes == source.length()) {
+                        "Incomplete copy for " + displayName +
+                            ": copied=" + copiedBytes + " expected=" + source.length()
+                    }
                 }
             } ?: error("Unable to open " + displayName)
 
