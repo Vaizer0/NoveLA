@@ -456,7 +456,7 @@ class AudiobookTtsExporter(private val context: Context) {
             Triple(
                 request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() },
                 tts.voice?.name.orEmpty().ifBlank { request.voiceId },
-                tts.voice?.locale?.toLanguageTag().orEmpty(),
+                tts.voice?.locale?.displayLanguage.orEmpty(),
             )
         }
         val effectiveEnginePackage = ttsMetadata.first
