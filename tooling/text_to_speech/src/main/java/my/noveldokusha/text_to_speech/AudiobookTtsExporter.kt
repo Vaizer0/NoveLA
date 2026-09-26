@@ -10,6 +10,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -300,10 +301,12 @@ private class AacMp4Sink(
             }
         }
         while (!drain(true)) { }
-        if (started) runCatching { muxer.stop() }
+        check(started) { "AAC encoder produced no output format/samples" }
+        runCatching { muxer.stop() }
         runCatching { muxer.release() }
         runCatching { codec.stop() }
         runCatching { codec.release() }
+        check(file.exists() && file.length() > 0L) { "AAC/MP4 output is missing or empty" }
         closed = true
     }
 
@@ -449,14 +452,25 @@ class AudiobookTtsExporter(private val context: Context) {
         }
         // Audio is generated once with synthesizeToFile(). Word timings come from
         // the Reader's persisted onRangeStart cache, so export never performs real-time playback.
-        val effectiveEnginePackage = request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() }
-        val effectiveVoiceId = tts.voice?.name.orEmpty().ifBlank { request.voiceId }
+        val ttsMetadata = withContext(Dispatchers.Main.immediate) {
+            Triple(
+                request.enginePackage.ifBlank { tts.defaultEngine.orEmpty() },
+                tts.voice?.name.orEmpty().ifBlank { request.voiceId },
+                tts.voice?.locale?.toLanguageTag().orEmpty(),
+            )
+        }
+        val effectiveEnginePackage = ttsMetadata.first
+        val effectiveVoiceId = ttsMetadata.second
+        val effectiveLocale = ttsMetadata.third
+        val effectiveNeedsInternet = withContext(Dispatchers.Main.immediate) {
+            tts.voice?.isNetworkConnectionRequired == true
+        }
         Timber.d(
             "AudiobookTTS: ready engine=%s voice=%s locale=%s network=%s speed=%.2f pitch=%.2f",
             effectiveEnginePackage,
             effectiveVoiceId,
-            tts.voice?.locale?.toLanguageTag().orEmpty(),
-            tts.voice?.isNetworkConnectionRequired == true,
+            effectiveLocale,
+            effectiveNeedsInternet,
             request.speed,
             request.pitch,
         )
@@ -564,7 +578,32 @@ class AudiobookTtsExporter(private val context: Context) {
                             }
 
                             val synthesisDeadline = SystemClock.elapsedRealtime() + 10 * 60_000L
-                            while (!latch.await(500L, TimeUnit.MILLISECONDS)) {
+                            var lastVerifiedFileSize = -1L
+                            var stableFileSince = 0L
+                            while (true) {
+                                if (latch.await(250L, TimeUnit.MILLISECONDS)) break
+
+                                // Some Android/TTS engine builds can finish the file write even
+                                // when the completion callback is delayed/missing. A syntactically
+                                // valid RIFF/WAVE with a stable size is a safe completion signal.
+                                val fileSize = synthesisFile.length()
+                                if (fileSize > 44L) {
+                                    val fileReady = runCatching {
+                                        readWavPcm16(synthesisFile).pcm16.isNotEmpty()
+                                    }.getOrDefault(false)
+                                    if (fileReady) {
+                                        if (fileSize == lastVerifiedFileSize) {
+                                            if (stableFileSince == 0L) stableFileSince = SystemClock.elapsedRealtime()
+                                            if (SystemClock.elapsedRealtime() - stableFileSince >= 250L) {
+                                                break
+                                            }
+                                        } else {
+                                            lastVerifiedFileSize = fileSize
+                                            stableFileSince = SystemClock.elapsedRealtime()
+                                        }
+                                    }
+                                }
+
                                 if (SystemClock.elapsedRealtime() >= synthesisDeadline) {
                                     throw IllegalStateException("TTS synthesis timeout")
                                 }
@@ -657,8 +696,8 @@ class AudiobookTtsExporter(private val context: Context) {
                     val timingKey = readerWordTimingCacheKey(
                         enginePackage = effectiveEnginePackage,
                         voiceId = effectiveVoiceId,
-                        needsInternet = tts.voice?.isNetworkConnectionRequired == true,
-                        language = tts.voice?.locale?.displayLanguage.orEmpty(),
+                        needsInternet = effectiveNeedsInternet,
+                        language = effectiveLocale.substringBefore('-').ifBlank { effectiveLocale },
                         pitch = request.pitch,
                         text = segment.text,
                     )
@@ -782,6 +821,13 @@ class AudiobookTtsExporter(private val context: Context) {
 
                 sink?.finish()
                 val totalDuration = durationMs(currentFrames, sampleRate)
+                validateGeneratedMedia(
+                    file = mediaFile,
+                    format = request.outputFormat,
+                    durationMs = totalDuration,
+                    sampleRate = sampleRate,
+                    channels = channels,
+                )
                 writeJson(
                     jsonFile,
                     request,
@@ -793,6 +839,14 @@ class AudiobookTtsExporter(private val context: Context) {
                     exportedTimingStore,
                     exportedTimingSegments,
                 )
+                check(jsonFile.exists() && jsonFile.length() > 0L) {
+                    "Audiobook metadata JSON is missing or empty"
+                }
+                runCatching {
+                    JSONObject(jsonFile.readText(Charsets.UTF_8))
+                }.getOrElse {
+                    throw IllegalStateException("Audiobook metadata JSON is invalid: " + (it.message ?: "parse error"))
+                }
                 totalDuration
             } finally {
                 runCatching { sink?.close() }
@@ -1199,6 +1253,35 @@ class AudiobookTtsExporter(private val context: Context) {
             tts.setPitch(request.pitch.coerceIn(0.1f, 2f))
         }
 
+        suspend fun queuePfd(): Int =
+            withContext(Dispatchers.Main.immediate) {
+                runCatching {
+                    outputFile.parentFile?.mkdirs()
+                    runCatching { outputFile.delete() }
+                    ParcelFileDescriptor.open(
+                        outputFile,
+                        ParcelFileDescriptor.MODE_CREATE or
+                            ParcelFileDescriptor.MODE_TRUNCATE or
+                            ParcelFileDescriptor.MODE_WRITE_ONLY,
+                    ).use { pfd ->
+                        tts.synthesizeToFile(
+                            text,
+                            Bundle().apply {
+                                putString(
+                                    TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
+                                    utteranceId,
+                                )
+                            },
+                            pfd,
+                            utteranceId,
+                        )
+                    }
+                }.getOrElse {
+                    Timber.w(it, "AudiobookTTS: PFD synthesizeToFile call failed")
+                    TextToSpeech.ERROR
+                }
+            }
+
         var result = queueFile()
         if (result == TextToSpeech.SUCCESS) return result
 
@@ -1216,7 +1299,19 @@ class AudiobookTtsExporter(private val context: Context) {
         if (result == TextToSpeech.SUCCESS) return result
 
         Timber.w(
-            "AudiobookTTS: second synth enqueue failed result=%d; trying legacy file API",
+            "AudiobookTTS: second File synth enqueue failed result=%d; trying PFD file API",
+            result,
+        )
+        withContext(Dispatchers.Main.immediate) {
+            runCatching { tts.stop() }
+            reapplySettings()
+        }
+        delay(60L)
+        result = queuePfd()
+        if (result == TextToSpeech.SUCCESS) return result
+
+        Timber.w(
+            "AudiobookTTS: PFD synth enqueue failed result=%d; trying legacy path API",
             result,
         )
         runCatching { outputFile.delete() }
@@ -1322,6 +1417,40 @@ class AudiobookTtsExporter(private val context: Context) {
             }
             out.write("\n  ],\n  \"summary\": {\"durationMs\": " + durationMs +
                 ",\"sampleRate\": " + sampleRate + ",\"channels\": " + channels + "}\n}\n")
+        }
+    }
+
+    private fun validateGeneratedMedia(
+        file: File,
+        format: OutputFormat,
+        durationMs: Long,
+        sampleRate: Int,
+        channels: Int,
+    ) {
+        require(file.exists() && file.length() > 0L) {
+            "Generated audiobook media is missing or empty"
+        }
+        require(durationMs > 0L) { "Generated audiobook duration is zero" }
+        when (format) {
+            OutputFormat.WAV -> {
+                val wav = readWavPcm16(file)
+                check(wav.sampleRate == sampleRate && wav.channels == channels) {
+                    "Generated WAV format mismatch"
+                }
+            }
+            OutputFormat.MP4 -> {
+                val extractor = MediaExtractor()
+                try {
+                    extractor.setDataSource(file.absolutePath)
+                    val audioTrack = findTrack(extractor, "audio/")
+                    check(audioTrack >= 0) { "Generated MP4 has no audio track" }
+                    val audioFormat = extractor.getTrackFormat(audioTrack)
+                    val mediaDurationUs = audioFormat.getLongOrDefault(MediaFormat.KEY_DURATION, 0L)
+                    check(mediaDurationUs > 0L) { "Generated MP4 audio duration is zero" }
+                } finally {
+                    extractor.release()
+                }
+            }
         }
     }
 
