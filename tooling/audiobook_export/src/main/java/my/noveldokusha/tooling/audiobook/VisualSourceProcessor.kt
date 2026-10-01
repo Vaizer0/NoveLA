@@ -456,20 +456,16 @@ class VisualSourceProcessor(private val context: Context) {
         val frameCount = frameCountFor(durationMs.toLong().coerceAtMost(MAX_SEGMENT_MS)).coerceAtMost(MAX_GIF_FRAMES)
         for (index in 0 until frameCount) {
             val timeMs = (durationMs.toLong() * index / frameCount).toInt()
-            val bitmap = Bitmap.createBitmap(TARGET_WIDTH, TARGET_HEIGHT, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(Color.BLACK)
             movie.setTime(timeMs)
-            val scaled = android.graphics.Matrix()
-            scaled.postScale(
-                TARGET_WIDTH.toFloat() / movie.width(),
-                TARGET_HEIGHT.toFloat() / movie.height(),
-            )
-            // minSdk проекта — 26, поэтому drawBitmap(Movie, Matrix, Paint)
-            // доступна без проверки версии.
+            // Кадр рисуется в натуральном размере Movie: перегрузка
+            // drawBitmap(Movie, Matrix, Paint) недоступна в android.jar,
+            // а масштабирование выполняется один раз при нормализации.
+            val sourceWidth = movie.width().coerceAtLeast(1)
+            val sourceHeight = movie.height().coerceAtLeast(1)
+            val frame = Bitmap.createBitmap(sourceWidth, sourceHeight, Bitmap.Config.ARGB_8888)
             @Suppress("DEPRECATION")
-            movie.draw(canvas, scaled, null)
-            frames += bitmap
+            movie.draw(Canvas(frame), 0f, 0f)
+            frames += scaleCenterCrop(frame, TARGET_WIDTH, TARGET_HEIGHT).also { frame.recycle() }
         }
         return frames
     }
