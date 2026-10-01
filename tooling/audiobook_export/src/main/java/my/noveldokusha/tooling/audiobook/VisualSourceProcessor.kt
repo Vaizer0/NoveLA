@@ -468,7 +468,7 @@ class VisualSourceProcessor(private val context: Context) {
             // minSdk проекта — 26, поэтому drawBitmap(Movie, Matrix, Paint)
             // доступна без проверки версии.
             @Suppress("DEPRECATION")
-            canvas.drawBitmap(movie, scaled, null)
+            movie.draw(canvas, scaled)
             frames += bitmap
         }
         return frames
