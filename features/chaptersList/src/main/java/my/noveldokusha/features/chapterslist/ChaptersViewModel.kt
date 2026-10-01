@@ -9,12 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -294,7 +296,36 @@ internal class ChaptersViewModel @Inject constructor(
         mutableStateOf<AudiobookExportDialogState>(AudiobookExportDialogState.Hidden)
     val audiobookMessage = mutableStateOf<String?>(null)
 
+    /** Прогресс текущего аудиоэкспорта (0..100) или null, если он не идёт. */
+    val audiobookProgress = mutableStateOf<Int?>(null)
+
     private var pendingAudiobook: PendingAudiobookExport? = null
+
+    init {
+        // Прогресс воркера публикуется через WorkManager и наблюдается здесь,
+        // чтобы показывать процент прямо в приложении, а не только в уведомлении.
+        viewModelScope.launch {
+            // В юнит-тестах WorkManager не инициализирован — молча выходим.
+            val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull()
+                ?: return@launch
+            workManager
+                .getWorkInfosForUniqueWorkFlow(AudiobookExportWorker.TAG)
+                .collect { infos ->
+                    val info = infos.firstOrNull()
+                    audiobookProgress.value = when {
+                        info == null || info.state.isFinished -> null
+                        info.progress.containsKey(AudiobookExportWorker.KEY_PROGRESS) ->
+                            info.progress.getInt(AudiobookExportWorker.KEY_PROGRESS, 0)
+                        else -> 0
+                    }
+                }
+        }
+    }
+
+    fun onAudiobookExportCancel() {
+        AudiobookExportWorker.cancelTask(context)
+        audiobookProgress.value = null
+    }
 
     // Инжектируемая точка постановки задачи: тесты подменяют её шпионом.
     var enqueueAudiobook: (Context, AudiobookExportRequest) -> Unit =

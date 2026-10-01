@@ -21,6 +21,8 @@ dependencies {
     implementation(projects.tooling.textTranslator.domain)
     implementation(projects.tooling.applicationWorkers)
     implementation(projects.tooling.audiobookExport)
+    // Наблюдение прогресса воркера аудиоэкспорта (WorkManager).
+    implementation(libs.androidx.workmanager)
 
     implementation(projects.tooling.novelMigration)
     implementation(libs.material)

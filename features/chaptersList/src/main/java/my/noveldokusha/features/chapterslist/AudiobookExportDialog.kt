@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -303,6 +304,36 @@ internal fun AudiobookExportDialog(
                         textAlign = TextAlign.Center,
                     )
                 }
+            }
+        },
+        dismissButton = {},
+    )
+}
+
+/**
+ * Модальный прогресс идущего аудиоэкспорта. Процент берётся из
+ * `WorkManager` (публикуется воркером), поэтому виден прямо в приложении.
+ */
+@Composable
+internal fun AudiobookExportProgressDialog(
+    progress: Int?,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(text = stringResource(StringsR.string.audiobook_export_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = stringResource(StringsR.string.audiobook_export_progress, progress ?: 0))
+                LinearProgressIndicator(
+                    progress = { (progress ?: 0).coerceIn(0, 100) / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCancel) {
+                Text(text = stringResource(StringsR.string.audiobook_export_cancel))
             }
         },
         dismissButton = {},

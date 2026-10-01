@@ -114,6 +114,8 @@ class ChaptersActivity : BaseActivity() {
                     audiobookDialogState = viewModel.audiobookDialogState.value,
                     audiobookMessage = viewModel.audiobookMessage.value,
                     onAudiobookMessageShown = { viewModel.audiobookMessage.value = null },
+                    audiobookProgress = viewModel.audiobookProgress.value,
+                    onAudiobookCancel = viewModel::onAudiobookExportCancel,
                     onMigrateBook = {
                         navigationRoutes.novelMigration(
                             this,

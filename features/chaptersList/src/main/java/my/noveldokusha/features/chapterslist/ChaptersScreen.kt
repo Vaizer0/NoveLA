@@ -139,6 +139,8 @@ internal fun ChaptersScreen(
     audiobookDialogState: AudiobookExportDialogState,
     audiobookMessage: String?,
     onAudiobookMessageShown: () -> Unit,
+    audiobookProgress: Int?,
+    onAudiobookCancel: () -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
     onFixBook: () -> Unit = {},
@@ -698,6 +700,14 @@ internal fun ChaptersScreen(
             onConfirm = onAudiobookExportConfirmed,
             onDirectorySaved = onAudiobookDirectorySaved,
             onDismiss = onAudiobookDialogDismiss,
+        )
+    }
+
+    // Прогресс аудиоэкспорта в приложении (не только в уведомлении).
+    if (audiobookProgress != null) {
+        AudiobookExportProgressDialog(
+            progress = audiobookProgress,
+            onCancel = onAudiobookCancel,
         )
     }
 }

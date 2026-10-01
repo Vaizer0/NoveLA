@@ -60,6 +60,9 @@ class AudiobookExportWorker(
     companion object {
         const val TAG = "AudiobookExport"
 
+        /** Ключ прогресса в `Data` (0..100) для наблюдения из UI. */
+        const val KEY_PROGRESS = "audiobook_progress_percent"
+
         private const val PROGRESS_INTERVAL_MS = 1_000L
         private const val KEY_BOOK_URL = "book_url"
         private const val KEY_BOOK_TITLE = "book_title"
@@ -143,7 +146,10 @@ class AudiobookExportWorker(
             return Result.failure()
         }
 
-        val outputDir = File(context.cacheDir, "audiobook_export/${request.jobId()}")
+        // ВАЖНО: папка не должна совпадать с tempDir экспортёра
+        // (`cacheDir/audiobook_export/<job>`), иначе экспортёр удалит
+        // готовые файлы вместе со своей временной папкой.
+        val outputDir = File(context.cacheDir, "audiobook_output/${request.jobId()}")
         if (outputDir.exists()) outputDir.deleteRecursively()
         outputDir.mkdirs()
 
@@ -170,6 +176,8 @@ class AudiobookExportWorker(
                         if (now - lastNotifyAt >= PROGRESS_INTERVAL_MS || progress.percent >= 100) {
                             lastNotifyAt = now
                             notification.showProgress(progress.percent)
+                            runCatching { setProgress(workDataOf(KEY_PROGRESS to progress.percent)) }
+                                .onFailure { Timber.w(it, "AudiobookExport: setProgress failed") }
                         }
                     },
                 )
