@@ -5,6 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.IOException
 import java.io.RandomAccessFile
 
 class WavAudioTest {
@@ -30,7 +31,7 @@ class WavAudioTest {
             raf.writeShortLe(16)
             raf.writeBytes("data")
             raf.writeIntLe(dataSize)
-            repeat(dataSize) { raf.write(0) }
+            repeat(dataSize) { raf.write(0.toByte()) }
         }
         return file
     }
@@ -106,7 +107,7 @@ class WavAudioTest {
             2, 0,
             16, 0,
             'd'.code.toByte(), 'a'.code.toByte(), 't'.code.toByte(), 'a'.code.toByte(),
-            0x40.toByte(), 0x0F, 0, 0,
+            0x40, 0x0F, 0, 0,
         )
         source.writeBytes(header)
         source.appendBytes(payload)
@@ -122,19 +123,25 @@ class WavAudioTest {
         assertTrue(payload.contentEquals(mergedData))
     }
 
-    @Test(expected = IncompatibleAudioFormatException::class)
+    @Test
     fun streamingWriter_rejectsMismatchedSampleRate() {
         val wrong = writeWav("wrong.wav", sampleRateHz = 16000, channels = 1, frames = 1600)
         val target = temp.newFile("mismatch.wav")
-        WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { writer ->
-            RandomAccessFile(wrong, "r").use { writer.append(WavAudio.readSegment(wrong), it) }
-        }
+        val failure = runCatching {
+            WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { writer ->
+                RandomAccessFile(wrong, "r").use { writer.append(WavAudio.readSegment(wrong), it) }
+            }
+        }.exceptionOrNull()
+        assertTrue(failure is IncompatibleAudioFormatException)
     }
 
-    @Test(expected = IOException::class)
+    @Test
     fun streamingWriter_refusesToFinalizeEmptyFile() {
         val target = temp.newFile("empty.wav")
-        WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { it.finish() }
+        val failure = runCatching {
+            WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { it.finish() }
+        }.exceptionOrNull()
+        assertTrue(failure is IOException)
     }
 }
 
