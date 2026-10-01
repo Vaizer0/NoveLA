@@ -60,6 +60,7 @@ class AudiobookExportWorker(
     companion object {
         const val TAG = "AudiobookExport"
 
+        private const val PROGRESS_INTERVAL_MS = 1_000L
         private const val KEY_BOOK_URL = "book_url"
         private const val KEY_BOOK_TITLE = "book_title"
         private const val KEY_FORMAT = "format"
@@ -266,9 +267,5 @@ class AudiobookExportWorker(
             visualSourceName = inputData.getString(KEY_VISUAL_SOURCE_NAME),
             treeUri = treeUri,
         )
-    }
-
-    private companion object {
-        const val PROGRESS_INTERVAL_MS = 1_000L
     }
 }
