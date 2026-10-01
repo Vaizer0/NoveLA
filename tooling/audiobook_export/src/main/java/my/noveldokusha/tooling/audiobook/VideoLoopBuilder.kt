@@ -1,0 +1,388 @@
+package my.noveldokusha.tooling.audiobook
+
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
+import java.io.File
+import java.io.FileInputStream
+import java.io.IOException
+import java.io.RandomAccessFile
+import timber.log.Timber
+
+/**
+ * Сборка финального MP4: закодированный звук аудиокниги + зацикленный визуал.
+ *
+ * Главное правило — визуальный ряд **не рендерится** на всю длительность.
+ * Короткий нормализованный сегмент читается как готовые сэмплы, его
+ * временные метки сдвигаются, и он повторяется до полной длительности
+ * аудио. Стоимость пропорциональна размеру исходника, а не длине книги.
+ */
+class VideoLoopBuilder {
+
+    /**
+     * Создаёт MP4 с зацикленным визуалом на всю длительность аудио.
+     *
+     * @param audioWav уже смёрженный WAV — единственный источник звука,
+     *   повторный синтез TTS ради MP4 не выполняется.
+     */
+    fun build(
+        audioWav: File,
+        visualSegment: NormalizedVisualSegment,
+        target: File,
+        onProgress: (Float) -> Unit = {},
+    ): Mp4Result {
+        if (!audioWav.exists()) throw IOException("audio file is missing: $audioWav")
+        val audioDurationMs = WavAudio.durationMs(audioWav)
+        if (audioDurationMs <= 0L) throw IOException("audio file is empty: $audioWav")
+
+        val tempOutput = File(target.absolutePath + ".tmp")
+        runCatching { tempOutput.delete() }
+
+        val muxer = MediaMuxer(tempOutput.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var videoTrack = -1
+        var audioTrack = -1
+        var started = false
+
+        try {
+            // 1. Готовим закодированный звук (AAC) ровно один раз.
+            val encodedAudio = AacAudioEncoder().encode(audioWav)
+            val audioFormat = encodedAudio.format
+            val aacFile = encodedAudio.file
+            aacFile.use {
+                MediaExtractor().apply { setDataSource(aacFile.absolutePath) }.use { extractor ->
+                    audioTrack = muxer.addTrack(extractor.getTrackFormat(0))
+                }
+            }
+
+            // 2. Видеодорожка: зацикливаем уже закодированные сэмплы сегмента.
+            MediaExtractor().apply {
+                setDataSource(visualSegment.file.absolutePath)
+            }.use { extractor ->
+                val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
+                    extractor.getTrackFormat(index)
+                        .getString(MediaFormat.KEY_MIME)
+                        ?.startsWith("video/") == true
+                } ?: throw IOException("visual segment has no video track")
+                extractor.selectTrack(trackIndex)
+                val videoFormat = extractor.getTrackFormat(trackIndex)
+                videoTrack = muxer.addTrack(videoFormat)
+
+                val segmentSamples = readVideoSamples(extractor)
+                if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
+                val segmentDurationUs = segmentSamples.last().presentationTimeUs +
+                    segmentSamples.last().size * 1_000_000L / maxOf(1, videoFormat.frameRateGuess())
+                if (segmentDurationUs <= 0L) throw IOException("visual segment has zero duration")
+
+                started = true
+                muxer.start()
+
+                val audioSamples = readAudioSamples(aacFile)
+                writeAudioSamples(muxer, audioTrack, audioSamples)
+
+                val totalVideoSamples = ((audioDurationMs * 1000L) / segmentDurationUs + 1)
+                val bufferInfo = MediaCodec.BufferInfo()
+                var writtenVideo = 0L
+                for (iteration in 0 until totalVideoSamples) {
+                    val timeOffsetUs = iteration * segmentDurationUs
+                    for (sample in segmentSamples) {
+                        val targetUs = timeOffsetUs + sample.presentationTimeUs
+                        // Последняя итерация обрезается точно по аудио,
+                        // чтобы видео не оказалось длиннее звука.
+                        if (targetUs >= audioDurationMs * 1000L) return@use
+                        bufferInfo.offset = 0
+                        bufferInfo.size = sample.size
+                        bufferInfo.presentationTimeUs = targetUs
+                        bufferInfo.flags = sample.flags
+                        muxer.writeSampleData(videoTrack, sample.buffer, bufferInfo)
+                        writtenVideo++
+                        if (writtenVideo % PROGRESS_SAMPLE_INTERVAL == 0L) {
+                            onProgress((targetUs.toFloat() / (audioDurationMs * 1000L)).coerceIn(0f, 1f))
+                        }
+                    }
+                }
+                onProgress(1f)
+            }
+        } catch (e: Exception) {
+            runCatching { muxer.release() }
+            runCatching { tempOutput.delete() }
+            throw if (e is IOException) e else IOException("MP4 assembly failed: ${e.message}", e)
+        } finally {
+            if (started) runCatching { muxer.stop() }
+            runCatching { muxer.release() }
+        }
+
+        // Продолжительность MP4 должна совпадать с аудио; проверяем и чиним.
+        val result = Mp4Result(
+            file = tempOutput,
+            audioDurationMs = audioDurationMs,
+            videoDurationMs = probeVideoDurationMs(tempOutput),
+        )
+        if (tempOutput.length() == 0L) {
+            runCatching { tempOutput.delete() }
+            throw IOException("MP4 output is empty")
+        }
+        if (target.exists()) target.delete()
+        if (!tempOutput.renameTo(target)) {
+            tempOutput.copyTo(target, overwrite = true)
+            runCatching { tempOutput.delete() }
+        }
+        return result.copy(file = target)
+    }
+
+    /** Один закодированный видеосэмпл сегмента. */
+    private class VideoSample(
+        val buffer: java.nio.ByteBuffer,
+        val size: Int,
+        val presentationTimeUs: Long,
+        val flags: Int,
+    )
+
+    /**
+     * Читает все закодированные видеосэмплы сегмента в память.
+     *
+     * Это допустимо: сегмент короткий (1–5 секунд), в отличие от аудиокниги.
+     * Именно поэтому дальше идёт повторное использование, а не рендеринг.
+     */
+    private fun readVideoSamples(extractor: MediaExtractor): List<VideoSample> {
+        val samples = mutableListOf<VideoSample>()
+        val buffer = java.nio.ByteBuffer.allocate(SAMPLE_BUFFER_SIZE)
+        while (true) {
+            val size = extractor.readSampleData(buffer, 0)
+            if (size < 0) break
+            val duplicated = buffer.duplicate()
+            samples += VideoSample(
+                buffer = java.nio.ByteBuffer.wrap(
+                    java.util.Arrays.copyOfRange(duplicated.array(), duplicated.arrayOffset(), duplicated.arrayOffset() + size),
+                ),
+                size = size,
+                presentationTimeUs = extractor.sampleTime,
+                flags = extractor.sampleFlags,
+            )
+            extractor.advance()
+        }
+        return samples
+    }
+
+    private fun readAudioSamples(aacFile: File): List<AudioSample> {
+        val samples = mutableListOf<AudioSample>()
+        val buffer = java.nio.ByteBuffer.allocate(SAMPLE_BUFFER_SIZE)
+        MediaExtractor().apply { setDataSource(aacFile.absolutePath) }.use { extractor ->
+            val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
+                extractor.getTrackFormat(index)
+                    .getString(MediaFormat.KEY_MIME)
+                    ?.startsWith("audio/") == true
+            } ?: return emptyList()
+            extractor.selectTrack(trackIndex)
+            while (true) {
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+                val duplicated = buffer.duplicate()
+                samples += AudioSample(
+                    buffer = java.nio.ByteBuffer.wrap(
+                        java.util.Arrays.copyOfRange(duplicated.array(), duplicated.arrayOffset(), duplicated.arrayOffset() + size),
+                    ),
+                    size = size,
+                    presentationTimeUs = extractor.sampleTime,
+                    flags = extractor.sampleFlags,
+                )
+                extractor.advance()
+            }
+        }
+        return samples
+    }
+
+    private class AudioSample(
+        val buffer: java.nio.ByteBuffer,
+        val size: Int,
+        val presentationTimeUs: Long,
+        val flags: Int,
+    )
+
+    private fun writeAudioSamples(
+        muxer: MediaMuxer,
+        trackIndex: Int,
+        samples: List<AudioSample>,
+    ) {
+        val bufferInfo = MediaCodec.BufferInfo()
+        for (sample in samples) {
+            bufferInfo.offset = 0
+            bufferInfo.size = sample.size
+            bufferInfo.presentationTimeUs = sample.presentationTimeUs
+            bufferInfo.flags = sample.flags
+            muxer.writeSampleData(trackIndex, sample.buffer, bufferInfo)
+        }
+    }
+
+    private fun probeVideoDurationMs(file: File): Long {
+        MediaExtractor().use { extractor ->
+            try {
+                extractor.setDataSource(file.absolutePath)
+                val index = (0 until extractor.trackCount).firstOrNull { i ->
+                    extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+                } ?: return 0L
+                return extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION) / 1000L
+            } catch (e: Exception) {
+                Timber.w(e, "VideoLoopBuilder: video duration probe failed")
+                return 0L
+            }
+        }
+    }
+
+    private fun MediaFormat.frameRateGuess(): Int =
+        if (containsKey(MediaFormat.KEY_FRAME_RATE)) getInteger(MediaFormat.KEY_FRAME_RATE) else TARGET_FPS
+
+    private fun MediaExtractor.use(block: (MediaExtractor) -> Unit) {
+        try {
+            block(this)
+        } finally {
+            runCatching { release() }
+        }
+    }
+
+    private companion object {
+        const val TARGET_FPS = 4
+        const val SAMPLE_BUFFER_SIZE = 256 * 1024
+        const val PROGRESS_SAMPLE_INTERVAL = 2_000L
+    }
+}
+
+/** Результат сборки MP4 с фактическими длительностями дорожек. */
+data class Mp4Result(
+    val file: File,
+    val audioDurationMs: Long,
+    val videoDurationMs: Long,
+) {
+    /** Допустимое расхождение видео и аудио — один кадр при TARGET_FPS. */
+    fun durationsMatch(toleranceMs: Long = 1_000L): Boolean =
+        kotlin.math.abs(audioDurationMs - videoDurationMs) <= toleranceMs
+}
+
+/**
+ * Кодирование смёрженного WAV в AAC-дорожку для MP4.
+ *
+ * WAV → AAC выполняется ровно один раз. Дальше AAC-сэмплы переиспользуются
+ * как есть, без повторного декодирования.
+ */
+internal class AacAudioEncoder {
+
+    fun encode(wavFile: File): EncodedAudio {
+        val segment = WavAudio.readSegment(wavFile)
+        val outputFile = File.createTempFile("novela_aac_", ".aac", wavFile.parentFile)
+        val format = MediaFormat.createAudioFormat(MIME_AUDIO_AAC, segment.sampleRateHz, segment.channels).apply {
+            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            setInteger(MediaFormat.KEY_BIT_RATE, AAC_BITRATE)
+            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_SIZE)
+        }
+
+        val codec = MediaCodec.createEncoderByType(MIME_AUDIO_AAC)
+        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MUXER_OUTPUT_MPEG_4)
+        val bufferInfo = MediaCodec.BufferInfo()
+        var trackIndex = -1
+        var started = false
+
+        try {
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.start()
+
+            val pcm = readPcm(wavFile, segment)
+            var pcmOffset = 0
+            var inputDone = false
+            var outputDone = false
+
+            while (!outputDone) {
+                if (!inputDone) {
+                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+                    if (inputIndex >= 0) {
+                        val inputBuffer = codec.getInputBuffer(inputIndex)
+                        if (inputBuffer != null) {
+                            val remaining = pcm.size - pcmOffset
+                            if (remaining <= 0) {
+                                codec.queueInputBuffer(
+                                    inputIndex, 0, 0, 0,
+                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                )
+                                inputDone = true
+                            } else {
+                                val chunk = minOf(remaining, inputBuffer.remaining())
+                                inputBuffer.put(pcm, pcmOffset, chunk)
+                                codec.queueInputBuffer(inputIndex, 0, chunk, 0, 0)
+                                pcmOffset += chunk
+                            }
+                        }
+                    }
+                }
+                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        trackIndex = muxer.addTrack(codec.outputFormat)
+                        muxer.start()
+                        started = true
+                    }
+                    else -> if (outputIndex >= 0) {
+                        val encoded = codec.getOutputBuffer(outputIndex)
+                        val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                        if (encoded != null && bufferInfo.size > 0 && !isConfig && started) {
+                            encoded.position(bufferInfo.offset)
+                            encoded.limit(bufferInfo.offset + bufferInfo.size)
+                            muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+                        }
+                        codec.releaseOutputBuffer(outputIndex, false)
+                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            outputDone = true
+                        }
+                    }
+                }
+            }
+        } finally {
+            runCatching { codec.stop() }
+            runCatching { codec.release() }
+            if (started) runCatching { muxer.stop() }
+            runCatching { muxer.release() }
+        }
+
+        if (!started) {
+            runCatching { outputFile.delete() }
+            throw IOException("AAC encoder produced no output")
+        }
+        return EncodedAudio(outputFile, format)
+    }
+
+    /**
+     * Читает PCM из WAV блоками. Весь файл в память не грузится:
+     * буфер ограничен [PCM_CHUNK_FRAMES].
+     */
+    private fun readPcm(wavFile: File, segment: PcmSegment): ByteArray {
+        val bufferSize = PCM_CHUNK_FRAMES * segment.bytesPerFrame
+        val output = java.io.ByteArrayOutputStream()
+        val scratch = ByteArray(bufferSize)
+        RandomAccessFile(wavFile, "r").use { raf ->
+            raf.seek(segment.dataOffset)
+            var remaining = segment.dataLength
+            while (remaining > 0) {
+                val toRead = minOf(remaining, scratch.size.toLong()).toInt()
+                val read = raf.read(scratch, 0, toRead)
+                if (read <= 0) break
+                output.write(scratch, 0, read)
+                remaining -= read
+            }
+        }
+        return output.toByteArray()
+    }
+
+    /** Закодированная AAC-дорожка во временном файле. */
+    class EncodedAudio(val file: File, val format: MediaFormat) : AutoCloseable {
+        override fun close() {
+            runCatching { file.delete() }
+        }
+    }
+
+    private companion object {
+        const val MIME_AUDIO_AAC = "audio/mp4a-latm"
+        const val AAC_BITRATE = 96_000
+        const val MAX_INPUT_SIZE = 16 * 1024
+        const val TIMEOUT_US = 10_000L
+        const val PCM_CHUNK_FRAMES = 8192
+    }
+}

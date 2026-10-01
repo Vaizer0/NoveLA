@@ -1576,6 +1576,14 @@ class AppPreferences @Inject constructor(
         override var value by SharedPreference_String(name, preferences, "")
     }
 
+    // URI папки (tree URI) для экспорта аудиокниг.
+    // Отдельное от EXPORT_DIRECTORY_URI намеренно: экспорт аудиокниг
+    // раскладывает файлы по схеме <folder>/Audiobooks/<Novel Name>/,
+    // EPUB-экспорт пишет в корень выбранной папки.
+    val AUDIOBOOK_EXPORT_DIRECTORY_URI = object : Preference<String>("AUDIOBOOK_EXPORT_DIRECTORY_URI") {
+        override var value by SharedPreference_String(name, preferences, "")
+    }
+
     // Максимальное количество хранимых файлов автобекапа
     val BACKUP_AUTO_MAX_COUNT = object : Preference<Int>("BACKUP_AUTO_MAX_COUNT") {
         override var value by SharedPreference_Int(name, preferences, 5)
