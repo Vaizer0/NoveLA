@@ -835,6 +835,37 @@
     <string name="book_export_no_chapters">No chapters to export</string>
     <string name="book_export_failed">Export failed</string>
 
+    <!-- Audiobook Export -->
+    <string name="audiobook_export_title">Export audiobook</string>
+    <string name="audiobook_export_format">Format</string>
+    <string name="audiobook_export_format_wav">WAV (audio only)</string>
+    <string name="audiobook_export_format_mp4">MP4 (audio + visual)</string>
+    <string name="audiobook_export_content">Content</string>
+    <string name="audiobook_export_content_original">Original</string>
+    <string name="audiobook_export_content_translation">Translation (%1$s → %2$s)</string>
+    <string name="audiobook_export_range">Chapters</string>
+    <string name="audiobook_export_range_start">From</string>
+    <string name="audiobook_export_range_end">To</string>
+    <string name="audiobook_export_range_value">%1$d – %2$d</string>
+    <string name="audiobook_export_visual">Visual source</string>
+    <string name="audiobook_export_choose_visual">Choose image, video or GIF</string>
+    <string name="audiobook_export_visual_none">Not selected</string>
+    <string name="audiobook_export_folder">Folder</string>
+    <string name="audiobook_export_choose_folder">Choose folder</string>
+    <string name="audiobook_export_no_folder">No folder selected</string>
+    <string name="audiobook_export_folder_hint">Files are saved to &quot;Audiobooks/&lt;book name&gt;/&quot; inside the selected folder.</string>
+    <string name="audiobook_export_start">Start export</string>
+    <string name="audiobook_export_started">Export started</string>
+    <string name="audiobook_export_mp4_needs_visual">Choose a visual source for MP4</string>
+    <string name="audiobook_export_not_downloaded">Book is not fully downloaded. Export available chapters?</string>
+    <string name="audiobook_export_no_chapters">No chapters to export</string>
+    <string name="audiobook_export_channel_name">Audiobook export</string>
+    <string name="audiobook_export_preparing">Preparing\u2026</string>
+    <string name="audiobook_export_progress">Converting to audio: %1$d%%</string>
+    <string name="audiobook_export_complete">Saved: %1$s</string>
+    <string name="audiobook_export_cancel">Cancel</string>
+    <string name="audiobook_export_failed">Export failed</string>
+
     <!-- Per-plugin translation settings -->
     <string name="extension_translation_settings">Open translation settings</string>
     <string name="plugin_translation_settings_title">Translation (plugin)</string>

@@ -9,6 +9,7 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.data.AppRemoteRepository
 import my.noveldokusha.interactor.LibraryUpdatesInteractions
 import my.noveldokusha.scraper.LuaSourceProvider
+import my.noveldokusha.tooling.application_workers.AudiobookExportWorker
 import my.noveldokusha.tooling.application_workers.AutoBackupWorker
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.DatabaseMaintenanceWorker
@@ -70,6 +71,13 @@ class AppWorkerFactory @Inject internal constructor(
             BookExportWorker::class.java.name -> {
                 Timber.d("AppWorkerFactory: creating BookExportWorker")
                 BookExportWorker(
+                    context = appContext,
+                    workerParameters = workerParameters,
+                )
+            }
+            AudiobookExportWorker::class.java.name -> {
+                Timber.d("AppWorkerFactory: creating AudiobookExportWorker")
+                AudiobookExportWorker(
                     context = appContext,
                     workerParameters = workerParameters,
                 )

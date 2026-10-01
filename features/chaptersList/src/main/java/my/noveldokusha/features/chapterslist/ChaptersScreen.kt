@@ -132,6 +132,13 @@ internal fun ChaptersScreen(
     exportDialogState: ExportDialogState,
     exportMessage: String?,
     onExportMessageShown: () -> Unit,
+    onAudiobookExport: (bookUrl: String, bookTitle: String) -> Unit,
+    onAudiobookExportConfirmed: (AudiobookExportConfig) -> Unit,
+    onAudiobookDirectorySaved: (uri: String) -> Unit,
+    onAudiobookDialogDismiss: () -> Unit,
+    audiobookDialogState: AudiobookExportDialogState,
+    audiobookMessage: String?,
+    onAudiobookMessageShown: () -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
     onFixBook: () -> Unit = {},
@@ -184,6 +191,12 @@ internal fun ChaptersScreen(
         if (exportMessage != null) {
             snackbarHostState.showSnackbar(exportMessage)
             onExportMessageShown()
+        }
+    }
+    LaunchedEffect(audiobookMessage) {
+        if (audiobookMessage != null) {
+            snackbarHostState.showSnackbar(audiobookMessage)
+            onAudiobookMessageShown()
         }
     }
     val areSelectedChaptersRead by remember {
@@ -275,6 +288,7 @@ internal fun ChaptersScreen(
                                         onDownloadNext100Chapters = onDownloadNext100Chapters,
                                         onDownloadAllChapters = onDownloadAllChapters,
                                         onExport = onExport,
+                                        onAudiobookExport = onAudiobookExport,
                                         onMigrateBook = onMigrateBook,
                                         onDeleteTranslations = onDeleteTranslations,
                                         onFixBook = onFixBook,
@@ -675,6 +689,16 @@ internal fun ChaptersScreen(
             }
         }
         ExportDialogState.Hidden -> { /* no-op */ }
+    }
+
+    // Audiobook (WAV/MP4 + JSON) export dialog
+    (audiobookDialogState as? AudiobookExportDialogState.Configure)?.let { audiobookState ->
+        AudiobookExportDialog(
+            state = audiobookState,
+            onConfirm = onAudiobookExportConfirmed,
+            onDirectorySaved = onAudiobookDirectorySaved,
+            onDismiss = onAudiobookDialogDismiss,
+        )
     }
 }
 

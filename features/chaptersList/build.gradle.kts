@@ -20,6 +20,7 @@ dependencies {
     implementation(projects.tooling.localDatabase)
     implementation(projects.tooling.textTranslator.domain)
     implementation(projects.tooling.applicationWorkers)
+    implementation(projects.tooling.audiobookExport)
 
     implementation(projects.tooling.novelMigration)
     implementation(libs.material)

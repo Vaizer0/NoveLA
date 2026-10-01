@@ -1278,6 +1278,37 @@
     <string name="book_export_no_chapters">Нет глав для экспорта</string>
     <string name="book_export_failed">Ошибка экспорта</string>
 
+    <!-- Audiobook Export -->
+    <string name="audiobook_export_title">Экспорт аудиокниги</string>
+    <string name="audiobook_export_format">Формат</string>
+    <string name="audiobook_export_format_wav">WAV (только звук)</string>
+    <string name="audiobook_export_format_mp4">MP4 (звук + визуал)</string>
+    <string name="audiobook_export_content">Содержимое</string>
+    <string name="audiobook_export_content_original">Оригинал</string>
+    <string name="audiobook_export_content_translation">Перевод (%1$s → %2$s)</string>
+    <string name="audiobook_export_range">Главы</string>
+    <string name="audiobook_export_range_start">С</string>
+    <string name="audiobook_export_range_end">По</string>
+    <string name="audiobook_export_range_value">%1$d – %2$d</string>
+    <string name="audiobook_export_visual">Визуальный источник</string>
+    <string name="audiobook_export_choose_visual">Выбрать изображение, видео или GIF</string>
+    <string name="audiobook_export_visual_none">Не выбран</string>
+    <string name="audiobook_export_folder">Папка</string>
+    <string name="audiobook_export_choose_folder">Выбрать папку</string>
+    <string name="audiobook_export_no_folder">Папка не выбрана</string>
+    <string name="audiobook_export_folder_hint">Файлы сохраняются в «Audiobooks/&lt;название книги&gt;/» внутри выбранной папки.</string>
+    <string name="audiobook_export_start">Начать экспорт</string>
+    <string name="audiobook_export_started">Экспорт запущен</string>
+    <string name="audiobook_export_mp4_needs_visual">Выберите визуальный источник для MP4</string>
+    <string name="audiobook_export_not_downloaded">Книга скачана не полностью. Экспортировать доступные главы?</string>
+    <string name="audiobook_export_no_chapters">Нет глав для экспорта</string>
+    <string name="audiobook_export_channel_name">Экспорт аудиокниги</string>
+    <string name="audiobook_export_preparing">Подготовка…</string>
+    <string name="audiobook_export_progress">Озвучивание: %1$d%%</string>
+    <string name="audiobook_export_complete">Сохранено: %1$s</string>
+    <string name="audiobook_export_cancel">Отмена</string>
+    <string name="audiobook_export_failed">Ошибка экспорта</string>
+
     <!-- Per-plugin translation settings -->
     <string name="extension_translation_settings">Открыть настройки перевода</string>
     <string name="plugin_translation_settings_title">Перевод (плагин)</string>

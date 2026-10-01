@@ -16,6 +16,7 @@ dependencies {
     implementation(projects.networking)
     implementation(projects.scraper)
     implementation(projects.tooling.localDatabase)
+    implementation(projects.tooling.audiobookExport)
     implementation(projects.tooling.backupCreate)
     implementation(projects.tooling.epubParser)
 

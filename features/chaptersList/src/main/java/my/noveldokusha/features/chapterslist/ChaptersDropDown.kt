@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Public
@@ -30,6 +31,7 @@ internal fun ChaptersDropDown(
     onDownloadNext100Chapters: () -> Unit,
     onDownloadAllChapters: () -> Unit,
     onExport: (bookUrl: String, bookTitle: String) -> Unit,
+    onAudiobookExport: (bookUrl: String, bookTitle: String) -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
     onFixBook: () -> Unit = {},
@@ -112,6 +114,18 @@ internal fun ChaptersDropDown(
             Icon(
                 Icons.Filled.IosShare,
                 stringResource(StringsR.string.export),
+            )
+        }
+    )
+    DropdownMenuItem(
+        onClick = { onAudiobookExport(bookUrl, bookTitle) },
+        text = {
+            Text(text = stringResource(StringsR.string.audiobook_export_title))
+        },
+        leadingIcon = {
+            Icon(
+                Icons.Filled.LibraryMusic,
+                stringResource(StringsR.string.audiobook_export_title),
             )
         }
     )

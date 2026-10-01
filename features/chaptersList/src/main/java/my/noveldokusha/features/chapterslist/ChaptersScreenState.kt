@@ -81,3 +81,19 @@ sealed interface ExportDialogState {
     /** Папка экспорта не выбрана — UI открывает SAF-пикер. */
     data object NeedDirectory : ExportDialogState
 }
+
+/** Состояние диалога экспорта книги в аудиокнигу (WAV/MP4 + JSON). */
+sealed interface AudiobookExportDialogState {
+    data object Hidden : AudiobookExportDialogState
+
+    data class Configure(
+        val bookUrl: String,
+        val bookTitle: String,
+        val totalChapters: Int,
+        val downloadedChapters: Int,
+        val availableTranslations: List<LangPair>,
+        val directoryName: String?,
+        /** Растёт при каждом запросе папки — UI открывает SAF-пикер по изменению. */
+        val directoryRequestId: Int = 0,
+    ) : AudiobookExportDialogState
+}

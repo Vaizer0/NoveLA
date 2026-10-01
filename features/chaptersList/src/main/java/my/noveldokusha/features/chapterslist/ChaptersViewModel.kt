@@ -66,8 +66,13 @@ import my.noveldokusha.core.utils.normalizeBookUrl
 import my.noveldokusha.chapterslist.BuildConfig
 import my.noveldokusha.debug.MemoryDiagnostics
 import my.noveldokusha.text_translator.domain.TranslationManager
+import my.noveldokusha.tooling.application_workers.AudiobookExportWorker
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
+import my.noveldokusha.tooling.audiobook.AudiobookContentMode
+import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
+import my.noveldokusha.tooling.audiobook.AudiobookFormat
+import my.noveldokusha.tooling.audiobook.VisualSource
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -281,6 +286,110 @@ internal class ChaptersViewModel @Inject constructor(
         // stale pendingExport останется и сработает для следующей книги.
         pendingExport = null
         exportDialogState.value = ExportDialogState.Hidden
+    }
+
+    // ─── Экспорт аудиокниги (WAV/MP4 + JSON) ─────────────────────────────────
+
+    val audiobookDialogState =
+        mutableStateOf<AudiobookExportDialogState>(AudiobookExportDialogState.Hidden)
+    val audiobookMessage = mutableStateOf<String?>(null)
+
+    private var pendingAudiobook: PendingAudiobookExport? = null
+
+    // Инжектируемая точка постановки задачи: тесты подменяют её шпионом.
+    var enqueueAudiobook: (Context, AudiobookExportRequest) -> Unit =
+        AudiobookExportWorker::enqueue
+
+    fun onAudiobookExportClicked(bookUrl: String, bookTitle: String) {
+        viewModelScope.launch {
+            val totalChapters = chapterDao.countByBookUrl(bookUrl)
+            val downloadedChapters = chapterBodyDao.countDownloadedBodies(bookUrl)
+            val availableTranslations = chapterTranslationDao
+                .getTranslationGroups(bookUrl)
+                .map { LangPair(it.sourceLang, it.targetLang, it.count) }
+            val directoryUri = appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value
+            val directoryName = directoryUri.takeIf { it.isNotBlank() }
+                ?.let { resolveExportDirectoryName(context.contentResolver, it) }
+
+            if (downloadedChapters == 0) {
+                audiobookMessage.value = context.getString(StringsR.string.audiobook_export_no_chapters)
+                return@launch
+            }
+
+            audiobookDialogState.value = AudiobookExportDialogState.Configure(
+                bookUrl = bookUrl,
+                bookTitle = bookTitle,
+                totalChapters = totalChapters,
+                downloadedChapters = downloadedChapters,
+                availableTranslations = availableTranslations,
+                directoryName = directoryName,
+            )
+        }
+    }
+
+    fun onAudiobookExportConfirmed(config: AudiobookExportConfig) {
+        val dialog = audiobookDialogState.value as? AudiobookExportDialogState.Configure ?: return
+        val directoryUri = appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value
+        if (directoryUri.isBlank()) {
+            // Папка не выбрана: сохраняем конфиг и просим UI открыть SAF-пикер.
+            pendingAudiobook = PendingAudiobookExport(dialog = dialog, config = config)
+            audiobookDialogState.value = dialog.copy(
+                directoryRequestId = dialog.directoryRequestId + 1,
+            )
+        } else {
+            enqueueAudiobookExport(dialog, config, directoryUri)
+        }
+    }
+
+    fun onAudiobookDirectorySaved(uri: String) {
+        appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value = uri
+        val pending = pendingAudiobook
+        if (pending != null) {
+            pendingAudiobook = null
+            enqueueAudiobookExport(pending.dialog, pending.config, uri)
+        } else {
+            // Смена папки в открытом диалоге: обновляем имя, экспорт не стартуем.
+            viewModelScope.launch {
+                val name = resolveExportDirectoryName(context.contentResolver, uri)
+                val state = audiobookDialogState.value
+                if (state is AudiobookExportDialogState.Configure) {
+                    audiobookDialogState.value = state.copy(directoryName = name)
+                }
+            }
+        }
+    }
+
+    fun onAudiobookDialogDismiss() {
+        pendingAudiobook = null
+        audiobookDialogState.value = AudiobookExportDialogState.Hidden
+    }
+
+    private fun enqueueAudiobookExport(
+        dialog: AudiobookExportDialogState.Configure,
+        config: AudiobookExportConfig,
+        directoryUri: String,
+    ) {
+        val request = AudiobookExportRequest(
+            bookUrl = dialog.bookUrl,
+            bookTitle = dialog.bookTitle,
+            format = config.format,
+            contentMode = config.contentMode,
+            sourceLang = if (config.contentMode == AudiobookContentMode.TRANSLATION) config.sourceLang else "",
+            targetLang = if (config.contentMode == AudiobookContentMode.TRANSLATION) config.targetLang else "",
+            startPosition = config.startPosition,
+            endPosition = config.endPosition,
+            enginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
+            voiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value,
+            speed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
+            pitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
+            visualUri = config.visualUri,
+            visualSource = config.visualSource,
+            visualSourceName = config.visualSourceName,
+            treeUri = directoryUri,
+        )
+        enqueueAudiobook(context, request)
+        audiobookMessage.value = context.getString(StringsR.string.audiobook_export_started)
+        audiobookDialogState.value = AudiobookExportDialogState.Hidden
     }
 
     // ─── Перевод названия и описания ──────────────────────────────────────────
@@ -1273,6 +1382,27 @@ internal class ChaptersViewModel @Inject constructor(
         state.selectedChaptersUrl.putAll(inverse)
     }
 }
+
+/** Конфигурация экспорта аудиокниги, выбранная в диалоге. */
+data class AudiobookExportConfig(
+    val format: AudiobookFormat = AudiobookFormat.WAV,
+    val contentMode: AudiobookContentMode = AudiobookContentMode.ORIGINAL,
+    val sourceLang: String = "",
+    val targetLang: String = "",
+    /** Позиция первой главы (0-based). */
+    val startPosition: Int = 0,
+    /** Позиция последней главы включительно (0-based). */
+    val endPosition: Int = 0,
+    val visualUri: String? = null,
+    val visualSource: VisualSource? = null,
+    val visualSourceName: String? = null,
+)
+
+/** Аудиоэкспорт, ожидающий выбора папки через SAF. */
+private data class PendingAudiobookExport(
+    val dialog: AudiobookExportDialogState.Configure,
+    val config: AudiobookExportConfig,
+)
 
 /** Экспорт, ожидающий выбора папки через SAF (ветка NeedDirectory). */
 private data class PendingExport(
