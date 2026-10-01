@@ -5,6 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 
@@ -13,25 +14,30 @@ class WavAudioTest {
     val temp = TemporaryFolder()
 
     /** Создаёт валидный 16-битный моно WAV заданной длительности. */
-    private fun writeWav(name: String, sampleRateHz: Int, channels: Int, frames: Int): java.io.File {
+    private fun writeWav(name: String, sampleRateHz: Int, channels: Int, frames: Int): File {
         val file = temp.newFile(name)
         val dataSize = frames * channels * 2
-        val riffSize = 36 + dataSize
-        RandomAccessFile(file, "rw").use { raf ->
-            raf.writeBytes("RIFF")
-            raf.writeIntLe(riffSize)
-            raf.writeBytes("WAVE")
-            raf.writeBytes("fmt ")
-            raf.writeIntLe(16)
-            raf.writeShortLe(1)
-            raf.writeShortLe(channels)
-            raf.writeIntLe(sampleRateHz)
-            raf.writeIntLe(sampleRateHz * channels * 2)
-            raf.writeShortLe(channels * 2)
-            raf.writeShortLe(16)
-            raf.writeBytes("data")
-            raf.writeIntLe(dataSize)
-            repeat(dataSize) { raf.write(0.toByte()) }
+        val silence = ByteArray(minOf(dataSize, 8192))
+        file.outputStream().use { out ->
+            out.write("RIFF".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(36 + dataSize)
+            out.write("WAVE".toByteArray(Charsets.US_ASCII))
+            out.write("fmt ".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(16)
+            out.writeShortLe(1)
+            out.writeShortLe(channels)
+            out.writeIntLe(sampleRateHz)
+            out.writeIntLe(sampleRateHz * channels * 2)
+            out.writeShortLe(channels * 2)
+            out.writeShortLe(16)
+            out.write("data".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(dataSize)
+            var written = 0
+            while (written < dataSize) {
+                val chunk = minOf(silence.size, dataSize - written)
+                out.write(silence, 0, chunk)
+                written += chunk
+            }
         }
         return file
     }
@@ -94,23 +100,24 @@ class WavAudioTest {
     fun streamingWriter_preservesRealSampleData() {
         val source = temp.newFile("tone.wav")
         val payload = ByteArray(4000) { (it % 251).toByte() }
-        val header = byteArrayOf(
-            'R'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 'F'.code.toByte(),
-            0x60, 0x0F, 0, 0,
-            'W'.code.toByte(), 'A'.code.toByte(), 'V'.code.toByte(), 'E'.code.toByte(),
-            'f'.code.toByte(), 'm'.code.toByte(), 't'.code.toByte(), ' '.code.toByte(),
-            16, 0, 0, 0,
-            1, 0,
-            1, 0,
-            0x40, 0x1F, 0, 0,
-            0x80, 0x3E, 0, 0,
-            2, 0,
-            16, 0,
-            'd'.code.toByte(), 'a'.code.toByte(), 't'.code.toByte(), 'a'.code.toByte(),
-            0x40, 0x0F, 0, 0,
-        )
-        source.writeBytes(header)
-        source.appendBytes(payload)
+        // Заголовок пишется тем же кодом, что и настоящий файл, чтобы тест
+        // не зависел от ручного набора байтов.
+        source.outputStream().use { out ->
+            out.write("RIFF".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(36 + payload.size)
+            out.write("WAVE".toByteArray(Charsets.US_ASCII))
+            out.write("fmt ".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(16)
+            out.writeShortLe(1)
+            out.writeShortLe(1)
+            out.writeIntLe(8000)
+            out.writeIntLe(16000)
+            out.writeShortLe(2)
+            out.writeShortLe(16)
+            out.write("data".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(payload.size)
+            out.write(payload)
+        }
 
         val target = temp.newFile("merged-tone.wav")
         WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { writer ->
@@ -145,14 +152,14 @@ class WavAudioTest {
     }
 }
 
-private fun RandomAccessFile.writeIntLe(value: Int) {
+private fun java.io.OutputStream.writeIntLe(value: Int) {
     write(value and 0xFF)
     write((value ushr 8) and 0xFF)
     write((value ushr 16) and 0xFF)
     write((value ushr 24) and 0xFF)
 }
 
-private fun RandomAccessFile.writeShortLe(value: Int) {
+private fun java.io.OutputStream.writeShortLe(value: Int) {
     write(value and 0xFF)
     write((value ushr 8) and 0xFF)
 }
