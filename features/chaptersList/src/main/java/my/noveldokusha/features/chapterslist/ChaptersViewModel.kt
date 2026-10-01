@@ -312,11 +312,10 @@ internal class ChaptersViewModel @Inject constructor(
                 .getWorkInfosForUniqueWorkFlow(AudiobookExportWorker.TAG)
                 .collect { infos ->
                     val info = infos.firstOrNull()
-                    audiobookProgress.value = when {
-                        info == null || info.state.isFinished -> null
-                        info.progress.containsKey(AudiobookExportWorker.KEY_PROGRESS) ->
-                            info.progress.getInt(AudiobookExportWorker.KEY_PROGRESS, 0)
-                        else -> 0
+                    audiobookProgress.value = if (info == null || info.state.isFinished) {
+                        null
+                    } else {
+                        info.progress.getInt(AudiobookExportWorker.KEY_PROGRESS, 0)
                     }
                 }
         }
