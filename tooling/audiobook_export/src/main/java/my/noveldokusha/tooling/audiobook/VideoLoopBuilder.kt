@@ -37,99 +37,144 @@ class VideoLoopBuilder {
         val audioDurationMs = WavAudio.durationMs(audioWav)
         if (audioDurationMs <= 0L) throw IOException("audio file is empty: $audioWav")
 
-        val tempOutput = File(target.absolutePath + ".tmp")
-        runCatching { tempOutput.delete() }
+        // Аудио кодируется в AAC один раз; готовые сэмплы дальше
+        // переиспользуются без повторного декодирования.
+        AacAudioEncoder().encode(audioWav).use { encodedAudio ->
+            buildWithEncodedAudio(encodedAudio.file, visualSegment.file, audioDurationMs, target, onProgress)
+        }
 
-        val muxer = MediaMuxer(tempOutput.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        var videoTrack = -1
-        var audioTrack = -1
+        val result = Mp4Result(
+            file = target,
+            audioDurationMs = audioDurationMs,
+            videoDurationMs = probeVideoDurationMs(target),
+        )
+        return result
+    }
+
+    /** Собирает MP4 из уже закодированного AAC и готового визуального сегмента. */
+    private fun buildWithEncodedAudio(
+        encodedAudioFile: File,
+        visualSegmentFile: File,
+        audioDurationMs: Long,
+        target: File,
+        onProgress: (Float) -> Unit,
+    ) {
+        runCatching { target.delete() }
+        val muxer = MediaMuxer(target.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var started = false
-
         try {
-            // 1. Готовим закодированный звук (AAC) ровно один раз.
-            val encodedAudio = AacAudioEncoder().encode(audioWav)
-            val audioFormat = encodedAudio.format
-            val aacFile = encodedAudio.file
-            aacFile.use {
-                MediaExtractor().apply { setDataSource(aacFile.absolutePath) }.use { extractor ->
-                    audioTrack = muxer.addTrack(extractor.getTrackFormat(0))
-                }
-            }
-
-            // 2. Видеодорожка: зацикливаем уже закодированные сэмплы сегмента.
-            MediaExtractor().apply {
-                setDataSource(visualSegment.file.absolutePath)
-            }.use { extractor ->
-                val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
-                    extractor.getTrackFormat(index)
-                        .getString(MediaFormat.KEY_MIME)
-                        ?.startsWith("video/") == true
-                } ?: throw IOException("visual segment has no video track")
-                extractor.selectTrack(trackIndex)
-                val videoFormat = extractor.getTrackFormat(trackIndex)
-                videoTrack = muxer.addTrack(videoFormat)
-
-                val segmentSamples = readVideoSamples(extractor)
-                if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
-                val segmentDurationUs = segmentSamples.last().presentationTimeUs +
-                    segmentSamples.last().size * 1_000_000L / maxOf(1, videoFormat.frameRateGuess())
-                if (segmentDurationUs <= 0L) throw IOException("visual segment has zero duration")
-
-                started = true
-                muxer.start()
-
-                val audioSamples = readAudioSamples(aacFile)
-                writeAudioSamples(muxer, audioTrack, audioSamples)
-
-                val totalVideoSamples = ((audioDurationMs * 1000L) / segmentDurationUs + 1)
-                val bufferInfo = MediaCodec.BufferInfo()
-                var writtenVideo = 0L
-                for (iteration in 0 until totalVideoSamples) {
-                    val timeOffsetUs = iteration * segmentDurationUs
-                    for (sample in segmentSamples) {
-                        val targetUs = timeOffsetUs + sample.presentationTimeUs
-                        // Последняя итерация обрезается точно по аудио,
-                        // чтобы видео не оказалось длиннее звука.
-                        if (targetUs >= audioDurationMs * 1000L) return@use
-                        bufferInfo.offset = 0
-                        bufferInfo.size = sample.size
-                        bufferInfo.presentationTimeUs = targetUs
-                        bufferInfo.flags = sample.flags
-                        muxer.writeSampleData(videoTrack, sample.buffer, bufferInfo)
-                        writtenVideo++
-                        if (writtenVideo % PROGRESS_SAMPLE_INTERVAL == 0L) {
-                            onProgress((targetUs.toFloat() / (audioDurationMs * 1000L)).coerceIn(0f, 1f))
-                        }
-                    }
-                }
-                onProgress(1f)
-            }
+            val audioTrack = audioTrackOf(encodedAudioFile, muxer)
+            val videoTrack = addVideoTrack(visualSegmentFile, muxer)
+            muxer.start()
+            started = true
+            writeAudioSamples(muxer, audioTrack, readAudioSamples(encodedAudioFile))
+            writeLoopedVideo(visualSegmentFile, muxer, videoTrack, audioDurationMs, onProgress)
         } catch (e: Exception) {
             runCatching { muxer.release() }
-            runCatching { tempOutput.delete() }
+            runCatching { target.delete() }
             throw if (e is IOException) e else IOException("MP4 assembly failed: ${e.message}", e)
         } finally {
+            // MediaMuxer.stop() обязан вызываться до release(), иначе
+            // moov-атом не пишется и файл остаётся нечитаемым.
             if (started) runCatching { muxer.stop() }
             runCatching { muxer.release() }
         }
 
-        // Продолжительность MP4 должна совпадать с аудио; проверяем и чиним.
-        val result = Mp4Result(
-            file = tempOutput,
-            audioDurationMs = audioDurationMs,
-            videoDurationMs = probeVideoDurationMs(tempOutput),
-        )
-        if (tempOutput.length() == 0L) {
-            runCatching { tempOutput.delete() }
+        if (target.length() == 0L) {
+            runCatching { target.delete() }
             throw IOException("MP4 output is empty")
         }
-        if (target.exists()) target.delete()
-        if (!tempOutput.renameTo(target)) {
-            tempOutput.copyTo(target, overwrite = true)
-            runCatching { tempOutput.delete() }
-        }
-        return result.copy(file = target)
     }
+
+    /** Добавляет аудиодорожку из закодированного AAC-файла в муксер. */
+    private fun audioTrackOf(aacFile: File, muxer: MediaMuxer): Int {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(aacFile.absolutePath)
+            val index = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: throw IOException("encoded audio has no audio track")
+            return muxer.addTrack(extractor.getTrackFormat(index))
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
+    /** Находит видеодорожку сегмента и добавляет её в муксер. */
+    private fun addVideoTrack(segmentFile: File, muxer: MediaMuxer): Int {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(segmentFile.absolutePath)
+            return muxer.addTrack(extractor.getTrackFormat(videoTrackIndexOf(extractor, segmentFile)))
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
+    /**
+     * Записывает видеодорожку, повторяя закодированные сэмплы сегмента со
+     * сдвигом временных меток до полной длительности аудио.
+     *
+     * Это и есть главная оптимизация MP4: стоимость пропорциональна длине
+     * сегмента, а не длине аудиокниги.
+     */
+    private fun writeLoopedVideo(
+        segmentFile: File,
+        muxer: MediaMuxer,
+        videoTrack: Int,
+        audioDurationMs: Long,
+        onProgress: (Float) -> Unit,
+    ) {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(segmentFile.absolutePath)
+            extractor.selectTrack(videoTrackIndexOf(extractor, segmentFile))
+            val frameRate = maxOf(1, extractor.getTrackFormat(extractor.getSampleTrackIndex()).frameRateGuess())
+
+            val segmentSamples = readVideoSamples(extractor)
+            if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
+
+            val lastSample = segmentSamples.last()
+            val segmentDurationUs = lastSample.presentationTimeUs +
+                lastSample.size * 1_000_000L / frameRate
+            if (segmentDurationUs <= 0L) throw IOException("visual segment has zero duration")
+
+            val audioUs = audioDurationMs * 1000L
+            val iterations = audioUs / segmentDurationUs + 1
+            val bufferInfo = MediaCodec.BufferInfo()
+            var written = 0L
+
+            loop@ for (iteration in 0 until iterations) {
+                val timeOffsetUs = iteration * segmentDurationUs
+                for (sample in segmentSamples) {
+                    val targetUs = timeOffsetUs + sample.presentationTimeUs
+                    // Последняя итерация обрезается точно по аудио:
+                    // видео не должно оказаться длиннее звука.
+                    if (targetUs >= audioUs) break@loop
+                    bufferInfo.offset = 0
+                    bufferInfo.size = sample.size
+                    bufferInfo.presentationTimeUs = targetUs
+                    bufferInfo.flags = sample.flags
+                    muxer.writeSampleData(videoTrack, sample.buffer, bufferInfo)
+                    written++
+                    if (written % PROGRESS_SAMPLE_INTERVAL == 0L) {
+                        onProgress((targetUs.toFloat() / audioUs).coerceIn(0f, 1f))
+                    }
+                }
+            }
+            onProgress(1f)
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
+    /** Индекс первой видеодорожки контейнера. */
+    private fun videoTrackIndexOf(extractor: MediaExtractor, source: File): Int =
+        (0 until extractor.trackCount).firstOrNull { index ->
+            extractor.getTrackFormat(index)
+                .getString(MediaFormat.KEY_MIME)
+                ?.startsWith("video/") == true
+        } ?: throw IOException("no video track in ${source.name}")
 
     /** Один закодированный видеосэмпл сегмента. */
     private class VideoSample(
@@ -167,14 +212,16 @@ class VideoLoopBuilder {
 
     private fun readAudioSamples(aacFile: File): List<AudioSample> {
         val samples = mutableListOf<AudioSample>()
-        val buffer = java.nio.ByteBuffer.allocate(SAMPLE_BUFFER_SIZE)
-        MediaExtractor().apply { setDataSource(aacFile.absolutePath) }.use { extractor ->
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(aacFile.absolutePath)
             val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
                 extractor.getTrackFormat(index)
                     .getString(MediaFormat.KEY_MIME)
                     ?.startsWith("audio/") == true
             } ?: return emptyList()
             extractor.selectTrack(trackIndex)
+            val buffer = java.nio.ByteBuffer.allocate(SAMPLE_BUFFER_SIZE)
             while (true) {
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
@@ -189,6 +236,8 @@ class VideoLoopBuilder {
                 )
                 extractor.advance()
             }
+        } finally {
+            runCatching { extractor.release() }
         }
         return samples
     }
@@ -216,30 +265,23 @@ class VideoLoopBuilder {
     }
 
     private fun probeVideoDurationMs(file: File): Long {
-        MediaExtractor().use { extractor ->
-            try {
-                extractor.setDataSource(file.absolutePath)
-                val index = (0 until extractor.trackCount).firstOrNull { i ->
-                    extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-                } ?: return 0L
-                return extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION) / 1000L
-            } catch (e: Exception) {
-                Timber.w(e, "VideoLoopBuilder: video duration probe failed")
-                return 0L
-            }
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            val index = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: return 0L
+            extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION) / 1000L
+        } catch (e: Exception) {
+            Timber.w(e, "VideoLoopBuilder: video duration probe failed")
+            0L
+        } finally {
+            runCatching { extractor.release() }
         }
     }
 
     private fun MediaFormat.frameRateGuess(): Int =
         if (containsKey(MediaFormat.KEY_FRAME_RATE)) getInteger(MediaFormat.KEY_FRAME_RATE) else TARGET_FPS
-
-    private fun MediaExtractor.use(block: (MediaExtractor) -> Unit) {
-        try {
-            block(this)
-        } finally {
-            runCatching { release() }
-        }
-    }
 
     private companion object {
         const val TARGET_FPS = 4

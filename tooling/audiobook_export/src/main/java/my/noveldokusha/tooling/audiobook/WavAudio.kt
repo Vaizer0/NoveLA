@@ -277,9 +277,11 @@ object WavAudio {
         return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
     }
 
-    private fun readLeInt32(raf: RandomAccessFile): Long =
-        (raf.read() and 0xFF) or
-            ((raf.read() and 0xFF) shl 8) or
-            ((raf.read() and 0xFF) shl 16) or
-            ((raf.read() and 0xFF).toLong() shl 24).let { (it and 0xFFFFFFFFL) }
+    private fun readLeInt32(raf: RandomAccessFile): Long {
+        val b0 = (raf.read() and 0xFF).toLong()
+        val b1 = (raf.read() and 0xFF).toLong()
+        val b2 = (raf.read() and 0xFF).toLong()
+        val b3 = (raf.read() and 0xFF).toLong()
+        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    }
 }

@@ -9,6 +9,9 @@ android {
 
 dependencies {
     implementation(projects.core)
+    // ChapterContentProvider читает оглавление и текст глав напрямую
+    // из локальной БД, поэтому зависимость нужна на уровне модуля.
+    implementation(projects.tooling.localDatabase)
 
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)

@@ -215,9 +215,14 @@ class TtsAudioSynthesizer(
         return false
     }
 
-    /** Лимит длины одной TTS-порции, заданный движком. */
+    /**
+     * Лимит длины одной TTS-порции, заданный движком.
+     *
+     * Метод статический, а не экземплярный: часть движков сообщает лимит
+     * только через него, поэтому он является безопасным минимумом.
+     */
     fun maxChunkLength(): Int =
-        (tts?.getMaxSpeechInputLength() ?: DEFAULT_MAX_CHUNK).coerceAtLeast(MIN_CHUNK)
+        TextToSpeech.getMaxSpeechInputLength().coerceAtLeast(MIN_CHUNK)
 
     override fun close() {
         runCatching { tts?.stop() }
