@@ -120,7 +120,7 @@ object AudiobookJsonWriter {
             content = JsonContent(
                 mode = if (contentMode == AudiobookContentMode.TRANSLATION) "translation" else "original",
                 sourceLanguage = sourceLanguage.ifBlank { "und" },
-                targetLanguage = targetLanguage.takeIf { it.isNotBlank() },
+                targetLanguage = targetLanguage?.takeIf { it.isNotBlank() },
             ),
             chapters = JsonChapters(
                 start = startPosition + 1,

@@ -79,7 +79,7 @@ class AudiobookExporter(private val context: Context) {
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
                     percent = 96,
-                    generatedAudioMs = mergedWav.durationMs(),
+                    generatedAudioMs = WavAudio.durationMs(mergedWav),
                     estimatedRemainingMs = 0L,
                 ),
             )

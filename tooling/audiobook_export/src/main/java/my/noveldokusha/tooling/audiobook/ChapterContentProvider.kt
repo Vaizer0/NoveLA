@@ -19,7 +19,7 @@ class ChapterContentProvider(private val database: AppDatabase) {
      *
      * @return список в порядке чтения; пустой, если в диапазоне нет скачанных глав.
      */
-    fun loadChapters(
+    suspend fun loadChapters(
         bookUrl: String,
         startPosition: Int,
         endPosition: Int,
@@ -42,7 +42,7 @@ class ChapterContentProvider(private val database: AppDatabase) {
         }
     }
 
-    private fun loadOriginal(chapters: List<Chapter>): List<AudiobookChapterData> {
+    private suspend fun loadOriginal(chapters: List<Chapter>): List<AudiobookChapterData> {
         val bodies = database.chapterBodyDao()
             .getBodiesByUrls(chapters.map { it.url })
             .associate { it.url to it.body }
@@ -63,7 +63,7 @@ class ChapterContentProvider(private val database: AppDatabase) {
         }
     }
 
-    private fun loadTranslated(
+    private suspend fun loadTranslated(
         chapters: List<Chapter>,
         sourceLang: String,
         targetLang: String,

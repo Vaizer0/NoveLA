@@ -319,7 +319,7 @@ internal class AacAudioEncoder {
         }
 
         val codec = MediaCodec.createEncoderByType(MIME_AUDIO_AAC)
-        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MUXER_OUTPUT_MPEG_4)
+        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val bufferInfo = MediaCodec.BufferInfo()
         var trackIndex = -1
         var started = false
@@ -328,59 +328,74 @@ internal class AacAudioEncoder {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             codec.start()
 
-            val pcm = readPcm(wavFile, segment)
-            var pcmOffset = 0
-            var inputDone = false
-            var outputDone = false
+            // PCM читается блоками прямо из WAV: полный объём аудиокниги
+            // в память не попадает, в отличие от ByteArrayOutputStream.
+            RandomAccessFile(wavFile, "r").use { raf ->
+                raf.seek(segment.dataOffset)
+                val bytesPerFrame = segment.bytesPerFrame
+                var bytesSubmitted = 0L
+                var inputDone = false
+                var outputDone = false
 
-            while (!outputDone) {
-                if (!inputDone) {
-                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
-                    if (inputIndex >= 0) {
-                        val inputBuffer = codec.getInputBuffer(inputIndex)
-                        if (inputBuffer != null) {
-                            val remaining = pcm.size - pcmOffset
-                            if (remaining <= 0) {
-                                codec.queueInputBuffer(
-                                    inputIndex, 0, 0, 0,
-                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                                )
-                                inputDone = true
-                            } else {
-                                val chunk = minOf(remaining, inputBuffer.remaining())
-                                inputBuffer.put(pcm, pcmOffset, chunk)
-                                codec.queueInputBuffer(inputIndex, 0, chunk, 0, 0)
-                                pcmOffset += chunk
+                while (!outputDone) {
+                    if (!inputDone) {
+                        val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+                        if (inputIndex >= 0) {
+                            val inputBuffer = codec.getInputBuffer(inputIndex)
+                            if (inputBuffer != null) {
+                                val toRead = minOf(
+                                    segment.dataLength - bytesSubmitted,
+                                    inputBuffer.remaining().toLong(),
+                                    (PCM_CHUNK_FRAMES * bytesPerFrame).toLong(),
+                                ).toInt()
+                                if (toRead <= 0) {
+                                    codec.queueInputBuffer(
+                                        inputIndex, 0, 0, 0,
+                                        MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                    )
+                                    inputDone = true
+                                } else {
+                                    val chunk = ByteArray(toRead)
+                                    raf.readFully(chunk)
+                                    inputBuffer.put(chunk)
+                                    // Метки времени идут от реальной позиции в
+                                    // аудио, иначе AAC-дорожка получится без
+                                    // длительности.
+                                    val presentationTimeUs = bytesSubmitted * 1_000_000L / segment.sampleRateHz
+                                    codec.queueInputBuffer(inputIndex, 0, toRead, presentationTimeUs, 0)
+                                    bytesSubmitted += toRead
+                                }
                             }
                         }
                     }
-                }
-                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        trackIndex = muxer.addTrack(codec.outputFormat)
-                        muxer.start()
-                        started = true
-                    }
-                    else -> if (outputIndex >= 0) {
-                        val encoded = codec.getOutputBuffer(outputIndex)
-                        val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                        if (encoded != null && bufferInfo.size > 0 && !isConfig && started) {
-                            encoded.position(bufferInfo.offset)
-                            encoded.limit(bufferInfo.offset + bufferInfo.size)
-                            muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+
+                    when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            trackIndex = muxer.addTrack(codec.outputFormat)
+                            muxer.start()
+                            started = true
                         }
-                        codec.releaseOutputBuffer(outputIndex, false)
-                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                            outputDone = true
+                        else -> if (outputIndex >= 0) {
+                            val encoded = codec.getOutputBuffer(outputIndex)
+                            val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                            if (encoded != null && bufferInfo.size > 0 && !isConfig && started) {
+                                encoded.position(bufferInfo.offset)
+                                encoded.limit(bufferInfo.offset + bufferInfo.size)
+                                muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+                            }
+                            codec.releaseOutputBuffer(outputIndex, false)
+                            if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                                outputDone = true
+                            }
                         }
                     }
                 }
             }
         } finally {
+            if (started) runCatching { muxer.stop() }
             runCatching { codec.stop() }
             runCatching { codec.release() }
-            if (started) runCatching { muxer.stop() }
             runCatching { muxer.release() }
         }
 
@@ -389,28 +404,6 @@ internal class AacAudioEncoder {
             throw IOException("AAC encoder produced no output")
         }
         return EncodedAudio(outputFile, format)
-    }
-
-    /**
-     * Читает PCM из WAV блоками. Весь файл в память не грузится:
-     * буфер ограничен [PCM_CHUNK_FRAMES].
-     */
-    private fun readPcm(wavFile: File, segment: PcmSegment): ByteArray {
-        val bufferSize = PCM_CHUNK_FRAMES * segment.bytesPerFrame
-        val output = java.io.ByteArrayOutputStream()
-        val scratch = ByteArray(bufferSize)
-        RandomAccessFile(wavFile, "r").use { raf ->
-            raf.seek(segment.dataOffset)
-            var remaining = segment.dataLength
-            while (remaining > 0) {
-                val toRead = minOf(remaining, scratch.size.toLong()).toInt()
-                val read = raf.read(scratch, 0, toRead)
-                if (read <= 0) break
-                output.write(scratch, 0, read)
-                remaining -= read
-            }
-        }
-        return output.toByteArray()
     }
 
     /** Закодированная AAC-дорожка во временном файле. */

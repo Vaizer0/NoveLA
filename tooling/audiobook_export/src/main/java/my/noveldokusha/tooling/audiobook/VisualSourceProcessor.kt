@@ -13,6 +13,7 @@ import android.media.MediaMuxer
 import android.net.Uri
 import android.view.Surface
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import timber.log.Timber
 
@@ -139,12 +140,11 @@ class VisualSourceProcessor(private val context: Context) {
             // Кадры рисуются на surface входного энкодера: это ровно одна
             // отрисовка на кадр сегмента, а не на весь audiobook.
             bitmaps.forEach { bitmap -> drawBitmapToSurface(bitmap, surface) }
-            drainEncoder(codec, outputMuxer, trackIndex = { index -> index }, endOfStream = true) { format ->
-                if (!muxerStarted) {
-                    outputMuxer.addTrack(format)
-                    outputMuxer.start()
-                    muxerStarted = true
-                }
+            drainEncoder(codec, outputMuxer, endOfStream = true) { format ->
+                val track = outputMuxer.addTrack(format)
+                outputMuxer.start()
+                muxerStarted = true
+                track
             }
 
             if (!muxerStarted) throw VisualProcessingException("Encoder produced no samples")
@@ -206,16 +206,15 @@ class VisualSourceProcessor(private val context: Context) {
     /**
      * Дренирует энкодер, добавляя дорожку в муксер по её выходному формату.
      *
-     * [trackIndex] вызывается один раз, когда формат дорожки известен, и
+     * [onOutputFormat] вызывается один раз, когда формат дорожки известен, и
      * должен вернуть индекс добавленной дорожки — писать сэмплы можно только
      * в неё, а не в предположительный индекс 0.
      */
     private inline fun drainEncoder(
         codec: MediaCodec,
         muxer: MediaMuxer,
-        trackIndex: () -> Int,
         endOfStream: Boolean,
-        onOutputFormat: (MediaFormat) -> Unit,
+        onOutputFormat: (MediaFormat) -> Int,
     ) {
         val bufferInfo = MediaCodec.BufferInfo()
         var muxerStarted = false
@@ -230,8 +229,7 @@ class VisualSourceProcessor(private val context: Context) {
             when {
                 status == MediaCodec.INFO_TRY_AGAIN_LATER -> if (signalled && muxerStarted) return else Unit
                 status == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    onOutputFormat(codec.outputFormat)
-                    currentTrack = trackIndex()
+                    currentTrack = onOutputFormat(codec.outputFormat)
                     muxerStarted = true
                 }
                 status >= 0 -> {
@@ -467,12 +465,10 @@ class VisualSourceProcessor(private val context: Context) {
                 TARGET_WIDTH.toFloat() / movie.width(),
                 TARGET_HEIGHT.toFloat() / movie.height(),
             )
-            // drawBitmap(Movie, Matrix, Paint) доступен с API 26.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                canvas.drawBitmap(movie, scaled, null)
-            } else {
-                canvas.drawColor(Color.BLACK)
-            }
+            // minSdk проекта — 26, поэтому drawBitmap(Movie, Matrix, Paint)
+            // доступна без проверки версии.
+            @Suppress("DEPRECATION")
+            canvas.drawBitmap(movie, scaled, null)
             frames += bitmap
         }
         return frames
