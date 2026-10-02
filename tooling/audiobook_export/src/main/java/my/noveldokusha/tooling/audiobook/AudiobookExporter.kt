@@ -231,6 +231,17 @@ class AudiobookExporter(private val context: Context) {
     @Volatile
     private var mergedChannels: Int? = null
 
+    @Volatile
+    private var mergedBitsPerSample: Int? = null
+
+    /** Формат уже начатого мердж-потока или `null`, пока он не определён. */
+    private fun mergedFormat(): PcmFormat? {
+        val rate = mergedSampleRate ?: return null
+        val channels = mergedChannels ?: return null
+        val bits = mergedBitsPerSample ?: return null
+        return PcmFormat(rate, channels, bits)
+    }
+
     /**
      * Синтезирует главы по порядку и на лету складывает сегменты в приёмник.
      *
@@ -254,6 +265,15 @@ class AudiobookExporter(private val context: Context) {
         var processedChars = 0
         val startedAt = System.currentTimeMillis()
 
+        // Аудит целостности: что запланировано и что реально озвучено.
+        // По нему в логе видно, что ни одна порция не потеряна и не
+        // продублирована, а число символов совпадает с планом.
+        var introSegments = 0
+        var audioChunks = 0
+        var plannedChunks = 0
+        var plannedChars = 0
+        var spokenChars = 0
+
         // Длительность считается по накопленным кадрам, а не суммой
         // независимо округлённых миллисекунд: тогда сумма таймлайна точно
         // совпадает с длительностью смёрженного WAV даже на тысячах порций.
@@ -273,6 +293,7 @@ class AudiobookExporter(private val context: Context) {
             voiceId = request.voiceId,
             speed = request.speed,
             pitch = request.pitch,
+            cache = TtsSynthesisCache(context),
         )
 
         // MP4 кодирует AAC прямо во время синтеза; WAV пишет RIFF-поток.
@@ -290,6 +311,8 @@ class AudiobookExporter(private val context: Context) {
 
                 val chapterTitle = chapter.title.ifBlank { "Chapter ${chapter.position + 1}" }
                 val plans = planParagraphs(splitChapterIntoParagraphs(chapter.paragraphs.joinToString("\n\n")), maxChunk)
+                plannedChunks += plans.sumOf { it.chunks.size }
+                plannedChars += plans.sumOf { it.text.length }
 
                 timeline.beginChapter(
                     chapterIndex = chapterOffset + 1,
@@ -307,6 +330,8 @@ class AudiobookExporter(private val context: Context) {
                     segmentHandle.append(introFile, introDuration)
                     timeline.endIntro(introDuration)
                     introFile.delete()
+                    introSegments++
+                    spokenChars += introText.length
                 } else {
                     // У выбранной главы нет названия — вводим нулевой intro,
                     // чтобы таймлайн оставался строгим.
@@ -326,6 +351,8 @@ class AudiobookExporter(private val context: Context) {
                         val chunkDuration = advanceFrames(chunkSegment)
                         segmentHandle.append(chunkFile, chunkDuration)
                         paragraphDurationMs += chunkDuration
+                        audioChunks++
+                        spokenChars += chunk.length
                         // Сегмент удаляется сразу после присоединения.
                         runCatching { chunkFile.delete() }
                     }
@@ -391,6 +418,23 @@ class AudiobookExporter(private val context: Context) {
         val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
         if (durationMs <= 0L) throw IOException("synthesized audio is empty")
         val builtTimeline = alignTimelineToDuration(timeline.build(), durationMs)
+        // Аудит целостности контента: в логе видно, что запланированное и
+        // озвученное совпадают. Это же позволяет сравнить WAV- и MP4-экспорт
+        // одного и того же диапазона (число порций/символов и длительность).
+        val intact = plannedChunks == audioChunks && plannedChars == spokenChars
+        AudiobookExportDebug.log(
+            "content audit: chapters=${builtTimeline.size} intros=$introSegments " +
+                "paragraphs=${builtTimeline.sumOf { it.paragraphs.size }} " +
+                "plannedChunks=$plannedChunks audioChunks=$audioChunks " +
+                "plannedChars=$plannedChars spokenChars=$spokenChars " +
+                "audioMs=$durationMs intact=$intact",
+        )
+        if (!intact) {
+            Timber.w(
+                "AudiobookExporter: content audit mismatch planned(chunks=%d chars=%d) spoken(chunks=%d chars=%d)",
+                plannedChunks, plannedChars, audioChunks, spokenChars,
+            )
+        }
         return MergeOutcome(
             timeline = builtTimeline,
             durationMs = durationMs,
@@ -407,10 +451,11 @@ class AudiobookExporter(private val context: Context) {
         chapterOffset: Int,
         chapterTitle: String,
     ): PcmSegment = try {
-        val segment = synthesizer.synthesizeToFile(text, target)
+        val segment = synthesizer.synthesizeToFile(text, target, mergedFormat())
         if (mergedSampleRate == null) {
             mergedSampleRate = segment.sampleRateHz
             mergedChannels = segment.channels
+            mergedBitsPerSample = segment.bitsPerSample
         }
         if (segment.frameCount <= 0L) {
             throw AudiobookChapterFailedException(
@@ -506,6 +551,7 @@ class AudiobookExporter(private val context: Context) {
                 val segment = WavAudio.readSegment(segmentFile)
                 mergedSampleRate = segment.sampleRateHz
                 mergedChannels = segment.channels
+                mergedBitsPerSample = segment.bitsPerSample
                 writer = WavAudio.StreamingWavWriter(
                     target = target,
                     sampleRateHz = segment.sampleRateHz,

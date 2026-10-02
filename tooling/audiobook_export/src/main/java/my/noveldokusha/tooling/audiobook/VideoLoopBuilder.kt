@@ -182,25 +182,30 @@ class VideoLoopBuilder {
             val segmentSamples = readVideoSamples(extractor)
             if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
 
-            // Длительность одного сегмента = максимум из расчётной (число
-            // кадров / FPS) и фактического размаха PTS. Расчётная не даёт
-            // выродиться в миллионы итераций (PTS surface иногда почти нулевые —
-            // старый баг 88%), а PTS страхует от наложения.
+            // Сегмент переразмечается по индексу сэмпла, а не по его PTS:
+            // surface-энкодер пишет метки времени, которые могут схлопнуться
+            // почти в одну точку. Тогда конец видеодорожки не дотягивался до
+            // конца аудио (разрыв ~один кадр). Число кадров и заявленный FPS
+            // дают стабильную длительность сегмента.
             val frameDurationUs = 1_000_000L / frameRate
-            val lastSample = segmentSamples.last()
+            val sampleCount = segmentSamples.size
             val nominalUs = if (visualSegment.expectedDurationMs > 0L) {
                 visualSegment.expectedDurationMs * 1000L
             } else {
                 0L
             }
-            val ptsSpanUs = lastSample.presentationTimeUs + frameDurationUs
-            val segmentDurationUs = maxOf(nominalUs, ptsSpanUs)
-            val segmentDurationSource = if (nominalUs >= ptsSpanUs) "expected" else "pts"
+            val frameBasedUs = sampleCount * frameDurationUs
+            val segmentDurationUs = maxOf(nominalUs, frameBasedUs)
+            val segmentDurationSource = if (nominalUs >= frameBasedUs) "expected" else "frames"
             if (segmentDurationUs < MIN_SEGMENT_US) {
                 throw IOException(
-                    "visual segment too short: ${segmentDurationUs}us (frames=${segmentSamples.size}, fps=$frameRate)",
+                    "visual segment too short: ${segmentDurationUs}us (frames=$sampleCount, fps=$frameRate)",
                 )
             }
+            // Равномерный шаг внутри сегмента: последний сэмпл хвоста встанет
+            // на `audioUs - step`, MediaMuxer добавит длительность кадра и
+            // закроет дорожку ровно на границе аудио.
+            val sampleStepUs = (segmentDurationUs / sampleCount).coerceAtLeast(1L)
 
             // Шаг зацикливания. Для статичной картинки он заметно длиннее самого
             // сегмента: одни и те же дешёвые сэмплы вставляются реже, и размер
@@ -216,9 +221,9 @@ class VideoLoopBuilder {
             val safeEndUs = (audioUs - segmentDurationUs).coerceAtLeast(0L)
             val iterations = audioUs / loopPeriodUs + 2
             AudiobookExportDebug.log(
-                "video loop: samples=${segmentSamples.size} fps=$frameRate " +
+                "video loop: samples=$sampleCount fps=$frameRate " +
                     "segment=${segmentDurationUs}us ($segmentDurationSource) " +
-                    "loop=${loopPeriodUs}us iterations=$iterations",
+                    "step=${sampleStepUs}us loop=${loopPeriodUs}us iterations=$iterations",
             )
             val bufferInfo = MediaCodec.BufferInfo()
             var written = 0L
@@ -237,24 +242,26 @@ class VideoLoopBuilder {
                 }
             }
 
+            fun sampleOffsetUs(index: Int): Long = index * sampleStepUs
+
             loop@ for (iteration in 0 until iterations) {
                 val timeOffsetUs = iteration * loopPeriodUs
-                for (sample in segmentSamples) {
-                    val targetUs = timeOffsetUs + sample.presentationTimeUs
+                for ((index, sample) in segmentSamples.withIndex()) {
+                    val targetUs = timeOffsetUs + sampleOffsetUs(index)
                     if (targetUs >= safeEndUs) break@loop
                     write(sample, targetUs)
                 }
             }
 
             // Плотный хвост: доигрываем последний сегмент вплотную к концу
-            // аудио. Соседние сэмплы хвоста отстоят на длительность кадра,
-            // поэтому MediaMuxer выведет длительность последнего сэмпла как
-            // один кадр — и видеодорожка закончится ровно на границе AAC,
-            // а не на произвольном шаге цикла.
-            val tailStartUs = audioUs - segmentDurationUs
-            if (tailStartUs > lastWrittenUs) {
-                for (sample in segmentSamples) {
-                    val targetUs = tailStartUs + sample.presentationTimeUs
+            // аудио. Последний сэмпл встаёт на `audioUs - step`, поэтому
+            // MediaMuxer выводит длительность последнего сэмпла как один кадр —
+            // и видеодорожка заканчивается ровно на границе AAC, а не на
+            // произвольном шаге цикла.
+            val tailStartUs = (audioUs - segmentDurationUs).coerceAtLeast(0L)
+            if (tailStartUs + sampleOffsetUs(sampleCount - 1) > lastWrittenUs) {
+                for ((index, sample) in segmentSamples.withIndex()) {
+                    val targetUs = tailStartUs + sampleOffsetUs(index)
                     if (targetUs >= audioUs) break
                     if (targetUs <= lastWrittenUs) continue
                     write(sample, targetUs)
@@ -262,8 +269,8 @@ class VideoLoopBuilder {
             }
             // Страховка для очень короткого аудио: хотя бы один кадр.
             if (written == 0L) {
-                for (sample in segmentSamples) {
-                    val targetUs = sample.presentationTimeUs
+                for ((index, sample) in segmentSamples.withIndex()) {
+                    val targetUs = sampleOffsetUs(index)
                     if (targetUs >= audioUs) break
                     write(sample, targetUs)
                 }

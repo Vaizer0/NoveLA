@@ -231,7 +231,7 @@ class VisualSourceProcessor(private val context: Context) {
             bitmaps.forEachIndexed { index, bitmap ->
                 drawBitmapToSurface(bitmap, surface)
                 drainOutput()
-                if (index != bitmaps.lastIndex) Thread.sleep(FRAME_INTERVAL_MS)
+                if (index != bitmaps.lastIndex) Thread.sleep(1000L / frameRate.coerceAtLeast(1))
             }
             codec.signalEndOfInputStream()
             var reachedEos = false
@@ -616,7 +616,6 @@ class VisualSourceProcessor(private val context: Context) {
         const val TARGET_WIDTH = 1280
         const val TARGET_HEIGHT = 720
         const val TARGET_FPS = 4
-        const val FRAME_INTERVAL_MS = 1000L / TARGET_FPS
         const val TARGET_BITRATE = 1_200_000
         const val I_FRAME_INTERVAL_SECONDS = 1
         const val TIMEOUT_US = 10_000L

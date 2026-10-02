@@ -24,6 +24,21 @@ data class SynthFormat(
 )
 
 /**
+ * Формат мердж-потока: с ним обязан совпасть сегмент, взятый из кэша,
+ * иначе его нельзя дописать к уже начатому файлу.
+ */
+data class PcmFormat(
+    val sampleRateHz: Int,
+    val channels: Int,
+    val bitsPerSample: Int = 16,
+) {
+    fun matches(segment: PcmSegment): Boolean =
+        segment.sampleRateHz == sampleRateHz &&
+            segment.channels == channels &&
+            segment.bitsPerSample == bitsPerSample
+}
+
+/**
  * Движок синтеза для экспорта аудиокниг.
  *
  * Экземпляр `TextToSpeech` здесь собственный и не переиспользует
@@ -31,6 +46,13 @@ data class SynthFormat(
  * на устройство, и его поток синтеза общий: поэтому на время экспорта
  * читалка через [TtsSynthesisCoordinator] снижает свой запас в очереди,
  * чтобы экспорт не голодал, а воспроизведение не прерывалось.
+ *
+ * Отдельный процесс/сервис не решает эту проблему: запросы всех клиентов
+ * всё равно приходят в один процесс TTS-движка через Binder и там
+ * выстраиваются в одну очередь. Поэтому изоляция достигается отдельным
+ * клиентом `TextToSpeech` (свой `stop`/`shutdown`, своя очередь-подписка),
+ * а не общим экземпляром читалки, плюс кэш PCM, который убирает
+ * дублирующий синтез между WAV- и MP4-экспортами.
  *
  * Настройки движка/голоса/скорости/тона передаются снимком из
  * `AppPreferences`, чтобы изменение настроек посреди экспорта ничего
@@ -42,12 +64,28 @@ class TtsAudioSynthesizer(
     private val voiceId: String,
     private val speed: Float,
     private val pitch: Float,
+    /** Постоянный кэш PCM. `null` — синтезировать всегда заново. */
+    private val cache: TtsSynthesisCache? = null,
 ) : AutoCloseable {
 
     private var tts: TextToSpeech? = null
 
     /** Зарегистрирован ли этот синтезатор как активный пакетный потребитель движка. */
     private var batchRegistered = false
+
+    /**
+     * Фактические движок и голос, участвующие в ключе кэша. Движок может
+     * быть выбран системой по умолчанию, а голос — подставлен из движка,
+     * поэтому одного снимка настроек недостаточно.
+     */
+    private var resolvedEnginePackage = enginePackage
+    private var resolvedVoiceId = voiceId
+
+    /** Сколько порций отдал кэш и сколько было синтезировано — для лога. */
+    var cacheHits: Int = 0
+        private set
+    var cacheMisses: Int = 0
+        private set
 
     /**
      * Ошибка текущей попытки синтеза. Пишется из колбэка движка,
@@ -94,6 +132,8 @@ class TtsAudioSynthesizer(
 
         tts = instance
         installProgressListener(instance)
+        resolvedEnginePackage = engine
+            ?: runCatching { instance.defaultEngine }.getOrNull().orEmpty()
         applySettings(instance)
         // Пока экспорт синтезирует, читалка снижает свой запас в очереди
         // движка: у него один поток синтеза, и иначе экспорт голодает.
@@ -115,6 +155,11 @@ class TtsAudioSynthesizer(
         }
         instance.setSpeechRate(speed.coerceIn(0.1f, 5f))
         instance.setPitch(pitch.coerceIn(0.1f, 5f))
+        // Фактически выбранный голос (учитывая подстановку движком) — часть
+        // ключа кэша: смена голоса обязана инвалидировать старые записи.
+        resolvedVoiceId = runCatching { instance.voice?.name }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: voiceId
     }
 
     /** Формат, сообщённый движком, либо null, если он его не прислал. */
@@ -123,14 +168,54 @@ class TtsAudioSynthesizer(
     /**
      * Синтезирует [text] в [outputFile] и возвращает разобранный сегмент.
      *
+     * Сначала пробует постоянный кэш: он делает повторную озвучку того же
+     * текста (в том числе в отдельном WAV/MP4-экспорте) байт-в-байт
+     * одинаковой. При промахе синтезирует и кладёт результат в кэш.
+     *
+     * @param expected формат уже начатого мердж-потока; кэшевый сегмент
+     *   другого формата игнорируется, чтобы не сломать склейку.
+     *
      * Длительность намеренно **не** возвращается отдельным числом: она всегда
      * берётся из фактически записанного файла (см. [WavAudio.readSegment]),
      * иначе таймлайн разошёлся бы с аудио.
      */
-    suspend fun synthesizeToFile(text: String, outputFile: File): PcmSegment {
+    suspend fun synthesizeToFile(
+        text: String,
+        outputFile: File,
+        expected: PcmFormat? = null,
+    ): PcmSegment {
         val instance = tts ?: throw TtsSynthesisException("TTS engine is not initialized")
         outputFile.parentFile?.mkdirs()
+
+        // 1. Кэш: одинаковый текст + движок + голос + темп + тон обязаны
+        //    давать то же аудио, иначе WAV/MP4 одного текста разойдутся.
+        val cacheKey = cache?.let {
+            TtsSynthesisCache.key(
+                enginePackage = resolvedEnginePackage,
+                voiceId = resolvedVoiceId,
+                speed = speed,
+                pitch = pitch,
+                text = text,
+            )
+        }
+        if (cache != null && cacheKey != null) {
+            val cached = cache.get(cacheKey)
+            if (cached != null) {
+                val segment = runCatching { WavAudio.readSegment(cached) }.getOrNull()
+                if (segment != null && (expected == null || expected.matches(segment))) {
+                    cached.copyTo(outputFile, overwrite = true)
+                    cacheHits++
+                    AudiobookExportDebug.log(
+                        "TTS cache hit: chars=${text.length} bytes=${outputFile.length()} frames=${segment.frameCount}",
+                    )
+                    return segment
+                }
+                // Формат не совпал с потоком — синтезируем и перезапишем кэш.
+            }
+        }
+
         if (outputFile.exists()) outputFile.delete()
+        cacheMisses++
 
         var lastFailure: Exception? = null
         repeat(MAX_SYNTHESIS_ATTEMPTS) { attempt ->
@@ -151,6 +236,9 @@ class TtsAudioSynthesizer(
                 val segment = runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
                     AudiobookExportDebug.log("synthesized file is unreadable", it)
                     throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
+                }
+                if (cache != null && cacheKey != null) {
+                    runCatching { cache.put(cacheKey, outputFile) }
                 }
                 AudiobookExportDebug.log(
                     "TTS ok: chars=${text.length} bytes=${outputFile.length()} attempt=${attempt + 1}",
@@ -288,6 +376,9 @@ class TtsAudioSynthesizer(
         if (batchRegistered) {
             batchRegistered = false
             TtsSynthesisCoordinator.endBatch()
+        }
+        if (cacheHits > 0 || cacheMisses > 0) {
+            AudiobookExportDebug.log("TTS session done: cacheHits=$cacheHits cacheMisses=$cacheMisses")
         }
     }
 
