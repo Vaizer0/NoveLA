@@ -40,7 +40,8 @@ fun planParagraphs(
             emptyList()
         } else {
             // Тот же сплиттер, что у живого TTS (TextToSpeechManager.speak).
-            delimiterAwareTextSplitter(cleaned, maxChunkLength, '.')
+            // Пустые хвостовые порции сплиттера не озвучиваем.
+            delimiterAwareTextSplitter(cleaned, maxChunkLength, '.').filter { it.isNotBlank() }
         }
         ParagraphPlan(paragraphIndex = index, text = cleaned, chunks = chunks)
     }
