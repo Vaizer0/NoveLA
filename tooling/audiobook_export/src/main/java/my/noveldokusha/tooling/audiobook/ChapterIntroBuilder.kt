@@ -16,8 +16,8 @@ fun buildChapterIntro(
     novelTitle: String,
     chapterTitle: String,
 ): String {
-    val novel = novelTitle.cleanTextForTts().trim()
-    val chapter = chapterTitle.cleanTextForTts().trim()
+    val novel = cleanTextForTts(novelTitle).trim()
+    val chapter = cleanTextForTts(chapterTitle).trim()
     return buildString {
         if (novel.isNotEmpty()) {
             append("Novel Name: ").append(novel).append(". ")
