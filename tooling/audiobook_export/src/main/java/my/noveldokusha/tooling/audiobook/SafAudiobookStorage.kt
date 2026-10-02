@@ -213,7 +213,8 @@ class SafAudiobookStorage(private val context: Context) {
                 val childName = cursor.getString(nameIndex) ?: continue
                 val childKey = if (normalized) normalizeName(childName) else childName
                 if (childKey == target) {
-                    return@use toTreeDocumentUri(parent, cursor.getString(idIndex))
+                    val childId = cursor.getString(idIndex) ?: return@use null
+                    return@use DocumentsContract.buildDocumentUriUsingTree(parent, childId)
                 }
             }
             null
