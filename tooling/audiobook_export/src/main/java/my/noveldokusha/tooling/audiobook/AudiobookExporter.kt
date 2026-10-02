@@ -74,8 +74,13 @@ class AudiobookExporter(private val context: Context) {
             validateTimeline(timeline, audioDurationMs)
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
+                AudiobookExportDebug.log("MP4: preparing visual segment")
                 val segment = prepareVisual(request, tempDir)
                 try {
+                    AudiobookExportDebug.log(
+                        "MP4: visual ready type=${segment.info.type} " +
+                            "expected=${segment.expectedDurationMs}ms file=${segment.file.name}",
+                    )
                     onProgress(
                         AudiobookExportProgress(
                             stage = AudiobookStage.CREATING_MP4,
@@ -96,6 +101,9 @@ class AudiobookExporter(private val context: Context) {
                             mp4.audioDurationMs, mp4.videoDurationMs,
                         )
                     }
+                    AudiobookExportDebug.log(
+                        "MP4: assembled audio=${mp4.audioDurationMs}ms video=${mp4.videoDurationMs}ms",
+                    )
                     segment.info
                 } finally {
                     segment.close()

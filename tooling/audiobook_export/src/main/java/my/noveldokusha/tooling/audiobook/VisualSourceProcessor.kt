@@ -27,6 +27,9 @@ import timber.log.Timber
 data class NormalizedVisualSegment(
     val file: File,
     val info: VisualSegmentInfo,
+    /** Расчётная длительность сегмента (кадры / FPS) — надёжнее, чем PTS контейнера. */
+    val expectedDurationMs: Long = 0L,
+    val frameRate: Int = 0,
 ) : AutoCloseable {
     override fun close() {
         runCatching { file.delete() }
@@ -225,16 +228,22 @@ class VisualSourceProcessor(private val context: Context) {
         }
 
         val durationMs = probeDurationMs(target)
+        // Длительность известна точно из числа кадров: PTS контейнера
+        // зависит от планировщика surface и иногда врёт (старый баг
+        // зацикливания на 88%).
+        val expectedDurationMs = bitmaps.size * 1000L / TARGET_FPS
         return NormalizedVisualSegment(
             file = target,
             info = VisualSegmentInfo(
                 type = source,
                 sourceName = sourceName,
                 loop = true,
-                durationMs = durationMs,
+                durationMs = expectedDurationMs.takeIf { it > 0L } ?: durationMs,
                 width = TARGET_WIDTH,
                 height = TARGET_HEIGHT,
             ),
+            expectedDurationMs = expectedDurationMs,
+            frameRate = TARGET_FPS,
         )
     }
 

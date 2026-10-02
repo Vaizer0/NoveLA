@@ -32,6 +32,7 @@ import my.noveldokusha.features.reader.domain.ReaderItem
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.text_to_speech.AppTtsEngine
 import my.noveldokusha.text_to_speech.TextToSpeechManager
+import my.noveldokusha.text_to_speech.TtsSynthesisCoordinator
 import my.noveldokusha.text_to_speech.Utterance
 import my.noveldokusha.text_to_speech.VoiceData
 
@@ -113,6 +114,13 @@ internal class ReaderTextToSpeech(
 
         @Volatile
         var userPaused: Boolean = false
+
+        // Запас чтения на время пакетного экспорта: движок один, и глубокий
+        // запас морит экспорт голодом. «Текущий + следующий» хватает, чтобы
+        // звук чтения не прерывался между абзацами.
+        private const val BATCH_START_QUANTITY = 2
+        private const val BATCH_REFILL_THRESHOLD = 1
+        private const val BATCH_REFILL_QUANTITY = 1
     }
 
     private val DECORATIVE_CHARS = """\-=*_~+#·•°─-┿"""
@@ -121,6 +129,18 @@ internal class ReaderTextToSpeech(
     private val TRAILING_DECORATIVE = Regex("""\s*[$DECORATIVE_CHARS]{3,}$""")
 
     private val halfBuffer = 5
+
+    // Пока идёт пакетный экспорт аудиокниги, очередь синтеза движка общая
+    // с экспортом и у движка один поток синтеза. Глубокий запас чтения
+    // морит экспорт голодом, поэтому на это время держим «текущий + следующий».
+    private fun startQuantity(): Int =
+        if (TtsSynthesisCoordinator.isBatchActive) BATCH_START_QUANTITY else halfBuffer * 2
+
+    private fun refillThreshold(): Int =
+        if (TtsSynthesisCoordinator.isBatchActive) BATCH_REFILL_THRESHOLD else halfBuffer
+
+    private fun refillQuantity(): Int =
+        if (TtsSynthesisCoordinator.isBatchActive) BATCH_REFILL_QUANTITY else halfBuffer
     private val _originalVoiceId = mutableStateOf(getPreferredVoiceIdForOriginal())
     private var updateJob: Job? = null
     private val manager = TextToSpeechManager(
@@ -442,27 +462,32 @@ internal class ReaderTextToSpeech(
                     .currentTextSpeakFlow
                     .filter { it.playState == Utterance.PlayState.FINISHED }
                     .collect {
-                        Timber.d("collect FINISHED queueSize=${manager.queueList.size}")
+                        val queueSize = manager.queueList.size
+                        Timber.d("collect FINISHED queueSize=$queueSize")
                         withContext(Dispatchers.Main) {
-                            when (manager.queueList.size) {
-                                halfBuffer -> {
-                                    val lastUtterance = manager
-                                        .queueList
-                                        .asSequence()
-                                        .last().value
-                                    Timber.d("TTS-JUMP halfBuffer: lastUtterance=(${lastUtterance.itemPos.chapterIndex},${lastUtterance.itemPos.chapterItemPosition}) readingNextChunk")
-                                    readChapterNextChunk(
-                                        chapterIndex = lastUtterance.itemPos.chapterIndex,
-                                        chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
-                                        quantity = halfBuffer
-                                    )
-                                    onBufferLow?.invoke()
-                                }
-                                0 -> {
+                            when {
+                                queueSize == 0 -> {
                                     Timber.w("TTS-JUMP queueSize==0 emit reachedChapterEnd: finished=(${it.itemPos.chapterIndex},${it.itemPos.chapterItemPosition})")
                                     launch {
                                         reachedChapterEndFlowChapterIndex.emit(it.itemPos.chapterIndex)
                                     }
+                                }
+                                // Порог динамический (на время экспорта он меньше),
+                                // поэтому «<=», а не «==»: иначе переход порога мог
+                                // оставить очередь на размере, который никогда не
+                                // совпадёт, и чтение замерло бы.
+                                queueSize <= refillThreshold() -> {
+                                    val lastUtterance = manager
+                                        .queueList
+                                        .asSequence()
+                                        .last().value
+                                    Timber.d("TTS-JUMP low buffer: lastUtterance=(${lastUtterance.itemPos.chapterIndex},${lastUtterance.itemPos.chapterItemPosition}) readingNextChunk")
+                                    readChapterNextChunk(
+                                        chapterIndex = lastUtterance.itemPos.chapterIndex,
+                                        chapterItemPosition = lastUtterance.itemPos.chapterItemPosition,
+                                        quantity = refillQuantity()
+                                    )
+                                    onBufferLow?.invoke()
                                 }
                                 else -> Unit
                             }
@@ -551,7 +576,7 @@ internal class ReaderTextToSpeech(
         val nextItems = getChapterNextItems(
             itemIndex = itemIndex,
             chapterIndex = chapterIndex,
-            quantity = halfBuffer * 2
+            quantity = startQuantity()
         )
 
         if (nextItems.isEmpty()) {

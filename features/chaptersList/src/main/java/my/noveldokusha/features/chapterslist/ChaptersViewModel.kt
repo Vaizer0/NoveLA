@@ -453,7 +453,12 @@ internal class ChaptersViewModel @Inject constructor(
             targetLang = if (config.contentMode == AudiobookContentMode.TRANSLATION) config.targetLang else "",
             startPosition = config.startPosition,
             endPosition = config.endPosition,
-            enginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
+            enginePackage = if (useReader) {
+                appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value
+            } else {
+                appPreferences.AUDIOBOOK_EXPORT_TTS_ENGINE.value
+                    .ifBlank { appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value }
+            },
             voiceId = if (useReader) {
                 appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value
             } else {

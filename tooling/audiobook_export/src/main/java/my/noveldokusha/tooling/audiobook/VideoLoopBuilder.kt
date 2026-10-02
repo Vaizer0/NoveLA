@@ -39,9 +39,17 @@ class VideoLoopBuilder {
 
         // Аудио кодируется в AAC один раз; готовые сэмплы дальше
         // переиспользуются без повторного декодирования.
+        AudiobookExportDebug.log(
+            "MP4 build start: audio=${audioDurationMs}ms visual=${visualSegment.file.name} " +
+                "expectedVisual=${visualSegment.expectedDurationMs}ms",
+        )
+        val startedAtMs = System.currentTimeMillis()
         AacAudioEncoder().encode(audioWav).use { encodedAudio ->
-            buildWithEncodedAudio(encodedAudio.file, visualSegment.file, audioDurationMs, target, onProgress)
+            buildWithEncodedAudio(encodedAudio.file, visualSegment, audioDurationMs, target, onProgress)
         }
+        AudiobookExportDebug.log(
+            "MP4 build done in ${System.currentTimeMillis() - startedAtMs}ms size=${target.length()}",
+        )
 
         val result = Mp4Result(
             file = target,
@@ -54,7 +62,7 @@ class VideoLoopBuilder {
     /** Собирает MP4 из уже закодированного AAC и готового визуального сегмента. */
     private fun buildWithEncodedAudio(
         encodedAudioFile: File,
-        visualSegmentFile: File,
+        visualSegment: NormalizedVisualSegment,
         audioDurationMs: Long,
         target: File,
         onProgress: (Float) -> Unit,
@@ -64,11 +72,11 @@ class VideoLoopBuilder {
         var started = false
         try {
             val audioTrack = audioTrackOf(encodedAudioFile, muxer)
-            val videoTrack = addVideoTrack(visualSegmentFile, muxer)
+            val videoTrack = addVideoTrack(visualSegment.file, muxer)
             muxer.start()
             started = true
             writeAudioSamples(muxer, audioTrack, encodedAudioFile)
-            writeLoopedVideo(visualSegmentFile, muxer, videoTrack, audioDurationMs, onProgress)
+            writeLoopedVideo(visualSegment, muxer, videoTrack, audioDurationMs, onProgress)
         } catch (e: Exception) {
             runCatching { muxer.release() }
             runCatching { target.delete() }
@@ -119,32 +127,53 @@ class VideoLoopBuilder {
      * сегмента, а не длине аудиокниги.
      */
     private fun writeLoopedVideo(
-        segmentFile: File,
+        visualSegment: NormalizedVisualSegment,
         muxer: MediaMuxer,
         videoTrack: Int,
         audioDurationMs: Long,
         onProgress: (Float) -> Unit,
     ) {
+        val segmentFile = visualSegment.file
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(segmentFile.absolutePath)
             val videoTrackIndex = videoTrackIndexOf(extractor, segmentFile)
             extractor.selectTrack(videoTrackIndex)
-            val frameRate = maxOf(1, extractor.getTrackFormat(videoTrackIndex).frameRateGuess())
+            val frameRate = if (visualSegment.frameRate > 0) {
+                visualSegment.frameRate
+            } else {
+                maxOf(1, extractor.getTrackFormat(videoTrackIndex).frameRateGuess())
+            }
 
             val segmentSamples = readVideoSamples(extractor)
             if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
 
             val frameDurationUs = 1_000_000L / frameRate
             val lastSample = segmentSamples.last()
-            // Длительность сегмента = PTS последнего кадра + длительность кадра.
-            // Раньше здесь к PTS прибавлялся размер кадра в байтах — формула
-            // была размерно неверной и давала произвольный результат.
-            val segmentDurationUs = lastSample.presentationTimeUs + frameDurationUs
-            if (segmentDurationUs <= 0L) throw IOException("visual segment has zero duration")
+            // Шаг цикла = максимум из расчётной длительности (число кадров / FPS)
+            // и фактического размаха PTS. Расчётная не даёт выродиться в миллионы
+            // итераций (PTS surface иногда почти нулевые — старый баг 88%), а PTS
+            // страхует от наложения, если движок разметил кадры шире задуманного.
+            val nominalUs = if (visualSegment.expectedDurationMs > 0L) {
+                visualSegment.expectedDurationMs * 1000L
+            } else {
+                0L
+            }
+            val ptsSpanUs = lastSample.presentationTimeUs + frameDurationUs
+            val segmentDurationUs = maxOf(nominalUs, ptsSpanUs)
+            val segmentDurationSource = if (nominalUs >= ptsSpanUs) "expected" else "pts"
+            if (segmentDurationUs < MIN_SEGMENT_US) {
+                throw IOException(
+                    "visual segment too short: ${segmentDurationUs}us (frames=${segmentSamples.size}, fps=$frameRate)",
+                )
+            }
 
             val audioUs = audioDurationMs * 1000L
             val iterations = audioUs / segmentDurationUs + 1
+            AudiobookExportDebug.log(
+                "video loop: samples=${segmentSamples.size} fps=$frameRate " +
+                    "segment=${segmentDurationUs}us ($segmentDurationSource) iterations=$iterations",
+            )
             val bufferInfo = MediaCodec.BufferInfo()
             var written = 0L
 
@@ -271,6 +300,9 @@ class VideoLoopBuilder {
         const val TARGET_FPS = 4
         const val SAMPLE_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_SAMPLE_INTERVAL = 2_000L
+        // Сегмент короче 100 мс означает битые метки времени: лучше упасть
+        // с внятной ошибкой, чем зацикливаться миллионы раз.
+        const val MIN_SEGMENT_US = 100_000L
     }
 }
 
@@ -314,10 +346,16 @@ internal class AacAudioEncoder {
 
             // PCM читается блоками прямо из WAV: полный объём аудиокниги
             // в память не попадает, в отличие от ByteArrayOutputStream.
+            AudiobookExportDebug.log(
+                "AAC encode start: ${segment.sampleRateHz}Hz/${segment.channels}ch " +
+                    "frames=${segment.frameCount} bytes=${segment.dataLength}",
+            )
+            val startedAtMs = System.currentTimeMillis()
             RandomAccessFile(wavFile, "r").use { raf ->
                 raf.seek(segment.dataOffset)
-                val bytesPerFrame = segment.bytesPerFrame
+                val bytesPerFrame = segment.bytesPerFrame.coerceAtLeast(1)
                 var bytesSubmitted = 0L
+                var framesSubmitted = 0L
                 var inputDone = false
                 var outputDone = false
 
@@ -327,11 +365,14 @@ internal class AacAudioEncoder {
                         if (inputIndex >= 0) {
                             val inputBuffer = codec.getInputBuffer(inputIndex)
                             if (inputBuffer != null) {
-                                val toRead = minOf(
+                                val rawRead = minOf(
                                     segment.dataLength - bytesSubmitted,
                                     inputBuffer.remaining().toLong(),
                                     (PCM_CHUNK_FRAMES * bytesPerFrame).toLong(),
-                                ).toInt()
+                                )
+                                // Подаём целое число кадров: иначе PTS считался
+                                // бы от неполного кадра и звук уезжал бы.
+                                val toRead = (rawRead / bytesPerFrame * bytesPerFrame).toInt()
                                 if (toRead <= 0) {
                                     codec.queueInputBuffer(
                                         inputIndex, 0, 0, 0,
@@ -342,12 +383,15 @@ internal class AacAudioEncoder {
                                     val chunk = ByteArray(toRead)
                                     raf.readFully(chunk)
                                     inputBuffer.put(chunk)
-                                    // Метки времени идут от реальной позиции в
-                                    // аудио, иначе AAC-дорожка получится без
-                                    // длительности.
-                                    val presentationTimeUs = bytesSubmitted * 1_000_000L / segment.sampleRateHz
+                                    // PTS считается по НОМЕРУ КАДРА, а не по числу
+                                    // байт: для моно 16 бит байтов вдвое больше
+                                    // кадров, и старая формула давала PTS вдвое
+                                    // быстрее реального — AAC-дорожка «съезжала».
+                                    val presentationTimeUs =
+                                        framesSubmitted * 1_000_000L / segment.sampleRateHz
                                     codec.queueInputBuffer(inputIndex, 0, toRead, presentationTimeUs, 0)
                                     bytesSubmitted += toRead
+                                    framesSubmitted += toRead / bytesPerFrame
                                 }
                             }
                         }
@@ -375,6 +419,10 @@ internal class AacAudioEncoder {
                         }
                     }
                 }
+                AudiobookExportDebug.log(
+                    "AAC encode done: frames=$framesSubmitted " +
+                        "in ${System.currentTimeMillis() - startedAtMs}ms",
+                )
             }
         } finally {
             if (started) runCatching { muxer.stop() }
