@@ -9,14 +9,22 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.text.Normalizer
 
 /** Ошибка доступа к SAF-дереву. */
 class SafAccessException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-/** Созданный документ в SAF. */
+/**
+ * Созданный документ в SAF.
+ *
+ * [created] показывает, был документ создан этим вызовом или переиспользован
+ * существующий. Это важно при откате: удалять можно только то, что создали
+ * сами, иначе можно снести прошлый удачный экспорт пользователя.
+ */
 data class SafDocument(
     val uri: Uri,
     val displayName: String,
+    val created: Boolean,
 )
 
 /**
@@ -26,6 +34,11 @@ data class SafDocument(
  * `<выбранная папка>/Audiobooks/<Название книги>/`.
  * Корнем выбранной папки экспорт не пользуется — файлы всегда внутри
  * подпапки книги.
+ *
+ * Повторный экспорт той же книги (WAV, затем MP4, или наоборот) обязан
+ * попадать в уже существующую папку книги. Провайдер нумерует коллизии
+ * (`Name (1)`, `Name (2)`), поэтому имена папок сравниваются в
+ * нормализованном виде, и существующая папка переиспользуется.
  *
  * Копирование потоковое: многогигабайтный MP4/WAV в память не читается.
  */
@@ -52,33 +65,45 @@ class SafAudiobookStorage(private val context: Context) {
 
     /**
      * Создаёт (при необходимости) `Audiobooks/<bookName>/` внутри дерева
-     * и возвращает URI этой папки. Существующая папка переиспользуется.
+     * и возвращает URI этой папки. Существующая папка книги переиспользуется.
      */
     fun ensureNovelFolder(treeUri: String, novelName: String): Uri {
-        val tree = Uri.parse(treeUri)
+        val tree = runCatching { Uri.parse(treeUri) }.getOrNull()
+            ?: throw SafAccessException("Invalid tree URI: $treeUri")
         val root = try {
-            DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+            DocumentsContract.buildDocumentUriUsingTree(
+                tree,
+                DocumentsContract.getTreeDocumentId(tree),
+            )
         } catch (e: Exception) {
             throw SafAccessException("Invalid tree URI: $treeUri", e)
         }
 
         val audiobooks = findOrCreateDirectory(root, AUDIOBOOKS_DIR)
-        val novelFolder = findOrCreateDirectory(audiobooks, sanitizeFileName(novelName).ifBlank { "Novel" })
-        return novelFolder
+        val folderName = sanitizeFileName(novelName).ifBlank { "Novel" }
+        return findOrCreateDirectory(audiobooks, folderName)
     }
 
     /**
-     * Создаёт документ в папке. При коллизии имён возвращается уникальное
-     * имя, чтобы не затереть чужой файл.
+     * Создаёт документ в папке. Если документ с таким именем уже есть, он
+     * переиспользуется (и будет перезаписан через `openOutputStream(..., "wt")`),
+     * а не получает ` (1)` от провайдера. Так повторный экспорт осознанно
+     * заменяет прошлый результат и не плодит дубликаты.
      */
     fun createDocument(folderUri: Uri, displayName: String, mimeType: String): SafDocument {
-        val uniqueName = uniqueName(folderUri, displayName)
-        val uri = try {
-            DocumentsContract.createDocument(resolver, folderUri, mimeType, uniqueName)
+        findChildByName(folderUri, displayName, normalized = false)?.let { existing ->
+            return SafDocument(uri = existing, displayName = displayName, created = false)
+        }
+        val created = try {
+            DocumentsContract.createDocument(resolver, folderUri, mimeType, displayName)
         } catch (e: Exception) {
-            throw SafAccessException("Failed to create document '$uniqueName'", e)
-        } ?: throw SafAccessException("Provider returned no document for '$uniqueName'")
-        return SafDocument(uri = uri, displayName = displayName)
+            throw SafAccessException("Failed to create document '$displayName'", e)
+        } ?: throw SafAccessException("Provider returned no document for '$displayName'")
+        return SafDocument(
+            uri = toTreeDocumentUri(folderUri, created),
+            displayName = displayName,
+            created = true,
+        )
     }
 
     /** Потоково копирует файл в SAF-документ. */
@@ -117,7 +142,7 @@ class SafAudiobookStorage(private val context: Context) {
         }
     }
 
-    /** Удаляет частично созданный документ (отмена, ошибка). */
+    /** Удаляет документ, созданный этим экспортом (отмена, ошибка). */
     fun deleteDocument(uri: Uri?) {
         if (uri == null) return
         runCatching { DocumentsContract.deleteDocument(resolver, uri) }
@@ -126,9 +151,8 @@ class SafAudiobookStorage(private val context: Context) {
 
     /** URI каталога для «открыть папку» в файловом менеджере. */
     fun documentTreeUri(folderUri: Uri): String = try {
-        val docId = DocumentsContract.getDocumentId(folderUri)
-        val treeId = docId.substringAfterLast(':').ifBlank { docId }
-        "content://${folderUri.authority}/tree/${android.net.Uri.encode(treeId)}"
+        val treeId = DocumentsContract.getTreeDocumentId(folderUri)
+        "content://${folderUri.authority}/tree/${Uri.encode(treeId)}"
     } catch (e: Exception) {
         Timber.w(e, "SafAudiobookStorage: cannot build tree uri for %s", folderUri)
         folderUri.toString()
@@ -147,19 +171,31 @@ class SafAudiobookStorage(private val context: Context) {
     }.getOrDefault(fallback)
 
     private fun findOrCreateDirectory(parent: Uri, name: String): Uri {
-        findChild(parent, name)?.let { return it }
+        findChildByName(parent, name, normalized = true)?.let { return it }
         val created = try {
-            DocumentsContract.createDocument(resolver, parent, DocumentsContract.Document.MIME_TYPE_DIR, name)
+            DocumentsContract.createDocument(
+                resolver,
+                parent,
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                name,
+            )
         } catch (e: Exception) {
             throw SafAccessException("Failed to create directory '$name'", e)
         } ?: throw SafAccessException("Provider returned no directory '$name'")
-        return created
+        return toTreeDocumentUri(parent, created)
     }
 
-    private fun findChild(parent: Uri, name: String): Uri? = runCatching {
+    /**
+     * Ищет потомка [parent] по имени. [parent] обязан быть tree-документом
+     * (`.../tree/<treeId>/document/<docId>`): только тогда его `documentId`
+     * — это идентификатор самого родителя, а не корня дерева. Старый код
+     * передавал `getTreeDocumentId(parent)` и потому всегда искал в корне —
+     * именно из-за этого папка книги создавалась заново на каждом экспорте.
+     */
+    private fun findChildByName(parent: Uri, name: String, normalized: Boolean): Uri? = runCatching {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(
             parent,
-            DocumentsContract.getTreeDocumentId(parent),
+            DocumentsContract.getDocumentId(parent),
         )
         resolver.query(
             children,
@@ -171,30 +207,36 @@ class SafAudiobookStorage(private val context: Context) {
         )?.use { cursor ->
             val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            if (idIndex < 0 || nameIndex < 0) return@use null
+            val target = if (normalized) normalizeName(name) else name
             while (cursor.moveToNext()) {
-                val childName = if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                if (childName == name && idIndex >= 0) {
-                    return@use DocumentsContract.buildDocumentUriUsingTree(parent, cursor.getString(idIndex))
+                val childName = cursor.getString(nameIndex) ?: continue
+                val childKey = if (normalized) normalizeName(childName) else childName
+                if (childKey == target) {
+                    return@use toTreeDocumentUri(parent, cursor.getString(idIndex))
                 }
             }
             null
         }
     }.getOrNull()
 
-    /** Добавляет суффикс к имени, если документ с таким именем уже есть. */
-    private fun uniqueName(folderUri: Uri, displayName: String): String {
-        if (findChild(folderUri, displayName) == null) return displayName
-        val dot = displayName.lastIndexOf('.')
-        val base = if (dot > 0) displayName.substring(0, dot) else displayName
-        val extension = if (dot > 0) displayName.substring(dot) else ""
-        var index = 2
-        while (index < MAX_UNIQUE_ATTEMPTS) {
-            val candidate = "$base ($index)$extension"
-            if (findChild(folderUri, candidate) == null) return candidate
-            index++
-        }
-        return "$base (${System.currentTimeMillis()})$extension"
-    }
+    /**
+     * Приводит URI, полученный от провайдера, к tree-документу. Часть
+     * провайдеров (например, Downloads) возвращает `.../document/<id>` без
+     * ветки `tree`; на таком URI не работают дочерние запросы, поэтому без
+     * нормализации повторный поиск снова не находил бы созданную папку.
+     */
+    private fun toTreeDocumentUri(treeDocument: Uri, rawDocument: Uri): Uri = runCatching {
+        val documentId = DocumentsContract.getDocumentId(rawDocument)
+        DocumentsContract.buildDocumentUriUsingTree(treeDocument, documentId)
+    }.getOrDefault(rawDocument)
+
+    /** Регистро- и пробело-независимый ключ имени папки. */
+    private fun normalizeName(name: String): String =
+        Normalizer.normalize(name, Normalizer.Form.NFKC)
+            .trim()
+            .replace(WHITESPACE_REGEX, " ")
+            .lowercase()
 
     companion object {
         const val AUDIOBOOKS_DIR = "Audiobooks"
@@ -203,6 +245,6 @@ class SafAudiobookStorage(private val context: Context) {
         const val JSON_MIME = "application/json"
         private const val COPY_BUFFER_SIZE = 256 * 1024
         private const val PROGRESS_STEP_BYTES = 4L * 1024 * 1024
-        private const val MAX_UNIQUE_ATTEMPTS = 100
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

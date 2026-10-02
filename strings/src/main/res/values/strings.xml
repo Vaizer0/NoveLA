@@ -847,6 +847,12 @@
     <string name="audiobook_export_range_start">From</string>
     <string name="audiobook_export_range_end">To</string>
     <string name="audiobook_export_range_value">%1$d – %2$d</string>
+    <string name="audiobook_export_range_from_line">From: %1$s \u2014 Chapter %2$d \u2014 %3$s</string>
+    <string name="audiobook_export_range_to_line">To: %1$s \u2014 Chapter %2$d \u2014 %3$s</string>
+    <string name="audiobook_export_summary_exporting">Exporting: %1$s</string>
+    <string name="audiobook_export_summary_chapters">Chapters: %1$d\u2013%2$d</string>
+    <string name="audiobook_export_summary_from">From: Chapter %1$d \u2014 %2$s</string>
+    <string name="audiobook_export_summary_to">To: Chapter %1$d \u2014 %2$s</string>
     <string name="audiobook_export_visual">Visual source</string>
     <string name="audiobook_export_choose_visual">Choose image, video or GIF</string>
     <string name="audiobook_export_visual_none">Novel cover (default)</string>

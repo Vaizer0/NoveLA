@@ -71,8 +71,8 @@ class AudiobookExporter(private val context: Context) {
 
             coroutineContext.ensureActive()
 
-            val timeline = outcome.timeline
-            val audioDurationMs = outcome.durationMs
+            var timeline = outcome.timeline
+            var audioDurationMs = outcome.durationMs
             validateTimeline(timeline, audioDurationMs)
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
@@ -109,8 +109,18 @@ class AudiobookExporter(private val context: Context) {
                         )
                     }
                     AudiobookExportDebug.log(
-                        "MP4: assembled audio=${mp4.audioDurationMs}ms video=${mp4.videoDurationMs}ms",
+                        "MP4: assembled audio=${mp4.audioDurationMs}ms " +
+                            "video=${mp4.videoDurationMs}ms " +
+                            "container=${mp4.containerDurationMs}ms",
                     )
+                    // JSON и таймлайн обязаны совпасть с реальной дорожкой
+                    // финального контейнера, а не с расчётом по PCM.
+                    val actualAudioMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
+                    if (actualAudioMs != audioDurationMs) {
+                        audioDurationMs = actualAudioMs
+                        timeline = alignTimelineToDuration(timeline, audioDurationMs)
+                    }
+                    validateTimeline(timeline, audioDurationMs)
                     segment.info
                 } finally {
                     segment.close()
@@ -248,6 +258,7 @@ class AudiobookExporter(private val context: Context) {
         // независимо округлённых миллисекунд: тогда сумма таймлайна точно
         // совпадает с длительностью смёрженного WAV даже на тысячах порций.
         var framesWritten = 0L
+        var sinkDurationMs = 0L
         fun advanceFrames(segment: PcmSegment): Long {
             val rate = mergedSampleRate ?: segment.sampleRateHz
             val startMs = framesWritten * 1000L / rate
@@ -360,7 +371,7 @@ class AudiobookExporter(private val context: Context) {
                 )
             }
 
-            segmentHandle.finish()
+            sinkDurationMs = segmentHandle.finish()
         } catch (e: CancellationException) {
             segmentHandle.abort()
             throw e
@@ -371,10 +382,15 @@ class AudiobookExporter(private val context: Context) {
             synthesizer.close()
         }
 
-        val builtTimeline = timeline.build()
         val rate = mergedSampleRate ?: DEFAULT_SAMPLE_RATE
-        val durationMs = framesWritten * 1000L / rate
+        val computedMs = framesWritten * 1000L / rate
+        // Для MP4 источник правды — фактическая длительность AAC-дорожки
+        // (в неё входит задержка кодера), для WAV — записанные PCM-кадры.
+        // Именно на неё выравнивается хвост таймлайна, чтобы `endMs` и
+        // `audio.durationMs` совпали с реальным медиафайлом.
+        val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
         if (durationMs <= 0L) throw IOException("synthesized audio is empty")
+        val builtTimeline = alignTimelineToDuration(timeline.build(), durationMs)
         return MergeOutcome(
             timeline = builtTimeline,
             durationMs = durationMs,
@@ -473,7 +489,8 @@ class AudiobookExporter(private val context: Context) {
     /** Приёмник синтезированных PCM-сегментов: WAV-поток или AAC-кодек. */
     private interface ChunkSink {
         fun append(segmentFile: File, durationMs: Long)
-        fun finish()
+        /** Финализирует поток и возвращает фактическую длительность носителя. */
+        fun finish(): Long
         fun abort()
     }
 
@@ -501,8 +518,10 @@ class AudiobookExporter(private val context: Context) {
             RandomAccessFile(segmentFile, "r").use { raf -> active.append(segment, raf) }
         }
 
-        override fun finish() {
-            writer?.finish()
+        override fun finish(): Long {
+            val active = writer ?: throw IOException("WAV writer produced no output")
+            active.finish()
+            return active.durationMs()
         }
 
         override fun abort() {
@@ -522,9 +541,10 @@ class AudiobookExporter(private val context: Context) {
             encoder.append(segmentFile)
         }
 
-        override fun finish() {
+        override fun finish(): Long {
             encoder.finish()
             if (!encoder.isUsable()) throw IOException("AAC encoder produced no output")
+            return encoder.durationMs
         }
 
         override fun abort() {

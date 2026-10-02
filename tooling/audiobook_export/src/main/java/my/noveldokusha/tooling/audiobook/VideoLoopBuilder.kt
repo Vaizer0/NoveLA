@@ -79,10 +79,17 @@ class VideoLoopBuilder {
             "MP4 build done in ${System.currentTimeMillis() - startedAtMs}ms size=${target.length()}",
         )
 
+        val durations = probeTrackDurations(target)
+        AudiobookExportDebug.log(
+            "MP4 tracks: audio=${durations.audioMs}ms video=${durations.videoMs}ms " +
+                "container=${durations.containerMs}ms requestedAudio=${audioDurationMs}ms " +
+                "size=${target.length()}",
+        )
         return Mp4Result(
             file = target,
-            audioDurationMs = audioDurationMs,
-            videoDurationMs = probeVideoDurationMs(target),
+            audioDurationMs = durations.audioMs.takeIf { it > 0L } ?: audioDurationMs,
+            videoDurationMs = durations.videoMs,
+            containerDurationMs = durations.containerMs,
         )
     }
 
@@ -175,12 +182,12 @@ class VideoLoopBuilder {
             val segmentSamples = readVideoSamples(extractor)
             if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
 
+            // Длительность одного сегмента = максимум из расчётной (число
+            // кадров / FPS) и фактического размаха PTS. Расчётная не даёт
+            // выродиться в миллионы итераций (PTS surface иногда почти нулевые —
+            // старый баг 88%), а PTS страхует от наложения.
             val frameDurationUs = 1_000_000L / frameRate
             val lastSample = segmentSamples.last()
-            // Шаг цикла = максимум из расчётной длительности (число кадров / FPS)
-            // и фактического размаха PTS. Расчётная не даёт выродиться в миллионы
-            // итераций (PTS surface иногда почти нулевые — старый баг 88%), а PTS
-            // страхует от наложения, если движок разметил кадры шире задуманного.
             val nominalUs = if (visualSegment.expectedDurationMs > 0L) {
                 visualSegment.expectedDurationMs * 1000L
             } else {
@@ -195,31 +202,70 @@ class VideoLoopBuilder {
                 )
             }
 
+            // Шаг зацикливания. Для статичной картинки он заметно длиннее самого
+            // сегмента: одни и те же дешёвые сэмплы вставляются реже, и размер
+            // файла растёт по числу повторов, а не по секундам битрейта.
+            val loopPeriodUs = maxOf(
+                if (visualSegment.loopPeriodMs > 0L) visualSegment.loopPeriodMs * 1000L else 0L,
+                segmentDurationUs,
+            )
+
             val audioUs = audioDurationMs * 1000L
-            val iterations = audioUs / segmentDurationUs + 1
+            // Основной цикл останавливается за один сегмент до конца, чтобы
+            // освободить место для плотного хвоста (см. ниже).
+            val safeEndUs = (audioUs - segmentDurationUs).coerceAtLeast(0L)
+            val iterations = audioUs / loopPeriodUs + 2
             AudiobookExportDebug.log(
                 "video loop: samples=${segmentSamples.size} fps=$frameRate " +
-                    "segment=${segmentDurationUs}us ($segmentDurationSource) iterations=$iterations",
+                    "segment=${segmentDurationUs}us ($segmentDurationSource) " +
+                    "loop=${loopPeriodUs}us iterations=$iterations",
             )
             val bufferInfo = MediaCodec.BufferInfo()
             var written = 0L
+            var lastWrittenUs = -1L
+
+            fun write(sample: VideoSample, targetUs: Long) {
+                bufferInfo.offset = 0
+                bufferInfo.size = sample.size
+                bufferInfo.presentationTimeUs = targetUs
+                bufferInfo.flags = sample.flags
+                muxer.writeSampleData(videoTrack, sample.buffer, bufferInfo)
+                written++
+                lastWrittenUs = targetUs
+                if (written % PROGRESS_SAMPLE_INTERVAL == 0L) {
+                    onProgress((targetUs.toFloat() / audioUs).coerceIn(0f, 1f))
+                }
+            }
 
             loop@ for (iteration in 0 until iterations) {
-                val timeOffsetUs = iteration * segmentDurationUs
+                val timeOffsetUs = iteration * loopPeriodUs
                 for (sample in segmentSamples) {
                     val targetUs = timeOffsetUs + sample.presentationTimeUs
-                    // Последняя итерация обрезается точно по аудио:
-                    // видео не должно оказаться длиннее звука.
-                    if (targetUs >= audioUs) break@loop
-                    bufferInfo.offset = 0
-                    bufferInfo.size = sample.size
-                    bufferInfo.presentationTimeUs = targetUs
-                    bufferInfo.flags = sample.flags
-                    muxer.writeSampleData(videoTrack, sample.buffer, bufferInfo)
-                    written++
-                    if (written % PROGRESS_SAMPLE_INTERVAL == 0L) {
-                        onProgress((targetUs.toFloat() / audioUs).coerceIn(0f, 1f))
-                    }
+                    if (targetUs >= safeEndUs) break@loop
+                    write(sample, targetUs)
+                }
+            }
+
+            // Плотный хвост: доигрываем последний сегмент вплотную к концу
+            // аудио. Соседние сэмплы хвоста отстоят на длительность кадра,
+            // поэтому MediaMuxer выведет длительность последнего сэмпла как
+            // один кадр — и видеодорожка закончится ровно на границе AAC,
+            // а не на произвольном шаге цикла.
+            val tailStartUs = audioUs - segmentDurationUs
+            if (tailStartUs > lastWrittenUs) {
+                for (sample in segmentSamples) {
+                    val targetUs = tailStartUs + sample.presentationTimeUs
+                    if (targetUs >= audioUs) break
+                    if (targetUs <= lastWrittenUs) continue
+                    write(sample, targetUs)
+                }
+            }
+            // Страховка для очень короткого аудио: хотя бы один кадр.
+            if (written == 0L) {
+                for (sample in segmentSamples) {
+                    val targetUs = sample.presentationTimeUs
+                    if (targetUs >= audioUs) break
+                    write(sample, targetUs)
                 }
             }
             onProgress(1f)
@@ -304,17 +350,39 @@ class VideoLoopBuilder {
         }
     }
 
-    private fun probeVideoDurationMs(file: File): Long {
+    /** Фактические длительности дорожек и контейнера собранного MP4. */
+    private class TrackDurations(val audioMs: Long, val videoMs: Long) {
+        val containerMs: Long get() = maxOf(audioMs, videoMs)
+    }
+
+    /**
+     * Читает из готового MP4 фактические длительности аудио- и видеодорожки.
+     *
+     * Это единственный способ узнать, что реально оказалось в контейнере:
+     * AAC добавляет задержку кодера, а длительность видеодорожки выводится
+     * из меток кадров. Именно эти числа, а не расчётные, должны попадать
+     * в JSON и таймлайн.
+     */
+    private fun probeTrackDurations(file: File): TrackDurations {
         val extractor = MediaExtractor()
         return try {
             extractor.setDataSource(file.absolutePath)
-            val index = (0 until extractor.trackCount).firstOrNull { i ->
-                extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            } ?: return 0L
-            extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION) / 1000L
+            var audio = 0L
+            var video = 0L
+            for (index in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(index)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (!format.containsKey(MediaFormat.KEY_DURATION)) continue
+                val durationMs = format.getLong(MediaFormat.KEY_DURATION) / 1000L
+                when {
+                    mime.startsWith("audio/") -> audio = maxOf(audio, durationMs)
+                    mime.startsWith("video/") -> video = maxOf(video, durationMs)
+                }
+            }
+            TrackDurations(audio, video)
         } catch (e: Exception) {
-            Timber.w(e, "VideoLoopBuilder: video duration probe failed")
-            0L
+            Timber.w(e, "VideoLoopBuilder: duration probe failed")
+            TrackDurations(0L, 0L)
         } finally {
             runCatching { extractor.release() }
         }
@@ -338,9 +406,10 @@ data class Mp4Result(
     val file: File,
     val audioDurationMs: Long,
     val videoDurationMs: Long,
+    val containerDurationMs: Long = maxOf(audioDurationMs, videoDurationMs),
 ) {
-    /** Допустимое расхождение видео и аудио — один кадр при TARGET_FPS. */
-    fun durationsMatch(toleranceMs: Long = 1_000L): Boolean =
+    /** Допустимое расхождение видео и аудио — один кадр при 2 FPS. */
+    fun durationsMatch(toleranceMs: Long = 500L): Boolean =
         kotlin.math.abs(audioDurationMs - videoDurationMs) <= toleranceMs
 }
 
@@ -508,6 +577,14 @@ internal class StreamingAacEncoder(private val outputFile: File) {
     var totalFrames: Long = 0L
         private set
 
+    /**
+     * Фактическая длительность записанной AAC-дорожки в мс, прочитанная из
+     * контейнера после [finish]. Может отличаться от `totalFrames / sampleRate`
+     * на задержку кодера — именно её обязан видеть таймлайн и JSON.
+     */
+    var durationMs: Long = 0L
+        private set
+
     /** Инициализирован ли кодек (был хотя бы один непустой сегмент). */
     fun isConfigured(): Boolean = configured
 
@@ -568,12 +645,36 @@ internal class StreamingAacEncoder(private val outputFile: File) {
             while (!outputDone) {
                 outputDone = drain() == DrainResult.END_OF_STREAM
             }
-            AudiobookExportDebug.log(
-                "AAC stream done: frames=$totalFrames started=$started " +
-                    "size=${runCatching { outputFile.length() }.getOrDefault(0L)}",
-            )
         }
         closeQuietly()
+        durationMs = probeDurationMs(outputFile)
+        AudiobookExportDebug.log(
+            "AAC stream done: frames=$totalFrames started=$started " +
+                "duration=${durationMs}ms " +
+                "size=${runCatching { outputFile.length() }.getOrDefault(0L)}",
+        )
+    }
+
+    /** Читает длительность аудиодорожки готового файла. */
+    private fun probeDurationMs(file: File): Long {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            val index = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return 0L
+            val format = extractor.getTrackFormat(index)
+            if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                format.getLong(MediaFormat.KEY_DURATION) / 1000L
+            } else {
+                0L
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "StreamingAacEncoder: duration probe failed")
+            0L
+        } finally {
+            runCatching { extractor.release() }
+        }
     }
 
     /** Аварийно освобождает ресурсы без финализации контейнера. */

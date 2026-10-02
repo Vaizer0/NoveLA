@@ -366,9 +366,10 @@ class AudiobookExportWorker(
             jsonDocument = storage.createDocument(folder, jsonFile.name, SafAudiobookStorage.JSON_MIME)
             storage.copyToSaf(jsonFile, jsonDocument.uri)
         } catch (e: Exception) {
-            // Частично записанные файлы не оставляем в папке пользователя.
-            storage.deleteDocument(jsonDocument?.uri)
-            storage.deleteDocument(audioDocument.uri)
+            // Удаляем только то, что создали сами: переиспользованный документ
+            // мог принадлежать прошлому удачному экспорту.
+            if (jsonDocument?.created == true) storage.deleteDocument(jsonDocument.uri)
+            if (audioDocument.created) storage.deleteDocument(audioDocument.uri)
             throw e
         }
         return CopiedFiles(audioDocument.uri, jsonDocument.uri)

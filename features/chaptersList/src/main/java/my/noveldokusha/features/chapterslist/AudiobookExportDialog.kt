@@ -93,6 +93,22 @@ internal fun AudiobookExportDialog(
     var ttsPitch by remember { mutableStateOf(state.ttsPitch) }
     val availableVoices = rememberAvailableVoices(state.readerEnginePackage)
 
+    // Разрешаем введённые номера в реальные главы: подпись диапазона и
+    // позиции экспорта берутся из одного и того же объекта главы, поэтому
+    // «From/To» всегда совпадают с тем, что реально озвучится.
+    val chapterRefs = state.chapters
+    val chapterCount = state.totalChapters.coerceAtLeast(1)
+    val fromNumber = (startText.toIntOrNull() ?: 1).coerceIn(1, chapterCount)
+    val toNumber = (endText.toIntOrNull() ?: chapterCount)
+        .coerceIn(1, chapterCount)
+        .coerceAtLeast(fromNumber)
+    val fromRef = chapterRefs.getOrNull(fromNumber - 1)
+    val toRef = chapterRefs.getOrNull(toNumber - 1)
+    val fromTitle = fromRef?.title?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.chapter_x_over_n, fromNumber, chapterCount)
+    val toTitle = toRef?.title?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.chapter_x_over_n, toNumber, chapterCount)
+
     fun persistTts() = onTtsChanged(useReaderTts, ttsVoiceId, ttsSpeed, ttsPitch)
 
     val effectiveVoice = if (useReaderTts) state.readerVoiceId else ttsVoiceId
@@ -219,6 +235,52 @@ internal fun AudiobookExportDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
+
+                // Подпись выбранного диапазона: книга, номер и реальное название
+                // главы. Без этого «1–4» не говорит пользователю, что попадёт в файл.
+                Text(
+                    text = stringResource(
+                        StringsR.string.audiobook_export_range_from_line,
+                        state.bookTitle,
+                        fromNumber,
+                        fromTitle,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(
+                        StringsR.string.audiobook_export_range_to_line,
+                        state.bookTitle,
+                        toNumber,
+                        toTitle,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val summaryExporting = stringResource(
+                    StringsR.string.audiobook_export_summary_exporting,
+                    state.bookTitle,
+                )
+                val summaryChapters = stringResource(
+                    StringsR.string.audiobook_export_summary_chapters,
+                    fromNumber,
+                    toNumber,
+                )
+                val summaryFrom = stringResource(
+                    StringsR.string.audiobook_export_summary_from,
+                    fromNumber,
+                    fromTitle,
+                )
+                val summaryTo = stringResource(
+                    StringsR.string.audiobook_export_summary_to,
+                    toNumber,
+                    toTitle,
+                )
+                Text(
+                    text = "$summaryExporting\n$summaryChapters\n$summaryFrom\n$summaryTo",
+                    style = MaterialTheme.typography.bodySmall,
+                )
 
                 if (format == AudiobookFormat.MP4) {
                     SectionLabel(stringResource(StringsR.string.audiobook_export_visual))
@@ -426,10 +488,11 @@ internal fun AudiobookExportDialog(
                 FilledTonalButton(
                     onClick = {
                         // Визуал не обязателен: без выбора для MP4 берётся обложка книги.
-                        val lastPosition = state.totalChapters.coerceAtLeast(1) - 1
-                        val start = (startText.toIntOrNull() ?: 1).coerceIn(1, state.totalChapters.coerceAtLeast(1)) - 1
-                        val end = (endText.toIntOrNull() ?: (lastPosition + 1))
-                            .coerceIn(1, state.totalChapters.coerceAtLeast(1)) - 1
+                        // Позиции берём из выбранных глав, а не из арифметики по
+                        // номерам: диапазон должен совпасть с подписью From/To
+                        // даже при несплошных позициях в книге.
+                        val start = fromRef?.position ?: (fromNumber - 1)
+                        val end = toRef?.position ?: (toNumber - 1)
                         onConfirm(
                             AudiobookExportConfig(
                                 format = format,

@@ -373,6 +373,10 @@ internal class ChaptersViewModel @Inject constructor(
             val availableTranslations = chapterTranslationDao
                 .getTranslationGroups(bookUrl)
                 .map { LangPair(it.sourceLang, it.targetLang, it.count) }
+            // Снимок глав нужен диалогу: показать «книга — номер — название»
+            // и вычислить позиции начала/конца по выбранным главам.
+            val chapters = chapterDao.chapters(bookUrl)
+                .map { AudiobookExportChapterRef(position = it.position, title = it.title) }
             val directoryUri = appPreferences.AUDIOBOOK_EXPORT_DIRECTORY_URI.value
             val directoryName = directoryUri.takeIf { it.isNotBlank() }
                 ?.let { resolveExportDirectoryName(context.contentResolver, it) }
@@ -389,6 +393,7 @@ internal class ChaptersViewModel @Inject constructor(
                 downloadedChapters = downloadedChapters,
                 availableTranslations = availableTranslations,
                 directoryName = directoryName,
+                chapters = chapters,
                 useReaderTts = appPreferences.AUDIOBOOK_EXPORT_USE_READER_TTS.value,
                 ttsVoiceId = appPreferences.AUDIOBOOK_EXPORT_TTS_VOICE_ID.value,
                 ttsSpeed = appPreferences.AUDIOBOOK_EXPORT_TTS_SPEED.value,

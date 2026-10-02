@@ -82,6 +82,16 @@ sealed interface ExportDialogState {
     data object NeedDirectory : ExportDialogState
 }
 
+/**
+ * Глава, доступная для выбора в диалоге аудиоэкспорта: реальная позиция
+ * (`Chapter.position`) и заголовок. По ним диалог показывает диапазон
+ * «книга — номер главы — название» и вычисляет позиции для экспорта.
+ */
+data class AudiobookExportChapterRef(
+    val position: Int,
+    val title: String,
+)
+
 /** Состояние диалога экспорта книги в аудиокнигу (WAV/MP4 + JSON). */
 sealed interface AudiobookExportDialogState {
     data object Hidden : AudiobookExportDialogState
@@ -93,6 +103,8 @@ sealed interface AudiobookExportDialogState {
         val downloadedChapters: Int,
         val availableTranslations: List<LangPair>,
         val directoryName: String?,
+        /** Главы книги по порядку позиций — для подписей From/To и диапазона. */
+        val chapters: List<AudiobookExportChapterRef> = emptyList(),
         /** Растёт при каждом запросе папки — UI открывает SAF-пикер по изменению. */
         val directoryRequestId: Int = 0,
         /** Начальные настройки голоса для экспорта (из AppPreferences). */

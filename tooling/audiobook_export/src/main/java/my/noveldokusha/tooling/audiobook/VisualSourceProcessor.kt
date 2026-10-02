@@ -30,6 +30,13 @@ data class NormalizedVisualSegment(
     /** Расчётная длительность сегмента (кадры / FPS) — надёжнее, чем PTS контейнера. */
     val expectedDurationMs: Long = 0L,
     val frameRate: Int = 0,
+    /**
+     * Шаг, через который сегмент повторяется при зацикливании. `0` — сегмент
+     * повторяется встык (как видео/GIF). Для статичной картинки шаг длиннее
+     * самого сегмента: одни и те же сэмплы вставляются реже, и размер файла
+     * падает пропорционально длительности книги, а не её полному битрейту.
+     */
+    val loopPeriodMs: Long = 0L,
 ) : AutoCloseable {
     override fun close() {
         runCatching { file.delete() }
@@ -67,17 +74,27 @@ class VisualSourceProcessor(private val context: Context) {
         }.also { Timber.d("VisualSourceProcessor: prepared %s from %s", source, sourceName) }
     }
 
-    /** Картинка: один кадр, закодированный в короткий сегмент. */
+    /**
+     * Картинка: короткий сегмент из пары кадров.
+     *
+     * В отличие от видео/GIF, картинка не повторяется встык: сегмент один раз
+     * кодируется дешёвым битрейтом и вставляется с большим шагом
+     * ([IMAGE_LOOP_PERIOD_MS]). Именно поэтому двадцатиминутный MP4 со
+     * статичной обложкой занимает единицы мегабайт, а не сотни.
+     */
     private fun prepareImage(uri: Uri, sourceName: String, target: File): NormalizedVisualSegment {
         val bitmap = decodeScaledBitmap(uri, TARGET_WIDTH, TARGET_HEIGHT)
             ?: throw VisualProcessingException("Unable to decode image: $sourceName")
-        val targetFrameCount = frameCountFor(MIN_SEGMENT_MS)
+        val targetFrameCount = frameCountFor(IMAGE_SEGMENT_MS, IMAGE_FPS)
         return try {
             encodeBitmapSequence(
                 bitmaps = List(targetFrameCount) { bitmap },
                 source = VisualSource.IMAGE,
                 sourceName = sourceName,
                 target = target,
+                frameRate = IMAGE_FPS,
+                bitRate = IMAGE_BITRATE,
+                loopPeriodMs = IMAGE_LOOP_PERIOD_MS,
             )
         } finally {
             bitmap.recycle()
@@ -91,13 +108,21 @@ class VisualSourceProcessor(private val context: Context) {
      * не длительность аудиокниги.
      */
     private fun prepareVideo(uri: Uri, sourceName: String, target: File): NormalizedVisualSegment {
-        val frames = decodeVideoFrames(uri, maxFrames = frameCountFor(MAX_SEGMENT_MS))
+        val frames = decodeVideoFrames(uri, maxFrames = frameCountFor(MAX_SEGMENT_MS, TARGET_FPS))
         if (frames.isEmpty()) {
             throw VisualProcessingException("Unable to decode video frames: $sourceName")
         }
         val cycle = List(frames.size) { frames[it % frames.size] }
         return try {
-            encodeBitmapSequence(cycle, VisualSource.VIDEO, sourceName, target)
+            encodeBitmapSequence(
+                bitmaps = cycle,
+                source = VisualSource.VIDEO,
+                sourceName = sourceName,
+                target = target,
+                frameRate = TARGET_FPS,
+                bitRate = TARGET_BITRATE,
+                loopPeriodMs = 0L,
+            )
         } finally {
             frames.forEach { it.recycle() }
         }
@@ -110,15 +135,23 @@ class VisualSourceProcessor(private val context: Context) {
             throw VisualProcessingException("Unable to decode GIF frames: $sourceName")
         }
         return try {
-            encodeBitmapSequence(frames, VisualSource.GIF, sourceName, target)
+            encodeBitmapSequence(
+                bitmaps = frames,
+                source = VisualSource.GIF,
+                sourceName = sourceName,
+                target = target,
+                frameRate = TARGET_FPS,
+                bitRate = TARGET_BITRATE,
+                loopPeriodMs = 0L,
+            )
         } finally {
             frames.forEach { it.recycle() }
         }
     }
 
-    /** Число кадров в сегменте для заданной длительности. */
-    private fun frameCountFor(durationMs: Long): Int =
-        ((durationMs * TARGET_FPS) / 1000L).toInt().coerceAtLeast(1)
+    /** Число кадров в сегменте для заданной длительности и частоты. */
+    private fun frameCountFor(durationMs: Long, fps: Int): Int =
+        ((durationMs * fps) / 1000L).toInt().coerceAtLeast(1)
 
     /**
      * Кодирует последовательность кадров в короткий MP4 через
@@ -129,14 +162,17 @@ class VisualSourceProcessor(private val context: Context) {
         source: VisualSource,
         sourceName: String,
         target: File,
+        frameRate: Int,
+        bitRate: Int,
+        loopPeriodMs: Long,
     ): NormalizedVisualSegment {
         val format = MediaFormat.createVideoFormat(MIME_VIDEO, TARGET_WIDTH, TARGET_HEIGHT).apply {
             setInteger(
                 MediaFormat.KEY_COLOR_FORMAT,
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
             )
-            setInteger(MediaFormat.KEY_BIT_RATE, TARGET_BITRATE)
-            setInteger(MediaFormat.KEY_FRAME_RATE, TARGET_FPS)
+            setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+            setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
         }
 
@@ -231,7 +267,7 @@ class VisualSourceProcessor(private val context: Context) {
         // Длительность известна точно из числа кадров: PTS контейнера
         // зависит от планировщика surface и иногда врёт (старый баг
         // зацикливания на 88%).
-        val expectedDurationMs = bitmaps.size * 1000L / TARGET_FPS
+        val expectedDurationMs = bitmaps.size * 1000L / frameRate
         return NormalizedVisualSegment(
             file = target,
             info = VisualSegmentInfo(
@@ -243,7 +279,8 @@ class VisualSourceProcessor(private val context: Context) {
                 height = TARGET_HEIGHT,
             ),
             expectedDurationMs = expectedDurationMs,
-            frameRate = TARGET_FPS,
+            frameRate = frameRate,
+            loopPeriodMs = loopPeriodMs,
         )
     }
 
@@ -251,26 +288,26 @@ class VisualSourceProcessor(private val context: Context) {
         val canvas = surface.lockCanvas(null)
         try {
             canvas.drawColor(Color.BLACK)
-            drawBitmapCenterCrop(canvas, bitmap)
+            drawBitmapCenterFit(canvas, bitmap)
         } finally {
             surface.unlockCanvasAndPost(canvas)
         }
     }
 
-    /** Вписывает кадр с сохранением пропорций и обрезкой лишнего (cover-fit). */
-    private fun drawBitmapCenterCrop(canvas: Canvas, bitmap: Bitmap) {
-        val canvasRatio = canvas.width.toFloat() / canvas.height.toFloat()
-        val bitmapRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
-        val dest: Rect = if (bitmapRatio > canvasRatio) {
-            val destWidth = (bitmap.height * canvasRatio).toInt()
-            val left = (bitmap.width - destWidth) / 2
-            Rect(left, 0, left + destWidth, bitmap.height)
-        } else {
-            val destHeight = (bitmap.width / canvasRatio).toInt()
-            val top = (bitmap.height - destHeight) / 2
-            Rect(0, top, bitmap.width, top + destHeight)
-        }
-        canvas.drawBitmap(bitmap, null, dest, null)
+    /**
+     * Вписывает кадр целиком с сохранением пропорций (contain-fit):
+     * обложка не обрезается, свободное место залито чёрным.
+     */
+    private fun drawBitmapCenterFit(canvas: Canvas, bitmap: Bitmap) {
+        val scale = minOf(
+            canvas.width.toFloat() / bitmap.width.toFloat(),
+            canvas.height.toFloat() / bitmap.height.toFloat(),
+        )
+        val destWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
+        val destHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        val left = (canvas.width - destWidth) / 2
+        val top = (canvas.height - destHeight) / 2
+        canvas.drawBitmap(bitmap, null, Rect(left, top, left + destWidth, top + destHeight), null)
     }
 
     /** Декодирует картинку сразу в целевом разрешении — полный размер не нужен. */
@@ -285,7 +322,7 @@ class VisualSourceProcessor(private val context: Context) {
         val decoded = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, options)
         } ?: return null
-        return scaleCenterCrop(decoded, width, height)
+        return scaleCenterFit(decoded, width, height)
     }
 
     private fun decodeVideoFrames(uri: Uri, maxFrames: Int): List<Bitmap> {
@@ -481,7 +518,10 @@ class VisualSourceProcessor(private val context: Context) {
 
         val durationMs = movie.duration().coerceAtLeast(1)
         val frames = mutableListOf<Bitmap>()
-        val frameCount = frameCountFor(durationMs.toLong().coerceAtMost(MAX_SEGMENT_MS)).coerceAtMost(MAX_GIF_FRAMES)
+        val frameCount = frameCountFor(
+            durationMs.toLong().coerceAtMost(MAX_SEGMENT_MS),
+            TARGET_FPS,
+        ).coerceAtMost(MAX_GIF_FRAMES)
         for (index in 0 until frameCount) {
             val timeMs = (durationMs.toLong() * index / frameCount).toInt()
             movie.setTime(timeMs)
@@ -493,9 +533,35 @@ class VisualSourceProcessor(private val context: Context) {
             val frame = Bitmap.createBitmap(sourceWidth, sourceHeight, Bitmap.Config.ARGB_8888)
             @Suppress("DEPRECATION")
             movie.draw(Canvas(frame), 0f, 0f)
-            frames += scaleCenterCrop(frame, TARGET_WIDTH, TARGET_HEIGHT)
+            frames += scaleCenterFit(frame, TARGET_WIDTH, TARGET_HEIGHT)
         }
         return frames
+    }
+
+    /**
+     * Вписывает изображение целиком (contain-fit): ничего не обрезается,
+     * оставшееся место залито чёрным. Именно так обложка сохраняется
+     * полностью на 16:9-канве.
+     */
+    private fun scaleCenterFit(source: Bitmap, width: Int, height: Int): Bitmap {
+        if (source.width == width && source.height == height) return source
+        val scale = minOf(
+            width.toFloat() / source.width.toFloat(),
+            height.toFloat() / source.height.toFloat(),
+        )
+        val scaledWidth = (source.width * scale).toInt().coerceAtLeast(1)
+        val scaledHeight = (source.height * scale).toInt().coerceAtLeast(1)
+        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        canvas.drawColor(Color.BLACK)
+        val left = (width - scaledWidth) / 2f
+        val top = (height - scaledHeight) / 2f
+        val matrix = android.graphics.Matrix()
+        matrix.postScale(scale, scale)
+        matrix.postTranslate(left, top)
+        canvas.drawBitmap(source, matrix, null)
+        if (source != output) source.recycle()
+        return output
     }
 
     /** Масштабирует по меньшей стороне с центральной обрезкой под целевой размер. */
@@ -560,6 +626,14 @@ class VisualSourceProcessor(private val context: Context) {
         const val MIN_SEGMENT_MS = 1_000L
         const val MAX_SEGMENT_MS = 5_000L
         const val MAX_GIF_FRAMES = 20
+
+        // Статичная обложка: дешёвый сегмент (низкий FPS и битрейт) плюс
+        // большой шаг зацикливания. Стоимость визуальной части падает
+        // пропорционально длительности книги, а не её полному хронометражу.
+        const val IMAGE_FPS = 2
+        const val IMAGE_BITRATE = 250_000
+        const val IMAGE_SEGMENT_MS = MIN_SEGMENT_MS
+        const val IMAGE_LOOP_PERIOD_MS = 10_000L
     }
 }
 

@@ -1290,6 +1290,12 @@
     <string name="audiobook_export_range_start">С</string>
     <string name="audiobook_export_range_end">По</string>
     <string name="audiobook_export_range_value">%1$d – %2$d</string>
+    <string name="audiobook_export_range_from_line">С: %1$s \u2014 Глава %2$d \u2014 %3$s</string>
+    <string name="audiobook_export_range_to_line">По: %1$s \u2014 Глава %2$d \u2014 %3$s</string>
+    <string name="audiobook_export_summary_exporting">Экспорт: %1$s</string>
+    <string name="audiobook_export_summary_chapters">Главы: %1$d\u2013%2$d</string>
+    <string name="audiobook_export_summary_from">С: Глава %1$d \u2014 %2$s</string>
+    <string name="audiobook_export_summary_to">По: Глава %1$d \u2014 %2$s</string>
     <string name="audiobook_export_visual">Визуальный источник</string>
     <string name="audiobook_export_choose_visual">Выбрать изображение, видео или GIF</string>
     <string name="audiobook_export_visual_none">Обложка книги (по умолчанию)</string>

@@ -212,6 +212,54 @@ fun validateTimeline(
     }
 }
 
+/**
+ * Подтягивает конец таймлайна к фактической длительности носителя.
+ *
+ * Синтез и таймлайн считаются по поданным PCM-кадрам, а AAC-дорожка из-за
+ * задержки кодера оказывается на несколько десятков миллисекунд длиннее.
+ * Чтобы `audio.durationMs` и `endMs` последней главы совпадали с реальным
+ * файлом, дельта добавляется к последнему озвученному фрагменту последней
+ * главы (абзацу, а если их нет — к intro). Промежуточные метки не трогаются:
+ * расхождение локализовано там, где оно физически возникло — в хвосте.
+ */
+fun alignTimelineToDuration(
+    chapters: List<AudiobookChapterTiming>,
+    totalMs: Long,
+): List<AudiobookChapterTiming> {
+    if (chapters.isEmpty()) return chapters
+    val last = chapters.last()
+    val delta = totalMs - last.span.endMs
+    if (delta == 0L) return chapters
+
+    val newParagraphs: List<AudiobookParagraphTiming>
+    val newIntro: AudiobookIntroTiming
+    if (last.paragraphs.isNotEmpty()) {
+        val updated = last.paragraphs.toMutableList()
+        val tail = updated.last()
+        val newDuration = tail.span.durationMs + delta
+        if (newDuration <= 0L) return chapters
+        updated[updated.lastIndex] = tail.copy(
+            span = tail.span.copy(endMs = totalMs, durationMs = newDuration),
+        )
+        newParagraphs = updated
+        newIntro = last.intro
+    } else {
+        val newDuration = last.intro.span.durationMs + delta
+        if (newDuration <= 0L) return chapters
+        newIntro = last.intro.copy(
+            span = last.intro.span.copy(endMs = totalMs, durationMs = newDuration),
+        )
+        newParagraphs = last.paragraphs
+    }
+
+    val newLast = last.copy(
+        span = last.span.copy(endMs = totalMs, durationMs = totalMs - last.span.startMs),
+        intro = newIntro,
+        paragraphs = newParagraphs,
+    )
+    return chapters.dropLast(1) + newLast
+}
+
 private fun requireSpanPositive(label: String, span: AudiobookSpan) {
     if (span.durationMs <= 0L) {
         throw TimelineValidationException("$label has non-positive duration ${span.durationMs}")
