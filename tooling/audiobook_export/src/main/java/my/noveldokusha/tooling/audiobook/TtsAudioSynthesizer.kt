@@ -130,6 +130,10 @@ class TtsAudioSynthesizer(
             val usable = queued == TextToSpeech.SUCCESS && waitForStableFile(outputFile, state)
 
             if (usable) {
+                if (!AudioDecoder.ensurePcmWav(outputFile, reportedFormat)) {
+                    AudiobookExportDebug.log("TTS output could not be converted to PCM WAV")
+                    throw TtsSynthesisException("TTS produced an unsupported audio format")
+                }
                 val segment = runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
                     AudiobookExportDebug.log("synthesized file is unreadable", it)
                     throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
@@ -199,6 +203,9 @@ class TtsAudioSynthesizer(
                 // посреди книги, склеить сегменты будет нельзя.
                 if (sampleRateInHz > 0 && channelCount > 0) {
                     reportedFormat = SynthFormat(sampleRateInHz, channelCount)
+                    AudiobookExportDebug.log(
+                        "onBeginSynthesis ${sampleRateInHz}Hz/${channelCount}ch enc=$audioFormat",
+                    )
                 }
             }
 
