@@ -22,10 +22,13 @@ import timber.log.Timber
 class VideoLoopBuilder {
 
     /**
-     * Создаёт MP4 с зацикленным визуалом на всю длительность аудио.
+     * Создаёт MP4 из готового смёрженного WAV.
      *
-     * @param audioWav уже смёрженный WAV — единственный источник звука,
-     *   повторный синтез TTS ради MP4 не выполняется.
+     * Оставлено для случаев, когда звук уже лежит единым WAV. Экспорт
+     * аудиокниги этим путём не пользуется: он кодирует PCM в AAC прямо во
+     * время синтеза через [StreamingAacEncoder] и зовёт
+     * [buildFromEncodedAudio], чтобы не писать и не перечитывать
+     * многогигабайтный промежуточный WAV.
      */
     fun build(
         audioWav: File,
@@ -36,27 +39,51 @@ class VideoLoopBuilder {
         if (!audioWav.exists()) throw IOException("audio file is missing: $audioWav")
         val audioDurationMs = WavAudio.durationMs(audioWav)
         if (audioDurationMs <= 0L) throw IOException("audio file is empty: $audioWav")
+        AacAudioEncoder().encode(audioWav).use { encodedAudio ->
+            return buildFromEncodedAudio(
+                encodedAudioFile = encodedAudio.file,
+                audioDurationMs = audioDurationMs,
+                visualSegment = visualSegment,
+                target = target,
+                onProgress = onProgress,
+            )
+        }
+    }
 
-        // Аудио кодируется в AAC один раз; готовые сэмплы дальше
-        // переиспользуются без повторного декодирования.
+    /**
+     * Собирает MP4 из уже закодированной AAC-дорожки и зацикленного визуала.
+     *
+     * Это основной путь экспорта: AAC приходит потоком из синтеза, WAV не
+     * создаётся вовсе. Стоимость визуальной части пропорциональна длине
+     * исходного сегмента, а не длительности книги.
+     */
+    fun buildFromEncodedAudio(
+        encodedAudioFile: File,
+        audioDurationMs: Long,
+        visualSegment: NormalizedVisualSegment,
+        target: File,
+        onProgress: (Float) -> Unit = {},
+    ): Mp4Result {
+        if (!encodedAudioFile.exists() || encodedAudioFile.length() == 0L) {
+            throw IOException("encoded audio is missing or empty: $encodedAudioFile")
+        }
+        if (audioDurationMs <= 0L) throw IOException("audio duration is not positive: $audioDurationMs")
+
         AudiobookExportDebug.log(
             "MP4 build start: audio=${audioDurationMs}ms visual=${visualSegment.file.name} " +
                 "expectedVisual=${visualSegment.expectedDurationMs}ms",
         )
         val startedAtMs = System.currentTimeMillis()
-        AacAudioEncoder().encode(audioWav).use { encodedAudio ->
-            buildWithEncodedAudio(encodedAudio.file, visualSegment, audioDurationMs, target, onProgress)
-        }
+        buildWithEncodedAudio(encodedAudioFile, visualSegment, audioDurationMs, target, onProgress)
         AudiobookExportDebug.log(
             "MP4 build done in ${System.currentTimeMillis() - startedAtMs}ms size=${target.length()}",
         )
 
-        val result = Mp4Result(
+        return Mp4Result(
             file = target,
             audioDurationMs = audioDurationMs,
             videoDurationMs = probeVideoDurationMs(target),
         )
-        return result
     }
 
     /** Собирает MP4 из уже закодированного AAC и готового визуального сегмента. */
@@ -443,6 +470,191 @@ internal class AacAudioEncoder {
         override fun close() {
             runCatching { file.delete() }
         }
+    }
+
+    private companion object {
+        const val MIME_AUDIO_AAC = "audio/mp4a-latm"
+        const val AAC_BITRATE = 96_000
+        const val MAX_INPUT_SIZE = 16 * 1024
+        const val TIMEOUT_US = 10_000L
+        const val PCM_CHUNK_FRAMES = 8192
+    }
+}
+
+/**
+ * Потоковый кодировщик PCM → AAC для MP4.
+ *
+ * В отличие от [AacAudioEncoder], который читает готовый WAV целиком,
+ * этот класс получает сегменты по мере синтеза. Состояние кодека и счётчик
+ * кадров живут между [append], поэтому PTS идут непрерывно, а промежуточный
+ * WAV на диске не создаётся. Стоимость и место пропорциональны аудио, а не
+ * удваиваются на лишний проход.
+ */
+internal class StreamingAacEncoder(private val outputFile: File) {
+
+    private val codec = MediaCodec.createEncoderByType(MIME_AUDIO_AAC)
+    private val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    private val bufferInfo = MediaCodec.BufferInfo()
+    private var trackIndex = -1
+    private var started = false
+    private var configured = false
+    private var released = false
+    private var sampleRate = 0
+    private var channels = 1
+    private var bitsPerSample = 16
+    private var bytesPerFrame = 1
+
+    /** Суммарно поданные кадры — источник длительности аудио. */
+    var totalFrames: Long = 0L
+        private set
+
+    /** Инициализирован ли кодек (был хотя бы один непустой сегмент). */
+    fun isConfigured(): Boolean = configured
+
+    /** Дошло ли дело до реального муксирования дорожки. */
+    fun isUsable(): Boolean = started
+
+    /** Добавляет PCM-данные одного wav-сегмента TTS в общий AAC-поток. */
+    fun append(segmentFile: File) {
+        check(!released) { "encoder is already released" }
+        val segment = WavAudio.readSegment(segmentFile)
+        if (!configured) configure(segment)
+        requireCompatible(segment)
+
+        RandomAccessFile(segmentFile, "r").use { raf ->
+            raf.seek(segment.dataOffset)
+            var remaining = segment.dataLength
+            while (remaining > 0) {
+                drain()
+                val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+                if (inputIndex < 0) continue
+                val inputBuffer = codec.getInputBuffer(inputIndex) ?: continue
+                val rawRead = minOf(
+                    remaining,
+                    inputBuffer.remaining().toLong(),
+                    (PCM_CHUNK_FRAMES * bytesPerFrame).toLong(),
+                )
+                val toRead = (rawRead / bytesPerFrame * bytesPerFrame).toInt()
+                if (toRead <= 0) break
+                val chunk = ByteArray(toRead)
+                raf.readFully(chunk)
+                inputBuffer.put(chunk)
+                val presentationTimeUs = totalFrames * 1_000_000L / sampleRate
+                codec.queueInputBuffer(inputIndex, 0, toRead, presentationTimeUs, 0)
+                totalFrames += toRead / bytesPerFrame
+                remaining -= toRead
+            }
+            drain()
+        }
+    }
+
+    /** Завершает поток (EOS), дописывает хвост и закрывает кодек/муксер. */
+    fun finish() {
+        if (released) return
+        if (configured) {
+            var inputDone = false
+            while (!inputDone) {
+                drain()
+                val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+                if (inputIndex >= 0) {
+                    val eosPts = totalFrames * 1_000_000L / sampleRate.coerceAtLeast(1)
+                    codec.queueInputBuffer(
+                        inputIndex, 0, 0, eosPts, MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                    )
+                    inputDone = true
+                }
+            }
+            var outputDone = false
+            while (!outputDone) {
+                outputDone = drain() == DrainResult.END_OF_STREAM
+            }
+            AudiobookExportDebug.log(
+                "AAC stream done: frames=$totalFrames started=$started " +
+                    "size=${runCatching { outputFile.length() }.getOrDefault(0L)}",
+            )
+        }
+        closeQuietly()
+    }
+
+    /** Аварийно освобождает ресурсы без финализации контейнера. */
+    fun abort() {
+        closeQuietly()
+    }
+
+    private enum class DrainResult { NONE, PROGRESS, END_OF_STREAM }
+
+    /**
+     * Забирает все доступные выходные буферы. Возвращает [DrainResult],
+     * чтобы [finish] понимал, когда пришёл EOS.
+     */
+    private fun drain(): DrainResult {
+        var result = DrainResult.NONE
+        while (true) {
+            val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
+            when {
+                outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> return result
+                outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    trackIndex = muxer.addTrack(codec.outputFormat)
+                    muxer.start()
+                    started = true
+                    result = DrainResult.PROGRESS
+                }
+                outputIndex >= 0 -> {
+                    val encoded = codec.getOutputBuffer(outputIndex)
+                    val isConfig =
+                        bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                    if (encoded != null && bufferInfo.size > 0 && !isConfig && started) {
+                        encoded.position(bufferInfo.offset)
+                        encoded.limit(bufferInfo.offset + bufferInfo.size)
+                        muxer.writeSampleData(trackIndex, encoded, bufferInfo)
+                    }
+                    codec.releaseOutputBuffer(outputIndex, false)
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        return DrainResult.END_OF_STREAM
+                    }
+                    result = DrainResult.PROGRESS
+                }
+            }
+        }
+    }
+
+    private fun configure(segment: PcmSegment) {
+        sampleRate = segment.sampleRateHz
+        channels = segment.channels
+        bitsPerSample = segment.bitsPerSample
+        bytesPerFrame = segment.bytesPerFrame.coerceAtLeast(1)
+        val format = MediaFormat.createAudioFormat(MIME_AUDIO_AAC, sampleRate, segment.channels).apply {
+            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            setInteger(MediaFormat.KEY_BIT_RATE, AAC_BITRATE)
+            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_SIZE)
+        }
+        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        codec.start()
+        configured = true
+        AudiobookExportDebug.log(
+            "AAC stream start: ${sampleRate}Hz/${channels}ch bits=$bitsPerSample",
+        )
+    }
+
+    private fun requireCompatible(segment: PcmSegment) {
+        if (segment.sampleRateHz != sampleRate ||
+            segment.bitsPerSample != bitsPerSample ||
+            segment.channels != channels
+        ) {
+            throw IncompatibleAudioFormatException(
+                "segment ${segment.sampleRateHz}Hz/${segment.channels}ch/${segment.bitsPerSample}bit " +
+                    "cannot be appended to ${sampleRate}Hz/${channels}ch/${bitsPerSample}bit AAC stream",
+            )
+        }
+    }
+
+    private fun closeQuietly() {
+        if (released) return
+        released = true
+        if (started) runCatching { muxer.stop() }
+        if (configured) runCatching { codec.stop() }
+        runCatching { codec.release() }
+        runCatching { muxer.release() }
     }
 
     private companion object {

@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 import timber.log.Timber
 import kotlin.coroutines.coroutineContext
@@ -33,12 +34,10 @@ class AudiobookChapterFailedException(
  * Оркестратор экспорта аудиокниги.
  *
  * Синтез и мердж идут одним проходом: каждый готовый сегмент сразу
- * попадает в общий WAV и в накопитель таймлайна. Никаких повторных
- * проходов и пересчётов в конце нет — прогресс и время считаются
- * инкрементально.
- *
- * MP4 переиспользует уже готовый смёрженный WAV: TTS ради MP4 повторно
- * не запускается (требование «синтезируем один раз»).
+ * попадает в общий приёмник. Для WAV это потоковый RIFF-writer, для MP4 —
+ * AAC-кодек, в который PCM уходит по мере синтеза. Промежуточный WAV для
+ * MP4 не создаётся: нет ни лишнего файла на диске, ни второго прохода
+ * декодирования/кодирования. Прогресс и время считаются инкрементально.
  */
 class AudiobookExporter(private val context: Context) {
 
@@ -56,21 +55,24 @@ class AudiobookExporter(private val context: Context) {
         tempDir.mkdirs()
 
         val mergedWav = File(tempDir, "merged.wav")
+        val encodedAudioFile = File(tempDir, "audio.m4a")
         val jsonFile = File(tempDir, outputBaseName(request) + ".json")
         val mediaFile = File(tempDir, outputBaseName(request) + extensionFor(request.format))
 
         try {
-            val timeline = synthesizeAndMerge(
+            val outcome = synthesizeAndMerge(
                 request = request,
                 chapters = chapters,
                 tempDir = tempDir,
-                mergedWav = mergedWav,
+                wavTarget = mergedWav,
+                encodedAudioTarget = encodedAudioFile,
                 onProgress = onProgress,
             )
 
             coroutineContext.ensureActive()
 
-            val audioDurationMs = WavAudio.durationMs(mergedWav)
+            val timeline = outcome.timeline
+            val audioDurationMs = outcome.durationMs
             validateTimeline(timeline, audioDurationMs)
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
@@ -94,7 +96,12 @@ class AudiobookExporter(private val context: Context) {
                             estimatedRemainingMs = null,
                         ),
                     )
-                    val mp4 = VideoLoopBuilder().build(mergedWav, segment, mediaFile)
+                    val mp4 = VideoLoopBuilder().buildFromEncodedAudio(
+                        encodedAudioFile = encodedAudioFile,
+                        audioDurationMs = audioDurationMs,
+                        visualSegment = segment,
+                        target = mediaFile,
+                    )
                     if (!mp4.durationsMatch()) {
                         Timber.w(
                             "AudiobookExporter: mp4 durations differ: audio=%d video=%d",
@@ -126,8 +133,8 @@ class AudiobookExporter(private val context: Context) {
                 ),
             )
 
-            val sampleRateHz = mergedSampleRate ?: DEFAULT_SAMPLE_RATE
-            val channels = mergedChannels ?: DEFAULT_CHANNELS
+            val sampleRateHz = outcome.sampleRateHz
+            val channels = outcome.channels
 
             jsonFile.writeText(
                 AudiobookJsonWriter.buildDocument(
@@ -215,19 +222,21 @@ class AudiobookExporter(private val context: Context) {
     private var mergedChannels: Int? = null
 
     /**
-     * Синтезирует главы по порядку и на лету склеивает сегменты в общий WAV.
+     * Синтезирует главы по порядку и на лету складывает сегменты в приёмник.
      *
-     * Таймлайн накапливается тем же проходом: длительность каждого абзаца
-     * берётся из фактически записанного файла, поэтому пересчётов после
-     * экспорта не требуется.
+     * Для WAV это потоковый RIFF-writer, для MP4 — AAC-кодек. Таймлайн
+     * накапливается тем же проходом: длительность каждого абзаца берётся из
+     * фактически записанного файла, поэтому пересчётов после экспорта не
+     * требуется.
      */
     private suspend fun synthesizeAndMerge(
         request: AudiobookExportRequest,
         chapters: List<AudiobookChapterData>,
         tempDir: File,
-        mergedWav: File,
+        wavTarget: File,
+        encodedAudioTarget: File,
         onProgress: suspend (AudiobookExportProgress) -> Unit,
-    ): List<AudiobookChapterTiming> {
+    ): MergeOutcome {
         val timeline = TimelineBuilder()
         val totalTextChars = chapters.sumOf { chapter ->
             chapter.paragraphs.sumOf { it.length } + chapter.title.length
@@ -255,7 +264,12 @@ class AudiobookExporter(private val context: Context) {
             pitch = request.pitch,
         )
 
-        val segmentHandle = SegmentChannel(mergedWav)
+        // MP4 кодирует AAC прямо во время синтеза; WAV пишет RIFF-поток.
+        val segmentHandle: ChunkSink = if (request.format == AudiobookFormat.MP4) {
+            AacChunkSink(encodedAudioTarget)
+        } else {
+            WavChunkSink(wavTarget)
+        }
         try {
             synthesizer.initialize()
             val maxChunk = synthesizer.maxChunkLength()
@@ -357,7 +371,16 @@ class AudiobookExporter(private val context: Context) {
             synthesizer.close()
         }
 
-        return timeline.build()
+        val builtTimeline = timeline.build()
+        val rate = mergedSampleRate ?: DEFAULT_SAMPLE_RATE
+        val durationMs = framesWritten * 1000L / rate
+        if (durationMs <= 0L) throw IOException("synthesized audio is empty")
+        return MergeOutcome(
+            timeline = builtTimeline,
+            durationMs = durationMs,
+            sampleRateHz = rate,
+            channels = mergedChannels ?: DEFAULT_CHANNELS,
+        )
     }
 
     /** Синтезирует одну порцию и возвращает её разобранный PCM-сегмент. */
@@ -439,14 +462,29 @@ class AudiobookExporter(private val context: Context) {
         )
     }
 
+    /** Итог синтеза: таймлайн и параметры получившегося аудио. */
+    private data class MergeOutcome(
+        val timeline: List<AudiobookChapterTiming>,
+        val durationMs: Long,
+        val sampleRateHz: Int,
+        val channels: Int,
+    )
+
+    /** Приёмник синтезированных PCM-сегментов: WAV-поток или AAC-кодек. */
+    private interface ChunkSink {
+        fun append(segmentFile: File, durationMs: Long)
+        fun finish()
+        fun abort()
+    }
+
     /**
-     * Держит открытым writer общего WAV, создавая его по фактическому
-     * формату первого синтезированного сегмента.
+     * Пишет общий WAV, создавая его по фактическому формату первого
+     * синтезированного сегмента.
      */
-    private inner class SegmentChannel(private val target: File) : AutoCloseable {
+    private inner class WavChunkSink(private val target: File) : ChunkSink {
         private var writer: WavAudio.StreamingWavWriter? = null
 
-        fun append(segmentFile: File, durationMs: Long) {
+        override fun append(segmentFile: File, durationMs: Long) {
             if (writer == null) {
                 val segment = WavAudio.readSegment(segmentFile)
                 mergedSampleRate = segment.sampleRateHz
@@ -463,18 +501,34 @@ class AudiobookExporter(private val context: Context) {
             RandomAccessFile(segmentFile, "r").use { raf -> active.append(segment, raf) }
         }
 
-        fun finish() {
+        override fun finish() {
             writer?.finish()
         }
 
-        fun abort() {
+        override fun abort() {
             runCatching { writer?.close() }
             writer = null
         }
+    }
 
-        override fun close() {
-            runCatching { writer?.close() }
-            writer = null
+    /**
+     * Кодирует PCM в AAC на лету, без промежуточного WAV: сегменты
+     * приходят по мере синтеза, кодек и счётчик кадров живут между ними.
+     */
+    private inner class AacChunkSink(target: File) : ChunkSink {
+        private val encoder = StreamingAacEncoder(target)
+
+        override fun append(segmentFile: File, durationMs: Long) {
+            encoder.append(segmentFile)
+        }
+
+        override fun finish() {
+            encoder.finish()
+            if (!encoder.isUsable()) throw IOException("AAC encoder produced no output")
+        }
+
+        override fun abort() {
+            encoder.abort()
         }
     }
 
