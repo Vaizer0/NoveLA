@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.strings.R as StringsR
+import my.noveldokusha.tooling.audiobook.AudiobookFormat
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -27,12 +28,31 @@ class AudiobookExportNotification(
     private val bookTitle: String,
     private val context: Context,
     private val notificationsCenter: NotificationsCenter,
+    private val format: AudiobookFormat = AudiobookFormat.WAV,
 ) {
     val notificationId: Int = idCounter.getAndIncrement()
 
     private var builder: NotificationCompat.Builder? = null
 
     private val channelName = context.getString(StringsR.string.audiobook_export_channel_name)
+
+    /** «Экспорт видео» для MP4 и «экспорт аудио» для WAV — всегда явно. */
+    private fun progressText(percent: Int): String = context.getString(
+        if (format == AudiobookFormat.MP4) {
+            StringsR.string.audiobook_export_progress_video
+        } else {
+            StringsR.string.audiobook_export_progress_audio
+        },
+        percent,
+    )
+
+    private fun preparingText(): String = context.getString(
+        if (format == AudiobookFormat.MP4) {
+            StringsR.string.audiobook_export_preparing_video
+        } else {
+            StringsR.string.audiobook_export_preparing_audio
+        },
+    )
 
     fun showProgress(percent: Int) {
         if (!hasNotificationPermission()) return
@@ -45,7 +65,7 @@ class AudiobookExportNotification(
                 importance = NotificationManager.IMPORTANCE_LOW,
             ) {
                 setContentTitle(bookTitle)
-                setContentText(context.getString(StringsR.string.audiobook_export_progress, percent))
+                setContentText(progressText(percent))
                 setProgress(100, percent, false)
                 setOngoing(true)
                 addCancelAction()
@@ -53,7 +73,7 @@ class AudiobookExportNotification(
             return
         }
         notificationsCenter.modifyNotification(currentBuilder, notificationId) {
-            setContentText(context.getString(StringsR.string.audiobook_export_progress, percent))
+            setContentText(progressText(percent))
             setProgress(100, percent, false)
         }
     }
@@ -84,7 +104,7 @@ class AudiobookExportNotification(
             importance = NotificationManager.IMPORTANCE_LOW,
         ) {
             setContentTitle(bookTitle)
-            setContentText(context.getString(StringsR.string.audiobook_export_preparing))
+            setContentText(preparingText())
             setOngoing(true)
         }.build()
 

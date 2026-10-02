@@ -127,7 +127,7 @@ class TtsAudioSynthesizer(
             val usable = when {
                 queued != TextToSpeech.SUCCESS -> false
                 state.error != null -> false
-                else -> waitForStableFile(outputFile)
+                else -> waitForStableFile(outputFile, state)
             }
 
             if (usable) {
@@ -197,11 +197,14 @@ class TtsAudioSynthesizer(
      * Ждёт, пока размер файла перестанет меняться: движки не всегда
      * присылают колбэк завершения, но к этому моменту файл уже записан.
      */
-    private suspend fun waitForStableFile(outputFile: File): Boolean {
+    private suspend fun waitForStableFile(outputFile: File, state: AttemptState): Boolean {
         var lastSize = -1L
         var stableRounds = 0
         val deadline = System.currentTimeMillis() + SYNTHESIS_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
+            // Движок может не прислать файл, но сообщить об ошибке — не ждём
+            // таймаут целиком, иначе экран зависает на 0% на минуты.
+            if (state.error != null) return false
             val size = if (outputFile.exists()) outputFile.length() else -1L
             if (size >= WAV_MIN_BYTES && size == lastSize) {
                 stableRounds++
@@ -241,7 +244,7 @@ class TtsAudioSynthesizer(
 
     private companion object {
         const val MAX_SYNTHESIS_ATTEMPTS = 3
-        const val SYNTHESIS_TIMEOUT_MS = 10L * 60L * 1000L
+        const val SYNTHESIS_TIMEOUT_MS = 3L * 60L * 1000L
         const val STABLE_POLL_MS = 120L
         const val STABLE_ROUNDS_REQUIRED = 2
         const val RETRY_DELAY_MS = 60L

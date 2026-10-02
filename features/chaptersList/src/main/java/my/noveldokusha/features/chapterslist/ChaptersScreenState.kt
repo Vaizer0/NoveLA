@@ -95,5 +95,15 @@ sealed interface AudiobookExportDialogState {
         val directoryName: String?,
         /** Растёт при каждом запросе папки — UI открывает SAF-пикер по изменению. */
         val directoryRequestId: Int = 0,
+        /** Начальные настройки голоса для экспорта (из AppPreferences). */
+        val useReaderTts: Boolean = true,
+        val ttsVoiceId: String = "",
+        val ttsSpeed: Float = 1f,
+        val ttsPitch: Float = 1f,
+        /** Текущие настройки читалки — для режима «как в читалке» и списка голосов. */
+        val readerEnginePackage: String = "",
+        val readerVoiceId: String = "",
+        val readerSpeed: Float = 1f,
+        val readerPitch: Float = 1f,
     ) : AudiobookExportDialogState
 }

@@ -3,9 +3,12 @@ package my.noveldokusha.features.chapterslist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,15 +20,20 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +66,8 @@ internal fun AudiobookExportDialog(
     state: AudiobookExportDialogState.Configure,
     onConfirm: (AudiobookExportConfig) -> Unit,
     onDirectorySaved: (String) -> Unit,
+    onTtsChanged: (Boolean, String, Float, Float) -> Unit,
+    onTtsSaved: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -73,6 +83,23 @@ internal fun AudiobookExportDialog(
     var visualUri by remember { mutableStateOf<String?>(null) }
     var visualSource by remember { mutableStateOf<VisualSource?>(null) }
     var visualName by remember { mutableStateOf<String?>(null) }
+
+    // Настройки голоса экспорта: либо как в читалке, либо ручные (сохраняются).
+    var useReaderTts by remember { mutableStateOf(state.useReaderTts) }
+    var ttsVoiceId by remember { mutableStateOf(state.ttsVoiceId) }
+    var ttsSpeed by remember { mutableStateOf(state.ttsSpeed) }
+    var ttsPitch by remember { mutableStateOf(state.ttsPitch) }
+    val availableVoices = rememberAvailableVoices(state.readerEnginePackage)
+
+    fun persistTts() = onTtsChanged(useReaderTts, ttsVoiceId, ttsSpeed, ttsPitch)
+
+    val effectiveVoice = if (useReaderTts) state.readerVoiceId else ttsVoiceId
+    val effectiveSpeed = if (useReaderTts) state.readerSpeed else ttsSpeed
+    val effectivePitch = if (useReaderTts) state.readerPitch else ttsPitch
+    val voiceLabel = effectiveVoice
+        .takeIf { it.isNotBlank() }
+        ?.substringAfterLast(':')
+        ?: stringResource(StringsR.string.audiobook_export_tts_voice_default)
 
     val directoryPicker = rememberLauncherForActivityResult(
         contract = AudiobookOpenDocumentTree(),
@@ -211,6 +238,125 @@ internal fun AudiobookExportDialog(
                     }
                 }
 
+                SectionLabel(stringResource(StringsR.string.audiobook_export_tts))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(StringsR.string.audiobook_export_tts_use_reader),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = useReaderTts,
+                        onCheckedChange = {
+                            useReaderTts = it
+                            persistTts()
+                        },
+                    )
+                }
+
+                Text(
+                    text = stringResource(
+                        StringsR.string.audiobook_export_tts_config,
+                        stringResource(
+                            StringsR.string.audiobook_export_tts_summary,
+                            voiceLabel,
+                            effectiveSpeed,
+                            effectivePitch,
+                        ),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                if (!useReaderTts) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(StringsR.string.audiobook_export_tts_voice),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box {
+                            var voicesExpanded by remember { mutableStateOf(false) }
+                            TextButton(onClick = { voicesExpanded = true }) {
+                                Text(
+                                    text = ttsVoiceId.takeIf { it.isNotBlank() }
+                                        ?.substringAfterLast(':')
+                                        ?: stringResource(StringsR.string.audiobook_export_tts_voice_default),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = voicesExpanded,
+                                onDismissRequest = { voicesExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                StringsR.string.audiobook_export_tts_voice_default,
+                                            ),
+                                        )
+                                    },
+                                    onClick = {
+                                        ttsVoiceId = ""
+                                        voicesExpanded = false
+                                        persistTts()
+                                    },
+                                )
+                                availableVoices.forEach { voice ->
+                                    DropdownMenuItem(
+                                        text = { Text(voice.name) },
+                                        onClick = {
+                                            ttsVoiceId = voice.name
+                                            voicesExpanded = false
+                                            persistTts()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "${stringResource(StringsR.string.audiobook_export_tts_speed)} " +
+                            "%.2f".format(ttsSpeed),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = ttsSpeed,
+                        onValueChange = { ttsSpeed = it },
+                        onValueChangeFinished = { persistTts() },
+                        valueRange = 0.5f..2f,
+                    )
+
+                    Text(
+                        text = "${stringResource(StringsR.string.audiobook_export_tts_pitch)} " +
+                            "%.2f".format(ttsPitch),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = ttsPitch,
+                        onValueChange = { ttsPitch = it },
+                        onValueChangeFinished = { persistTts() },
+                        valueRange = 0.5f..2f,
+                    )
+
+                    TextButton(onClick = {
+                        persistTts()
+                        onTtsSaved()
+                    }) {
+                        Text(text = stringResource(StringsR.string.audiobook_export_tts_save))
+                    }
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
@@ -288,6 +434,10 @@ internal fun AudiobookExportDialog(
                                 visualUri = visualUri,
                                 visualSource = visualSource,
                                 visualSourceName = visualName,
+                                useReaderTts = useReaderTts,
+                                ttsVoiceId = ttsVoiceId,
+                                ttsSpeed = ttsSpeed,
+                                ttsPitch = ttsPitch,
                             ),
                         )
                     },
@@ -311,33 +461,78 @@ internal fun AudiobookExportDialog(
 }
 
 /**
- * Модальный прогресс идущего аудиоэкспорта. Процент берётся из
- * `WorkManager` (публикуется воркером), поэтому виден прямо в приложении.
+ * Модальный прогресс идущего аудиоэкспорта. Процент приходит из живого шины
+ * прогресса (воркер в том же процессе), поэтому виден сразу.
  */
 @Composable
 internal fun AudiobookExportProgressDialog(
     progress: Int?,
+    isVideo: Boolean,
     onCancel: () -> Unit,
+    onKeepInBackground: () -> Unit,
 ) {
+    val percent = (progress ?: 0).coerceIn(0, 100)
     AlertDialog(
         onDismissRequest = {},
         title = { Text(text = stringResource(StringsR.string.audiobook_export_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(text = stringResource(StringsR.string.audiobook_export_progress, progress ?: 0))
+                Text(
+                    text = stringResource(
+                        if (isVideo) {
+                            StringsR.string.audiobook_export_progress_video
+                        } else {
+                            StringsR.string.audiobook_export_progress_audio
+                        },
+                        percent,
+                    ),
+                )
                 LinearProgressIndicator(
-                    progress = { (progress ?: 0).coerceIn(0, 100) / 100f },
+                    progress = { percent / 100f },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
+            TextButton(onClick = onKeepInBackground) {
+                Text(text = stringResource(StringsR.string.audiobook_export_keep_background))
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onCancel) {
                 Text(text = stringResource(StringsR.string.audiobook_export_cancel))
             }
         },
-        dismissButton = {},
     )
+}
+
+/**
+ * Голоса системного TTS-движка для ручного выбора. Движок создаётся на время
+ * показа диалога и освобождается при уходе с экрана.
+ */
+@Composable
+private fun rememberAvailableVoices(enginePackage: String): List<Voice> {
+    val context = LocalContext.current
+    var voices by remember { mutableStateOf<List<Voice>>(emptyList()) }
+    DisposableEffect(enginePackage) {
+        var disposed = false
+        var tts: TextToSpeech? = null
+        val listener = TextToSpeech.OnInitListener { status ->
+            if (status == TextToSpeech.SUCCESS && !disposed) {
+                voices = tts?.voices?.sortedBy { it.name }?.toList().orEmpty()
+            }
+        }
+        tts = if (enginePackage.isBlank()) {
+            TextToSpeech(context, listener)
+        } else {
+            TextToSpeech(context, listener, enginePackage)
+        }
+        onDispose {
+            disposed = true
+            runCatching { tts?.shutdown() }
+        }
+    }
+    return voices
 }
 
 @Composable

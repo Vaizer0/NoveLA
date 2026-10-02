@@ -141,6 +141,11 @@ internal fun ChaptersScreen(
     onAudiobookMessageShown: () -> Unit,
     audiobookProgress: Int?,
     onAudiobookCancel: () -> Unit,
+    onAudiobookKeepInBackground: () -> Unit,
+    audiobookProgressIsVideo: Boolean,
+    audiobookProgressDismissed: Boolean,
+    onAudiobookTtsChanged: (Boolean, String, Float, Float) -> Unit,
+    onAudiobookTtsSaved: () -> Unit,
     onMigrateBook: () -> Unit = {},
     onDeleteTranslations: () -> Unit = {},
     onFixBook: () -> Unit = {},
@@ -699,15 +704,19 @@ internal fun ChaptersScreen(
             state = audiobookState,
             onConfirm = onAudiobookExportConfirmed,
             onDirectorySaved = onAudiobookDirectorySaved,
+            onTtsChanged = onAudiobookTtsChanged,
+            onTtsSaved = onAudiobookTtsSaved,
             onDismiss = onAudiobookDialogDismiss,
         )
     }
 
     // Прогресс аудиоэкспорта в приложении (не только в уведомлении).
-    if (audiobookProgress != null) {
+    if (audiobookProgress != null && !audiobookProgressDismissed) {
         AudiobookExportProgressDialog(
             progress = audiobookProgress,
+            isVideo = audiobookProgressIsVideo,
             onCancel = onAudiobookCancel,
+            onKeepInBackground = onAudiobookKeepInBackground,
         )
     }
 }

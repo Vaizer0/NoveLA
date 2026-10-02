@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,6 +71,7 @@ import my.noveldokusha.tooling.application_workers.AudiobookExportWorker
 import my.noveldokusha.tooling.application_workers.BookExportWorker
 import my.noveldokusha.tooling.application_workers.ExportMode
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
+import my.noveldokusha.tooling.audiobook.AudiobookExportProgressBus
 import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
 import my.noveldokusha.tooling.audiobook.AudiobookFormat
 import my.noveldokusha.tooling.audiobook.VisualSource
@@ -299,31 +299,57 @@ internal class ChaptersViewModel @Inject constructor(
     /** Прогресс текущего аудиоэкспорта (0..100) или null, если он не идёт. */
     val audiobookProgress = mutableStateOf<Int?>(null)
 
+    /** true — идёт экспорт MP4 (видео), false — WAV (аудио). */
+    val audiobookProgressIsVideo = mutableStateOf(false)
+
+    /** true — пользователь свернул прогресс («Оставить в фоне»). */
+    val audiobookProgressDismissed = mutableStateOf(false)
+
     private var pendingAudiobook: PendingAudiobookExport? = null
 
     init {
-        // Прогресс воркера публикуется через WorkManager и наблюдается здесь,
-        // чтобы показывать процент прямо в приложении, а не только в уведомлении.
+        // Живой прогресс идёт напрямую из воркера (тот же процесс), поэтому
+        // проценты обновляются сразу — без опроса WorkManager и «зависания на 0%».
         viewModelScope.launch {
-            // В юнит-тестах WorkManager не инициализирован — молча выходим.
-            val workManager = runCatching { WorkManager.getInstance(context) }.getOrNull()
-                ?: return@launch
-            workManager
-                .getWorkInfosForUniqueWorkFlow(AudiobookExportWorker.TAG)
-                .collect { infos ->
-                    val info = infos.firstOrNull()
-                    audiobookProgress.value = if (info == null || info.state.isFinished) {
-                        null
-                    } else {
-                        info.progress.getInt(AudiobookExportWorker.KEY_PROGRESS, 0)
+            AudiobookExportProgressBus.progress.collect { live ->
+                if (live == null) {
+                    audiobookProgress.value = null
+                    audiobookProgressDismissed.value = false
+                } else {
+                    if (audiobookProgress.value == null) {
+                        // Новый экспорт: показываем диалог снова, даже если
+                        // предыдущий был свёрнут в фон.
+                        audiobookProgressDismissed.value = false
                     }
+                    audiobookProgressIsVideo.value = live.format == AudiobookFormat.MP4
+                    audiobookProgress.value = live.percent
                 }
+            }
         }
     }
 
     fun onAudiobookExportCancel() {
         AudiobookExportWorker.cancelTask(context)
+        AudiobookExportProgressBus.clear()
         audiobookProgress.value = null
+        audiobookProgressDismissed.value = false
+    }
+
+    /** Свернуть диалог прогресса: экспорт продолжается в фоне (уведомление). */
+    fun onAudiobookKeepInBackground() {
+        audiobookProgressDismissed.value = true
+    }
+
+    /** Сохраняет выбранные настройки голоса для будущих экспортов. */
+    fun onAudiobookTtsChanged(useReaderTts: Boolean, voiceId: String, speed: Float, pitch: Float) {
+        appPreferences.AUDIOBOOK_EXPORT_USE_READER_TTS.value = useReaderTts
+        appPreferences.AUDIOBOOK_EXPORT_TTS_VOICE_ID.value = voiceId
+        appPreferences.AUDIOBOOK_EXPORT_TTS_SPEED.value = speed
+        appPreferences.AUDIOBOOK_EXPORT_TTS_PITCH.value = pitch
+    }
+
+    fun onAudiobookTtsSaved() {
+        audiobookMessage.value = context.getString(StringsR.string.audiobook_export_tts_saved)
     }
 
     // Инжектируемая точка постановки задачи: тесты подменяют её шпионом.
@@ -353,6 +379,14 @@ internal class ChaptersViewModel @Inject constructor(
                 downloadedChapters = downloadedChapters,
                 availableTranslations = availableTranslations,
                 directoryName = directoryName,
+                useReaderTts = appPreferences.AUDIOBOOK_EXPORT_USE_READER_TTS.value,
+                ttsVoiceId = appPreferences.AUDIOBOOK_EXPORT_TTS_VOICE_ID.value,
+                ttsSpeed = appPreferences.AUDIOBOOK_EXPORT_TTS_SPEED.value,
+                ttsPitch = appPreferences.AUDIOBOOK_EXPORT_TTS_PITCH.value,
+                readerEnginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
+                readerVoiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value,
+                readerSpeed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
+                readerPitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
             )
         }
     }
@@ -399,6 +433,7 @@ internal class ChaptersViewModel @Inject constructor(
         config: AudiobookExportConfig,
         directoryUri: String,
     ) {
+        val useReader = config.useReaderTts
         val request = AudiobookExportRequest(
             bookUrl = dialog.bookUrl,
             bookTitle = dialog.bookTitle,
@@ -409,16 +444,34 @@ internal class ChaptersViewModel @Inject constructor(
             startPosition = config.startPosition,
             endPosition = config.endPosition,
             enginePackage = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ENGINE.value,
-            voiceId = appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value,
-            speed = appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value,
-            pitch = appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value,
+            voiceId = if (useReader) {
+                appPreferences.READER_TEXT_TO_SPEECH_VOICE_ID.value
+            } else {
+                config.ttsVoiceId
+            },
+            speed = if (useReader) {
+                appPreferences.READER_TEXT_TO_SPEECH_VOICE_SPEED.value
+            } else {
+                config.ttsSpeed
+            },
+            pitch = if (useReader) {
+                appPreferences.READER_TEXT_TO_SPEECH_VOICE_PITCH.value
+            } else {
+                config.ttsPitch
+            },
             visualUri = config.visualUri,
             visualSource = config.visualSource,
             visualSourceName = config.visualSourceName,
             treeUri = directoryUri,
         )
         enqueueAudiobook(context, request)
-        audiobookMessage.value = context.getString(StringsR.string.audiobook_export_started)
+        audiobookMessage.value = context.getString(
+            if (config.format == AudiobookFormat.MP4) {
+                StringsR.string.audiobook_export_started_video
+            } else {
+                StringsR.string.audiobook_export_started_audio
+            },
+        )
         audiobookDialogState.value = AudiobookExportDialogState.Hidden
     }
 
@@ -1426,6 +1479,12 @@ data class AudiobookExportConfig(
     val visualUri: String? = null,
     val visualSource: VisualSource? = null,
     val visualSourceName: String? = null,
+    /** true — голос/скорость/тон брать из настроек читалки. */
+    val useReaderTts: Boolean = true,
+    /** Голос для ручного режима (пусто — голос движка по умолчанию). */
+    val ttsVoiceId: String = "",
+    val ttsSpeed: Float = 1f,
+    val ttsPitch: Float = 1f,
 )
 
 /** Аудиоэкспорт, ожидающий выбора папки через SAF. */

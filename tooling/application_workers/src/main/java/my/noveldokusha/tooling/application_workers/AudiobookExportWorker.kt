@@ -31,7 +31,9 @@ import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
 import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
 import my.noveldokusha.tooling.audiobook.AudiobookExporter
+import my.noveldokusha.tooling.audiobook.AudiobookExportProgressBus
 import my.noveldokusha.tooling.audiobook.AudiobookFormat
+import my.noveldokusha.tooling.audiobook.AudiobookStage
 import my.noveldokusha.tooling.audiobook.ChapterContentProvider
 import my.noveldokusha.tooling.audiobook.SafAudiobookStorage
 import my.noveldokusha.tooling.audiobook.SafDocument
@@ -128,9 +130,25 @@ class AudiobookExportWorker(
         val coverRepository = entryPoint.coverRepository()
 
         val storedRequest = readRequest() ?: return Result.failure()
-        val notification =
-            AudiobookExportNotification(storedRequest.bookTitle, context, notificationsCenter)
+        val notification = AudiobookExportNotification(
+            storedRequest.bookTitle,
+            context,
+            notificationsCenter,
+            storedRequest.format,
+        )
         val storage = SafAudiobookStorage(context)
+
+        // Foreground поднимается сразу: длинный синтез не должен ждать
+        // первого процента, иначе система может остановить воркер.
+        runCatching { setForeground(buildForegroundInfo(notification)) }
+            .onFailure { Timber.w(it, "AudiobookExport: early setForeground failed") }
+
+        // Показываем «0%» сразу, чтобы экран не выглядел зависшим до первого абзаца.
+        AudiobookExportProgressBus.publish(
+            percent = 0,
+            format = storedRequest.format,
+            stage = AudiobookStage.PREPARING,
+        )
 
         // MP4 без выбранного визуала: подставляем обложку книги.
         val request = if (
@@ -189,7 +207,6 @@ class AudiobookExportWorker(
         if (outputDir.exists()) outputDir.deleteRecursively()
         outputDir.mkdirs()
 
-        var foregroundSet = false
         var lastNotifyAt = 0L
         val exporter = AudiobookExporter(context)
 
@@ -201,13 +218,13 @@ class AudiobookExportWorker(
                     outputDir = outputDir,
                     onProgress = { progress ->
                         coroutineContext.ensureActive()
-                        // Foreground поднимается при первых процентах, чтобы
-                        // WorkManager не убил длинный синтез.
-                        if (!foregroundSet) {
-                            foregroundSet = true
-                            runCatching { setForeground(buildForegroundInfo(notification)) }
-                                .onFailure { Timber.w(it, "AudiobookExport: setForeground failed") }
-                        }
+                        // Живой прогресс экрана — сразу, без троттлинга, чтобы
+                        // процент не «залипал» на 0%.
+                        AudiobookExportProgressBus.publish(
+                            percent = progress.percent,
+                            format = request.format,
+                            stage = progress.stage,
+                        )
                         val now = SystemClock.elapsedRealtime()
                         if (now - lastNotifyAt >= PROGRESS_INTERVAL_MS || progress.percent >= 100) {
                             lastNotifyAt = now
@@ -234,6 +251,7 @@ class AudiobookExportWorker(
             Result.failure()
         } finally {
             outputDir.deleteRecursively()
+            AudiobookExportProgressBus.clear()
         }
     }
 

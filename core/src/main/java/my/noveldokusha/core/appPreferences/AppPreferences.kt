@@ -410,6 +410,30 @@ class AppPreferences @Inject constructor(
             override var value by SharedPreference_Float(name, preferences, 1f)
         }
 
+    // ─── Аудиоэкспорт: настройки голоса ─────────────────────────────────────
+    // true — брать голос/скорость/тон из настроек читалки; false — из
+    // сохранённых ниже значений экспорта.
+    val AUDIOBOOK_EXPORT_USE_READER_TTS =
+        object : Preference<Boolean>("AUDIOBOOK_EXPORT_USE_READER_TTS") {
+            override var value by SharedPreference_Boolean(name, preferences, true)
+        }
+    val AUDIOBOOK_EXPORT_TTS_ENGINE =
+        object : Preference<String>("AUDIOBOOK_EXPORT_TTS_ENGINE") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+    val AUDIOBOOK_EXPORT_TTS_VOICE_ID =
+        object : Preference<String>("AUDIOBOOK_EXPORT_TTS_VOICE_ID") {
+            override var value by SharedPreference_String(name, preferences, "")
+        }
+    val AUDIOBOOK_EXPORT_TTS_SPEED =
+        object : Preference<Float>("AUDIOBOOK_EXPORT_TTS_SPEED") {
+            override var value by SharedPreference_Float(name, preferences, 1f)
+        }
+    val AUDIOBOOK_EXPORT_TTS_PITCH =
+        object : Preference<Float>("AUDIOBOOK_EXPORT_TTS_PITCH") {
+            override var value by SharedPreference_Float(name, preferences, 1f)
+        }
+
     val READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST =
         object : Preference<List<VoicePredefineState>>(
             "READER_TEXT_TO_SPEECH_SAVED_PREDEFINED_LIST"

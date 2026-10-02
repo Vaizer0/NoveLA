@@ -116,6 +116,11 @@ class ChaptersActivity : BaseActivity() {
                     onAudiobookMessageShown = { viewModel.audiobookMessage.value = null },
                     audiobookProgress = viewModel.audiobookProgress.value,
                     onAudiobookCancel = viewModel::onAudiobookExportCancel,
+                    onAudiobookKeepInBackground = viewModel::onAudiobookKeepInBackground,
+                    audiobookProgressIsVideo = viewModel.audiobookProgressIsVideo.value,
+                    audiobookProgressDismissed = viewModel.audiobookProgressDismissed.value,
+                    onAudiobookTtsChanged = viewModel::onAudiobookTtsChanged,
+                    onAudiobookTtsSaved = viewModel::onAudiobookTtsSaved,
                     onMigrateBook = {
                         navigationRoutes.novelMigration(
                             this,
