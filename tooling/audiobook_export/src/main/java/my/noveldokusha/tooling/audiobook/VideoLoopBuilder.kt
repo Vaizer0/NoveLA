@@ -197,23 +197,33 @@ class VideoLoopBuilder {
                 segmentDurationUs,
             )
             val hasGaps = loopPeriodUs > segmentDurationUs
+            val bufferSize = maxOf(
+                EncodedVideoValidator.sampleBufferSize(trackFormat),
+                visualSegment.maxSampleBytes,
+            )
             AudiobookExportDebug.log(
                 "video loop: segment=${segmentDurationUs}us loop=${loopPeriodUs}us " +
-                    "audio=${audioUs}us gaps=$hasGaps",
+                    "audio=${audioUs}us gaps=$hasGaps buffer=${bufferSize}B " +
+                    "frameRate=${visualSegment.frameRate}",
             )
 
-            val buffer = java.nio.ByteBuffer.allocate(VIDEO_SAMPLE_BUFFER_SIZE)
+            val buffer = java.nio.ByteBuffer.allocate(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
             var written = 0L
-            var lastWrittenUs = -1L
+            var maxWrittenUs = -1L
 
             fun writeSample(size: Int, targetUs: Long) {
                 buffer.position(0)
                 buffer.limit(size)
-                bufferInfo.set(0, size, targetUs, extractor.sampleFlags)
+                bufferInfo.set(
+                    0,
+                    size,
+                    targetUs,
+                    EncodedVideoValidator.muxerFlags(extractor.sampleFlags),
+                )
                 muxer.writeSampleData(videoTrack, buffer, bufferInfo)
                 written++
-                lastWrittenUs = targetUs
+                if (targetUs > maxWrittenUs) maxWrittenUs = targetUs
                 if (written % PROGRESS_SAMPLE_INTERVAL == 0L) {
                     onProgress((targetUs.toFloat() / audioUs).coerceIn(0f, 1f))
                 }
@@ -222,45 +232,65 @@ class VideoLoopBuilder {
             // Проигрывает сегмент от seekTo(0). originUs — PTS первого сэмпла
             // после сик-точки: он вычитается, чтобы каждый повтор начинался с
             // нуля, а внутренние интервалы сохранялись один в один.
-            // Возвращает false, если сэмпл вышел за конец аудио.
-            fun playSegment(offsetUs: Long, stopAtUs: Long): Boolean {
+            //
+            // ВАЖНО: пишутся ВСЕ сэмплы в порядке декодирования. Раньше сэмпл
+            // пропускался, если его PTS не больше предыдущего, но с B-кадрами
+            // PTS в порядке декодирования немонотонны — B-кадры терялись, а
+            // ссылающиеся на них кадры рассыпались в «мозаику». Муксер сам
+            // считает DTS и строит ctts по PTS.
+            //
+            // Возвращает число записанных сэмплов (0 — сегмент не влез).
+            fun writeCycle(offsetUs: Long, stopAtUs: Long): Int {
                 extractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
                 var originUs = -1L
+                var produced = 0
                 while (true) {
                     val size = extractor.readSampleData(buffer, 0)
                     if (size < 0) break
                     val sampleTimeUs = extractor.sampleTime
                     if (originUs < 0L) originUs = sampleTimeUs
                     val targetUs = offsetUs + (sampleTimeUs - originUs).coerceAtLeast(0L)
-                    if (targetUs >= stopAtUs) return false
-                    if (size > 0 && targetUs > lastWrittenUs) writeSample(size, targetUs)
+                    if (targetUs >= stopAtUs) break
+                    if (size > 0) {
+                        writeSample(size, targetUs)
+                        produced++
+                    }
                     extractor.advance()
                 }
-                return true
+                return produced
             }
 
             var loopStartUs = 0L
             var loops = 0L
             while (loopStartUs < audioUs) {
-                if (!playSegment(loopStartUs, audioUs)) break
+                val produced = writeCycle(loopStartUs, audioUs)
+                if (produced == 0) break
                 loops++
+                if (loops == 1L) {
+                    AudiobookExportDebug.log(
+                        "video loop: first cycle samples=$produced last=${maxWrittenUs}us",
+                    )
+                }
                 loopStartUs += loopPeriodUs
             }
 
             // Хвост нужен только при разрывах между повторами (статичная
             // картинка): без него видеодорожка оборвалась бы посреди книги.
             // Для непрерывного видео основной цикл уже дошёл до конца аудио.
-            if (hasGaps && lastWrittenUs < audioUs - 1L) {
+            if (hasGaps && maxWrittenUs < audioUs - 1L) {
                 val tailStartUs = (audioUs - segmentDurationUs).coerceAtLeast(0L)
-                playSegment(tailStartUs, audioUs)
+                writeCycle(tailStartUs, audioUs)
             }
 
             // Страховка для очень короткого аудио: хотя бы один кадр.
             if (written == 0L) {
-                playSegment(0L, audioUs)
+                writeCycle(0L, audioUs)
             }
             if (written == 0L) throw IOException("visual segment produced no samples")
-            AudiobookExportDebug.log("video loop done: samples=$written loops=$loops last=${lastWrittenUs}us")
+            AudiobookExportDebug.log(
+                "video loop done: samples=$written loops=$loops last=${maxWrittenUs}us " +
+                    "audio=${audioUs}us duration=${maxWrittenUs.coerceAtLeast(0L) / 1000L}ms",
+            )
             onProgress(1f)
         } finally {
             runCatching { extractor.release() }
@@ -300,7 +330,9 @@ class VideoLoopBuilder {
                 if (size < 0) break
                 buffer.position(0)
                 buffer.limit(size)
-                bufferInfo.set(0, size, extractor.sampleTime, extractor.sampleFlags)
+                // Флаги не переносятся: у аудио нет ключевых кадров, а
+                // SAMPLE_FLAG_PARTIAL_FRAME совпал бы с END_OF_STREAM.
+                bufferInfo.set(0, size, extractor.sampleTime, 0)
                 muxer.writeSampleData(trackIndex, buffer, bufferInfo)
                 extractor.advance()
             }
@@ -348,9 +380,9 @@ class VideoLoopBuilder {
     }
 
     private companion object {
-        // Видеосэмпл (ключевой кадр) может быть крупным: с запасом, но
-        // ограниченно, чтобы не держать в куче весь сегмент.
-        const val VIDEO_SAMPLE_BUFFER_SIZE = 8 * 1024 * 1024
+        // Размер буфера видеосэмпла считается по формату и замеру максимума
+        // (см. EncodedVideoValidator): ключевой кадр у 4K-источника не влез
+        // бы в фиксированные 8 МБ и поток бы развалился.
         const val AUDIO_SAMPLE_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_SAMPLE_INTERVAL = 2_000L
         // Сегмент короче 100 мс означает битые метки времени: лучше упасть

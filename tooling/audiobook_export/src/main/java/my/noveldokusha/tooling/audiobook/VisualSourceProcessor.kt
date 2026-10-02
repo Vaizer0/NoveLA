@@ -38,6 +38,14 @@ data class NormalizedVisualSegment(
      * падает пропорционально длительности книги, а не её полному битрейту.
      */
     val loopPeriodMs: Long = 0L,
+    /**
+     * Размер самого крупного сжатого сэмпла сегмента (в байтах), замеренный
+     * при подготовке. По нему выделяется буфер зацикливания: если он меньше
+     * ключевого кадра, [android.media.MediaExtractor.readSampleData] бросает
+     * исключение или читает битый сэмпл — источник рассыпавшихся кадров.
+     * `0` — размер неизвестен, берётся оценка по формату.
+     */
+    val maxSampleBytes: Int = 0,
 ) : AutoCloseable {
     override fun close() {
         runCatching { file.delete() }
@@ -112,12 +120,18 @@ class VisualSourceProcessor(private val context: Context) {
     private fun prepareVideo(uri: Uri, sourceName: String, target: File): NormalizedVisualSegment {
         val meta = readVideoMeta(uri)
             ?: throw VisualProcessingException("Unable to read video track: $sourceName")
-        try {
+        // Проверяем подготовленный короткий сегмент, пока он ещё мал: битый
+        // источник нужно поймать здесь, а не после зацикливания на всю книгу.
+        // Если remux формально прошёл, но дал недекодируемый поток, он тоже
+        // считается провалом и уходит в аварийный транскод.
+        val summary = try {
             remuxFullVideo(uri, target, meta)
+            EncodedVideoValidator.analyze(target, "prepared-remux")
         } catch (e: Exception) {
             Timber.w(e, "VisualSourceProcessor: remux failed, transcoding full video")
             runCatching { target.delete() }
             transcodeFullVideo(uri, target, meta)
+            EncodedVideoValidator.analyze(target, "prepared-transcode")
         }
         val durationMs = probeDurationMs(target).takeIf { it > 0L } ?: meta.durationMs
         if (durationMs <= 0L) {
@@ -125,7 +139,9 @@ class VisualSourceProcessor(private val context: Context) {
         }
         AudiobookExportDebug.log(
             "VisualSourceProcessor: video ready ${meta.width}x${meta.height} " +
-                "fps=${meta.frameRate} duration=${durationMs}ms codec=${meta.mime}",
+                "fps=${meta.frameRate} duration=${durationMs}ms codec=${meta.mime} " +
+                "samples=${summary.sampleCount} keyframes=${summary.keyframeCount} " +
+                "maxSample=${summary.maxSampleBytes}B",
         )
         return NormalizedVisualSegment(
             file = target,
@@ -140,6 +156,7 @@ class VisualSourceProcessor(private val context: Context) {
             expectedDurationMs = durationMs,
             frameRate = meta.frameRate,
             loopPeriodMs = 0L,
+            maxSampleBytes = summary.maxSampleBytes,
         )
     }
 
@@ -202,22 +219,44 @@ class VisualSourceProcessor(private val context: Context) {
             val track = muxer.addTrack(format)
             muxer.start()
             started = true
-            val buffer = ByteBuffer.allocate(sampleBufferSize(format, meta))
+            val buffer = ByteBuffer.allocate(EncodedVideoValidator.sampleBufferSize(format))
             val bufferInfo = MediaCodec.BufferInfo()
             var originUs = -1L
+            var samples = 0
+            var keyframes = 0
+            var minBytes = Int.MAX_VALUE
+            var maxBytes = 0
             while (true) {
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
                 val sampleTimeUs = extractor.sampleTime
                 if (originUs < 0L) originUs = sampleTimeUs
                 if (size > 0) {
+                    // Сэмплы пишутся в порядке декодирования с исходными
+                    // относительными PTS: B-кадры не отбрасываются, иначе
+                    // ссылающиеся на них кадры рассыпаются в «мозаику».
+                    // Флаги маскируются: SAMPLE_FLAG_PARTIAL_FRAME совпадает
+                    // с BUFFER_FLAG_END_OF_STREAM.
                     buffer.position(0)
                     buffer.limit(size)
-                    bufferInfo.set(0, size, (sampleTimeUs - originUs).coerceAtLeast(0L), extractor.sampleFlags)
+                    bufferInfo.set(
+                        0,
+                        size,
+                        (sampleTimeUs - originUs).coerceAtLeast(0L),
+                        EncodedVideoValidator.muxerFlags(extractor.sampleFlags),
+                    )
                     muxer.writeSampleData(track, buffer, bufferInfo)
+                    samples++
+                    if (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) keyframes++
+                    if (size < minBytes) minBytes = size
+                    if (size > maxBytes) maxBytes = size
                 }
                 extractor.advance()
             }
+            AudiobookExportDebug.log(
+                "VisualSourceProcessor: remux samples=$samples keyframes=$keyframes " +
+                    "sampleBytes=[${if (minBytes == Int.MAX_VALUE) 0 else minBytes}..$maxBytes]",
+            )
         } finally {
             if (started) runCatching { muxer.stop() }
             runCatching { muxer.release() }
@@ -641,18 +680,6 @@ class VisualSourceProcessor(private val context: Context) {
     private fun MediaFormat.optInt(key: String, fallback: Int): Int =
         if (containsKey(key)) getInteger(key) else fallback
 
-    /**
-     * Размер буфера под один сжатый видеосэмпл. Оценка сверху — полный
-     * несжатый кадр (w*h): сжатый ключевой кадр всегда меньше. Ограничение
-     * сверху не даёт 8K-исходнику зарезервировать гигабайты.
-     */
-    private fun sampleBufferSize(format: MediaFormat, meta: VideoMeta): Int {
-        val declared = format.optInt(MediaFormat.KEY_MAX_INPUT_SIZE, 0)
-        val estimate = meta.width.coerceAtLeast(1) * meta.height.coerceAtLeast(1)
-        return maxOf(declared, estimate, MIN_SAMPLE_BUFFER_BYTES)
-            .coerceAtMost(MAX_SAMPLE_BUFFER_BYTES)
-    }
-
     /** Битрейт аварийного транскода: ~ w*h*fps/8, в разумных пределах. */
     private fun bitrateFor(width: Int, height: Int, frameRate: Int): Int {
         val bits = width.toLong() * height.toLong() * frameRate.coerceAtLeast(1) / 8L
@@ -680,9 +707,7 @@ class VisualSourceProcessor(private val context: Context) {
         const val MAX_SEGMENT_MS = 5_000L
         const val MAX_GIF_FRAMES = 20
 
-        // Границы буфера видеосэмпла и битрейта аварийного транскода.
-        const val MIN_SAMPLE_BUFFER_BYTES = 1 shl 20
-        const val MAX_SAMPLE_BUFFER_BYTES = 64 shl 20
+        // Границы битрейта аварийного транскода.
         const val MIN_TRANSCODE_BITRATE = 2_000_000L
         const val MAX_TRANSCODE_BITRATE = 40_000_000L
         const val TRANSCODE_TIMEOUT_BASE_MS = 60_000L
