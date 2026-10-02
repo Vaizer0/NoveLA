@@ -139,6 +139,7 @@ class AudiobookExportWorker(
         val notificationsCenter = entryPoint.notificationsCenter()
         val appFileResolver = entryPoint.appFileResolver()
         val coverRepository = entryPoint.coverRepository()
+        val appPreferences = entryPoint.appPreferences()
 
         val storedRequest = readRequest()
         if (storedRequest == null) {
@@ -215,6 +216,10 @@ class AudiobookExportWorker(
                 contentMode = request.contentMode,
                 sourceLang = request.sourceLang,
                 targetLang = request.targetLang,
+                // Снимок настроек очистки: экспорт должен построить текст
+                // ровно так же, как живое чтение (общий пайплайн в core).
+                userRegexRules = appPreferences.effectiveRegexRules(request.bookUrl),
+                sentenceSplittingEnabled = appPreferences.READER_SENTENCE_SPLITTING.value,
             )
         }
         if (chapters == null) {

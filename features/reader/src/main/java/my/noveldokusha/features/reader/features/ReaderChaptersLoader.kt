@@ -25,8 +25,8 @@ import my.noveldokusha.features.reader.domain.ReaderState
 import my.noveldokusha.features.reader.domain.ReadingChapterPosStats
 import my.noveldokusha.features.reader.domain.indexOfReaderItem
 import my.noveldokusha.features.reader.tools.ResolveResult
-import my.noveldokusha.features.reader.tools.SentenceSplitter
-import my.noveldokusha.features.reader.tools.applyUserRegexRules
+import my.noveldokusha.core.text.SentenceSplitter
+import my.noveldokusha.core.text.applyUserRegexRules
 import my.noveldokusha.features.reader.tools.expandParagraphPairs
 import my.noveldokusha.features.reader.tools.resolveParagraphTranslations
 import my.noveldokusha.features.reader.tools.splitParagraphPair

@@ -1,5 +1,7 @@
 package my.noveldokusha.features.reader.tools
 
+import my.noveldokusha.core.text.SentenceSplitter
+
 /**
  * Resolution of a historical positional translation cache (index = chapter paragraph)
  * against the current paragraph list, when the cached array size may differ from

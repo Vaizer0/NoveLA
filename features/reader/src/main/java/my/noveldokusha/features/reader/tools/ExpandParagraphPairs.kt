@@ -1,5 +1,6 @@
 package my.noveldokusha.features.reader.tools
 
+import my.noveldokusha.core.text.SentenceSplitter
 import my.noveldokusha.features.reader.domain.ReaderItem
 
 /**

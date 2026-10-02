@@ -302,10 +302,9 @@ class AudiobookExporter(
                 chapterOffset++
 
                 val chapterTitle = chapter.title.ifBlank { "Chapter ${chapter.position + 1}" }
-                val plans = planParagraphs(
-                    splitChapterIntoParagraphs(chapter.paragraphs.joinToString("\n\n")),
-                    maxChunk,
-                )
+                // Абзацы уже построены живым пайплайном (ChapterContentProvider),
+                // повторно не разбиваем — планируем чистку и TTS-порции.
+                val plans = planParagraphs(chapter.paragraphs, maxChunk)
 
                 timeline.beginChapter(
                     chapterIndex = chapterOffset + 1,

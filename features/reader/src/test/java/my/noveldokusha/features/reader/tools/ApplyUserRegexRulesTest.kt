@@ -1,6 +1,7 @@
 package my.noveldokusha.features.reader.tools
 
 import my.noveldokusha.core.models.RegexRule
+import my.noveldokusha.core.text.applyUserRegexRules
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

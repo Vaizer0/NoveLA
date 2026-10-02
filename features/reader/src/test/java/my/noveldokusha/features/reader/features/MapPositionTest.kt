@@ -2,7 +2,7 @@ package my.noveldokusha.features.reader.features
 
 import my.noveldokusha.features.reader.domain.ImgEntry
 import my.noveldokusha.features.reader.domain.ReaderItem
-import my.noveldokusha.features.reader.tools.SentenceSplitter
+import my.noveldokusha.core.text.SentenceSplitter
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

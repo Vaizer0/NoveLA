@@ -1,4 +1,4 @@
-package my.noveldokusha.features.reader.tools
+package my.noveldokusha.core.text
 
 /**
  * Rule-based paragraph-to-sentences splitter.
@@ -155,7 +155,7 @@ object SentenceSplitter {
      * Test-only: the body of [splitParagraph] without the MIN_PARAGRAPH_LENGTH gate.
      * Used by the corpus diagnostic to measure what short paragraphs would do.
      */
-    internal fun splitIgnoringMinLength(paragraph: String): List<String> {
+    fun splitIgnoringMinLength(paragraph: String): List<String> {
         if (isStatusBlock(paragraph) || isDashDialogue(paragraph) || hasDecorationSymbols(paragraph)) return listOf(paragraph)
         val boundaries = findValidBoundaries(paragraph)
         if (boundaries.isEmpty()) return listOf(paragraph)
@@ -186,7 +186,7 @@ object SentenceSplitter {
      * is a split candidate only at stack depth 0; script terminators always
      * yield a boundary, basic ones ( . ! ? ) are validated.
      */
-    internal fun findValidBoundaries(paragraph: String): List<Int> {
+    fun findValidBoundaries(paragraph: String): List<Int> {
         val stack = ArrayDeque<Char>()
         val boundaries = mutableListOf<Int>()
 
@@ -338,15 +338,15 @@ object SentenceSplitter {
     // === Diagnostic API (test-only; additive, does not affect production paths) ===
 
     /** Current split threshold, exposed for the corpus diagnostic. */
-    internal val minParagraphLength: Int get() = MIN_PARAGRAPH_LENGTH
+    val minParagraphLength: Int get() = MIN_PARAGRAPH_LENGTH
 
-    internal enum class UnsplitReason { TOO_SHORT, STATUS_BLOCK, DASH_DIALOGUE, DECORATIVE_SYMBOLS, NO_VALID_BOUNDARY }
+    enum class UnsplitReason { TOO_SHORT, STATUS_BLOCK, DASH_DIALOGUE, DECORATIVE_SYMBOLS, NO_VALID_BOUNDARY }
 
     /**
      * Test-only diagnostic: returns why [splitParagraph] keeps [paragraph] whole, or
      * null when it would be split. Mirrors the decision order of [splitParagraph].
      */
-    internal fun diagnose(paragraph: String): UnsplitReason? = when {
+    fun diagnose(paragraph: String): UnsplitReason? = when {
         paragraph.length < MIN_PARAGRAPH_LENGTH -> UnsplitReason.TOO_SHORT
         isStatusBlock(paragraph) -> UnsplitReason.STATUS_BLOCK
         isDashDialogue(paragraph) -> UnsplitReason.DASH_DIALOGUE
@@ -355,7 +355,7 @@ object SentenceSplitter {
         else -> null
     }
 
-    internal data class BoundaryRejection(val terminatorPos: Int, val reason: String)
+    data class BoundaryRejection(val terminatorPos: Int, val reason: String)
 
     /**
      * Test-only diagnostic: replays the [findValidBoundaries] scan and reports every
@@ -364,7 +364,7 @@ object SentenceSplitter {
      * 'adjacent terminator' — part of a punctuation run (…!?/….);
      * 'a'..'g' — the matching rule in [isBoundaryValid] rejected it.
      */
-    internal fun boundaryRejections(paragraph: String): List<BoundaryRejection> {
+    fun boundaryRejections(paragraph: String): List<BoundaryRejection> {
         val stack = ArrayDeque<Char>()
         val rejections = mutableListOf<BoundaryRejection>()
         var i = 0

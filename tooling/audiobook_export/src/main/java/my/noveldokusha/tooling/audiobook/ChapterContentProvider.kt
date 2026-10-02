@@ -1,5 +1,9 @@
 package my.noveldokusha.tooling.audiobook
 
+import my.noveldokusha.core.models.RegexRule
+import my.noveldokusha.core.text.SentenceSplitter
+import my.noveldokusha.core.text.applyUserRegexRules
+import my.noveldokusha.core.text.htmlToTtsParagraphs
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.feature.local_database.tables.Chapter
 import org.json.JSONArray
@@ -27,6 +31,8 @@ interface AudiobookChapterSource : AutoCloseable {
 /**
  * Достаёт содержимое глав для озвучки.
  *
+ * Текст строится тем же пайплайном, что и живое чтение (общий код в
+ * `core.text`), поэтому экспорт синтезирует ровно то, что читает ридер.
  * Порядок глав задаётся исключительно `Chapter.position` (тем же, что и
  * в ридере) — алфавитная сортировка не используется нигде.
  */
@@ -45,6 +51,8 @@ class ChapterContentProvider(private val database: AppDatabase) {
         contentMode: AudiobookContentMode,
         sourceLang: String,
         targetLang: String,
+        userRegexRules: List<RegexRule> = emptyList(),
+        sentenceSplittingEnabled: Boolean = false,
     ): AudiobookChapterSource? {
         val allChapters = database.chapterDao().chapters(bookUrl)
         if (allChapters.isEmpty()) return null
@@ -71,6 +79,8 @@ class ChapterContentProvider(private val database: AppDatabase) {
             contentMode = contentMode,
             sourceLang = sourceLang,
             targetLang = targetLang,
+            userRegexRules = userRegexRules,
+            sentenceSplittingEnabled = sentenceSplittingEnabled,
             estimatedTotalChars = estimatedChars,
         )
     }
@@ -83,6 +93,8 @@ private class DatabaseAudiobookChapterSource(
     private val contentMode: AudiobookContentMode,
     private val sourceLang: String,
     private val targetLang: String,
+    private val userRegexRules: List<RegexRule>,
+    private val sentenceSplittingEnabled: Boolean,
     override val estimatedTotalChars: Long,
 ) : AudiobookChapterSource {
 
@@ -105,7 +117,9 @@ private class DatabaseAudiobookChapterSource(
     private suspend fun loadOriginal(chapter: Chapter): AudiobookChapterData? {
         val body = database.chapterBodyDao().get(chapter.url)?.body
             ?: return null
-        val paragraphs = splitChapterIntoParagraphs(stripHtml(body))
+        // Идентично живому чтению: тот же HTML->абзацы пайплайн (общий в core),
+        // включая пользовательские regex-правила и разбиение предложений.
+        val paragraphs = htmlToTtsParagraphs(body, userRegexRules, sentenceSplittingEnabled)
         if (paragraphs.isEmpty()) {
             Timber.w("ChapterContentProvider: chapter %s has no text, skipping", chapter.url)
             return null
@@ -123,7 +137,16 @@ private class DatabaseAudiobookChapterSource(
             .getTranslations(chapter.url, sourceLang, targetLang)
             ?.takeIf { it.translatedParagraphs.isNotBlank() }
             ?: return null
-        val paragraphs = decodeTranslatedParagraphs(translation.translatedParagraphs)
+        // Ридер применяет те же regex-правила к переведённому тексту перед
+        // озвучкой, а при включённом разбиении предложений ещё и режет абзацы
+        // тем же [SentenceSplitter]. Экспорт повторяет обе ступени.
+        val withRegex = decodeTranslatedParagraphs(translation.translatedParagraphs)
+            .map { applyUserRegexRules(it, userRegexRules) }
+        val paragraphs = if (sentenceSplittingEnabled) {
+            withRegex.flatMap { SentenceSplitter.splitParagraph(it) }
+        } else {
+            withRegex
+        }
         if (paragraphs.isEmpty()) {
             Timber.w("ChapterContentProvider: chapter %s translation is empty, skipping", chapter.url)
             return null
@@ -150,32 +173,3 @@ private fun decodeTranslatedParagraphs(json: String): List<String> = try {
     Timber.e(e, "ChapterContentProvider: cannot decode translated paragraphs")
     emptyList()
 }
-
-/**
- * Убирает HTML-разметку из тела главы.
- *
- * Абзацные границы задаются тегами `<p>`/`<br>`, иначе текст склеится
- * в одну строку и таймлайн абзацев окажется бессмысленным.
- */
-private fun stripHtml(html: String): String {
-    if (html.isBlank()) return html
-    val withBreaks = html
-        .replace(Regex("(?i)<br\\s*/?>"), "\n")
-        .replace(Regex("(?i)</p\\s*>"), "\n\n")
-        .replace(Regex("(?i)<p\\s*[^>]*>"), "\n\n")
-        .replace(Regex("(?i)</div\\s*>"), "\n\n")
-        .replace(Regex("(?i)<br\\s*/?>"), "\n")
-    val text = TAG_REGEX.replace(withBreaks, "")
-    return unescapeEntities(text)
-}
-
-private fun unescapeEntities(text: String): String = text
-    .replace("&nbsp;", " ")
-    .replace("&amp;", "&")
-    .replace("&lt;", "<")
-    .replace("&gt;", ">")
-    .replace("&quot;", "\"")
-    .replace("&#39;", "'")
-    .replace("&apos;", "'")
-
-private val TAG_REGEX = Regex("<[^>]+>")

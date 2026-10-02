@@ -1,5 +1,7 @@
 package my.noveldokusha.features.reader.tools
 
+import my.noveldokusha.core.text.SentenceSplitter
+
 /**
  * Joint split of a paragraph pair; both sides split by SentenceSplitter, grouped to equal count.
  *
