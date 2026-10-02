@@ -516,12 +516,13 @@ class VisualSourceProcessor(private val context: Context) {
 
     private companion object {
         const val MIME_VIDEO = "video/avc"
-        // Лёгкие audiobook-настройки: небольшое разрешение, скромный битрейт,
-        // низкий FPS. Цель — маленький файл и минимум нагрева.
-        const val TARGET_WIDTH = 640
-        const val TARGET_HEIGHT = 360
+        // Выход всегда в YouTube-формате 16:9 (1280x720 = 720p HD).
+        // Низкий FPS и умеренный битрейт: зацикленный визуал audiobook'а не
+        // требует много движения, а кадры переиспользуются как готовые сэмплы.
+        const val TARGET_WIDTH = 1280
+        const val TARGET_HEIGHT = 720
         const val TARGET_FPS = 4
-        const val TARGET_BITRATE = 400_000
+        const val TARGET_BITRATE = 1_200_000
         const val I_FRAME_INTERVAL_SECONDS = 1
         const val TIMEOUT_US = 10_000L
         const val DEFAULT_SEGMENT_MS = 2_000L

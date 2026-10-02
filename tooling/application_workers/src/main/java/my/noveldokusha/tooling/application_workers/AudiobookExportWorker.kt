@@ -20,8 +20,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import my.noveldokusha.core.AppFileResolver
 import my.noveldokusha.core.appPreferences.AppPreferences
+import my.noveldokusha.core.isCoverValid
+import my.noveldokusha.core.isHttpsUrl
 import my.noveldokusha.coreui.states.NotificationsCenter
+import my.noveldokusha.data.CoverRepository
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
@@ -55,6 +59,8 @@ class AudiobookExportWorker(
         fun appDatabase(): AppDatabase
         fun appPreferences(): AppPreferences
         fun notificationsCenter(): NotificationsCenter
+        fun appFileResolver(): AppFileResolver
+        fun coverRepository(): CoverRepository
     }
 
     companion object {
@@ -118,10 +124,40 @@ class AudiobookExportWorker(
         )
         val appDatabase = entryPoint.appDatabase()
         val notificationsCenter = entryPoint.notificationsCenter()
+        val appFileResolver = entryPoint.appFileResolver()
+        val coverRepository = entryPoint.coverRepository()
 
-        val request = readRequest() ?: return Result.failure()
-        val notification = AudiobookExportNotification(request.bookTitle, context, notificationsCenter)
+        val storedRequest = readRequest() ?: return Result.failure()
+        val notification =
+            AudiobookExportNotification(storedRequest.bookTitle, context, notificationsCenter)
         val storage = SafAudiobookStorage(context)
+
+        // MP4 без выбранного визуала: подставляем обложку книги.
+        val request = if (
+            storedRequest.format == AudiobookFormat.MP4 &&
+            storedRequest.visualUri.isNullOrBlank()
+        ) {
+            val coverUri = withContext(Dispatchers.IO) {
+                resolveCoverImageUri(
+                    appDatabase = appDatabase,
+                    appFileResolver = appFileResolver,
+                    coverRepository = coverRepository,
+                    bookUrl = storedRequest.bookUrl,
+                )
+            }
+            if (coverUri == null) {
+                // Обложки нет — собрать визуальный ряд не из чего.
+                notification.showError(context.getString(StringsR.string.audiobook_export_mp4_needs_visual))
+                return Result.failure()
+            }
+            storedRequest.copy(
+                visualUri = coverUri.toString(),
+                visualSource = VisualSource.IMAGE,
+                visualSourceName = "cover",
+            )
+        } else {
+            storedRequest
+        }
 
         // Директория проверяется до тяжёлого синтеза: недоступный SAF не должен
         // стоить пользователю минут TTS.
@@ -239,6 +275,33 @@ class AudiobookExportWorker(
             throw e
         }
         return CopiedFiles(audioDocument.uri, jsonDocument.uri)
+    }
+
+    /**
+     * Локальный `file://`-Uri обложки книги для визуала MP4.
+     *
+     * Приоритет — уже скачанный кэш-файл; если его нет, обложка докачивается
+     * через [CoverRepository]. Возвращает null, если обложки нет вовсе.
+     */
+    private suspend fun resolveCoverImageUri(
+        appDatabase: AppDatabase,
+        appFileResolver: AppFileResolver,
+        coverRepository: CoverRepository,
+        bookUrl: String,
+    ): Uri? = withContext(Dispatchers.IO) {
+        val coverFile = appFileResolver.getStorageBookCoverImageFile(
+            appFileResolver.getLocalBookFolderName(bookUrl),
+        )
+        if (isCoverValid(coverFile)) return@withContext Uri.fromFile(coverFile)
+
+        val remoteUrl = appDatabase.libraryDao().get(bookUrl)
+            ?.coverImageUrl
+            ?.takeIf { it.isHttpsUrl }
+        if (remoteUrl != null) {
+            coverRepository.ensureCover(coverFile, remoteUrl)
+            if (isCoverValid(coverFile)) return@withContext Uri.fromFile(coverFile)
+        }
+        null
     }
 
     private fun readRequest(): AudiobookExportRequest? {

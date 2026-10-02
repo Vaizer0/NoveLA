@@ -272,7 +272,7 @@ internal fun AudiobookExportDialog(
                 }
                 FilledTonalButton(
                     onClick = {
-                        if (format == AudiobookFormat.MP4 && visualUri == null) return@FilledTonalButton
+                        // Визуал не обязателен: без выбора для MP4 берётся обложка книги.
                         val lastPosition = state.totalChapters.coerceAtLeast(1) - 1
                         val start = (startText.toIntOrNull() ?: 1).coerceIn(1, state.totalChapters.coerceAtLeast(1)) - 1
                         val end = (endText.toIntOrNull() ?: (lastPosition + 1))

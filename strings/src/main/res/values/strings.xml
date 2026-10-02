@@ -849,7 +849,7 @@
     <string name="audiobook_export_range_value">%1$d – %2$d</string>
     <string name="audiobook_export_visual">Visual source</string>
     <string name="audiobook_export_choose_visual">Choose image, video or GIF</string>
-    <string name="audiobook_export_visual_none">Not selected</string>
+    <string name="audiobook_export_visual_none">Novel cover (default)</string>
     <string name="audiobook_export_folder">Folder</string>
     <string name="audiobook_export_choose_folder">Choose folder</string>
     <string name="audiobook_export_no_folder">No folder selected</string>
