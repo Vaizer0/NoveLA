@@ -187,9 +187,13 @@ class TtsAudioSynthesizer(
         val instance = tts ?: throw TtsSynthesisException("TTS engine is not initialized")
         outputFile.parentFile?.mkdirs()
 
+        // Локальные ссылки: на член класса smart-cast внутри лямбды не
+        // распространяется, а `runCatching` — именно лямбда.
+        val pcmCache = cache
+
         // 1. Кэш: одинаковый текст + движок + голос + темп + тон обязаны
         //    давать то же аудио, иначе WAV/MP4 одного текста разойдутся.
-        val cacheKey = cache?.let {
+        val cacheKey = pcmCache?.let {
             TtsSynthesisCache.key(
                 enginePackage = resolvedEnginePackage,
                 voiceId = resolvedVoiceId,
@@ -198,8 +202,8 @@ class TtsAudioSynthesizer(
                 text = text,
             )
         }
-        if (cache != null && cacheKey != null) {
-            val cached = cache.get(cacheKey)
+        if (pcmCache != null && cacheKey != null) {
+            val cached = pcmCache.get(cacheKey)
             if (cached != null) {
                 val segment = runCatching { WavAudio.readSegment(cached) }.getOrNull()
                 if (segment != null && (expected == null || expected.matches(segment))) {
@@ -237,8 +241,8 @@ class TtsAudioSynthesizer(
                     AudiobookExportDebug.log("synthesized file is unreadable", it)
                     throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
                 }
-                if (cache != null && cacheKey != null) {
-                    runCatching { cache.put(cacheKey, outputFile) }
+                if (pcmCache != null && cacheKey != null) {
+                    runCatching { pcmCache.put(cacheKey, outputFile) }
                 }
                 AudiobookExportDebug.log(
                     "TTS ok: chars=${text.length} bytes=${outputFile.length()} attempt=${attempt + 1}",
