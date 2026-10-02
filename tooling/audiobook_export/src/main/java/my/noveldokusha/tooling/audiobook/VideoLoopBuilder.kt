@@ -67,7 +67,7 @@ class VideoLoopBuilder {
             val videoTrack = addVideoTrack(visualSegmentFile, muxer)
             muxer.start()
             started = true
-            writeAudioSamples(muxer, audioTrack, readAudioSamples(encodedAudioFile))
+            writeAudioSamples(muxer, audioTrack, encodedAudioFile)
             writeLoopedVideo(visualSegmentFile, muxer, videoTrack, audioDurationMs, onProgress)
         } catch (e: Exception) {
             runCatching { muxer.release() }
@@ -128,15 +128,19 @@ class VideoLoopBuilder {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(segmentFile.absolutePath)
-            extractor.selectTrack(videoTrackIndexOf(extractor, segmentFile))
-            val frameRate = maxOf(1, extractor.getTrackFormat(extractor.getSampleTrackIndex()).frameRateGuess())
+            val videoTrackIndex = videoTrackIndexOf(extractor, segmentFile)
+            extractor.selectTrack(videoTrackIndex)
+            val frameRate = maxOf(1, extractor.getTrackFormat(videoTrackIndex).frameRateGuess())
 
             val segmentSamples = readVideoSamples(extractor)
             if (segmentSamples.isEmpty()) throw IOException("visual segment has no samples")
 
+            val frameDurationUs = 1_000_000L / frameRate
             val lastSample = segmentSamples.last()
-            val segmentDurationUs = lastSample.presentationTimeUs +
-                lastSample.size * 1_000_000L / frameRate
+            // Длительность сегмента = PTS последнего кадра + длительность кадра.
+            // Раньше здесь к PTS прибавлялся размер кадра в байтах — формула
+            // была размерно неверной и давала произвольный результат.
+            val segmentDurationUs = lastSample.presentationTimeUs + frameDurationUs
             if (segmentDurationUs <= 0L) throw IOException("visual segment has zero duration")
 
             val audioUs = audioDurationMs * 1000L
@@ -210,57 +214,37 @@ class VideoLoopBuilder {
         return samples
     }
 
-    private fun readAudioSamples(aacFile: File): List<AudioSample> {
-        val samples = mutableListOf<AudioSample>()
+    /**
+     * Потоково переносит AAC-сэмплы из закодированного файла в муксер.
+     *
+     * Сэмплы не накапливаются в памяти: в отличие от списка, такое чтение
+     * не зависит от длительности книги (несколько часов аудио — это сотни
+     * мегабайт, которые незачем держать в куче).
+     */
+    private fun writeAudioSamples(muxer: MediaMuxer, trackIndex: Int, aacFile: File) {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(aacFile.absolutePath)
-            val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
+            val sourceTrack = (0 until extractor.trackCount).firstOrNull { index ->
                 extractor.getTrackFormat(index)
                     .getString(MediaFormat.KEY_MIME)
                     ?.startsWith("audio/") == true
-            } ?: return emptyList()
-            extractor.selectTrack(trackIndex)
+            } ?: throw IOException("encoded audio has no audio track")
+            extractor.selectTrack(sourceTrack)
+
             val buffer = java.nio.ByteBuffer.allocate(SAMPLE_BUFFER_SIZE)
+            val bufferInfo = MediaCodec.BufferInfo()
             while (true) {
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
-                val duplicated = buffer.duplicate()
-                samples += AudioSample(
-                    buffer = java.nio.ByteBuffer.wrap(
-                        java.util.Arrays.copyOfRange(duplicated.array(), duplicated.arrayOffset(), duplicated.arrayOffset() + size),
-                    ),
-                    size = size,
-                    presentationTimeUs = extractor.sampleTime,
-                    flags = extractor.sampleFlags,
-                )
+                buffer.position(0)
+                buffer.limit(size)
+                bufferInfo.set(0, size, extractor.sampleTime, extractor.sampleFlags)
+                muxer.writeSampleData(trackIndex, buffer, bufferInfo)
                 extractor.advance()
             }
         } finally {
             runCatching { extractor.release() }
-        }
-        return samples
-    }
-
-    private class AudioSample(
-        val buffer: java.nio.ByteBuffer,
-        val size: Int,
-        val presentationTimeUs: Long,
-        val flags: Int,
-    )
-
-    private fun writeAudioSamples(
-        muxer: MediaMuxer,
-        trackIndex: Int,
-        samples: List<AudioSample>,
-    ) {
-        val bufferInfo = MediaCodec.BufferInfo()
-        for (sample in samples) {
-            bufferInfo.offset = 0
-            bufferInfo.size = sample.size
-            bufferInfo.presentationTimeUs = sample.presentationTimeUs
-            bufferInfo.flags = sample.flags
-            muxer.writeSampleData(trackIndex, sample.buffer, bufferInfo)
         }
     }
 

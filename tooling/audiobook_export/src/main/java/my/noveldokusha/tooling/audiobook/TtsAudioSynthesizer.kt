@@ -15,7 +15,12 @@ import timber.log.Timber
 class TtsSynthesisException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /** Формат аудио, сообщённый движком через `onBeginSynthesis`. */
-data class SynthFormat(val sampleRateHz: Int, val channels: Int)
+data class SynthFormat(
+    val sampleRateHz: Int,
+    val channels: Int,
+    /** `AudioFormat.ENCODING_*`; 0 — движок не сообщил (считаем PCM 16 бит). */
+    val encoding: Int = 0,
+)
 
 /**
  * Выделенный движок синтеза для экспорта аудиокниг.
@@ -202,7 +207,7 @@ class TtsAudioSynthesizer(
                 // Движок сообщает реальный формат синтеза. Если он «прыгнул»
                 // посреди книги, склеить сегменты будет нельзя.
                 if (sampleRateInHz > 0 && channelCount > 0) {
-                    reportedFormat = SynthFormat(sampleRateInHz, channelCount)
+                    reportedFormat = SynthFormat(sampleRateInHz, channelCount, audioFormat)
                     AudiobookExportDebug.log(
                         "onBeginSynthesis ${sampleRateInHz}Hz/${channelCount}ch enc=$audioFormat",
                     )

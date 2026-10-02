@@ -69,12 +69,16 @@ class VisualSourceProcessor(private val context: Context) {
         val bitmap = decodeScaledBitmap(uri, TARGET_WIDTH, TARGET_HEIGHT)
             ?: throw VisualProcessingException("Unable to decode image: $sourceName")
         val targetFrameCount = frameCountFor(MIN_SEGMENT_MS)
-        return encodeBitmapSequence(
-            bitmaps = List(targetFrameCount) { bitmap },
-            source = VisualSource.IMAGE,
-            sourceName = sourceName,
-            target = target,
-        )
+        return try {
+            encodeBitmapSequence(
+                bitmaps = List(targetFrameCount) { bitmap },
+                source = VisualSource.IMAGE,
+                sourceName = sourceName,
+                target = target,
+            )
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     /**
@@ -89,7 +93,11 @@ class VisualSourceProcessor(private val context: Context) {
             throw VisualProcessingException("Unable to decode video frames: $sourceName")
         }
         val cycle = List(frames.size) { frames[it % frames.size] }
-        return encodeBitmapSequence(cycle, VisualSource.VIDEO, sourceName, target)
+        return try {
+            encodeBitmapSequence(cycle, VisualSource.VIDEO, sourceName, target)
+        } finally {
+            frames.forEach { it.recycle() }
+        }
     }
 
     /** GIF: декодируется один раз, затем его кадры зацикливаются в сегменте. */
@@ -98,7 +106,11 @@ class VisualSourceProcessor(private val context: Context) {
         if (frames.isEmpty()) {
             throw VisualProcessingException("Unable to decode GIF frames: $sourceName")
         }
-        return encodeBitmapSequence(frames, VisualSource.GIF, sourceName, target)
+        return try {
+            encodeBitmapSequence(frames, VisualSource.GIF, sourceName, target)
+        } finally {
+            frames.forEach { it.recycle() }
+        }
     }
 
     /** Число кадров в сегменте для заданной длительности. */
@@ -139,12 +151,61 @@ class VisualSourceProcessor(private val context: Context) {
 
             // Кадры рисуются на surface входного энкодера: это ровно одна
             // отрисовка на кадр сегмента, а не на весь audiobook.
-            bitmaps.forEach { bitmap -> drawBitmapToSurface(bitmap, surface) }
-            drainEncoder(codec, outputMuxer, endOfStream = true) { format ->
-                val track = outputMuxer.addTrack(format)
-                outputMuxer.start()
-                muxerStarted = true
-                track
+            //
+            // Пауза между кадрами выдерживает реальный интервал: метки времени
+            // surface-входа берутся из момента post, поэтому без паузы кадры
+            // получили бы почти одинаковые PTS и сегмент оказался бы короче
+            // задуманного — а зацикливание выродилось бы в миллионы итераций.
+            //
+            // Выходные буферы дренируются после каждого кадра: очередь входа
+            // энкодера ограничена, и без этого unlockCanvasAndPost завис бы на
+            // сегментах длиннее нескольких кадров.
+            val bufferInfo = MediaCodec.BufferInfo()
+            var trackIndex = -1
+            fun drainOutput(): Boolean {
+                while (true) {
+                    when (val status = codec.dequeueOutputBuffer(bufferInfo, 0L)) {
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> return false
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            if (trackIndex < 0) {
+                                trackIndex = outputMuxer.addTrack(codec.outputFormat)
+                                outputMuxer.start()
+                                muxerStarted = true
+                            }
+                        }
+                        else -> if (status >= 0) {
+                            val encoded = codec.getOutputBuffer(status)
+                            val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                            val isEnd = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                            if (encoded != null && bufferInfo.size > 0 && !isConfig && muxerStarted) {
+                                encoded.position(bufferInfo.offset)
+                                encoded.limit(bufferInfo.offset + bufferInfo.size)
+                                outputMuxer.writeSampleData(trackIndex, encoded, bufferInfo)
+                            }
+                            codec.releaseOutputBuffer(status, false)
+                            if (isEnd) return true
+                        }
+                    }
+                }
+            }
+
+            bitmaps.forEachIndexed { index, bitmap ->
+                drawBitmapToSurface(bitmap, surface)
+                drainOutput()
+                if (index != bitmaps.lastIndex) Thread.sleep(FRAME_INTERVAL_MS)
+            }
+            codec.signalEndOfInputStream()
+            var reachedEos = false
+            val deadline = System.currentTimeMillis() + EOS_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                if (drainOutput()) {
+                    reachedEos = true
+                    break
+                }
+                Thread.sleep(EOS_POLL_MS)
+            }
+            if (!reachedEos) {
+                throw VisualProcessingException("Encoder did not finish the visual segment")
             }
 
             if (!muxerStarted) throw VisualProcessingException("Encoder produced no samples")
@@ -201,51 +262,6 @@ class VisualSourceProcessor(private val context: Context) {
             Rect(0, top, bitmap.width, top + destHeight)
         }
         canvas.drawBitmap(bitmap, null, dest, null)
-    }
-
-    /**
-     * Дренирует энкодер, добавляя дорожку в муксер по её выходному формату.
-     *
-     * [onOutputFormat] вызывается один раз, когда формат дорожки известен, и
-     * должен вернуть индекс добавленной дорожки — писать сэмплы можно только
-     * в неё, а не в предположительный индекс 0.
-     */
-    private inline fun drainEncoder(
-        codec: MediaCodec,
-        muxer: MediaMuxer,
-        endOfStream: Boolean,
-        onOutputFormat: (MediaFormat) -> Int,
-    ) {
-        val bufferInfo = MediaCodec.BufferInfo()
-        var muxerStarted = false
-        var currentTrack = -1
-        var signalled = false
-        while (true) {
-            if (endOfStream && !signalled) {
-                codec.signalEndOfInputStream()
-                signalled = true
-            }
-            val status = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-            when {
-                status == MediaCodec.INFO_TRY_AGAIN_LATER -> if (signalled && muxerStarted) return else Unit
-                status == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    currentTrack = onOutputFormat(codec.outputFormat)
-                    muxerStarted = true
-                }
-                status >= 0 -> {
-                    val encoded = codec.getOutputBuffer(status)
-                    val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                    val isEndOfStream = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    if (encoded != null && bufferInfo.size > 0 && !isConfig && muxerStarted) {
-                        encoded.position(bufferInfo.offset)
-                        encoded.limit(bufferInfo.offset + bufferInfo.size)
-                        muxer.writeSampleData(currentTrack, encoded, bufferInfo)
-                    }
-                    codec.releaseOutputBuffer(status, false)
-                    if (isEndOfStream) return
-                }
-            }
-        }
     }
 
     /** Декодирует картинку сразу в целевом разрешении — полный размер не нужен. */
@@ -359,8 +375,11 @@ class VisualSourceProcessor(private val context: Context) {
                                 cropBottom,
                             )
                             if (bitmap != null) {
+                                // scaleCenterCrop сам утилизирует исходный
+                                // Bitmap, если создал новый; если размеры уже
+                                // совпадали — возвращает тот же объект, который
+                                // обязан остаться живым в [frames].
                                 frames += scaleCenterCrop(bitmap, TARGET_WIDTH, TARGET_HEIGHT)
-                                bitmap.recycle()
                             }
                         }
                         codec.releaseOutputBuffer(outputIndex, false)
@@ -465,7 +484,7 @@ class VisualSourceProcessor(private val context: Context) {
             val frame = Bitmap.createBitmap(sourceWidth, sourceHeight, Bitmap.Config.ARGB_8888)
             @Suppress("DEPRECATION")
             movie.draw(Canvas(frame), 0f, 0f)
-            frames += scaleCenterCrop(frame, TARGET_WIDTH, TARGET_HEIGHT).also { frame.recycle() }
+            frames += scaleCenterCrop(frame, TARGET_WIDTH, TARGET_HEIGHT)
         }
         return frames
     }
@@ -505,7 +524,7 @@ class VisualSourceProcessor(private val context: Context) {
             val index = (0 until extractor.trackCount).firstOrNull { i ->
                 extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
             } ?: return 0L
-            extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION)
+            extractor.getTrackFormat(index).getLong(MediaFormat.KEY_DURATION) / 1000L
         } catch (e: Exception) {
             Timber.w(e, "VisualSourceProcessor: duration probe failed")
             0L
@@ -522,9 +541,12 @@ class VisualSourceProcessor(private val context: Context) {
         const val TARGET_WIDTH = 1280
         const val TARGET_HEIGHT = 720
         const val TARGET_FPS = 4
+        const val FRAME_INTERVAL_MS = 1000L / TARGET_FPS
         const val TARGET_BITRATE = 1_200_000
         const val I_FRAME_INTERVAL_SECONDS = 1
         const val TIMEOUT_US = 10_000L
+        const val EOS_TIMEOUT_MS = 30_000L
+        const val EOS_POLL_MS = 5L
         const val DEFAULT_SEGMENT_MS = 2_000L
         const val MIN_SEGMENT_MS = 1_000L
         const val MAX_SEGMENT_MS = 5_000L

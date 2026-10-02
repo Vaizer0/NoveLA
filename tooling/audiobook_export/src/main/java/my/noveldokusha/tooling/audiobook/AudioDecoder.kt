@@ -23,6 +23,7 @@ object AudioDecoder {
 
     private const val TIMEOUT_US = 20_000L
     private const val WAV_HEADER_SIZE = 44L
+    private const val COPY_BUFFER = 256 * 1024
 
     /**
      * Гарантирует, что [file] — корректный 16-битный PCM WAV.
@@ -192,15 +193,122 @@ object AudioDecoder {
         val sampleRate = fallback?.sampleRateHz ?: return false
         val channels = fallback.channels
         if (sampleRate <= 0 || channels <= 0) return false
-        val dataBytes = input.length()
-        if (dataBytes <= 0L) return false
-        writeWavHeader(output, dataBytes, sampleRate, channels)
+        if (input.length() <= 0L) return false
+        // Заведомо сжатый контейнер нельзя трактовать как сырой PCM: иначе
+        // получится «валидный» WAV из шума.
+        if (looksLikeContainer(input)) {
+            AudiobookExportDebug.log("AudioDecoder: refusing to wrap container-like bytes as raw PCM")
+            return false
+        }
+
+        return when (fallback.encoding) {
+            AudioFormat.ENCODING_PCM_16BIT, 0 -> wrapRawPcm16(input, output, sampleRate, channels)
+            AudioFormat.ENCODING_PCM_8BIT -> wrapRawPcm8Bit(input, output, sampleRate, channels)
+            AudioFormat.ENCODING_PCM_FLOAT -> wrapRawPcmFloat(input, output, sampleRate, channels)
+            else -> {
+                AudiobookExportDebug.log("AudioDecoder: unsupported raw PCM encoding ${fallback.encoding}")
+                false
+            }
+        }
+    }
+
+    private fun wrapRawPcm16(input: File, output: File, sampleRate: Int, channels: Int): Boolean {
+        writeWavHeader(output, input.length(), sampleRate, channels)
         appendFile(output, input)
         AudiobookExportDebug.log(
-            "AudioDecoder: wrapped raw PCM as ${sampleRate}Hz/${channels}ch, ${dataBytes}B",
+            "AudioDecoder: wrapped raw PCM as ${sampleRate}Hz/${channels}ch, ${input.length()}B",
         )
         return true
     }
+
+    private fun wrapRawPcm8Bit(input: File, output: File, sampleRate: Int, channels: Int): Boolean {
+        val dataBytes = input.length() * 2L
+        if (dataBytes <= 0L) return false
+        writeWavHeader(output, dataBytes, sampleRate, channels)
+        RandomAccessFile(output, "rw").use { out ->
+            out.seek(WAV_HEADER_SIZE)
+            input.inputStream().buffered(COPY_BUFFER).use { source ->
+                val inBuf = ByteArray(COPY_BUFFER)
+                val outBuf = ByteArray(COPY_BUFFER * 2)
+                while (true) {
+                    val read = readFullyUpTo(source, inBuf)
+                    if (read <= 0) break
+                    var offset = 0
+                    for (i in 0 until read) {
+                        val centered = (inBuf[i].toInt() and 0xFF) - 128
+                        val sample = (centered shl 8).toShort().toInt()
+                        outBuf[offset++] = (sample and 0xFF).toByte()
+                        outBuf[offset++] = ((sample shr 8) and 0xFF).toByte()
+                    }
+                    out.write(outBuf, 0, offset)
+                }
+            }
+        }
+        AudiobookExportDebug.log(
+            "AudioDecoder: converted 8-bit PCM to ${sampleRate}Hz/${channels}ch, ${dataBytes}B",
+        )
+        return true
+    }
+
+    private fun wrapRawPcmFloat(input: File, output: File, sampleRate: Int, channels: Int): Boolean {
+        val dataBytes = (input.length() / 4L) * 2L
+        if (dataBytes <= 0L) return false
+        writeWavHeader(output, dataBytes, sampleRate, channels)
+        RandomAccessFile(output, "rw").use { out ->
+            out.seek(WAV_HEADER_SIZE)
+            input.inputStream().buffered(COPY_BUFFER).use { source ->
+                val inBuf = ByteArray(COPY_BUFFER)
+                val outBuf = ByteArray(COPY_BUFFER / 2)
+                while (true) {
+                    val read = readFullyUpTo(source, inBuf)
+                    if (read < 4) break
+                    val samples = read / 4
+                    val floats = ByteBuffer.wrap(inBuf, 0, samples * 4).order(ByteOrder.LITTLE_ENDIAN)
+                    var offset = 0
+                    repeat(samples) {
+                        val sample = (floats.getFloat() * 32767f)
+                            .coerceIn(-32768f, 32767f).toInt().toShort().toInt()
+                        outBuf[offset++] = (sample and 0xFF).toByte()
+                        outBuf[offset++] = ((sample shr 8) and 0xFF).toByte()
+                    }
+                    out.write(outBuf, 0, offset)
+                }
+            }
+        }
+        AudiobookExportDebug.log(
+            "AudioDecoder: converted float PCM to ${sampleRate}Hz/${channels}ch, ${dataBytes}B",
+        )
+        return true
+    }
+
+    /** Заполняет [buffer] полностью, пока поток не закончится; возвращает число байт. */
+    private fun readFullyUpTo(source: java.io.InputStream, buffer: ByteArray): Int {
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = source.read(buffer, offset, buffer.size - offset)
+            if (read < 0) break
+            offset += read
+        }
+        return offset
+    }
+
+    /** Первые байты похожи на сжатый контейнер (MP3/AAC/OGG/FLAC/MP4/ID3). */
+    private fun looksLikeContainer(file: File): Boolean = runCatching {
+        if (file.length() < 4L) return false
+        RandomAccessFile(file, "r").use { raf ->
+            val head = ByteArray(12)
+            val read = raf.read(head)
+            if (read < 4) return false
+            val tag = String(head, 0, 4, Charsets.US_ASCII)
+            when {
+                tag == "OggS" || tag == "fLaC" || tag == "ID3" -> true
+                read >= 12 && String(head, 4, 4, Charsets.US_ASCII) == "ftyp" -> true
+                // MPEG audio / ADTS sync word.
+                (head[0].toInt() and 0xFF) == 0xFF && (head[1].toInt() and 0xE0) == 0xE0 -> true
+                else -> false
+            }
+        }
+    }.getOrDefault(false)
 
     private fun writeWavHeader(output: File, dataBytes: Long, sampleRate: Int, channels: Int) {
         val bitsPerSample = 16

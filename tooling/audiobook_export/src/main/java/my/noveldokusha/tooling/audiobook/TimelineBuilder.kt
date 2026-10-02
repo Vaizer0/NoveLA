@@ -168,6 +168,7 @@ fun validateTimeline(
         }
 
         var previousParagraphEnd = chapter.intro.span.endMs
+        var previousParagraphIndex = -1
         chapter.paragraphs.forEachIndexed { pIndex, paragraph ->
             val label = "chapter ${chapter.chapterIndex} paragraph $pIndex"
             requireSpanPositive(label, paragraph.span)
@@ -183,9 +184,16 @@ fun validateTimeline(
             if (paragraph.span.endMs > chapter.span.endMs) {
                 throw TimelineValidationException("$label ends after its chapter")
             }
-            if (paragraph.paragraphIndex != pIndex) {
-                throw TimelineValidationException("$label has index ${paragraph.paragraphIndex}")
+            // Индексы идут по исходному списку абзацев и могут иметь пропуски:
+            // абзац, ставший пустым после очистки, не озвучивается. Важна
+            // только строгая монотонность, а не непрерывность.
+            if (paragraph.paragraphIndex <= previousParagraphIndex) {
+                throw TimelineValidationException(
+                    "$label has non-increasing index ${paragraph.paragraphIndex} " +
+                        "after $previousParagraphIndex",
+                )
             }
+            previousParagraphIndex = paragraph.paragraphIndex
             previousParagraphEnd = paragraph.span.endMs
         }
         if (previousParagraphEnd != chapter.span.endMs) {

@@ -70,20 +70,6 @@ class AudiobookExporter(private val context: Context) {
 
             coroutineContext.ensureActive()
 
-            onProgress(
-                AudiobookExportProgress(
-                    stage = AudiobookStage.FINALIZING,
-                    currentChapter = chapters.size,
-                    totalChapters = chapters.size,
-                    chapterTitle = "",
-                    currentParagraph = 0,
-                    paragraphsInChapter = 0,
-                    percent = 96,
-                    generatedAudioMs = WavAudio.durationMs(mergedWav),
-                    estimatedRemainingMs = 0L,
-                ),
-            )
-
             val audioDurationMs = WavAudio.durationMs(mergedWav)
             validateTimeline(timeline, audioDurationMs)
 
@@ -98,7 +84,7 @@ class AudiobookExporter(private val context: Context) {
                             chapterTitle = "",
                             currentParagraph = 0,
                             paragraphsInChapter = 0,
-                            percent = 90,
+                            percent = 88,
                             generatedAudioMs = audioDurationMs,
                             estimatedRemainingMs = null,
                         ),
@@ -126,7 +112,7 @@ class AudiobookExporter(private val context: Context) {
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
-                    percent = 98,
+                    percent = 95,
                     generatedAudioMs = audioDurationMs,
                     estimatedRemainingMs = 0L,
                 ),
@@ -154,6 +140,20 @@ class AudiobookExporter(private val context: Context) {
             )
 
             coroutineContext.ensureActive()
+
+            onProgress(
+                AudiobookExportProgress(
+                    stage = AudiobookStage.FINALIZING,
+                    currentChapter = chapters.size,
+                    totalChapters = chapters.size,
+                    chapterTitle = "",
+                    currentParagraph = 0,
+                    paragraphsInChapter = 0,
+                    percent = 98,
+                    generatedAudioMs = audioDurationMs,
+                    estimatedRemainingMs = 0L,
+                ),
+            )
 
             // Промежуточный WAV живёт во временной папке, поэтому готовый
             // результат копируется в outputDir: для WAV это сам merged.wav,
@@ -227,6 +227,18 @@ class AudiobookExporter(private val context: Context) {
         var processedChars = 0
         val startedAt = System.currentTimeMillis()
 
+        // Длительность считается по накопленным кадрам, а не суммой
+        // независимо округлённых миллисекунд: тогда сумма таймлайна точно
+        // совпадает с длительностью смёрженного WAV даже на тысячах порций.
+        var framesWritten = 0L
+        fun advanceFrames(segment: PcmSegment): Long {
+            val rate = mergedSampleRate ?: segment.sampleRateHz
+            val startMs = framesWritten * 1000L / rate
+            framesWritten += segment.frameCount
+            val endMs = framesWritten * 1000L / rate
+            return endMs - startMs
+        }
+
         val synthesizer = TtsAudioSynthesizer(
             context = context,
             enginePackage = request.enginePackage,
@@ -257,7 +269,8 @@ class AudiobookExporter(private val context: Context) {
                 val introText = buildChapterIntro(request.bookTitle, chapterTitle)
                 if (introText.isNotBlank()) {
                     val introFile = File(tempDir, "ch${chapterOffset}_intro.wav")
-                    val introDuration = synthesizeChunk(synthesizer, introText, introFile, chapterOffset, chapterTitle)
+                    val introSegment = synthesizeChunk(synthesizer, introText, introFile, chapterOffset, chapterTitle)
+                    val introDuration = advanceFrames(introSegment)
                     segmentHandle.append(introFile, introDuration)
                     timeline.endIntro(introDuration)
                     introFile.delete()
@@ -276,7 +289,8 @@ class AudiobookExporter(private val context: Context) {
                     var paragraphDurationMs = 0L
                     plan.chunks.forEachIndexed { chunkIndex, chunk ->
                         val chunkFile = File(tempDir, "ch${chapterOffset}_p${plan.paragraphIndex}_c$chunkIndex.wav")
-                        val chunkDuration = synthesizeChunk(synthesizer, chunk, chunkFile, chapterOffset, chapterTitle)
+                        val chunkSegment = synthesizeChunk(synthesizer, chunk, chunkFile, chapterOffset, chapterTitle)
+                        val chunkDuration = advanceFrames(chunkSegment)
                         segmentHandle.append(chunkFile, chunkDuration)
                         paragraphDurationMs += chunkDuration
                         // Сегмент удаляется сразу после присоединения.
@@ -338,30 +352,26 @@ class AudiobookExporter(private val context: Context) {
         return timeline.build()
     }
 
-    /** Синтезирует одну порцию и возвращает её фактическую длительность. */
+    /** Синтезирует одну порцию и возвращает её разобранный PCM-сегмент. */
     private suspend fun synthesizeChunk(
         synthesizer: TtsAudioSynthesizer,
         text: String,
         target: File,
         chapterOffset: Int,
         chapterTitle: String,
-    ): Long = try {
+    ): PcmSegment = try {
         val segment = synthesizer.synthesizeToFile(text, target)
-        val format = synthesizer.currentFormat()
-        if (format != null) {
-            if (mergedSampleRate == null) {
-                mergedSampleRate = segment.sampleRateHz
-                mergedChannels = segment.channels
-            }
+        if (mergedSampleRate == null) {
+            mergedSampleRate = segment.sampleRateHz
+            mergedChannels = segment.channels
         }
-        val duration = segment.durationMs()
-        if (duration <= 0L) {
+        if (segment.frameCount <= 0L) {
             throw AudiobookChapterFailedException(
                 chapterOffset + 1, chapterTitle,
                 "TTS produced an empty segment for: ${text.take(40)}",
             )
         }
-        duration
+        segment
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
