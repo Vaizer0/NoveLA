@@ -122,4 +122,27 @@ interface ChapterTranslationDao {
         GROUP BY ChapterTranslation.sourceLang, ChapterTranslation.targetLang
     """)
     suspend fun getTranslationGroups(bookUrl: String): List<TranslationGroup>
+
+    /**
+     * Число глав с непустым переводом и суммарная длина перевода в диапазоне
+     * позиций. Считается в SQL — тела глав не загружаются в память.
+     */
+    @Query("""
+        SELECT COUNT(*) AS chapterCount,
+               COALESCE(SUM(LENGTH(ChapterTranslation.translatedParagraphs)), 0) AS charCount
+        FROM ChapterTranslation
+        INNER JOIN Chapter ON Chapter.url = ChapterTranslation.chapterUrl
+        WHERE Chapter.bookUrl = :bookUrl
+        AND Chapter.position BETWEEN :startPosition AND :endPosition
+        AND (:sourceLang = '' OR ChapterTranslation.sourceLang = :sourceLang)
+        AND (:targetLang = '' OR ChapterTranslation.targetLang = :targetLang)
+        AND ChapterTranslation.translatedParagraphs != ''
+    """)
+    suspend fun statsInRange(
+        bookUrl: String,
+        startPosition: Int,
+        endPosition: Int,
+        sourceLang: String = "",
+        targetLang: String = "",
+    ): RangeStats
 }

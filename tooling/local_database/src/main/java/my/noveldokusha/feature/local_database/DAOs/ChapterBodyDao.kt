@@ -7,6 +7,16 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 import my.noveldokusha.feature.local_database.tables.ChapterBody
 
+/**
+ * Агрегаты по диапазону глав: число глав и суммарная длина текста.
+ *
+ * Позволяет оценить объём экспорта, не загружая тела глав в память.
+ */
+data class RangeStats(
+    val chapterCount: Int,
+    val charCount: Long,
+)
+
 @Dao
 interface ChapterBodyDao {
     @Query("SELECT * FROM ChapterBody")
@@ -65,6 +75,26 @@ interface ChapterBodyDao {
         WHERE Chapter.bookUrl = :bookUrl
     """)
     suspend fun countDownloadedBodies(bookUrl: String): Int
+
+    /**
+     * Число скачанных глав и суммарная длина их тел в диапазоне позиций.
+     *
+     * Считается в SQL, поэтому не зависит от размера книги и не требует
+     * держать главы в памяти (важно для экспорта на 1000+ глав).
+     */
+    @Query("""
+        SELECT COUNT(*) AS chapterCount,
+               COALESCE(SUM(LENGTH(ChapterBody.body)), 0) AS charCount
+        FROM ChapterBody
+        INNER JOIN Chapter ON Chapter.url = ChapterBody.url
+        WHERE Chapter.bookUrl = :bookUrl
+        AND Chapter.position BETWEEN :startPosition AND :endPosition
+    """)
+    suspend fun statsInRange(
+        bookUrl: String,
+        startPosition: Int,
+        endPosition: Int,
+    ): RangeStats
 
     data class UrlSize(val url: String, val sizeBytes: Long)
 

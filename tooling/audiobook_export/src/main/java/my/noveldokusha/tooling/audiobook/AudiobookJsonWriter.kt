@@ -1,9 +1,9 @@
 package my.noveldokusha.tooling.audiobook
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 
 /** Версия схемы таймлайна. Повышается только при несовместимых изменениях. */
 const val AUDIOBOOK_SCHEMA_VERSION: Int = 1
@@ -69,6 +69,19 @@ private data class JsonChapter(
     val paragraphs: List<JsonParagraph>,
 )
 
+/** Конверт документа без таймлайна: таймлайн дописывается потоково. */
+@Serializable
+private data class JsonEnvelope(
+    val schemaVersion: Int,
+    val type: String,
+    val format: String,
+    val novel: JsonNovel,
+    val content: JsonContent,
+    val chapters: JsonChapters,
+    val audio: JsonAudio,
+    val visual: JsonVisual? = null,
+)
+
 @Serializable
 private data class JsonTimelineDocument(
     val schemaVersion: Int,
@@ -97,6 +110,12 @@ object AudiobookJsonWriter {
         explicitNulls = false
     }
 
+    /** Компактная форма: одна глава — одна строка без переносов. */
+    private val compactJson = Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
+
     fun buildDocument(
         novelTitle: String,
         novelUrl: String,
@@ -117,11 +136,7 @@ object AudiobookJsonWriter {
             type = TYPE_AUDIOBOOK,
             format = format.name.lowercase(),
             novel = JsonNovel(title = novelTitle, url = novelUrl),
-            content = JsonContent(
-                mode = if (contentMode == AudiobookContentMode.TRANSLATION) "translation" else "original",
-                sourceLanguage = sourceLanguage.ifBlank { "und" },
-                targetLanguage = targetLanguage?.takeIf { it.isNotBlank() },
-            ),
+            content = contentOf(contentMode, sourceLanguage, targetLanguage),
             chapters = JsonChapters(
                 start = startPosition + 1,
                 end = endPosition + 1,
@@ -132,42 +147,109 @@ object AudiobookJsonWriter {
                 sampleRateHz = sampleRateHz,
                 channels = channels,
             ),
-            visual = visual?.let {
-                JsonVisual(
-                    type = it.type.name.lowercase(),
-                    sourceName = it.sourceName,
-                    loop = it.loop,
-                    durationMs = it.durationMs,
-                    width = it.width,
-                    height = it.height,
-                )
-            },
-            timeline = timeline.map { chapter ->
-                JsonChapter(
-                    chapterIndex = chapter.chapterIndex,
-                    title = chapter.title,
-                    startMs = chapter.span.startMs,
-                    endMs = chapter.span.endMs,
-                    durationMs = chapter.span.durationMs,
-                    intro = JsonIntro(
-                        startMs = chapter.intro.span.startMs,
-                        endMs = chapter.intro.span.endMs,
-                        durationMs = chapter.intro.span.durationMs,
-                        novelTitle = chapter.intro.novelTitle,
-                        chapterTitle = chapter.intro.chapterTitle,
-                    ),
-                    paragraphs = chapter.paragraphs.map { paragraph ->
-                        JsonParagraph(
-                            paragraphIndex = paragraph.paragraphIndex,
-                            startMs = paragraph.span.startMs,
-                            endMs = paragraph.span.endMs,
-                            durationMs = paragraph.span.durationMs,
-                            text = paragraph.text,
-                        )
-                    },
-                )
-            },
+            visual = visual?.toJson(),
+            timeline = timeline.map { it.toJson() },
         )
         return json.encodeToString(document)
     }
+
+    /**
+     * Потоково пишет JSON, не удерживая таймлайн целиком в памяти.
+     *
+     * Из `ChapterSpool` главы читаются по одной строке и вставляются в массив
+     * `timeline`; таким образом на 1000+ глав в куче живёт не больше одной.
+     */
+    internal fun writeDocument(
+        output: File,
+        novelTitle: String,
+        novelUrl: String,
+        format: AudiobookFormat,
+        contentMode: AudiobookContentMode,
+        sourceLanguage: String,
+        targetLanguage: String?,
+        startPosition: Int,
+        endPosition: Int,
+        totalDurationMs: Long,
+        sampleRateHz: Int,
+        channels: Int,
+        spool: ChapterSpool,
+        visual: VisualSegmentInfo?,
+    ) {
+        val envelope = JsonEnvelope(
+            schemaVersion = AUDIOBOOK_SCHEMA_VERSION,
+            type = TYPE_AUDIOBOOK,
+            format = format.name.lowercase(),
+            novel = JsonNovel(title = novelTitle, url = novelUrl),
+            content = contentOf(contentMode, sourceLanguage, targetLanguage),
+            chapters = JsonChapters(
+                start = startPosition + 1,
+                end = endPosition + 1,
+                count = spool.chapterCount,
+            ),
+            audio = JsonAudio(
+                durationMs = totalDurationMs,
+                sampleRateHz = sampleRateHz,
+                channels = channels,
+            ),
+            visual = visual?.toJson(),
+        )
+        val header = compactJson.encodeToString(envelope)
+        output.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+            writer.write(header.dropLast(1))
+            writer.write(",\"timeline\":[")
+            var first = true
+            spool.forEachJsonLine { line ->
+                if (first) first = false else writer.write(",")
+                writer.write(line)
+            }
+            writer.write("]}")
+        }
+    }
+
+    /** Компактный JSON одной главы для строки spool'а. */
+    internal fun encodeChapter(chapter: AudiobookChapterTiming): String =
+        compactJson.encodeToString(chapter.toJson())
+
+    private fun contentOf(
+        contentMode: AudiobookContentMode,
+        sourceLanguage: String,
+        targetLanguage: String?,
+    ) = JsonContent(
+        mode = if (contentMode == AudiobookContentMode.TRANSLATION) "translation" else "original",
+        sourceLanguage = sourceLanguage.ifBlank { "und" },
+        targetLanguage = targetLanguage?.takeIf { it.isNotBlank() },
+    )
+
+    private fun VisualSegmentInfo.toJson() = JsonVisual(
+        type = type.name.lowercase(),
+        sourceName = sourceName,
+        loop = loop,
+        durationMs = durationMs,
+        width = width,
+        height = height,
+    )
+
+    private fun AudiobookChapterTiming.toJson() = JsonChapter(
+        chapterIndex = chapterIndex,
+        title = title,
+        startMs = span.startMs,
+        endMs = span.endMs,
+        durationMs = span.durationMs,
+        intro = JsonIntro(
+            startMs = intro.span.startMs,
+            endMs = intro.span.endMs,
+            durationMs = intro.span.durationMs,
+            novelTitle = intro.novelTitle,
+            chapterTitle = intro.chapterTitle,
+        ),
+        paragraphs = paragraphs.map { paragraph ->
+            JsonParagraph(
+                paragraphIndex = paragraph.paragraphIndex,
+                startMs = paragraph.span.startMs,
+                endMs = paragraph.span.endMs,
+                durationMs = paragraph.span.durationMs,
+                text = paragraph.text,
+            )
+        },
+    )
 }

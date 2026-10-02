@@ -18,11 +18,12 @@ import java.nio.ByteBuffer
 import timber.log.Timber
 
 /**
- * Нормализованный короткий видеосегмент — «сырьё» для последующего зацикливания.
+ * Нормализованный визуальный сегмент — «сырьё» для последующего зацикливания.
  *
  * Ключевая идея фичи: визуал готовится **один раз**, а на всю длительность
- * аудиокниги переиспользуются уже закодированные сэмплы. Стоимость
- * визуального пайплайна зависит от размера исходника, а не от длины книги.
+ * аудиокниги переиспользуются уже закодированные сэмплы. Для видео это весь
+ * исходник (после побайтового переноса), для картинки/GIF — короткий ролик,
+ * повторяемый с большим шагом.
  */
 data class NormalizedVisualSegment(
     val file: File,
@@ -44,29 +45,26 @@ data class NormalizedVisualSegment(
 }
 
 /**
- * Приводит изображение / короткое видео / GIF к одному короткому
- * H.264-сегменту фиксированного размера.
+ * Готовит визуальный источник к зацикливанию.
  *
- * Строгая дисциплина: декодирование, масштабирование и кодирование
- * выполняются ровно один раз на источник. Дальше сегмент только зацикливается.
+ * Видео переносится в MP4 побайтово, целиком и в оригинальном качестве;
+ * картинка/GIF один раз декодируются и кодируются в короткий дешёвый
+ * H.264-ролик. Дальше сегмент только зацикливается.
  */
 class VisualSourceProcessor(private val context: Context) {
 
     /**
      * Готовит нормализованный сегмент из выбранного пользователем источника.
      *
-     * @param targetDurationMs длина сегмента; ограничена [MAX_SEGMENT_MS],
-     *   чтобы не дать источнику видео раздуть подготовительный этап.
+     * Для видео сегментом становится **весь исходник** (без обрезки), для
+     * картинки/GIF — короткий дешёвый ролик, повторяемый с большим шагом.
      */
     fun prepare(
         source: VisualSource,
         uri: Uri,
         sourceName: String,
-        targetDurationMs: Long = DEFAULT_SEGMENT_MS,
     ): NormalizedVisualSegment {
         val segmentFile = File.createTempFile("novela_visual_", ".mp4", context.cacheDir)
-        val boundedMs = targetDurationMs.coerceIn(MIN_SEGMENT_MS, MAX_SEGMENT_MS)
-
         return when (source) {
             VisualSource.IMAGE -> prepareImage(uri, sourceName, segmentFile)
             VisualSource.VIDEO -> prepareVideo(uri, sourceName, segmentFile)
@@ -102,29 +100,257 @@ class VisualSourceProcessor(private val context: Context) {
     }
 
     /**
-     * Короткое видео: берём начальный фрагмент и нормализуем один раз.
+     * Полное видео: сохраняем **весь исходник** без обрезки и перекодирования.
      *
-     * Декодируется только начало исходника, а не все 10 секунд, и уж тем более
-     * не длительность аудиокниги.
+     * Раньше здесь декодировались первые 5 секунд и заново кодировались в
+     * 1280x720@4fps — терялись длительность, скорость, FPS, разрешение и
+     * качество. Теперь видеодорожка переносится побайтово (remux) вместе с
+     * оригинальными PTS, а зацикливание до конца аудио со сдвигом меток
+     * делает [VideoLoopBuilder]. Перекодирование — только аварийный путь для
+     * кодеков, которые муксер MP4 не принимает.
      */
     private fun prepareVideo(uri: Uri, sourceName: String, target: File): NormalizedVisualSegment {
-        val frames = decodeVideoFrames(uri, maxFrames = frameCountFor(MAX_SEGMENT_MS, TARGET_FPS))
-        if (frames.isEmpty()) {
-            throw VisualProcessingException("Unable to decode video frames: $sourceName")
+        val meta = readVideoMeta(uri)
+            ?: throw VisualProcessingException("Unable to read video track: $sourceName")
+        try {
+            remuxFullVideo(uri, target, meta)
+        } catch (e: Exception) {
+            Timber.w(e, "VisualSourceProcessor: remux failed, transcoding full video")
+            runCatching { target.delete() }
+            transcodeFullVideo(uri, target, meta)
         }
-        val cycle = List(frames.size) { frames[it % frames.size] }
-        return try {
-            encodeBitmapSequence(
-                bitmaps = cycle,
-                source = VisualSource.VIDEO,
+        val durationMs = probeDurationMs(target).takeIf { it > 0L } ?: meta.durationMs
+        if (durationMs <= 0L) {
+            throw VisualProcessingException("Video has no measurable duration: $sourceName")
+        }
+        AudiobookExportDebug.log(
+            "VisualSourceProcessor: video ready ${meta.width}x${meta.height} " +
+                "fps=${meta.frameRate} duration=${durationMs}ms codec=${meta.mime}",
+        )
+        return NormalizedVisualSegment(
+            file = target,
+            info = VisualSegmentInfo(
+                type = VisualSource.VIDEO,
                 sourceName = sourceName,
-                target = target,
-                frameRate = TARGET_FPS,
-                bitRate = TARGET_BITRATE,
-                loopPeriodMs = 0L,
+                loop = true,
+                durationMs = durationMs,
+                width = meta.width,
+                height = meta.height,
+            ),
+            expectedDurationMs = durationMs,
+            frameRate = meta.frameRate,
+            loopPeriodMs = 0L,
+        )
+    }
+
+    /** Метаданные видеодорожки исходника. */
+    private class VideoMeta(
+        val trackIndex: Int,
+        val mime: String,
+        val width: Int,
+        val height: Int,
+        val frameRate: Int,
+        val durationMs: Long,
+        val rotation: Int,
+    )
+
+    /** Читает метаданные первой видеодорожки. */
+    private fun readVideoMeta(uri: Uri): VideoMeta? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(context, uri, null)
+            val index = videoTrackIndexOf(extractor)
+            val format = extractor.getTrackFormat(index)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
+            VideoMeta(
+                trackIndex = index,
+                mime = mime,
+                width = format.optInt(MediaFormat.KEY_WIDTH, 0),
+                height = format.optInt(MediaFormat.KEY_HEIGHT, 0),
+                frameRate = format.optInt(MediaFormat.KEY_FRAME_RATE, 0),
+                durationMs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                    format.getLong(MediaFormat.KEY_DURATION) / 1000L
+                } else {
+                    0L
+                },
+                rotation = format.optInt(MediaFormat.KEY_ROTATION, 0),
             )
+        } catch (e: Exception) {
+            Timber.w(e, "VisualSourceProcessor: video meta read failed")
+            null
         } finally {
-            frames.forEach { it.recycle() }
+            runCatching { extractor.release() }
+        }
+    }
+
+    /**
+     * Побайтово переносит видеодорожку исходника в MP4 без перекодирования.
+     *
+     * [MediaMuxer.addTrack] служит пробой совместимости: если контейнер не
+     * умеет хранить этот кодек/CSD, он бросит исключение и сработает
+     * аварийное перекодирование.
+     */
+    private fun remuxFullVideo(uri: Uri, target: File, meta: VideoMeta) {
+        val extractor = android.media.MediaExtractor()
+        val muxer = MediaMuxer(target.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var started = false
+        try {
+            extractor.setDataSource(context, uri, null)
+            extractor.selectTrack(meta.trackIndex)
+            val format = extractor.getTrackFormat(meta.trackIndex)
+            if (meta.rotation != 0) runCatching { muxer.setOrientationHint(meta.rotation) }
+            val track = muxer.addTrack(format)
+            muxer.start()
+            started = true
+            val buffer = ByteBuffer.allocate(sampleBufferSize(format, meta))
+            val bufferInfo = MediaCodec.BufferInfo()
+            var originUs = -1L
+            while (true) {
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+                val sampleTimeUs = extractor.sampleTime
+                if (originUs < 0L) originUs = sampleTimeUs
+                if (size > 0) {
+                    buffer.position(0)
+                    buffer.limit(size)
+                    bufferInfo.set(0, size, (sampleTimeUs - originUs).coerceAtLeast(0L), extractor.sampleFlags)
+                    muxer.writeSampleData(track, buffer, bufferInfo)
+                }
+                extractor.advance()
+            }
+        } finally {
+            if (started) runCatching { muxer.stop() }
+            runCatching { muxer.release() }
+            runCatching { extractor.release() }
+        }
+        if (!started) throw VisualProcessingException("Unable to remux video track")
+    }
+
+    /**
+     * Аварийный полный транскод: декодер рендерит кадры прямо на входную
+     * поверхность энкодера (surface-to-surface), поэтому исходные разрешение,
+     * пропорции и метки времени сохраняются, а кадры не проходят через
+     * Bitmap-конвейер.
+     */
+    private fun transcodeFullVideo(uri: Uri, target: File, meta: VideoMeta) {
+        val extractor = android.media.MediaExtractor()
+        val encoder = MediaCodec.createEncoderByType(MIME_VIDEO)
+        val muxer = MediaMuxer(target.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var decoder: MediaCodec? = null
+        var surface: Surface? = null
+        var encoderStarted = false
+        var decoderStarted = false
+        var muxerStarted = false
+        try {
+            extractor.setDataSource(context, uri, null)
+            extractor.selectTrack(meta.trackIndex)
+            val inputFormat = extractor.getTrackFormat(meta.trackIndex)
+            val width = meta.width.takeIf { it > 0 } ?: TARGET_WIDTH
+            val height = meta.height.takeIf { it > 0 } ?: TARGET_HEIGHT
+            val frameRate = meta.frameRate.takeIf { it > 0 } ?: TARGET_FPS
+            val format = MediaFormat.createVideoFormat(MIME_VIDEO, width, height).apply {
+                setInteger(
+                    MediaFormat.KEY_COLOR_FORMAT,
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                )
+                setInteger(MediaFormat.KEY_BIT_RATE, bitrateFor(width, height, frameRate))
+                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
+            }
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            surface = encoder.createInputSurface()
+            encoder.start()
+            encoderStarted = true
+            val decoderCodec = MediaCodec.createDecoderByType(meta.mime)
+            decoder = decoderCodec
+            decoderCodec.configure(inputFormat, surface, null, 0)
+            decoderCodec.start()
+            decoderStarted = true
+            if (meta.rotation != 0) runCatching { muxer.setOrientationHint(meta.rotation) }
+
+            val bufferInfo = MediaCodec.BufferInfo()
+            var videoTrack = -1
+            var inputDone = false
+            var decoderDone = false
+            var encoderSignaled = false
+            var encoderDone = false
+            val deadline = System.currentTimeMillis() + transcodeTimeoutMs(meta.durationMs)
+
+            while (!encoderDone) {
+                if (System.currentTimeMillis() > deadline) {
+                    throw VisualProcessingException("Video transcode timed out")
+                }
+                if (!inputDone) {
+                    val inIndex = decoderCodec.dequeueInputBuffer(TIMEOUT_US)
+                    if (inIndex >= 0) {
+                        val inBuffer = decoderCodec.getInputBuffer(inIndex)
+                        if (inBuffer == null) {
+                            decoderCodec.queueInputBuffer(
+                                inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                            )
+                            inputDone = true
+                        } else {
+                            val sampleSize = extractor.readSampleData(inBuffer, 0)
+                            if (sampleSize < 0) {
+                                decoderCodec.queueInputBuffer(
+                                    inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                )
+                                inputDone = true
+                            } else {
+                                decoderCodec.queueInputBuffer(inIndex, 0, sampleSize, extractor.sampleTime, 0)
+                                extractor.advance()
+                            }
+                        }
+                    }
+                }
+                if (!decoderDone) {
+                    when (val outIndex = decoderCodec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Unit
+                        else -> if (outIndex >= 0) {
+                            decoderCodec.releaseOutputBuffer(outIndex, bufferInfo.size > 0)
+                            if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                                decoderDone = true
+                            }
+                        }
+                    }
+                }
+                if (decoderDone && !encoderSignaled) {
+                    encoder.signalEndOfInputStream()
+                    encoderSignaled = true
+                }
+                when (val outIndex = encoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> if (videoTrack < 0) {
+                        videoTrack = muxer.addTrack(encoder.outputFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    }
+                    else -> if (outIndex >= 0) {
+                        val encoded = encoder.getOutputBuffer(outIndex)
+                        val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                        if (encoded != null && bufferInfo.size > 0 && !isConfig && muxerStarted) {
+                            encoded.position(bufferInfo.offset)
+                            encoded.limit(bufferInfo.offset + bufferInfo.size)
+                            muxer.writeSampleData(videoTrack, encoded, bufferInfo)
+                        }
+                        encoder.releaseOutputBuffer(outIndex, false)
+                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            encoderDone = true
+                        }
+                    }
+                }
+            }
+            if (!muxerStarted) throw VisualProcessingException("Transcoder produced no video samples")
+        } finally {
+            if (decoderStarted) runCatching { decoder?.stop() }
+            runCatching { decoder?.release() }
+            if (encoderStarted) runCatching { encoder.stop() }
+            runCatching { encoder.release() }
+            runCatching { surface?.release() }
+            if (muxerStarted) runCatching { muxer.stop() }
+            runCatching { muxer.release() }
+            runCatching { extractor.release() }
         }
     }
 
@@ -325,125 +551,6 @@ class VisualSourceProcessor(private val context: Context) {
         return scaleCenterFit(decoded, width, height)
     }
 
-    private fun decodeVideoFrames(uri: Uri, maxFrames: Int): List<Bitmap> {
-        val frames = mutableListOf<Bitmap>()
-        val extractor = android.media.MediaExtractor()
-        try {
-            extractor.setDataSource(context, uri, null)
-            val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
-                extractor.getTrackFormat(index)
-                    .getString(MediaFormat.KEY_MIME)
-                    ?.startsWith("video/") == true
-            } ?: return emptyList()
-            extractor.selectTrack(trackIndex)
-            frames += decodeTrackFrames(extractor, maxFrames)
-        } catch (e: Exception) {
-            Timber.w(e, "VisualSourceProcessor: video decode failed")
-            return frames
-        } finally {
-            runCatching { extractor.release() }
-        }
-        return frames
-    }
-
-    /** Раскладывает видеодорожку на кадры, декодируя не больше [maxFrames]. */
-    private fun decodeTrackFrames(extractor: android.media.MediaExtractor, maxFrames: Int): List<Bitmap> {
-        val frames = mutableListOf<Bitmap>()
-        val bufferInfo = MediaCodec.BufferInfo()
-        var inputDone = false
-        var outputDone = false
-        var codec: MediaCodec? = null
-        // MediaCodec.BufferInfo не несёт размеров кадра: они приходят в
-        // MediaFormat, который нужно получить до конвертации пикселей.
-        var frameWidth = 0
-        var frameHeight = 0
-        var cropLeft = 0
-        var cropTop = 0
-        var cropRight = 0
-        var cropBottom = 0
-
-        try {
-            val trackIndex = videoTrackIndexOf(extractor)
-            extractor.selectTrack(trackIndex)
-            val trackFormat = extractor.getTrackFormat(trackIndex)
-            val mime = trackFormat.getString(MediaFormat.KEY_MIME)
-                ?: throw IOException("video track has no MIME type")
-            codec = MediaCodec.createDecoderByType(mime)
-            codec.configure(trackFormat, null, null, 0)
-            codec.start()
-            while (!outputDone && frames.size < maxFrames) {
-                if (!inputDone) {
-                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
-                    if (inputIndex >= 0) {
-                        val inputBuffer = codec.getInputBuffer(inputIndex)
-                        if (inputBuffer == null) {
-                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                            if (sampleSize < 0) {
-                                codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                                inputDone = true
-                            } else {
-                                codec.queueInputBuffer(inputIndex, 0, sampleSize, extractor.sampleTime, 0)
-                                extractor.advance()
-                            }
-                        }
-                    }
-                }
-                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        // Размеры и кроп приходят только здесь.
-                        val outputFormat = codec.outputFormat
-                        frameWidth = outputFormat.getInteger(MediaFormat.KEY_WIDTH)
-                        frameHeight = outputFormat.getInteger(MediaFormat.KEY_HEIGHT)
-                        if (outputFormat.containsKey(MediaFormat.KEY_CROP_LEFT)) {
-                            cropLeft = outputFormat.getInteger(MediaFormat.KEY_CROP_LEFT)
-                            cropTop = outputFormat.getInteger(MediaFormat.KEY_CROP_TOP)
-                            cropRight = outputFormat.getInteger(MediaFormat.KEY_CROP_RIGHT)
-                            cropBottom = outputFormat.getInteger(MediaFormat.KEY_CROP_BOTTOM)
-                        } else {
-                            cropRight = frameWidth
-                            cropBottom = frameHeight
-                        }
-                    }
-                    else -> if (outputIndex >= 0) {
-                        val buffer = codec.getOutputBuffer(outputIndex)
-                        val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                        if (!isConfig && bufferInfo.size > 0 && buffer != null) {
-                            val bitmap = buffer.toBitmap(
-                                frameWidth,
-                                frameHeight,
-                                cropLeft,
-                                cropTop,
-                                cropRight,
-                                cropBottom,
-                            )
-                            if (bitmap != null) {
-                                // scaleCenterCrop сам утилизирует исходный
-                                // Bitmap, если создал новый; если размеры уже
-                                // совпадали — возвращает тот же объект, который
-                                // обязан остаться живым в [frames].
-                                frames += scaleCenterCrop(bitmap, TARGET_WIDTH, TARGET_HEIGHT)
-                            }
-                        }
-                        codec.releaseOutputBuffer(outputIndex, false)
-                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                            outputDone = true
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "VisualSourceProcessor: video frame decode failed")
-        } finally {
-            runCatching { codec?.stop() }
-            runCatching { codec?.release() }
-        }
-        return frames
-    }
-
     /** Индекс первой видеодорожки контейнера. */
     private fun videoTrackIndexOf(extractor: android.media.MediaExtractor): Int =
         (0 until extractor.trackCount).firstOrNull { index ->
@@ -451,64 +558,6 @@ class VisualSourceProcessor(private val context: Context) {
                 .getString(MediaFormat.KEY_MIME)
                 ?.startsWith("video/") == true
         } ?: throw IOException("no video track")
-
-    /**
-     * Конвертирует видеокадр из YUV (semi-planar) в Bitmap.
-     *
-     * Размеры и кроп передаются отдельно: у [MediaCodec.BufferInfo] таких
-     * полей нет, они живут в [MediaFormat].
-     */
-    private fun ByteBuffer.toBitmap(
-        frameWidth: Int,
-        frameHeight: Int,
-        cropLeft: Int,
-        cropTop: Int,
-        cropRight: Int,
-        cropBottom: Int,
-    ): Bitmap? {
-        if (frameWidth <= 0 || frameHeight <= 0) return null
-        val ySize = frameWidth * frameHeight
-        val chromaHeight = frameHeight / 2
-        val chromaWidth = frameWidth / 2
-        val chromaSize = chromaWidth * chromaHeight
-        if (remaining() < ySize + chromaSize * 2) return null
-
-        // absolute get(byte[], offset) доступен только начиная с Java 13,
-        // поэтому позиция двигается вручную.
-        val yPlane = ByteArray(ySize)
-        val uPlane = ByteArray(chromaSize)
-        val vPlane = ByteArray(chromaSize)
-        get(yPlane)
-        get(uPlane)
-        get(vPlane)
-
-        val visibleWidth = (cropRight - cropLeft).coerceAtLeast(1)
-        val visibleHeight = (cropBottom - cropTop).coerceAtLeast(1)
-        val pixels = IntArray(visibleWidth * visibleHeight)
-        for (row in 0 until visibleHeight) {
-            val sourceRow = (row + cropTop).coerceAtMost(frameHeight - 1)
-            for (col in 0 until visibleWidth) {
-                val sourceCol = (col + cropLeft).coerceAtMost(frameWidth - 1)
-                val yIndex = sourceRow * frameWidth + sourceCol
-                val uvIndex = (sourceRow / 2) * chromaWidth + (sourceCol / 2)
-                val y = yPlane[yIndex].toInt() and 0xFF
-                val u = (uPlane[uvIndex].toInt() and 0xFF) - 128
-                val v = (vPlane[uvIndex].toInt() and 0xFF) - 128
-                pixels[row * visibleWidth + col] = yuvToColor(y, u, v)
-            }
-        }
-        return Bitmap.createBitmap(pixels, visibleWidth, visibleHeight, Bitmap.Config.ARGB_8888)
-    }
-
-    private fun yuvToColor(y: Int, u: Int, v: Int): Int {
-        val c = y - 16
-        val d = u - 128
-        val e = v - 128
-        val r = (298 * c + 409 * e + 128) shr 8
-        val g = (298 * c - 100 * d - 208 * e + 128) shr 8
-        val b = (298 * c + 516 * d + 128) shr 8
-        return Color.rgb(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
-    }
 
     /** Декодирует GIF через [android.graphics.Movie] — один проход. */
     private fun decodeGifFrames(uri: Uri): List<Bitmap> {
@@ -564,25 +613,6 @@ class VisualSourceProcessor(private val context: Context) {
         return output
     }
 
-    /** Масштабирует по меньшей стороне с центральной обрезкой под целевой размер. */
-    private fun scaleCenterCrop(source: Bitmap, width: Int, height: Int): Bitmap {
-        if (source.width == width && source.height == height) return source
-        val scale = maxOf(width.toFloat() / source.width, height.toFloat() / source.height)
-        val scaledWidth = (source.width * scale).toInt().coerceAtLeast(width)
-        val scaledHeight = (source.height * scale).toInt().coerceAtLeast(height)
-        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        canvas.drawColor(Color.BLACK)
-        val left = (scaledWidth - width) / 2f
-        val top = (scaledHeight - height) / 2f
-        val matrix = android.graphics.Matrix()
-        matrix.postScale(scale, scale)
-        matrix.postTranslate(-left, -top)
-        canvas.drawBitmap(source, matrix, null)
-        if (source != output) source.recycle()
-        return output
-    }
-
     private fun sampleSizeFor(srcWidth: Int, srcHeight: Int, reqWidth: Int, reqHeight: Int): Int {
         if (srcWidth <= 0 || srcHeight <= 0) return 1
         var sample = 1
@@ -608,9 +638,34 @@ class VisualSourceProcessor(private val context: Context) {
         }
     }
 
+    private fun MediaFormat.optInt(key: String, fallback: Int): Int =
+        if (containsKey(key)) getInteger(key) else fallback
+
+    /**
+     * Размер буфера под один сжатый видеосэмпл. Оценка сверху — полный
+     * несжатый кадр (w*h): сжатый ключевой кадр всегда меньше. Ограничение
+     * сверху не даёт 8K-исходнику зарезервировать гигабайты.
+     */
+    private fun sampleBufferSize(format: MediaFormat, meta: VideoMeta): Int {
+        val declared = format.optInt(MediaFormat.KEY_MAX_INPUT_SIZE, 0)
+        val estimate = meta.width.coerceAtLeast(1) * meta.height.coerceAtLeast(1)
+        return maxOf(declared, estimate, MIN_SAMPLE_BUFFER_BYTES)
+            .coerceAtMost(MAX_SAMPLE_BUFFER_BYTES)
+    }
+
+    /** Битрейт аварийного транскода: ~ w*h*fps/8, в разумных пределах. */
+    private fun bitrateFor(width: Int, height: Int, frameRate: Int): Int {
+        val bits = width.toLong() * height.toLong() * frameRate.coerceAtLeast(1) / 8L
+        return bits.coerceIn(MIN_TRANSCODE_BITRATE, MAX_TRANSCODE_BITRATE).toInt()
+    }
+
+    /** Таймаут транскода: с запасом на медленный декодер, но не бесконечный. */
+    private fun transcodeTimeoutMs(durationMs: Long): Long =
+        TRANSCODE_TIMEOUT_BASE_MS + durationMs.coerceAtLeast(0L) * 10L
+
     private companion object {
         const val MIME_VIDEO = "video/avc"
-        // Выход всегда в YouTube-формате 16:9 (1280x720 = 720p HD).
+        // Выход картинки/GIF — YouTube-формат 16:9 (1280x720 = 720p HD).
         // Низкий FPS и умеренный битрейт: зацикленный визуал audiobook'а не
         // требует много движения, а кадры переиспользуются как готовые сэмплы.
         const val TARGET_WIDTH = 1280
@@ -621,10 +676,16 @@ class VisualSourceProcessor(private val context: Context) {
         const val TIMEOUT_US = 10_000L
         const val EOS_TIMEOUT_MS = 30_000L
         const val EOS_POLL_MS = 5L
-        const val DEFAULT_SEGMENT_MS = 2_000L
         const val MIN_SEGMENT_MS = 1_000L
         const val MAX_SEGMENT_MS = 5_000L
         const val MAX_GIF_FRAMES = 20
+
+        // Границы буфера видеосэмпла и битрейта аварийного транскода.
+        const val MIN_SAMPLE_BUFFER_BYTES = 1 shl 20
+        const val MAX_SAMPLE_BUFFER_BYTES = 64 shl 20
+        const val MIN_TRANSCODE_BITRATE = 2_000_000L
+        const val MAX_TRANSCODE_BITRATE = 40_000_000L
+        const val TRANSCODE_TIMEOUT_BASE_MS = 60_000L
 
         // Статичная обложка: дешёвый сегмент (низкий FPS и битрейт) плюс
         // большой шаг зацикливания. Стоимость визуальной части падает

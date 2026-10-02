@@ -39,9 +39,21 @@ data class AudiobookChapterTiming(
  * глава N-1, без искусственных пауз.
  *
  * Класс намеренно не потокобезопасен — им пользуется один поток синтеза.
+ *
+ * Если задан [onChapterClosed], закрытые главы не накапливаются в памяти:
+ * они валидируются инкрементально и сразу отдаются наружу (см. `ChapterSpool`).
+ * Это позволяет держать в куче не больше одной главы даже на 1000+ глав.
  */
-class TimelineBuilder {
+class TimelineBuilder(
+    private val onChapterClosed: ((AudiobookChapterTiming) -> Unit)? = null,
+) {
     private val chapters = mutableListOf<AudiobookChapterTiming>()
+
+    /** Сколько глав уже закрыто (для потокового режима). */
+    var closedCount: Int = 0
+        private set
+
+    private var lastClosedEndMs: Long = 0L
 
     private var currentMs: Long = 0
 
@@ -57,7 +69,7 @@ class TimelineBuilder {
     val totalDurationMs: Long get() = currentMs
 
     /** Количество уже полностью закрытых глав. */
-    val chapterCount: Int get() = chapters.size
+    val chapterCount: Int get() = if (onChapterClosed != null) closedCount else chapters.size
 
     /**
      * Открывает новую главу. Предыдущая должна быть закрыта [endChapter] —
@@ -113,7 +125,15 @@ class TimelineBuilder {
             ),
             paragraphs = pendingParagraphs.toList(),
         )
-        chapters += timing
+        if (onChapterClosed != null) {
+            // Потоковый режим: глава проверяется сразу, а не хранится до конца.
+            validateChapter(timing, expectedStartMs = lastClosedEndMs)
+            onChapterClosed(timing)
+            lastClosedEndMs = timing.span.endMs
+            closedCount++
+        } else {
+            chapters += timing
+        }
         openChapterIndex = null
         openChapterTitle = ""
         pendingParagraphs = mutableListOf()
@@ -149,65 +169,81 @@ fun validateTimeline(
     if (expectedTotalMs <= 0L) throw TimelineValidationException("total duration is not positive: $expectedTotalMs")
 
     var previousChapterEnd = 0L
-    chapters.forEachIndexed { index, chapter ->
-        requireSpanPositive("chapter ${chapter.chapterIndex}", chapter.span)
-        requireSpanConsistent("chapter ${chapter.chapterIndex}", chapter.span)
-        if (chapter.span.startMs != previousChapterEnd) {
-            throw TimelineValidationException(
-                "chapter ${chapter.chapterIndex} starts at ${chapter.span.startMs}, expected $previousChapterEnd",
-            )
-        }
-        if (chapter.span.startMs < 0L) {
-            throw TimelineValidationException("chapter ${chapter.chapterIndex} has negative start")
-        }
-        if (chapter.intro.span.startMs != chapter.span.startMs) {
-            throw TimelineValidationException("chapter ${chapter.chapterIndex} intro does not start with the chapter")
-        }
-        if (chapter.intro.span.endMs > chapter.span.endMs) {
-            throw TimelineValidationException("chapter ${chapter.chapterIndex} intro ends after the chapter")
-        }
-
-        var previousParagraphEnd = chapter.intro.span.endMs
-        var previousParagraphIndex = -1
-        chapter.paragraphs.forEachIndexed { pIndex, paragraph ->
-            val label = "chapter ${chapter.chapterIndex} paragraph $pIndex"
-            requireSpanPositive(label, paragraph.span)
-            requireSpanConsistent(label, paragraph.span)
-            if (paragraph.span.startMs != previousParagraphEnd) {
-                throw TimelineValidationException(
-                    "$label starts at ${paragraph.span.startMs}, expected $previousParagraphEnd",
-                )
-            }
-            if (paragraph.span.startMs < chapter.span.startMs) {
-                throw TimelineValidationException("$label starts before its chapter")
-            }
-            if (paragraph.span.endMs > chapter.span.endMs) {
-                throw TimelineValidationException("$label ends after its chapter")
-            }
-            // Индексы идут по исходному списку абзацев и могут иметь пропуски:
-            // абзац, ставший пустым после очистки, не озвучивается. Важна
-            // только строгая монотонность, а не непрерывность.
-            if (paragraph.paragraphIndex <= previousParagraphIndex) {
-                throw TimelineValidationException(
-                    "$label has non-increasing index ${paragraph.paragraphIndex} " +
-                        "after $previousParagraphIndex",
-                )
-            }
-            previousParagraphIndex = paragraph.paragraphIndex
-            previousParagraphEnd = paragraph.span.endMs
-        }
-        if (previousParagraphEnd != chapter.span.endMs) {
-            throw TimelineValidationException(
-                "chapter ${chapter.chapterIndex} ends at ${chapter.span.endMs} but its last span ends at $previousParagraphEnd",
-            )
-        }
+    chapters.forEach { chapter ->
+        validateChapter(chapter, expectedStartMs = previousChapterEnd)
         previousChapterEnd = chapter.span.endMs
     }
+    validateTotalDuration(previousChapterEnd, expectedTotalMs, toleranceMs)
+}
 
-    val lastEnd = chapters.last().span.endMs
-    if (kotlin.math.abs(lastEnd - expectedTotalMs) > toleranceMs) {
+/**
+ * Проверяет одну главу целиком: монотонность, непротиворечивость врезок
+ * и абзацев. Используется и пакетной валидацией, и потоковым режимом
+ * [TimelineBuilder], где главы не накапливаются.
+ */
+internal fun validateChapter(chapter: AudiobookChapterTiming, expectedStartMs: Long) {
+    requireSpanPositive("chapter ${chapter.chapterIndex}", chapter.span)
+    requireSpanConsistent("chapter ${chapter.chapterIndex}", chapter.span)
+    if (chapter.span.startMs != expectedStartMs) {
         throw TimelineValidationException(
-            "last chapter ends at $lastEnd but total duration is $expectedTotalMs (tolerance ${toleranceMs}ms)",
+            "chapter ${chapter.chapterIndex} starts at ${chapter.span.startMs}, expected $expectedStartMs",
+        )
+    }
+    if (chapter.span.startMs < 0L) {
+        throw TimelineValidationException("chapter ${chapter.chapterIndex} has negative start")
+    }
+    if (chapter.intro.span.startMs != chapter.span.startMs) {
+        throw TimelineValidationException("chapter ${chapter.chapterIndex} intro does not start with the chapter")
+    }
+    if (chapter.intro.span.endMs > chapter.span.endMs) {
+        throw TimelineValidationException("chapter ${chapter.chapterIndex} intro ends after the chapter")
+    }
+
+    var previousParagraphEnd = chapter.intro.span.endMs
+    var previousParagraphIndex = -1
+    chapter.paragraphs.forEachIndexed { pIndex, paragraph ->
+        val label = "chapter ${chapter.chapterIndex} paragraph $pIndex"
+        requireSpanPositive(label, paragraph.span)
+        requireSpanConsistent(label, paragraph.span)
+        if (paragraph.span.startMs != previousParagraphEnd) {
+            throw TimelineValidationException(
+                "$label starts at ${paragraph.span.startMs}, expected $previousParagraphEnd",
+            )
+        }
+        if (paragraph.span.startMs < chapter.span.startMs) {
+            throw TimelineValidationException("$label starts before its chapter")
+        }
+        if (paragraph.span.endMs > chapter.span.endMs) {
+            throw TimelineValidationException("$label ends after its chapter")
+        }
+        // Индексы идут по исходному списку абзацев и могут иметь пропуски:
+        // абзац, ставший пустым после очистки, не озвучивается. Важна
+        // только строгая монотонность, а не непрерывность.
+        if (paragraph.paragraphIndex <= previousParagraphIndex) {
+            throw TimelineValidationException(
+                "$label has non-increasing index ${paragraph.paragraphIndex} " +
+                    "after $previousParagraphIndex",
+            )
+        }
+        previousParagraphIndex = paragraph.paragraphIndex
+        previousParagraphEnd = paragraph.span.endMs
+    }
+    if (previousParagraphEnd != chapter.span.endMs) {
+        throw TimelineValidationException(
+            "chapter ${chapter.chapterIndex} ends at ${chapter.span.endMs} but its last span ends at $previousParagraphEnd",
+        )
+    }
+}
+
+/** Проверяет, что конец последней главы совпадает с длительностью медиа. */
+internal fun validateTotalDuration(
+    lastEndMs: Long,
+    expectedTotalMs: Long,
+    toleranceMs: Long = 60L,
+) {
+    if (kotlin.math.abs(lastEndMs - expectedTotalMs) > toleranceMs) {
+        throw TimelineValidationException(
+            "last chapter ends at $lastEndMs but total duration is $expectedTotalMs (tolerance ${toleranceMs}ms)",
         )
     }
 }
@@ -227,9 +263,23 @@ fun alignTimelineToDuration(
     totalMs: Long,
 ): List<AudiobookChapterTiming> {
     if (chapters.isEmpty()) return chapters
-    val last = chapters.last()
+    val aligned = alignLastChapter(chapters.last(), totalMs)
+    return if (aligned === chapters.last()) chapters else chapters.dropLast(1) + aligned
+}
+
+/**
+ * Подтягивает последнюю (уже закрытую) главу к фактической длительности.
+ *
+ * Возвращает исходный объект, если сдвиг не требуется или невозможен
+ * (например, отрицательная итоговая длительность): вызывающий код должен
+ * проверить итог через [validateTotalDuration].
+ */
+internal fun alignLastChapter(
+    last: AudiobookChapterTiming,
+    totalMs: Long,
+): AudiobookChapterTiming {
     val delta = totalMs - last.span.endMs
-    if (delta == 0L) return chapters
+    if (delta == 0L) return last
 
     val newParagraphs: List<AudiobookParagraphTiming>
     val newIntro: AudiobookIntroTiming
@@ -237,7 +287,7 @@ fun alignTimelineToDuration(
         val updated = last.paragraphs.toMutableList()
         val tail = updated.last()
         val newDuration = tail.span.durationMs + delta
-        if (newDuration <= 0L) return chapters
+        if (newDuration <= 0L) return last
         updated[updated.lastIndex] = tail.copy(
             span = tail.span.copy(endMs = totalMs, durationMs = newDuration),
         )
@@ -245,19 +295,18 @@ fun alignTimelineToDuration(
         newIntro = last.intro
     } else {
         val newDuration = last.intro.span.durationMs + delta
-        if (newDuration <= 0L) return chapters
+        if (newDuration <= 0L) return last
         newIntro = last.intro.copy(
             span = last.intro.span.copy(endMs = totalMs, durationMs = newDuration),
         )
         newParagraphs = last.paragraphs
     }
 
-    val newLast = last.copy(
+    return last.copy(
         span = last.span.copy(endMs = totalMs, durationMs = totalMs - last.span.startMs),
         intro = newIntro,
         paragraphs = newParagraphs,
     )
-    return chapters.dropLast(1) + newLast
 }
 
 private fun requireSpanPositive(label: String, span: AudiobookSpan) {

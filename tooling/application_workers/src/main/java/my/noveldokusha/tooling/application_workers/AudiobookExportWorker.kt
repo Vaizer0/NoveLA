@@ -39,6 +39,7 @@ import my.noveldokusha.tooling.audiobook.AudiobookStage
 import my.noveldokusha.tooling.audiobook.ChapterContentProvider
 import my.noveldokusha.tooling.audiobook.SafAudiobookStorage
 import my.noveldokusha.tooling.audiobook.SafDocument
+import my.noveldokusha.tooling.audiobook.ThermalExportThrottle
 import my.noveldokusha.tooling.audiobook.VisualSource
 import my.noveldokusha.tooling.audiobook.jobId
 import timber.log.Timber
@@ -218,7 +219,7 @@ class AudiobookExportWorker(
         }
 
         val chapters = withContext(Dispatchers.IO) {
-            ChapterContentProvider(appDatabase).loadChapters(
+            ChapterContentProvider(appDatabase).createSource(
                 bookUrl = request.bookUrl,
                 startPosition = request.startPosition,
                 endPosition = request.endPosition,
@@ -227,7 +228,7 @@ class AudiobookExportWorker(
                 targetLang = request.targetLang,
             )
         }
-        if (chapters.isEmpty()) {
+        if (chapters == null) {
             AudiobookExportDebug.log("no chapters to export for ${request.bookUrl}")
             val message = context.getString(StringsR.string.audiobook_export_no_chapters)
             notification.showError(message)
@@ -243,36 +244,40 @@ class AudiobookExportWorker(
         outputDir.mkdirs()
 
         var lastNotifyAt = 0L
-        val exporter = AudiobookExporter(context)
+        val exporter = AudiobookExporter(context, ThermalExportThrottle(context))
 
         return try {
             val result = withContext(Dispatchers.IO) {
-                exporter.export(
-                    request = request,
-                    chapters = chapters,
-                    outputDir = outputDir,
-                    onProgress = { progress ->
-                        coroutineContext.ensureActive()
-                        // Живой прогресс экрана — сразу, без троттлинга, чтобы
-                        // процент не «залипал» на 0%.
-                        AudiobookExportProgressBus.publish(
-                            percent = progress.percent,
-                            format = request.format,
-                            stage = progress.stage,
-                        )
-                        val now = SystemClock.elapsedRealtime()
-                        if (now - lastNotifyAt >= PROGRESS_INTERVAL_MS || progress.percent >= 100) {
-                            lastNotifyAt = now
-                            notification.showProgress(progress.percent)
-                            runCatching {
-                                setProgress(Data.Builder().putInt(KEY_PROGRESS, progress.percent).build())
-                            }.onFailure {
-                                AudiobookExportDebug.log("setProgress failed", it)
-                                Timber.w(it, "AudiobookExport: setProgress failed")
+                chapters.use { source ->
+                    exporter.export(
+                        request = request,
+                        chapters = source,
+                        outputDir = outputDir,
+                        onProgress = { progress ->
+                            coroutineContext.ensureActive()
+                            // Живой прогресс экрана — сразу, без троттлинга, чтобы
+                            // процент не «залипал» на 0%.
+                            AudiobookExportProgressBus.publish(
+                                percent = progress.percent,
+                                format = request.format,
+                                stage = progress.stage,
+                            )
+                            val now = SystemClock.elapsedRealtime()
+                            if (now - lastNotifyAt >= PROGRESS_INTERVAL_MS || progress.percent >= 100) {
+                                lastNotifyAt = now
+                                notification.showProgress(progress.percent)
+                                runCatching {
+                                    setProgress(
+                                        Data.Builder().putInt(KEY_PROGRESS, progress.percent).build(),
+                                    )
+                                }.onFailure {
+                                    AudiobookExportDebug.log("setProgress failed", it)
+                                    Timber.w(it, "AudiobookExport: setProgress failed")
+                                }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
 
             coroutineContext.ensureActive()

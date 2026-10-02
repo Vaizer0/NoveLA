@@ -37,43 +37,60 @@ class AudiobookChapterFailedException(
  * попадает в общий приёмник. Для WAV это потоковый RIFF-writer, для MP4 —
  * AAC-кодек, в который PCM уходит по мере синтеза. Промежуточный WAV для
  * MP4 не создаётся: нет ни лишнего файла на диске, ни второго прохода
- * декодирования/кодирования. Прогресс и время считаются инкрементально.
+ * декодирования/кодирования.
+ *
+ * Память ограничена одной главой: главы читаются из [AudiobookChapterSource]
+ * по одной, таймлайн уходит в [ChapterSpool]. Это рассчитано на 1000+ глав.
  */
-class AudiobookExporter(private val context: Context) {
+class AudiobookExporter(
+    private val context: Context,
+    private val throttle: ExportThrottle = ExportThrottle.None,
+) {
 
     suspend fun export(
         request: AudiobookExportRequest,
-        chapters: List<AudiobookChapterData>,
+        chapters: AudiobookChapterSource,
         outputDir: File,
         onProgress: suspend (AudiobookExportProgress) -> Unit = {},
     ): AudiobookExportResult = withContext(Dispatchers.IO) {
-        require(chapters.isNotEmpty()) { "no chapters to export" }
+        if (chapters.totalChapters <= 0) throw IOException("no chapters to export")
         outputDir.mkdirs()
+        resetMergedFormat()
+
+        val baseName = outputBaseName(request)
+        val mediaFile = File(outputDir, baseName + extensionFor(request.format))
+        val jsonFile = File(outputDir, baseName + ".json")
 
         val tempDir = File(context.cacheDir, "$TEMP_DIR_NAME/${request.jobId()}")
         if (tempDir.exists()) tempDir.deleteRecursively()
         tempDir.mkdirs()
 
-        val mergedWav = File(tempDir, "merged.wav")
-        val encodedAudioFile = File(tempDir, "audio.m4a")
-        val jsonFile = File(tempDir, outputBaseName(request) + ".json")
-        val mediaFile = File(tempDir, outputBaseName(request) + extensionFor(request.format))
+        // WAV пишется сразу в outputDir — копии готового файла нет.
+        // MP4 сначала получает AAC во временной папке, а контейнер собирается
+        // уже в outputDir после выравнивания по фактической длительности.
+        val wavTarget = if (request.format == AudiobookFormat.WAV) {
+            mediaFile
+        } else {
+            File(tempDir, "unused.wav")
+        }
+        val encodedAudioTarget = File(tempDir, "audio.m4a")
+        val spool = ChapterSpool(File(tempDir, "timeline.ndjson"))
 
+        var success = false
         try {
             val outcome = synthesizeAndMerge(
                 request = request,
                 chapters = chapters,
                 tempDir = tempDir,
-                wavTarget = mergedWav,
-                encodedAudioTarget = encodedAudioFile,
+                wavTarget = wavTarget,
+                encodedAudioTarget = encodedAudioTarget,
+                spool = spool,
                 onProgress = onProgress,
             )
 
             coroutineContext.ensureActive()
 
-            var timeline = outcome.timeline
             var audioDurationMs = outcome.durationMs
-            validateTimeline(timeline, audioDurationMs)
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
                 AudiobookExportDebug.log("MP4: preparing visual segment")
@@ -86,8 +103,8 @@ class AudiobookExporter(private val context: Context) {
                     onProgress(
                         AudiobookExportProgress(
                             stage = AudiobookStage.CREATING_MP4,
-                            currentChapter = chapters.size,
-                            totalChapters = chapters.size,
+                            currentChapter = spool.chapterCount,
+                            totalChapters = chapters.totalChapters,
                             chapterTitle = "",
                             currentParagraph = 0,
                             paragraphsInChapter = 0,
@@ -97,7 +114,7 @@ class AudiobookExporter(private val context: Context) {
                         ),
                     )
                     val mp4 = VideoLoopBuilder().buildFromEncodedAudio(
-                        encodedAudioFile = encodedAudioFile,
+                        encodedAudioFile = encodedAudioTarget,
                         audioDurationMs = audioDurationMs,
                         visualSegment = segment,
                         target = mediaFile,
@@ -115,12 +132,7 @@ class AudiobookExporter(private val context: Context) {
                     )
                     // JSON и таймлайн обязаны совпасть с реальной дорожкой
                     // финального контейнера, а не с расчётом по PCM.
-                    val actualAudioMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
-                    if (actualAudioMs != audioDurationMs) {
-                        audioDurationMs = actualAudioMs
-                        timeline = alignTimelineToDuration(timeline, audioDurationMs)
-                    }
-                    validateTimeline(timeline, audioDurationMs)
+                    audioDurationMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
                     segment.info
                 } finally {
                     segment.close()
@@ -129,11 +141,17 @@ class AudiobookExporter(private val context: Context) {
                 null
             }
 
+            // Выравнивание последней главы выполняется ровно один раз —
+            // после того, как фактическая длительность медиа окончательно
+            // известна (для MP4 — только после сборки контейнера).
+            val sealedEndMs = spool.seal(audioDurationMs)
+            validateTotalDuration(sealedEndMs, audioDurationMs)
+
             onProgress(
                 AudiobookExportProgress(
                     stage = AudiobookStage.WRITING_JSON,
-                    currentChapter = chapters.size,
-                    totalChapters = chapters.size,
+                    currentChapter = spool.chapterCount,
+                    totalChapters = chapters.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -143,25 +161,21 @@ class AudiobookExporter(private val context: Context) {
                 ),
             )
 
-            val sampleRateHz = outcome.sampleRateHz
-            val channels = outcome.channels
-
-            jsonFile.writeText(
-                AudiobookJsonWriter.buildDocument(
-                    novelTitle = request.bookTitle,
-                    novelUrl = request.bookUrl,
-                    format = request.format,
-                    contentMode = request.contentMode,
-                    sourceLanguage = request.sourceLang,
-                    targetLanguage = request.targetLang,
-                    startPosition = request.startPosition,
-                    endPosition = request.endPosition,
-                    totalDurationMs = audioDurationMs,
-                    sampleRateHz = sampleRateHz,
-                    channels = channels,
-                    timeline = timeline,
-                    visual = visualInfo,
-                ),
+            AudiobookJsonWriter.writeDocument(
+                output = jsonFile,
+                novelTitle = request.bookTitle,
+                novelUrl = request.bookUrl,
+                format = request.format,
+                contentMode = request.contentMode,
+                sourceLanguage = request.sourceLang,
+                targetLanguage = request.targetLang,
+                startPosition = request.startPosition,
+                endPosition = request.endPosition,
+                totalDurationMs = audioDurationMs,
+                sampleRateHz = outcome.sampleRateHz,
+                channels = outcome.channels,
+                spool = spool,
+                visual = visualInfo,
             )
 
             coroutineContext.ensureActive()
@@ -169,8 +183,8 @@ class AudiobookExporter(private val context: Context) {
             onProgress(
                 AudiobookExportProgress(
                     stage = AudiobookStage.FINALIZING,
-                    currentChapter = chapters.size,
-                    totalChapters = chapters.size,
+                    currentChapter = spool.chapterCount,
+                    totalChapters = chapters.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -180,23 +194,11 @@ class AudiobookExporter(private val context: Context) {
                 ),
             )
 
-            // Промежуточный WAV живёт во временной папке, поэтому готовый
-            // результат копируется в outputDir: для WAV это сам merged.wav,
-            // для MP4 — уже собранный контейнер.
-            val finalMedia = File(outputDir, mediaFile.name)
-            val finalJson = File(outputDir, jsonFile.name)
-            if (request.format == AudiobookFormat.WAV) {
-                mergedWav.copyTo(finalMedia, overwrite = true)
-            } else {
-                mediaFile.copyTo(finalMedia, overwrite = true)
-            }
-            jsonFile.copyTo(finalJson, overwrite = true)
-
             onProgress(
                 AudiobookExportProgress(
                     stage = AudiobookStage.COMPLETED,
-                    currentChapter = chapters.size,
-                    totalChapters = chapters.size,
+                    currentChapter = spool.chapterCount,
+                    totalChapters = chapters.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -206,22 +208,23 @@ class AudiobookExporter(private val context: Context) {
                 ),
             )
 
-            tempDir.deleteRecursively()
-
+            success = true
             AudiobookExportResult(
-                audioFile = finalMedia,
-                jsonFile = finalJson,
+                audioFile = mediaFile,
+                jsonFile = jsonFile,
                 durationMs = audioDurationMs,
-                chapterCount = timeline.size,
-                sampleRateHz = sampleRateHz,
-                channels = channels,
+                chapterCount = spool.chapterCount,
+                sampleRateHz = outcome.sampleRateHz,
+                channels = outcome.channels,
             )
-        } catch (e: CancellationException) {
+        } finally {
+            spool.close()
             tempDir.deleteRecursively()
-            throw e
-        } catch (e: Exception) {
-            tempDir.deleteRecursively()
-            throw e
+            if (!success) {
+                // Неудачный экспорт не оставляет полуфайлов в папке пользователя.
+                runCatching { mediaFile.delete() }
+                runCatching { jsonFile.delete() }
+            }
         }
     }
 
@@ -233,6 +236,12 @@ class AudiobookExporter(private val context: Context) {
 
     @Volatile
     private var mergedBitsPerSample: Int? = null
+
+    private fun resetMergedFormat() {
+        mergedSampleRate = null
+        mergedChannels = null
+        mergedBitsPerSample = null
+    }
 
     /** Формат уже начатого мердж-потока или `null`, пока он не определён. */
     private fun mergedFormat(): PcmFormat? {
@@ -246,23 +255,22 @@ class AudiobookExporter(private val context: Context) {
      * Синтезирует главы по порядку и на лету складывает сегменты в приёмник.
      *
      * Для WAV это потоковый RIFF-writer, для MP4 — AAC-кодек. Таймлайн
-     * накапливается тем же проходом: длительность каждого абзаца берётся из
-     * фактически записанного файла, поэтому пересчётов после экспорта не
-     * требуется.
+     * строится тем же проходом и сразу уходит в [spool], не накапливаясь в
+     * памяти: длительность каждого абзаца берётся из фактически записанного
+     * файла, поэтому пересчётов после экспорта не требуется.
      */
     private suspend fun synthesizeAndMerge(
         request: AudiobookExportRequest,
-        chapters: List<AudiobookChapterData>,
+        chapters: AudiobookChapterSource,
         tempDir: File,
         wavTarget: File,
         encodedAudioTarget: File,
+        spool: ChapterSpool,
         onProgress: suspend (AudiobookExportProgress) -> Unit,
     ): MergeOutcome {
-        val timeline = TimelineBuilder()
-        val totalTextChars = chapters.sumOf { chapter ->
-            chapter.paragraphs.sumOf { it.length } + chapter.title.length
-        }.coerceAtLeast(1)
-        var processedChars = 0
+        val timeline = TimelineBuilder(onChapterClosed = { spool.add(it) })
+        val totalTextChars = chapters.estimatedTotalChars.coerceAtLeast(1L)
+        var processedChars = 0L
         val startedAt = System.currentTimeMillis()
 
         // Аудит целостности: что запланировано и что реально озвучено.
@@ -271,8 +279,9 @@ class AudiobookExporter(private val context: Context) {
         var introSegments = 0
         var audioChunks = 0
         var plannedChunks = 0
-        var plannedChars = 0
-        var spokenChars = 0
+        var plannedChars = 0L
+        var spokenChars = 0L
+        var paragraphTotal = 0
 
         // Длительность считается по накопленным кадрам, а не суммой
         // независимо округлённых миллисекунд: тогда сумма таймлайна точно
@@ -306,11 +315,17 @@ class AudiobookExporter(private val context: Context) {
             synthesizer.initialize()
             val maxChunk = synthesizer.maxChunkLength()
 
-            chapters.forEachIndexed { chapterOffset, chapter ->
+            var chapterOffset = -1
+            while (true) {
                 coroutineContext.ensureActive()
+                val chapter = chapters.next() ?: break
+                chapterOffset++
 
                 val chapterTitle = chapter.title.ifBlank { "Chapter ${chapter.position + 1}" }
-                val plans = planParagraphs(splitChapterIntoParagraphs(chapter.paragraphs.joinToString("\n\n")), maxChunk)
+                val plans = planParagraphs(
+                    splitChapterIntoParagraphs(chapter.paragraphs.joinToString("\n\n")),
+                    maxChunk,
+                )
                 plannedChunks += plans.sumOf { it.chunks.size }
                 plannedChars += plans.sumOf { it.text.length }
 
@@ -325,9 +340,11 @@ class AudiobookExporter(private val context: Context) {
                 val introText = buildChapterIntro(request.bookTitle, chapterTitle)
                 if (introText.isNotBlank()) {
                     val introFile = File(tempDir, "ch${chapterOffset}_intro.wav")
-                    val introSegment = synthesizeChunk(synthesizer, introText, introFile, chapterOffset, chapterTitle)
+                    val introSegment = synthesizeChunk(
+                        synthesizer, introText, introFile, chapterOffset, chapterTitle,
+                    )
                     val introDuration = advanceFrames(introSegment)
-                    segmentHandle.append(introFile, introDuration)
+                    segmentHandle.append(introFile, introSegment, introDuration)
                     timeline.endIntro(introDuration)
                     introFile.delete()
                     introSegments++
@@ -341,15 +358,22 @@ class AudiobookExporter(private val context: Context) {
 
                 // 2. Абзацы: внутренние TTS-порции складываются в один тайминг.
                 val spokenParagraphs = plans.filter { !it.isEmpty }
+                paragraphTotal += spokenParagraphs.size
                 spokenParagraphs.forEachIndexed { paragraphOffset, plan ->
                     coroutineContext.ensureActive()
 
                     var paragraphDurationMs = 0L
                     plan.chunks.forEachIndexed { chunkIndex, chunk ->
-                        val chunkFile = File(tempDir, "ch${chapterOffset}_p${plan.paragraphIndex}_c$chunkIndex.wav")
-                        val chunkSegment = synthesizeChunk(synthesizer, chunk, chunkFile, chapterOffset, chapterTitle)
+                        throttle.beforeChunk()
+                        val chunkFile = File(
+                            tempDir,
+                            "ch${chapterOffset}_p${plan.paragraphIndex}_c$chunkIndex.wav",
+                        )
+                        val chunkSegment = synthesizeChunk(
+                            synthesizer, chunk, chunkFile, chapterOffset, chapterTitle,
+                        )
                         val chunkDuration = advanceFrames(chunkSegment)
-                        segmentHandle.append(chunkFile, chunkDuration)
+                        segmentHandle.append(chunkFile, chunkSegment, chunkDuration)
                         paragraphDurationMs += chunkDuration
                         audioChunks++
                         spokenChars += chunk.length
@@ -368,7 +392,7 @@ class AudiobookExporter(private val context: Context) {
                         onProgress = onProgress,
                         stage = AudiobookStage.SYNTHESIZING,
                         chapterOffset = chapterOffset,
-                        totalChapters = chapters.size,
+                        totalChapters = chapters.totalChapters,
                         chapterTitle = chapterTitle,
                         paragraphOffset = paragraphOffset,
                         paragraphsInChapter = spokenParagraphs.size,
@@ -387,7 +411,7 @@ class AudiobookExporter(private val context: Context) {
                     onProgress = onProgress,
                     stage = AudiobookStage.SYNTHESIZING,
                     chapterOffset = chapterOffset,
-                    totalChapters = chapters.size,
+                    totalChapters = chapters.totalChapters,
                     chapterTitle = chapterTitle,
                     paragraphOffset = spokenParagraphs.size,
                     paragraphsInChapter = spokenParagraphs.size,
@@ -397,6 +421,8 @@ class AudiobookExporter(private val context: Context) {
                     startedAt = startedAt,
                 )
             }
+
+            if (chapterOffset < 0) throw IOException("no chapters were synthesized")
 
             sinkDurationMs = segmentHandle.finish()
         } catch (e: CancellationException) {
@@ -413,18 +439,15 @@ class AudiobookExporter(private val context: Context) {
         val computedMs = framesWritten * 1000L / rate
         // Для MP4 источник правды — фактическая длительность AAC-дорожки
         // (в неё входит задержка кодера), для WAV — записанные PCM-кадры.
-        // Именно на неё выравнивается хвост таймлайна, чтобы `endMs` и
-        // `audio.durationMs` совпали с реальным медиафайлом.
         val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
         if (durationMs <= 0L) throw IOException("synthesized audio is empty")
-        val builtTimeline = alignTimelineToDuration(timeline.build(), durationMs)
         // Аудит целостности контента: в логе видно, что запланированное и
         // озвученное совпадают. Это же позволяет сравнить WAV- и MP4-экспорт
         // одного и того же диапазона (число порций/символов и длительность).
         val intact = plannedChunks == audioChunks && plannedChars == spokenChars
         AudiobookExportDebug.log(
-            "content audit: chapters=${builtTimeline.size} intros=$introSegments " +
-                "paragraphs=${builtTimeline.sumOf { it.paragraphs.size }} " +
+            "content audit: chapters=${spool.chapterCount} intros=$introSegments " +
+                "paragraphs=$paragraphTotal " +
                 "plannedChunks=$plannedChunks audioChunks=$audioChunks " +
                 "plannedChars=$plannedChars spokenChars=$spokenChars " +
                 "audioMs=$durationMs intact=$intact",
@@ -436,7 +459,6 @@ class AudiobookExporter(private val context: Context) {
             )
         }
         return MergeOutcome(
-            timeline = builtTimeline,
             durationMs = durationMs,
             sampleRateHz = rate,
             channels = mergedChannels ?: DEFAULT_CHANNELS,
@@ -482,8 +504,8 @@ class AudiobookExporter(private val context: Context) {
         chapterTitle: String,
         paragraphOffset: Int,
         paragraphsInChapter: Int,
-        totalTextChars: Int,
-        processedChars: Int,
+        totalTextChars: Long,
+        processedChars: Long,
         generatedAudioMs: Long,
         startedAt: Long,
     ) {
@@ -523,9 +545,8 @@ class AudiobookExporter(private val context: Context) {
         )
     }
 
-    /** Итог синтеза: таймлайн и параметры получившегося аудио. */
+    /** Итог синтеза: длительность и параметры получившегося аудио. */
     private data class MergeOutcome(
-        val timeline: List<AudiobookChapterTiming>,
         val durationMs: Long,
         val sampleRateHz: Int,
         val channels: Int,
@@ -533,7 +554,7 @@ class AudiobookExporter(private val context: Context) {
 
     /** Приёмник синтезированных PCM-сегментов: WAV-поток или AAC-кодек. */
     private interface ChunkSink {
-        fun append(segmentFile: File, durationMs: Long)
+        fun append(segmentFile: File, segment: PcmSegment, durationMs: Long)
         /** Финализирует поток и возвращает фактическую длительность носителя. */
         fun finish(): Long
         fun abort()
@@ -546,9 +567,8 @@ class AudiobookExporter(private val context: Context) {
     private inner class WavChunkSink(private val target: File) : ChunkSink {
         private var writer: WavAudio.StreamingWavWriter? = null
 
-        override fun append(segmentFile: File, durationMs: Long) {
+        override fun append(segmentFile: File, segment: PcmSegment, durationMs: Long) {
             if (writer == null) {
-                val segment = WavAudio.readSegment(segmentFile)
                 mergedSampleRate = segment.sampleRateHz
                 mergedChannels = segment.channels
                 mergedBitsPerSample = segment.bitsPerSample
@@ -560,7 +580,6 @@ class AudiobookExporter(private val context: Context) {
                 )
             }
             val active = writer ?: error("writer is not initialized")
-            val segment = WavAudio.readSegment(segmentFile)
             RandomAccessFile(segmentFile, "r").use { raf -> active.append(segment, raf) }
         }
 
@@ -583,8 +602,8 @@ class AudiobookExporter(private val context: Context) {
     private inner class AacChunkSink(target: File) : ChunkSink {
         private val encoder = StreamingAacEncoder(target)
 
-        override fun append(segmentFile: File, durationMs: Long) {
-            encoder.append(segmentFile)
+        override fun append(segmentFile: File, segment: PcmSegment, durationMs: Long) {
+            encoder.append(segmentFile, segment)
         }
 
         override fun finish(): Long {
