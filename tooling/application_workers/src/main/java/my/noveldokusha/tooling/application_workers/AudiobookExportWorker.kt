@@ -4,14 +4,15 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -31,6 +32,7 @@ import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
 import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
 import my.noveldokusha.tooling.audiobook.AudiobookExporter
+import my.noveldokusha.tooling.audiobook.AudiobookExportDebug
 import my.noveldokusha.tooling.audiobook.AudiobookExportProgressBus
 import my.noveldokusha.tooling.audiobook.AudiobookFormat
 import my.noveldokusha.tooling.audiobook.AudiobookStage
@@ -55,6 +57,8 @@ class AudiobookExportWorker(
     workerParameters: WorkerParameters,
 ) : CoroutineWorker(context, workerParameters) {
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface AudiobookExportEntryPoint {
@@ -72,6 +76,7 @@ class AudiobookExportWorker(
         const val KEY_PROGRESS = "audiobook_progress_percent"
 
         private const val PROGRESS_INTERVAL_MS = 1_000L
+        private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
         private const val KEY_BOOK_URL = "book_url"
         private const val KEY_BOOK_TITLE = "book_title"
         private const val KEY_FORMAT = "format"
@@ -90,36 +95,44 @@ class AudiobookExportWorker(
         private const val KEY_TREE_URI = "tree_uri"
 
         fun cancelTask(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(TAG)
+            WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
         }
 
         fun enqueue(context: Context, request: AudiobookExportRequest) {
-            val data = workDataOf(
-                KEY_BOOK_URL to request.bookUrl,
-                KEY_BOOK_TITLE to request.bookTitle,
-                KEY_FORMAT to request.format.name,
-                KEY_CONTENT_MODE to request.contentMode.name,
-                KEY_SOURCE_LANG to request.sourceLang,
-                KEY_TARGET_LANG to request.targetLang,
-                KEY_START_POSITION to request.startPosition,
-                KEY_END_POSITION to request.endPosition,
-                KEY_ENGINE_PACKAGE to request.enginePackage,
-                KEY_VOICE_ID to request.voiceId,
-                KEY_SPEED to request.speed,
-                KEY_PITCH to request.pitch,
-                KEY_VISUAL_URI to request.visualUri,
-                KEY_VISUAL_SOURCE to request.visualSource?.name,
-                KEY_VISUAL_SOURCE_NAME to request.visualSourceName,
-                KEY_TREE_URI to request.treeUri,
-            )
+            val data = Data.Builder()
+                .putString(KEY_BOOK_URL, request.bookUrl)
+                .putString(KEY_BOOK_TITLE, request.bookTitle)
+                .putString(KEY_FORMAT, request.format.name)
+                .putString(KEY_CONTENT_MODE, request.contentMode.name)
+                .putString(KEY_SOURCE_LANG, request.sourceLang)
+                .putString(KEY_TARGET_LANG, request.targetLang)
+                .putInt(KEY_START_POSITION, request.startPosition)
+                .putInt(KEY_END_POSITION, request.endPosition)
+                .putString(KEY_ENGINE_PACKAGE, request.enginePackage)
+                .putString(KEY_VOICE_ID, request.voiceId)
+                .putFloat(KEY_SPEED, request.speed)
+                .putFloat(KEY_PITCH, request.pitch)
+                .putString(KEY_TREE_URI, request.treeUri)
+                .apply {
+                    request.visualUri?.let { putString(KEY_VISUAL_URI, it) }
+                    request.visualSource?.let { putString(KEY_VISUAL_SOURCE, it.name) }
+                    request.visualSourceName?.let { putString(KEY_VISUAL_SOURCE_NAME, it) }
+                }
+                .build()
             val work = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
                 .setInputData(data)
+                .addTag(TAG)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, work)
+            // Уникальное имя по job'у: экспорт другой книги или диапазона
+            // не должен отменять уже запущенный экспорт (REPLACE иначе его убьёт).
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork("$TAG-${request.jobId()}", ExistingWorkPolicy.REPLACE, work)
         }
     }
 
     override suspend fun doWork(): Result {
+        AudiobookExportDebug.init(context)
+        AudiobookExportDebug.log("doWork started (attempt=$runAttemptCount, id=$id)")
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             AudiobookExportEntryPoint::class.java,
@@ -129,7 +142,12 @@ class AudiobookExportWorker(
         val appFileResolver = entryPoint.appFileResolver()
         val coverRepository = entryPoint.coverRepository()
 
-        val storedRequest = readRequest() ?: return Result.failure()
+        val storedRequest = readRequest()
+        if (storedRequest == null) {
+            AudiobookExportDebug.log("readRequest returned null; aborting")
+            AudiobookExportProgressBus.reportError("Invalid audiobook export request")
+            return Result.failure()
+        }
         val notification = AudiobookExportNotification(
             storedRequest.bookTitle,
             context,
@@ -141,7 +159,16 @@ class AudiobookExportWorker(
         // Foreground поднимается сразу: длинный синтез не должен ждать
         // первого процента, иначе система может остановить воркер.
         runCatching { setForeground(buildForegroundInfo(notification)) }
-            .onFailure { Timber.w(it, "AudiobookExport: early setForeground failed") }
+            .onFailure {
+                AudiobookExportDebug.log("early setForeground failed", it)
+                Timber.w(it, "AudiobookExport: early setForeground failed")
+            }
+        acquireWakeLock()
+        AudiobookExportDebug.log(
+            "request: book='${storedRequest.bookTitle}' format=${storedRequest.format} " +
+                "chapters=${storedRequest.startPosition}..${storedRequest.endPosition} " +
+                "engine='${storedRequest.enginePackage}' voice='${storedRequest.voiceId}'",
+        )
 
         // Показываем «0%» сразу, чтобы экран не выглядел зависшим до первого абзаца.
         AudiobookExportProgressBus.publish(
@@ -165,7 +192,10 @@ class AudiobookExportWorker(
             }
             if (coverUri == null) {
                 // Обложки нет — собрать визуальный ряд не из чего.
-                notification.showError(context.getString(StringsR.string.audiobook_export_mp4_needs_visual))
+                val message = context.getString(StringsR.string.audiobook_export_mp4_needs_visual)
+                AudiobookExportDebug.log("MP4 export aborted: no cover and no visual source")
+                notification.showError(message)
+                AudiobookExportProgressBus.reportError(message)
                 return Result.failure()
             }
             storedRequest.copy(
@@ -180,8 +210,10 @@ class AudiobookExportWorker(
         // Директория проверяется до тяжёлого синтеза: недоступный SAF не должен
         // стоить пользователю минут TTS.
         if (!withContext(Dispatchers.IO) { storage.isAccessible(request.treeUri) }) {
-            Timber.e("AudiobookExport: SAF tree not accessible")
-            notification.showError(context.getString(StringsR.string.audiobook_export_failed))
+            AudiobookExportDebug.log("SAF tree not accessible: ${request.treeUri}")
+            val message = context.getString(StringsR.string.audiobook_export_failed)
+            notification.showError(message)
+            AudiobookExportProgressBus.reportError(message)
             return Result.failure()
         }
 
@@ -196,7 +228,10 @@ class AudiobookExportWorker(
             )
         }
         if (chapters.isEmpty()) {
-            notification.showError(context.getString(StringsR.string.audiobook_export_no_chapters))
+            AudiobookExportDebug.log("no chapters to export for ${request.bookUrl}")
+            val message = context.getString(StringsR.string.audiobook_export_no_chapters)
+            notification.showError(message)
+            AudiobookExportProgressBus.reportError(message)
             return Result.failure()
         }
 
@@ -229,8 +264,12 @@ class AudiobookExportWorker(
                         if (now - lastNotifyAt >= PROGRESS_INTERVAL_MS || progress.percent >= 100) {
                             lastNotifyAt = now
                             notification.showProgress(progress.percent)
-                            runCatching { setProgress(workDataOf(KEY_PROGRESS to progress.percent)) }
-                                .onFailure { Timber.w(it, "AudiobookExport: setProgress failed") }
+                            runCatching {
+                                setProgress(Data.Builder().putInt(KEY_PROGRESS, progress.percent).build())
+                            }.onFailure {
+                                AudiobookExportDebug.log("setProgress failed", it)
+                                Timber.w(it, "AudiobookExport: setProgress failed")
+                            }
                         }
                     },
                 )
@@ -243,16 +282,56 @@ class AudiobookExportWorker(
             notification.showComplete(result.audioFile.name, copied.audioUri)
             Result.success()
         } catch (e: CancellationException) {
+            AudiobookExportDebug.log("export cancelled")
             notification.close()
             throw e
         } catch (e: Exception) {
+            AudiobookExportDebug.log("export failed", e)
             Timber.e(e, "AudiobookExport failed")
-            notification.showError(context.getString(StringsR.string.audiobook_export_failed))
+            val reason = e.message?.takeIf { it.isNotBlank() }
+            val message = if (reason != null) {
+                "${context.getString(StringsR.string.audiobook_export_failed)}: $reason"
+            } else {
+                context.getString(StringsR.string.audiobook_export_failed)
+            }
+            notification.showError(message)
+            AudiobookExportProgressBus.reportError(message)
             Result.failure()
         } finally {
             outputDir.deleteRecursively()
             AudiobookExportProgressBus.clear()
+            releaseWakeLock()
+            AudiobookExportDebug.log("doWork finished")
         }
+    }
+
+    /**
+     * Держим CPU в бодрствовании на время экспорта: foreground-сервис
+     * WorkManager не удерживает wakelock, и при выключенном экране
+     * синтез может «заснуть» посреди книги.
+     */
+    private fun acquireWakeLock() {
+        runCatching {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NoveLA:AudiobookExport")
+                .apply {
+                    setReferenceCounted(false)
+                    acquire(MAX_WAKE_LOCK_MS)
+                }
+            AudiobookExportDebug.log("wake lock acquired")
+        }.onFailure {
+            AudiobookExportDebug.log("wake lock acquire failed", it)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching {
+            wakeLock?.takeIf { it.isHeld }?.release()
+        }.onFailure {
+            AudiobookExportDebug.log("wake lock release failed", it)
+        }
+        wakeLock = null
     }
 
     private fun buildForegroundInfo(notification: AudiobookExportNotification): ForegroundInfo =

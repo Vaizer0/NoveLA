@@ -326,6 +326,16 @@ internal class ChaptersViewModel @Inject constructor(
                 }
             }
         }
+
+        // Ошибки воркера показываем снекбаром: иначе экспорт «молча» падает.
+        viewModelScope.launch {
+            AudiobookExportProgressBus.error.collect { message ->
+                if (message != null) {
+                    audiobookMessage.value = message
+                    AudiobookExportProgressBus.clearError()
+                }
+            }
+        }
     }
 
     fun onAudiobookExportCancel() {

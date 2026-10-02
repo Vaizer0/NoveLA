@@ -23,12 +23,25 @@ object AudiobookExportProgressBus {
 
     val progress: StateFlow<AudiobookExportLiveProgress?> = _progress.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+
+    /** Последняя ошибка экспорта, чтобы показать её пользователю. */
+    val error: StateFlow<String?> = _error.asStateFlow()
+
     fun publish(percent: Int, format: AudiobookFormat, stage: AudiobookStage) {
         _progress.value = AudiobookExportLiveProgress(
             percent = percent.coerceIn(0, 100),
             format = format,
             stage = stage,
         )
+    }
+
+    fun reportError(message: String) {
+        _error.value = message
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 
     fun clear() {

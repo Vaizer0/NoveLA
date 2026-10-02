@@ -49,6 +49,9 @@ class TtsAudioSynthesizer(
     @Volatile
     private var reportedFormat: SynthFormat? = null
 
+    /** Уникальные utteranceId, чтобы поздние колбэки не влияли на новые попытки. */
+    private val utteranceCounter = java.util.concurrent.atomic.AtomicInteger(0)
+
     /**
      * Создаёт и настраивает движок. Вызывается один раз перед синтезом.
      *
@@ -80,9 +83,9 @@ class TtsAudioSynthesizer(
         }
 
         tts = instance
-        currentAttempt = AttemptState()
-        installProgressListener(instance, currentAttempt!!)
+        installProgressListener(instance)
         applySettings(instance)
+        AudiobookExportDebug.log("TTS initialized (engine=${engine ?: "default"}, voice=$voiceId, speed=$speed, pitch=$pitch)")
     }
 
     /** Применяет голос, скорость и тон, заданные снимком настроек. */
@@ -117,28 +120,34 @@ class TtsAudioSynthesizer(
 
         var lastFailure: Exception? = null
         repeat(MAX_SYNTHESIS_ATTEMPTS) { attempt ->
-            val state = AttemptState()
+            val utteranceId = "$AUDIOBOOK_UTTERANCE_PREFIX${utteranceCounter.incrementAndGet()}"
+            val state = AttemptState(utteranceId)
             currentAttempt = state
-            val utteranceId = "$AUDIOBOOK_UTTERANCE_PREFIX$attempt"
             val queued = queueSynthesis(instance, text, outputFile, utteranceId)
 
             // Колбэк завершения — best effort: часть движков его не шлёт,
             // и тогда срабатывает проверка стабильности размера файла.
-            val usable = when {
-                queued != TextToSpeech.SUCCESS -> false
-                state.error != null -> false
-                else -> waitForStableFile(outputFile, state)
-            }
+            val usable = queued == TextToSpeech.SUCCESS && waitForStableFile(outputFile, state)
 
             if (usable) {
-                return runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
+                val segment = runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
+                    AudiobookExportDebug.log("synthesized file is unreadable", it)
                     throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
                 }
+                AudiobookExportDebug.log(
+                    "TTS ok: chars=${text.length} bytes=${outputFile.length()} attempt=${attempt + 1}",
+                )
+                currentAttempt = null
+                return segment
             }
 
-            lastFailure = TtsSynthesisException(
-                state.error ?: "TTS produced no audio on attempt ${attempt + 1}",
-            )
+            val reason = when {
+                queued != TextToSpeech.SUCCESS -> "queue returned $queued"
+                state.error != null -> state.error!!
+                else -> "no audio produced on attempt ${attempt + 1}"
+            }
+            AudiobookExportDebug.log("TTS attempt ${attempt + 1} failed: $reason")
+            lastFailure = TtsSynthesisException(reason)
             runCatching { instance.stop() }
             runCatching { outputFile.delete() }
             applySettings(instance)
@@ -161,19 +170,23 @@ class TtsAudioSynthesizer(
         return instance.synthesizeToFile(text, params, outputFile, utteranceId)
     }
 
-    private fun installProgressListener(instance: TextToSpeech, state: AttemptState) {
+    private fun installProgressListener(instance: TextToSpeech) {
         instance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
 
-            override fun onDone(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) {
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.done = true
+            }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                state.error = "TTS reported an error for $utteranceId"
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.error =
+                    "TTS reported an error for $utteranceId"
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                state.error = "TTS error $errorCode for $utteranceId"
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.error =
+                    "TTS error $errorCode for $utteranceId"
             }
 
             override fun onBeginSynthesis(
@@ -206,7 +219,10 @@ class TtsAudioSynthesizer(
             // таймаут целиком, иначе экран зависает на 0% на минуты.
             if (state.error != null) return false
             val size = if (outputFile.exists()) outputFile.length() else -1L
-            if (size >= WAV_MIN_BYTES && size == lastSize) {
+            // Готовый файл: колбэк onDone либо стабильный размер с реальными
+            // данными (не только 44-байтовый заголовок WAV).
+            if (state.done && size > WAV_MIN_BYTES) return true
+            if (size > WAV_MIN_BYTES && size == lastSize) {
                 stableRounds++
                 if (stableRounds >= STABLE_ROUNDS_REQUIRED) return true
             } else {
@@ -237,9 +253,15 @@ class TtsAudioSynthesizer(
      * Состояние одной попытки синтеза: ошибка приходит асинхронно из
      * колбэка движка, поэтому поле помечено `@Volatile`.
      */
-    private class AttemptState {
+    private class AttemptState(val utteranceId: String) {
         @Volatile
         var error: String? = null
+
+        @Volatile
+        var done: Boolean = false
+
+        /** Относится ли колбэк к этой попытке (null-идентификатор считаем своим). */
+        fun matches(other: String?): Boolean = other == null || other == utteranceId
     }
 
     private companion object {
