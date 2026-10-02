@@ -93,13 +93,8 @@ class AudiobookExporter(
             var audioDurationMs = outcome.durationMs
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
-                AudiobookExportDebug.log("MP4: preparing visual segment")
                 val segment = prepareVisual(request, tempDir)
                 try {
-                    AudiobookExportDebug.log(
-                        "MP4: visual ready type=${segment.info.type} " +
-                            "expected=${segment.expectedDurationMs}ms file=${segment.file.name}",
-                    )
                     onProgress(
                         AudiobookExportProgress(
                             stage = AudiobookStage.CREATING_MP4,
@@ -125,11 +120,6 @@ class AudiobookExporter(
                             mp4.audioDurationMs, mp4.videoDurationMs,
                         )
                     }
-                    AudiobookExportDebug.log(
-                        "MP4: assembled audio=${mp4.audioDurationMs}ms " +
-                            "video=${mp4.videoDurationMs}ms " +
-                            "container=${mp4.containerDurationMs}ms",
-                    )
                     // JSON и таймлайн обязаны совпасть с реальной дорожкой
                     // финального контейнера, а не с расчётом по PCM.
                     audioDurationMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
@@ -273,16 +263,6 @@ class AudiobookExporter(
         var processedChars = 0L
         val startedAt = System.currentTimeMillis()
 
-        // Аудит целостности: что запланировано и что реально озвучено.
-        // По нему в логе видно, что ни одна порция не потеряна и не
-        // продублирована, а число символов совпадает с планом.
-        var introSegments = 0
-        var audioChunks = 0
-        var plannedChunks = 0
-        var plannedChars = 0L
-        var spokenChars = 0L
-        var paragraphTotal = 0
-
         // Длительность считается по накопленным кадрам, а не суммой
         // независимо округлённых миллисекунд: тогда сумма таймлайна точно
         // совпадает с длительностью смёрженного WAV даже на тысячах порций.
@@ -326,8 +306,6 @@ class AudiobookExporter(
                     splitChapterIntoParagraphs(chapter.paragraphs.joinToString("\n\n")),
                     maxChunk,
                 )
-                plannedChunks += plans.sumOf { it.chunks.size }
-                plannedChars += plans.sumOf { it.text.length }
 
                 timeline.beginChapter(
                     chapterIndex = chapterOffset + 1,
@@ -347,8 +325,6 @@ class AudiobookExporter(
                     segmentHandle.append(introFile, introSegment, introDuration)
                     timeline.endIntro(introDuration)
                     introFile.delete()
-                    introSegments++
-                    spokenChars += introText.length
                 } else {
                     // У выбранной главы нет названия — вводим нулевой intro,
                     // чтобы таймлайн оставался строгим.
@@ -358,7 +334,6 @@ class AudiobookExporter(
 
                 // 2. Абзацы: внутренние TTS-порции складываются в один тайминг.
                 val spokenParagraphs = plans.filter { !it.isEmpty }
-                paragraphTotal += spokenParagraphs.size
                 spokenParagraphs.forEachIndexed { paragraphOffset, plan ->
                     coroutineContext.ensureActive()
 
@@ -375,8 +350,6 @@ class AudiobookExporter(
                         val chunkDuration = advanceFrames(chunkSegment)
                         segmentHandle.append(chunkFile, chunkSegment, chunkDuration)
                         paragraphDurationMs += chunkDuration
-                        audioChunks++
-                        spokenChars += chunk.length
                         // Сегмент удаляется сразу после присоединения.
                         runCatching { chunkFile.delete() }
                     }
@@ -441,23 +414,6 @@ class AudiobookExporter(
         // (в неё входит задержка кодера), для WAV — записанные PCM-кадры.
         val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
         if (durationMs <= 0L) throw IOException("synthesized audio is empty")
-        // Аудит целостности контента: в логе видно, что запланированное и
-        // озвученное совпадают. Это же позволяет сравнить WAV- и MP4-экспорт
-        // одного и того же диапазона (число порций/символов и длительность).
-        val intact = plannedChunks == audioChunks && plannedChars == spokenChars
-        AudiobookExportDebug.log(
-            "content audit: chapters=${spool.chapterCount} intros=$introSegments " +
-                "paragraphs=$paragraphTotal " +
-                "plannedChunks=$plannedChunks audioChunks=$audioChunks " +
-                "plannedChars=$plannedChars spokenChars=$spokenChars " +
-                "audioMs=$durationMs intact=$intact",
-        )
-        if (!intact) {
-            Timber.w(
-                "AudiobookExporter: content audit mismatch planned(chunks=%d chars=%d) spoken(chunks=%d chars=%d)",
-                plannedChunks, plannedChars, audioChunks, spokenChars,
-            )
-        }
         return MergeOutcome(
             durationMs = durationMs,
             sampleRateHz = rate,

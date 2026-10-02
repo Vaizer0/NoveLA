@@ -36,16 +36,10 @@ class ThermalExportThrottle(context: Context) : ExportThrottle {
     private val powerManager =
         context.getSystemService(Context.POWER_SERVICE) as? PowerManager
 
-    private var lastStatus: Int = Int.MIN_VALUE
-
     override suspend fun beforeChunk() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val manager = powerManager ?: return
         val status = manager.currentThermalStatus
-        if (status != lastStatus) {
-            lastStatus = status
-            AudiobookExportDebug.log("thermal status -> $status")
-        }
         val delayMs = thermalDelayMs(status)
         if (delayMs > 0L) delay(delayMs)
     }

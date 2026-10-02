@@ -81,12 +81,6 @@ class TtsAudioSynthesizer(
     private var resolvedEnginePackage = enginePackage
     private var resolvedVoiceId = voiceId
 
-    /** Сколько порций отдал кэш и сколько было синтезировано — для лога. */
-    var cacheHits: Int = 0
-        private set
-    var cacheMisses: Int = 0
-        private set
-
     /**
      * Ошибка текущей попытки синтеза. Пишется из колбэка движка,
      * который приходит на другой поток, поэтому доступ через @Volatile.
@@ -139,7 +133,6 @@ class TtsAudioSynthesizer(
         // движка: у него один поток синтеза, и иначе экспорт голодает.
         TtsSynthesisCoordinator.beginBatch()
         batchRegistered = true
-        AudiobookExportDebug.log("TTS initialized (engine=${engine ?: "default"}, voice=$voiceId, speed=$speed, pitch=$pitch)")
     }
 
     /** Применяет голос, скорость и тон, заданные снимком настроек. */
@@ -208,10 +201,6 @@ class TtsAudioSynthesizer(
                 val segment = runCatching { WavAudio.readSegment(cached) }.getOrNull()
                 if (segment != null && (expected == null || expected.matches(segment))) {
                     cached.copyTo(outputFile, overwrite = true)
-                    cacheHits++
-                    AudiobookExportDebug.log(
-                        "TTS cache hit: chars=${text.length} bytes=${outputFile.length()} frames=${segment.frameCount}",
-                    )
                     return segment
                 }
                 // Формат не совпал с потоком — синтезируем и перезапишем кэш.
@@ -219,7 +208,6 @@ class TtsAudioSynthesizer(
         }
 
         if (outputFile.exists()) outputFile.delete()
-        cacheMisses++
 
         var lastFailure: Exception? = null
         repeat(MAX_SYNTHESIS_ATTEMPTS) { attempt ->
@@ -234,19 +222,14 @@ class TtsAudioSynthesizer(
 
             if (usable) {
                 if (!AudioDecoder.ensurePcmWav(outputFile, reportedFormat)) {
-                    AudiobookExportDebug.log("TTS output could not be converted to PCM WAV")
                     throw TtsSynthesisException("TTS produced an unsupported audio format")
                 }
                 val segment = runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
-                    AudiobookExportDebug.log("synthesized file is unreadable", it)
                     throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
                 }
                 if (pcmCache != null && cacheKey != null) {
                     runCatching { pcmCache.put(cacheKey, outputFile) }
                 }
-                AudiobookExportDebug.log(
-                    "TTS ok: chars=${text.length} bytes=${outputFile.length()} attempt=${attempt + 1}",
-                )
                 currentAttempt = null
                 return segment
             }
@@ -256,7 +239,7 @@ class TtsAudioSynthesizer(
                 state.error != null -> state.error!!
                 else -> "no audio produced on attempt ${attempt + 1}"
             }
-            AudiobookExportDebug.log("TTS attempt ${attempt + 1} failed: $reason")
+            Timber.w("TtsAudioSynthesizer: TTS attempt %d failed: %s", attempt + 1, reason)
             lastFailure = TtsSynthesisException(reason)
             runCatching { instance.stop() }
             runCatching { outputFile.delete() }
@@ -309,9 +292,6 @@ class TtsAudioSynthesizer(
                 // посреди книги, склеить сегменты будет нельзя.
                 if (sampleRateInHz > 0 && channelCount > 0) {
                     reportedFormat = SynthFormat(sampleRateInHz, channelCount, audioFormat)
-                    AudiobookExportDebug.log(
-                        "onBeginSynthesis ${sampleRateInHz}Hz/${channelCount}ch enc=$audioFormat",
-                    )
                 }
             }
 
@@ -380,9 +360,6 @@ class TtsAudioSynthesizer(
         if (batchRegistered) {
             batchRegistered = false
             TtsSynthesisCoordinator.endBatch()
-        }
-        if (cacheHits > 0 || cacheMisses > 0) {
-            AudiobookExportDebug.log("TTS session done: cacheHits=$cacheHits cacheMisses=$cacheMisses")
         }
     }
 

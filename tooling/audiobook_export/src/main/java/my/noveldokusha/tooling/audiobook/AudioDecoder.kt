@@ -34,7 +34,6 @@ object AudioDecoder {
      */
     fun ensurePcmWav(file: File, fallback: SynthFormat?): Boolean {
         if (isRiffWav(file)) return true
-        logHead(file)
 
         val parent = file.parentFile ?: return false
         val normalised = File(parent, file.name + ".normalized.wav")
@@ -63,20 +62,6 @@ object AudioDecoder {
                 String(bytes, Charsets.US_ASCII) == "RIFF"
             }
         }.getOrDefault(false)
-    }
-
-    private fun logHead(file: File) {
-        runCatching {
-            RandomAccessFile(file, "r").use { raf ->
-                val count = minOf(16L, raf.length()).toInt()
-                val bytes = ByteArray(count)
-                raf.readFully(bytes)
-                AudiobookExportDebug.log(
-                    "TTS output is not RIFF (size=${raf.length()}), head=" +
-                        bytes.joinToString(" ") { "%02X".format(it) },
-                )
-            }
-        }
     }
 
     /** Декодирует контейнер (MP3/OGG/…) в PCM через штатные кодеки Android. */
@@ -182,9 +167,6 @@ object AudioDecoder {
         writeWavHeader(output, wroteBytes, sampleRate, channels)
         appendFile(output, pcm)
         pcm.delete()
-        AudiobookExportDebug.log(
-            "AudioDecoder: decoded container to ${sampleRate}Hz/${channels}ch, ${wroteBytes}B",
-        )
         return true
     }
 
@@ -197,7 +179,7 @@ object AudioDecoder {
         // Заведомо сжатый контейнер нельзя трактовать как сырой PCM: иначе
         // получится «валидный» WAV из шума.
         if (looksLikeContainer(input)) {
-            AudiobookExportDebug.log("AudioDecoder: refusing to wrap container-like bytes as raw PCM")
+            Timber.w("AudioDecoder: refusing to wrap container-like bytes as raw PCM")
             return false
         }
 
@@ -206,7 +188,7 @@ object AudioDecoder {
             AudioFormat.ENCODING_PCM_8BIT -> wrapRawPcm8Bit(input, output, sampleRate, channels)
             AudioFormat.ENCODING_PCM_FLOAT -> wrapRawPcmFloat(input, output, sampleRate, channels)
             else -> {
-                AudiobookExportDebug.log("AudioDecoder: unsupported raw PCM encoding ${fallback.encoding}")
+                Timber.w("AudioDecoder: unsupported raw PCM encoding %d", fallback.encoding)
                 false
             }
         }
@@ -215,9 +197,6 @@ object AudioDecoder {
     private fun wrapRawPcm16(input: File, output: File, sampleRate: Int, channels: Int): Boolean {
         writeWavHeader(output, input.length(), sampleRate, channels)
         appendFile(output, input)
-        AudiobookExportDebug.log(
-            "AudioDecoder: wrapped raw PCM as ${sampleRate}Hz/${channels}ch, ${input.length()}B",
-        )
         return true
     }
 
@@ -244,9 +223,6 @@ object AudioDecoder {
                 }
             }
         }
-        AudiobookExportDebug.log(
-            "AudioDecoder: converted 8-bit PCM to ${sampleRate}Hz/${channels}ch, ${dataBytes}B",
-        )
         return true
     }
 
@@ -275,9 +251,6 @@ object AudioDecoder {
                 }
             }
         }
-        AudiobookExportDebug.log(
-            "AudioDecoder: converted float PCM to ${sampleRate}Hz/${channels}ch, ${dataBytes}B",
-        )
         return true
     }
 

@@ -137,12 +137,6 @@ class VisualSourceProcessor(private val context: Context) {
         if (durationMs <= 0L) {
             throw VisualProcessingException("Video has no measurable duration: $sourceName")
         }
-        AudiobookExportDebug.log(
-            "VisualSourceProcessor: video ready ${meta.width}x${meta.height} " +
-                "fps=${meta.frameRate} duration=${durationMs}ms codec=${meta.mime} " +
-                "samples=${summary.sampleCount} keyframes=${summary.keyframeCount} " +
-                "maxSample=${summary.maxSampleBytes}B",
-        )
         return NormalizedVisualSegment(
             file = target,
             info = VisualSegmentInfo(
@@ -222,10 +216,6 @@ class VisualSourceProcessor(private val context: Context) {
             val buffer = ByteBuffer.allocate(EncodedVideoValidator.sampleBufferSize(format))
             val bufferInfo = MediaCodec.BufferInfo()
             var originUs = -1L
-            var samples = 0
-            var keyframes = 0
-            var minBytes = Int.MAX_VALUE
-            var maxBytes = 0
             while (true) {
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
@@ -246,17 +236,9 @@ class VisualSourceProcessor(private val context: Context) {
                         EncodedVideoValidator.muxerFlags(extractor.sampleFlags),
                     )
                     muxer.writeSampleData(track, buffer, bufferInfo)
-                    samples++
-                    if (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) keyframes++
-                    if (size < minBytes) minBytes = size
-                    if (size > maxBytes) maxBytes = size
                 }
                 extractor.advance()
             }
-            AudiobookExportDebug.log(
-                "VisualSourceProcessor: remux samples=$samples keyframes=$keyframes " +
-                    "sampleBytes=[${if (minBytes == Int.MAX_VALUE) 0 else minBytes}..$maxBytes]",
-            )
         } finally {
             if (started) runCatching { muxer.stop() }
             runCatching { muxer.release() }

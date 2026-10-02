@@ -32,7 +32,6 @@ import my.noveldokusha.strings.R as StringsR
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
 import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
 import my.noveldokusha.tooling.audiobook.AudiobookExporter
-import my.noveldokusha.tooling.audiobook.AudiobookExportDebug
 import my.noveldokusha.tooling.audiobook.AudiobookExportProgressBus
 import my.noveldokusha.tooling.audiobook.AudiobookFormat
 import my.noveldokusha.tooling.audiobook.AudiobookStage
@@ -132,8 +131,6 @@ class AudiobookExportWorker(
     }
 
     override suspend fun doWork(): Result {
-        AudiobookExportDebug.init(context)
-        AudiobookExportDebug.log("doWork started (attempt=$runAttemptCount, id=$id)")
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             AudiobookExportEntryPoint::class.java,
@@ -145,7 +142,6 @@ class AudiobookExportWorker(
 
         val storedRequest = readRequest()
         if (storedRequest == null) {
-            AudiobookExportDebug.log("readRequest returned null; aborting")
             AudiobookExportProgressBus.reportError("Invalid audiobook export request")
             return Result.failure()
         }
@@ -161,15 +157,9 @@ class AudiobookExportWorker(
         // первого процента, иначе система может остановить воркер.
         runCatching { setForeground(buildForegroundInfo(notification)) }
             .onFailure {
-                AudiobookExportDebug.log("early setForeground failed", it)
                 Timber.w(it, "AudiobookExport: early setForeground failed")
             }
         acquireWakeLock()
-        AudiobookExportDebug.log(
-            "request: book='${storedRequest.bookTitle}' format=${storedRequest.format} " +
-                "chapters=${storedRequest.startPosition}..${storedRequest.endPosition} " +
-                "engine='${storedRequest.enginePackage}' voice='${storedRequest.voiceId}'",
-        )
 
         // Показываем «0%» сразу, чтобы экран не выглядел зависшим до первого абзаца.
         AudiobookExportProgressBus.publish(
@@ -194,7 +184,6 @@ class AudiobookExportWorker(
             if (coverUri == null) {
                 // Обложки нет — собрать визуальный ряд не из чего.
                 val message = context.getString(StringsR.string.audiobook_export_mp4_needs_visual)
-                AudiobookExportDebug.log("MP4 export aborted: no cover and no visual source")
                 notification.showError(message)
                 AudiobookExportProgressBus.reportError(message)
                 return Result.failure()
@@ -211,7 +200,7 @@ class AudiobookExportWorker(
         // Директория проверяется до тяжёлого синтеза: недоступный SAF не должен
         // стоить пользователю минут TTS.
         if (!withContext(Dispatchers.IO) { storage.isAccessible(request.treeUri) }) {
-            AudiobookExportDebug.log("SAF tree not accessible: ${request.treeUri}")
+            Timber.w("AudiobookExport: SAF tree not accessible: %s", request.treeUri)
             val message = context.getString(StringsR.string.audiobook_export_failed)
             notification.showError(message)
             AudiobookExportProgressBus.reportError(message)
@@ -229,7 +218,7 @@ class AudiobookExportWorker(
             )
         }
         if (chapters == null) {
-            AudiobookExportDebug.log("no chapters to export for ${request.bookUrl}")
+            Timber.w("AudiobookExport: no chapters to export for %s", request.bookUrl)
             val message = context.getString(StringsR.string.audiobook_export_no_chapters)
             notification.showError(message)
             AudiobookExportProgressBus.reportError(message)
@@ -271,7 +260,6 @@ class AudiobookExportWorker(
                                         Data.Builder().putInt(KEY_PROGRESS, progress.percent).build(),
                                     )
                                 }.onFailure {
-                                    AudiobookExportDebug.log("setProgress failed", it)
                                     Timber.w(it, "AudiobookExport: setProgress failed")
                                 }
                             }
@@ -287,11 +275,9 @@ class AudiobookExportWorker(
             notification.showComplete(result.audioFile.name, copied.audioUri)
             Result.success()
         } catch (e: CancellationException) {
-            AudiobookExportDebug.log("export cancelled")
             notification.close()
             throw e
         } catch (e: Exception) {
-            AudiobookExportDebug.log("export failed", e)
             Timber.e(e, "AudiobookExport failed")
             val reason = e.message?.takeIf { it.isNotBlank() }
             val message = if (reason != null) {
@@ -306,7 +292,6 @@ class AudiobookExportWorker(
             outputDir.deleteRecursively()
             AudiobookExportProgressBus.clear()
             releaseWakeLock()
-            AudiobookExportDebug.log("doWork finished")
         }
     }
 
@@ -324,9 +309,8 @@ class AudiobookExportWorker(
                     setReferenceCounted(false)
                     acquire(MAX_WAKE_LOCK_MS)
                 }
-            AudiobookExportDebug.log("wake lock acquired")
         }.onFailure {
-            AudiobookExportDebug.log("wake lock acquire failed", it)
+            Timber.w(it, "AudiobookExport: wake lock acquire failed")
         }
     }
 
@@ -334,7 +318,7 @@ class AudiobookExportWorker(
         runCatching {
             wakeLock?.takeIf { it.isHeld }?.release()
         }.onFailure {
-            AudiobookExportDebug.log("wake lock release failed", it)
+            Timber.w(it, "AudiobookExport: wake lock release failed")
         }
         wakeLock = null
     }

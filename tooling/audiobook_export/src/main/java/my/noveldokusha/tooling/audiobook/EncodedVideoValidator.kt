@@ -21,12 +21,7 @@ internal object EncodedVideoValidator {
     data class Summary(
         val sampleCount: Int,
         val keyframeCount: Int,
-        val firstPtsUs: Long,
-        val lastPtsUs: Long,
-        val minSampleBytes: Int,
         val maxSampleBytes: Int,
-        /** Сколько раз PTS в порядке декодирования меньше предыдущего (B-кадры). */
-        val decodeOrderInversions: Int,
         val hasCsd: Boolean,
     ) {
         val isValid: Boolean
@@ -68,9 +63,9 @@ internal object EncodedVideoValidator {
         }
 
     /**
-     * Читает дорожку целиком, считая сэмплы/ключевые кадры и собирая
-     * диагностику меток времени. Бросает [IOException], если поток заведомо
-     * недекодируем (нет сэмплов, ключевых кадров или CSD).
+     * Читает дорожку целиком, считая сэмплы/ключевые кадры. Бросает
+     * [IOException], если поток заведомо недекодируем (нет сэмплов,
+     * ключевых кадров или CSD).
      */
     fun analyze(file: File, label: String): Summary {
         val extractor = MediaExtractor()
@@ -83,27 +78,15 @@ internal object EncodedVideoValidator {
             extractor.selectTrack(index)
             val format = extractor.getTrackFormat(index)
 
-            val bufferSize = sampleBufferSize(format)
-            val buffer = ByteBuffer.allocate(bufferSize)
+            val buffer = ByteBuffer.allocate(sampleBufferSize(format))
             var samples = 0
             var keyframes = 0
-            var firstPts = Long.MIN_VALUE
-            var lastPts = 0L
-            var inversions = 0
-            var minBytes = Int.MAX_VALUE
             var maxBytes = 0
             while (true) {
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
-                val pts = extractor.sampleTime
-                if (firstPts == Long.MIN_VALUE) firstPts = pts
-                if (samples > 0 && pts < lastPts) inversions++
-                lastPts = pts
                 if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) keyframes++
-                if (size > 0) {
-                    if (size < minBytes) minBytes = size
-                    if (size > maxBytes) maxBytes = size
-                }
+                if (size > maxBytes) maxBytes = size
                 samples++
                 extractor.advance()
             }
@@ -111,26 +94,8 @@ internal object EncodedVideoValidator {
             val summary = Summary(
                 sampleCount = samples,
                 keyframeCount = keyframes,
-                firstPtsUs = if (firstPts == Long.MIN_VALUE) 0L else firstPts,
-                lastPtsUs = lastPts,
-                minSampleBytes = if (minBytes == Int.MAX_VALUE) 0 else minBytes,
                 maxSampleBytes = maxBytes,
-                decodeOrderInversions = inversions,
                 hasCsd = format.containsKey(CSD_0),
-            )
-            AudiobookExportDebug.log(
-                "[$label] video: mime=${format.getString(MediaFormat.KEY_MIME)} " +
-                    "profile=${optInt(format, MediaFormat.KEY_PROFILE)} " +
-                    "level=${optInt(format, MediaFormat.KEY_LEVEL)} " +
-                    "${optInt(format, MediaFormat.KEY_WIDTH)}x${optInt(format, MediaFormat.KEY_HEIGHT)} " +
-                    "fps=${optInt(format, MediaFormat.KEY_FRAME_RATE)} " +
-                    "duration=${optLong(format, MediaFormat.KEY_DURATION) / 1000L}ms " +
-                    "rotation=${optInt(format, MediaFormat.KEY_ROTATION)} " +
-                    "samples=${summary.sampleCount} keyframes=${summary.keyframeCount} " +
-                    "firstPts=${summary.firstPtsUs} lastPts=${summary.lastPtsUs} " +
-                    "ptsInversions=${summary.decodeOrderInversions} " +
-                    "sampleBytes=[${summary.minSampleBytes}..${summary.maxSampleBytes}] " +
-                    "buffer=$bufferSize csd=${summary.hasCsd} bytes=${file.length()}",
             )
             if (!summary.isValid) {
                 throw IOException(
@@ -147,9 +112,6 @@ internal object EncodedVideoValidator {
     private fun optInt(format: MediaFormat, key: String): Int =
         runCatching { if (format.containsKey(key)) format.getInteger(key) else FALLBACK_INT }
             .getOrDefault(FALLBACK_INT)
-
-    private fun optLong(format: MediaFormat, key: String): Long =
-        runCatching { if (format.containsKey(key)) format.getLong(key) else 0L }.getOrDefault(0L)
 
     private const val CSD_0 = "csd-0"
     private const val FALLBACK_INT = -1

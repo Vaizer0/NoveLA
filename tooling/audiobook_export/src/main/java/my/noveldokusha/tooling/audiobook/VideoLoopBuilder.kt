@@ -69,22 +69,9 @@ class VideoLoopBuilder {
         }
         if (audioDurationMs <= 0L) throw IOException("audio duration is not positive: $audioDurationMs")
 
-        AudiobookExportDebug.log(
-            "MP4 build start: audio=${audioDurationMs}ms visual=${visualSegment.file.name} " +
-                "expectedVisual=${visualSegment.expectedDurationMs}ms",
-        )
-        val startedAtMs = System.currentTimeMillis()
         buildWithEncodedAudio(encodedAudioFile, visualSegment, audioDurationMs, target, onProgress)
-        AudiobookExportDebug.log(
-            "MP4 build done in ${System.currentTimeMillis() - startedAtMs}ms size=${target.length()}",
-        )
 
         val durations = probeTrackDurations(target)
-        AudiobookExportDebug.log(
-            "MP4 tracks: audio=${durations.audioMs}ms video=${durations.videoMs}ms " +
-                "container=${durations.containerMs}ms requestedAudio=${audioDurationMs}ms " +
-                "size=${target.length()}",
-        )
         return Mp4Result(
             file = target,
             audioDurationMs = durations.audioMs.takeIf { it > 0L } ?: audioDurationMs,
@@ -201,12 +188,6 @@ class VideoLoopBuilder {
                 EncodedVideoValidator.sampleBufferSize(trackFormat),
                 visualSegment.maxSampleBytes,
             )
-            AudiobookExportDebug.log(
-                "video loop: segment=${segmentDurationUs}us loop=${loopPeriodUs}us " +
-                    "audio=${audioUs}us gaps=$hasGaps buffer=${bufferSize}B " +
-                    "frameRate=${visualSegment.frameRate}",
-            )
-
             val buffer = java.nio.ByteBuffer.allocate(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
             var written = 0L
@@ -261,16 +242,9 @@ class VideoLoopBuilder {
             }
 
             var loopStartUs = 0L
-            var loops = 0L
             while (loopStartUs < audioUs) {
                 val produced = writeCycle(loopStartUs, audioUs)
                 if (produced == 0) break
-                loops++
-                if (loops == 1L) {
-                    AudiobookExportDebug.log(
-                        "video loop: first cycle samples=$produced last=${maxWrittenUs}us",
-                    )
-                }
                 loopStartUs += loopPeriodUs
             }
 
@@ -287,10 +261,6 @@ class VideoLoopBuilder {
                 writeCycle(0L, audioUs)
             }
             if (written == 0L) throw IOException("visual segment produced no samples")
-            AudiobookExportDebug.log(
-                "video loop done: samples=$written loops=$loops last=${maxWrittenUs}us " +
-                    "audio=${audioUs}us duration=${maxWrittenUs.coerceAtLeast(0L) / 1000L}ms",
-            )
             onProgress(1f)
         } finally {
             runCatching { extractor.release() }
@@ -432,11 +402,6 @@ internal class AacAudioEncoder {
 
             // PCM читается блоками прямо из WAV: полный объём аудиокниги
             // в память не попадает, в отличие от ByteArrayOutputStream.
-            AudiobookExportDebug.log(
-                "AAC encode start: ${segment.sampleRateHz}Hz/${segment.channels}ch " +
-                    "frames=${segment.frameCount} bytes=${segment.dataLength}",
-            )
-            val startedAtMs = System.currentTimeMillis()
             RandomAccessFile(wavFile, "r").use { raf ->
                 raf.seek(segment.dataOffset)
                 val bytesPerFrame = segment.bytesPerFrame.coerceAtLeast(1)
@@ -505,10 +470,6 @@ internal class AacAudioEncoder {
                         }
                     }
                 }
-                AudiobookExportDebug.log(
-                    "AAC encode done: frames=$framesSubmitted " +
-                        "in ${System.currentTimeMillis() - startedAtMs}ms",
-                )
             }
         } finally {
             if (started) runCatching { muxer.stop() }
@@ -645,11 +606,6 @@ internal class StreamingAacEncoder(private val outputFile: File) {
         }
         closeQuietly()
         durationMs = probeDurationMs(outputFile)
-        AudiobookExportDebug.log(
-            "AAC stream done: frames=$totalFrames started=$started " +
-                "duration=${durationMs}ms " +
-                "size=${runCatching { outputFile.length() }.getOrDefault(0L)}",
-        )
     }
 
     /** Читает длительность аудиодорожки готового файла. */
@@ -729,9 +685,6 @@ internal class StreamingAacEncoder(private val outputFile: File) {
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         codec.start()
         configured = true
-        AudiobookExportDebug.log(
-            "AAC stream start: ${sampleRate}Hz/${channels}ch bits=$bitsPerSample",
-        )
     }
 
     private fun requireCompatible(segment: PcmSegment) {
