@@ -7,6 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.io.RandomAccessFile
 
 class AudiobookExportJobTest {
 
@@ -167,7 +168,7 @@ class AudiobookExportJobTest {
         appendBytes(first.audioFile, 1000)
         first.commitChapter(chapter(1, pcmBytes = 1000, frames = 24000, startMs = 1000, endMs = 2000))
         // Имитируем обрыв: манифест говорит про 2 главы, а на диск легло меньше.
-        first.audioFile.setLength(1500)
+        RandomAccessFile(first.audioFile, "rw").use { it.setLength(1500) }
 
         val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
 
@@ -193,7 +194,7 @@ class AudiobookExportJobTest {
         first.mp4File.writeBytes(byteArrayOf(1))
         first.jsonFile.writeBytes(byteArrayOf(1))
 
-        first.audioFile.setLength(1200)
+        RandomAccessFile(first.audioFile, "rw").use { it.setLength(1200) }
 
         val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
 
