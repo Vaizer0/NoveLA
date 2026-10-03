@@ -90,6 +90,28 @@ class AudiobookExportJobTest {
         file.appendBytes(ByteArray(count))
     }
 
+    private fun commitChapters(
+        job: AudiobookExportJob,
+        count: Int,
+        startIndex: Int,
+        bytesPerChapter: Int,
+        framesPerChapter: Long,
+    ) {
+        repeat(count) { i ->
+            val index = startIndex + i
+            appendBytes(job.audioFile, bytesPerChapter)
+            job.commitChapter(
+                chapter(
+                    offset = index,
+                    pcmBytes = bytesPerChapter.toLong(),
+                    frames = framesPerChapter,
+                    startMs = index * 1000L,
+                    endMs = (index + 1) * 1000L,
+                ),
+            )
+        }
+    }
+
     @Test
     fun newJobIsCreatedEmpty() {
         val job = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
@@ -216,6 +238,89 @@ class AudiobookExportJobTest {
         job.discard()
 
         assertFalse(job.dir.exists())
+    }
+
+    @Test
+    fun resumesLargeExportAfterInterruptedSynthesis() {
+        val total = 60
+        val first = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+        first.setFormat(24000, 1, 16)
+        // Синтез оборвался на 45-й главе: дальше манифест не двигался.
+        commitChapters(first, count = 45, startIndex = 0, bytesPerChapter = 1000, framesPerChapter = 24000)
+
+        val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+
+        assertEquals(AudiobookExportJob.Status.RESUMED, resumed.status)
+        assertEquals(45, resumed.recoveredChapters)
+        assertEquals(45000L, resumed.pcmBytes)
+        assertEquals(1_080_000L, resumed.frames)
+        // Продолжаем ровно оставшиеся главы и снова переживаем перезапуск.
+        commitChapters(resumed, count = total - 45, startIndex = 45, bytesPerChapter = 1000, framesPerChapter = 24000)
+
+        val finished = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+        assertEquals(total, finished.recoveredChapters)
+        assertEquals(0, finished.droppedChapters)
+        assertEquals(60000L, finished.pcmBytes)
+        assertEquals((1..total).toList(), finished.completedTimings.map { it.chapterIndex })
+    }
+
+    @Test
+    fun recoversFromInterruptedMergeAtScale() {
+        val total = 60
+        val first = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+        first.setFormat(24000, 1, 16)
+        commitChapters(first, count = total, startIndex = 0, bytesPerChapter = 1000, framesPerChapter = 24000)
+        // Обрыв во время сборки: манифест помнит 60 глав, а на диске половина 60-й.
+        RandomAccessFile(first.audioFile, "rw").use { it.setLength(59 * 1000L + 500L) }
+
+        val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+
+        assertEquals(59, resumed.recoveredChapters)
+        assertEquals(1, resumed.droppedChapters)
+        assertEquals(59000L, resumed.pcmBytes)
+        assertEquals(59000L, resumed.audioFile.length())
+        // Повторно фиксируем последнюю главу после пересборки её хвоста.
+        appendBytes(resumed.audioFile, 1000)
+        resumed.commitChapter(
+            chapter(59, pcmBytes = 1000, frames = 24000, startMs = 59000, endMs = 60000),
+        )
+
+        val finished = AudiobookExportJob.open(baseDir, request(), totalChapters = total)
+        assertEquals(total, finished.recoveredChapters)
+        assertEquals(0, finished.droppedChapters)
+    }
+
+    @Test
+    fun aacDurationAndVisualSurviveResume() {
+        val first = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+        first.setFormat(24000, 1, 16)
+        commitChapters(first, count = 3, startIndex = 0, bytesPerChapter = 1000, framesPerChapter = 24000)
+        first.setPhase(AudiobookJobPhase.ENCODING)
+        first.markAacReady(durationMs = 12_345L)
+        first.setVisual(
+            CheckpointVisual(
+                type = VisualSource.IMAGE.name,
+                sourceName = "cover",
+                loop = true,
+                durationMs = 500,
+                width = 1280,
+                height = 720,
+                expectedDurationMs = 500,
+                frameRate = 30,
+                loopPeriodMs = 1000,
+                maxSampleBytes = 4096,
+            ),
+        )
+
+        val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+
+        assertEquals(3, resumed.recoveredChapters)
+        assertEquals(AudiobookJobPhase.ENCODING, resumed.phase)
+        assertTrue(resumed.aacReady)
+        assertFalse(resumed.mp4Ready)
+        assertEquals(12_345L, resumed.mediaDurationMs)
+        assertEquals("cover", resumed.visual?.sourceName)
+        assertEquals(1280, resumed.visual?.width)
     }
 
     @Test
