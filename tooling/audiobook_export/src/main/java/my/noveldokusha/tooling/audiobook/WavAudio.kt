@@ -62,7 +62,7 @@ object WavAudio {
             var bitsPerSample = 0
             var audioFormat = 0
             var dataOffset = -1L
-            var dataLength = 0L
+            var declaredDataLength = -1L
 
             while (raf.filePointer + 8 <= raf.length()) {
                 val chunkId = ByteArray(4)
@@ -82,9 +82,7 @@ object WavAudio {
                     }
                     "data" -> {
                         dataOffset = chunkStart
-                        // Размер data может превышать реальный файл, если движок
-                        // не успел дописать хвост — обрезаем по длине файла.
-                        dataLength = minOf(chunkSize.toLong(), raf.length() - chunkStart)
+                        declaredDataLength = chunkSize.toLong()
                     }
                 }
 
@@ -100,17 +98,52 @@ object WavAudio {
             if (audioFormat != 1 && audioFormat != 0xFFFE) {
                 throw IOException("unsupported WAV format $audioFormat: $file")
             }
-            if (dataLength <= 0L) throw IOException("WAV segment has no audio data: $file")
+            val bytesPerFrame = channels * (bitsPerSample / 8)
+            if (bytesPerFrame <= 0) throw IOException("invalid WAV frame size: $file")
+            if (declaredDataLength <= 0L) throw IOException("WAV segment has no audio data: $file")
+            // Незавершённая запись движка: заголовок обещает больше байт, чем
+            // реально лежит в файле. Раньше это молча обрезалось, и обрыв
+            // попадал в мердж как «короткий абзац» — слышен прыжок с середины
+            // абзаца на следующий. Теперь это ошибка, которую вызывающий
+            // обрабатывает как неудачную попытку синтеза и повторяет.
+            val availableData = (raf.length() - dataOffset).coerceAtLeast(0L)
+            if (declaredDataLength > availableData) {
+                throw IOException(
+                    "truncated WAV data chunk: $file has $availableData of $declaredDataLength bytes",
+                )
+            }
+            if (declaredDataLength % bytesPerFrame != 0L) {
+                throw IOException("WAV data is not frame-aligned: $file")
+            }
 
             return PcmSegment(
                 sampleRateHz = sampleRate,
                 channels = channels,
                 bitsPerSample = bitsPerSample,
                 dataOffset = dataOffset,
-                dataLength = dataLength,
+                dataLength = declaredDataLength,
             )
         }
     }
+
+    /** Похож ли файл на RIFF/WAVE по первым байтам. */
+    fun isRiffWav(file: File): Boolean {
+        if (!file.isFile || file.length() < 12L) return false
+        return runCatching {
+            RandomAccessFile(file, "r").use { raf ->
+                val header = ByteArray(4)
+                raf.readFully(header)
+                String(header, Charsets.US_ASCII) == "RIFF"
+            }
+        }.getOrDefault(false)
+    }
+
+    /**
+     * true, только если файл — дописанный WAV: data-чанк присутствует целиком
+     * и выровнен по кадру. Не RIFF-файлы (сырой PCM/сжатый контейнер) дают
+     * false — их полноту здесь проверить нечем.
+     */
+    fun isCompleteWav(file: File): Boolean = runCatching { readSegment(file) }.isSuccess
 
     /** Реальная длительность WAV-файла в мс. */
     fun durationMs(file: File): Long = readSegment(file).durationMs()

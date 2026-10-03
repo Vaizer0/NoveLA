@@ -7,6 +7,7 @@ import android.speech.tts.UtteranceProgressListener
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -200,12 +201,15 @@ class TtsAudioSynthesizer(
         if (pcmCache != null && cacheKey != null) {
             val cached = pcmCache.get(cacheKey)
             if (cached != null) {
+                // readSegment строго проверяет целостность, а get() уже отсёк
+                // и удалил оборванные записи, поэтому здесь попадает только
+                // полный сегмент нужного формата.
                 val segment = runCatching { WavAudio.readSegment(cached) }.getOrNull()
                 if (segment != null && (expected == null || expected.matches(segment))) {
                     cached.copyTo(outputFile, overwrite = true)
                     return segment
                 }
-                // Формат не совпал с потоком — синтезируем и перезапишем кэш.
+                runCatching { cached.delete() }
             }
         }
 
@@ -218,17 +222,31 @@ class TtsAudioSynthesizer(
             currentAttempt = state
             val queued = queueSynthesis(instance, text, outputFile, utteranceId)
 
-            // Колбэк завершения — best effort: часть движков его не шлёт,
-            // и тогда срабатывает проверка стабильности размера файла.
-            val usable = queued == TextToSpeech.SUCCESS && waitForStableFile(instance, outputFile, state)
+            // Приёмка возможна только после терминального состояния движка
+            // (onDone либо «движок больше не говорит» + дописанный контейнер).
+            // Стабильный размер файла сам по себе доказательством не является,
+            // а целостность WAV проверяется отдельно ниже.
+            val segment = if (queued == TextToSpeech.SUCCESS &&
+                waitForSynthesis(instance, outputFile, state)
+            ) {
+                try {
+                    if (!AudioDecoder.ensurePcmWav(outputFile, reportedFormat)) {
+                        throw TtsSynthesisException("TTS produced an unsupported audio format")
+                    }
+                    WavAudio.readSegment(outputFile)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Оборванный/нечитаемый файл — это неудачная попытка, а не
+                    // финальный результат: повторим синтез, а не продолжим с дырой.
+                    Timber.w(e, "TtsAudioSynthesizer: attempt %d produced an unusable segment", attempt + 1)
+                    null
+                }
+            } else {
+                null
+            }
 
-            if (usable) {
-                if (!AudioDecoder.ensurePcmWav(outputFile, reportedFormat)) {
-                    throw TtsSynthesisException("TTS produced an unsupported audio format")
-                }
-                val segment = runCatching { WavAudio.readSegment(outputFile) }.getOrElse {
-                    throw TtsSynthesisException("synthesized file is unreadable: ${it.message}", it)
-                }
+            if (segment != null && segment.frameCount > 0L) {
                 if (pcmCache != null && cacheKey != null) {
                     runCatching { pcmCache.put(cacheKey, outputFile) }
                 }
@@ -239,7 +257,8 @@ class TtsAudioSynthesizer(
             val reason = when {
                 queued != TextToSpeech.SUCCESS -> "queue returned $queued"
                 state.error != null -> state.error!!
-                else -> "no audio produced on attempt ${attempt + 1}"
+                segment != null -> "synthesized segment is empty"
+                else -> "incomplete audio produced on attempt ${attempt + 1}"
             }
             Timber.w("TtsAudioSynthesizer: TTS attempt %d failed: %s", attempt + 1, reason)
             lastFailure = TtsSynthesisException(reason)
@@ -309,41 +328,49 @@ class TtsAudioSynthesizer(
     }
 
     /**
-     * Ждёт, пока размер файла перестанет меняться: движки не всегда
-     * присылают колбэк завершения, но к этому моменту файл уже записан.
+     * Ждёт терминального состояния синтеза: `onDone`/`onError` либо (для
+     * движков без колбэка) «движок больше не говорит» + дописанный контейнер.
+     *
+     * Стабильный размер файла **не** является доказательством завершения:
+     * временная пауза записи даёт ровно такой же стабильный размер. Поэтому
+     * решение принимает [SynthesisCompletionGate], а не сам факт «файл не рос».
      */
-    private suspend fun waitForStableFile(
+    private suspend fun waitForSynthesis(
         instance: TextToSpeech,
         outputFile: File,
         state: AttemptState,
     ): Boolean {
-        var lastSize = -1L
-        var stableRounds = 0
+        val gate = SynthesisCompletionGate(
+            stableRoundsRequired = STABLE_ROUNDS_REQUIRED,
+            minAudioBytes = WAV_MIN_BYTES,
+        )
         val startedAt = System.currentTimeMillis()
         var deadline = startedAt + SYNTHESIS_TIMEOUT_MS
         while (true) {
-            // Движок может не прислать файл, но сообщить об ошибке — не ждём
-            // таймаут целиком, иначе экран зависает на 0% на минуты.
-            if (state.error != null) return false
             val size = if (outputFile.exists()) outputFile.length() else -1L
-            // Готовый файл: колбэк onDone либо стабильный размер с реальными
-            // данными (не только 44-байтовый заголовок WAV).
-            if (state.done && size > WAV_MIN_BYTES) return true
-            if (size > WAV_MIN_BYTES && size == lastSize) {
-                stableRounds++
-                if (stableRounds >= STABLE_ROUNDS_REQUIRED) return true
-            } else {
-                stableRounds = 0
+            // Если опрос isSpeaking бросает исключение, считаем, что движок
+            // ещё занят: подтвердить завершение без колбэка нельзя.
+            val engineSpeaking = runCatching { instance.isSpeaking }.getOrDefault(true)
+            when (
+                gate.evaluate(
+                    done = state.done,
+                    failed = state.error != null,
+                    fileSize = size,
+                    engineSpeaking = engineSpeaking,
+                    containerComplete = { isContainerComplete(outputFile, size) },
+                )
+            ) {
+                SynthesisCompletion.ACCEPT -> return true
+                SynthesisCompletion.FAIL -> return false
+                SynthesisCompletion.WAIT -> Unit
             }
-            lastSize = size
             val now = System.currentTimeMillis()
             if (now >= deadline) {
                 // Движок занят (например, читалка озвучивает книгу): наш
                 // запрос всё ещё стоит в общей очереди синтеза, это не
                 // ошибка. Иначе экспорт уходил в бесконечные ретраи и
                 // выглядел «зависшим» до паузы читалки.
-                val engineBusy = runCatching { instance.isSpeaking }.getOrDefault(false)
-                if (engineBusy && now < startedAt + HARD_TIMEOUT_MS) {
+                if (engineSpeaking && now < startedAt + HARD_TIMEOUT_MS) {
                     deadline = now + SYNTHESIS_TIMEOUT_MS
                 } else {
                     return false
@@ -358,6 +385,20 @@ class TtsAudioSynthesizer(
                 state.awaitChange(STABLE_POLL_MS)
             }
         }
+    }
+
+    /**
+     * Проверка полноты контейнера для терминального пути без `onDone`.
+     *
+     * Для RIFF WAV требуется целостный, выровненный по кадру data-чанк.
+     * Для сырого PCM/сжатого контейнера полноту по заголовку не проверить:
+     * там полагаемся на «движок больше не говорит», а реальный формат и
+     * читаемость проверит `AudioDecoder` после приёмки.
+     */
+    private fun isContainerComplete(file: File, size: Long): Boolean {
+        if (size <= WAV_MIN_BYTES) return false
+        if (!WavAudio.isRiffWav(file)) return true
+        return WavAudio.isCompleteWav(file)
     }
 
     /**

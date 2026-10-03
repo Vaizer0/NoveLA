@@ -1,6 +1,8 @@
 package my.noveldokusha.tooling.audiobook
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -149,6 +151,53 @@ class WavAudioTest {
             WavAudio.StreamingWavWriter(target, sampleRateHz = 8000, channels = 1).use { it.finish() }
         }.exceptionOrNull()
         assertTrue(failure is IOException)
+    }
+
+    @Test
+    fun readSegment_rejectsTruncatedDataChunk() {
+        // Заголовок обещает 1000 байт, реально записано 400: движок не успел
+        // дописать файл. Раньше это молча обрезалось и обрыв попадал в мердж.
+        val file = writeWavWithDeclaredData("truncated.wav", declared = 1000, actual = 400)
+        assertTrue(WavAudio.isRiffWav(file))
+        assertFalse(WavAudio.isCompleteWav(file))
+        assertThrows(IOException::class.java) { WavAudio.readSegment(file) }
+    }
+
+    @Test
+    fun readSegment_rejectsNonFrameAlignedData() {
+        // 16-битное моно: кадр 2 байта, объявленный размер data 999 не выровнен.
+        val file = writeWavWithDeclaredData("misaligned.wav", declared = 999, actual = 999)
+        assertThrows(IOException::class.java) { WavAudio.readSegment(file) }
+    }
+
+    @Test
+    fun isCompleteWav_trueForCompleteFalseForTruncated() {
+        val complete = writeWav("complete.wav", sampleRateHz = 8000, channels = 1, frames = 100)
+        assertTrue(WavAudio.isCompleteWav(complete))
+        val truncated = writeWavWithDeclaredData("partial.wav", declared = 1000, actual = 400)
+        assertFalse(WavAudio.isCompleteWav(truncated))
+    }
+
+    /** WAV, чей заголовок объявляет больше данных, чем реально записано. */
+    private fun writeWavWithDeclaredData(name: String, declared: Int, actual: Int): File {
+        val file = temp.newFile(name)
+        file.outputStream().use { out ->
+            out.write("RIFF".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(36 + declared)
+            out.write("WAVE".toByteArray(Charsets.US_ASCII))
+            out.write("fmt ".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(16)
+            out.writeShortLe(1)
+            out.writeShortLe(1)
+            out.writeIntLe(8000)
+            out.writeIntLe(16000)
+            out.writeShortLe(2)
+            out.writeShortLe(16)
+            out.write("data".toByteArray(Charsets.US_ASCII))
+            out.writeIntLe(declared)
+            out.write(ByteArray(actual))
+        }
+        return file
     }
 }
 

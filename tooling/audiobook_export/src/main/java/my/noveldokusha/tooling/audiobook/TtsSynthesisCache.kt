@@ -33,6 +33,15 @@ class TtsSynthesisCache(context: Context) {
     fun get(key: String): File? {
         val file = File(root, "$key.wav")
         if (!file.isFile || file.length() <= WAV_HEADER_BYTES) return null
+        if (!WavAudio.isCompleteWav(file)) {
+            // Оборванная/битая запись (в том числе оставшаяся от старой версии)
+            // не должна попасть в мердж: удаляем её, следующий синтез перезапишет.
+            val size = file.length()
+            if (file.delete() && totalBytes >= 0L) {
+                totalBytes = (totalBytes - size).coerceAtLeast(0L)
+            }
+            return null
+        }
         file.setLastModified(System.currentTimeMillis())
         return file
     }
@@ -46,6 +55,9 @@ class TtsSynthesisCache(context: Context) {
      * приходится полный обход каталога.
      */
     fun put(key: String, source: File) {
+        // В кэш попадает только целый WAV: оборванный сегмент не должен
+        // «заражать» последующие экспорты того же текста.
+        if (!WavAudio.isCompleteWav(source)) return
         if (!root.exists() && !root.mkdirs()) return
         val target = File(root, "$key.wav")
         val tmp = File(root, "$key.tmp")
