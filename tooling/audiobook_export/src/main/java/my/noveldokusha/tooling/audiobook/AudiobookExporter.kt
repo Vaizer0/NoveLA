@@ -774,6 +774,9 @@ class AudiobookExporter(
         private var encoder: StreamingAacEncoder? = null
 
         init {
+            // Старый AAC может содержать главы, которые чекпоинт уже отбросил,
+            // поэтому перед перекодированием его всегда пересоздаём.
+            runCatching { job.aacFile.delete() }
             if (resume) {
                 val format = knownFormat ?: throw IOException("resume without known PCM format")
                 RandomAccessFile(pcmFile, "rw").use { it.setLength(job.pcmBytes) }
@@ -790,11 +793,7 @@ class AudiobookExporter(
                             dataLength = job.pcmBytes,
                         ),
                     )
-                } else {
-                    runCatching { job.aacFile.delete() }
                 }
-            } else {
-                runCatching { job.aacFile.delete() }
             }
             raf = RandomAccessFile(pcmFile, "rw").apply { seek(length()) }
         }
