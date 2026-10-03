@@ -31,6 +31,16 @@ class AudiobookChapterFailedException(
 ) : Exception(message, cause)
 
 /**
+ * Ошибка, после которой retry заведомо не поможет (битый запрос, недоступный
+ * SAF, отсутствующий визуал). Воркер помечает такую задачу failed, а не
+ * гоняет её по кругу.
+ */
+class PermanentAudiobookExportException(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
+/**
  * Оркестратор экспорта аудиокниги.
  *
  * Синтез и мердж идут одним проходом: каждый готовый сегмент сразу
@@ -38,6 +48,11 @@ class AudiobookChapterFailedException(
  * AAC-кодек, в который PCM уходит по мере синтеза. Промежуточный WAV для
  * MP4 не создаётся: нет ни лишнего файла на диске, ни второго прохода
  * декодирования/кодирования.
+ *
+ * Синтез идемпотентно возобновляем: каждая завершённая глава фиксируется в
+ * [AudiobookExportJob] (atomic manifest + аудио в `filesDir`) и при retry,
+ * смерти процесса или отмене продолжается с последней целой главы, не
+ * переозвучивая готовое.
  *
  * Память ограничена одной главой: главы читаются из [AudiobookChapterSource]
  * по одной, таймлайн уходит в [ChapterSpool]. Это рассчитано на 1000+ глав.
@@ -50,83 +65,82 @@ class AudiobookExporter(
     suspend fun export(
         request: AudiobookExportRequest,
         chapters: AudiobookChapterSource,
-        outputDir: File,
         onProgress: suspend (AudiobookExportProgress) -> Unit = {},
     ): AudiobookExportResult = withContext(Dispatchers.IO) {
-        if (chapters.totalChapters <= 0) throw IOException("no chapters to export")
-        outputDir.mkdirs()
-        resetMergedFormat()
+        if (chapters.totalChapters <= 0) throw PermanentAudiobookExportException("no chapters to export")
 
-        val baseName = outputBaseName(request)
-        val mediaFile = File(outputDir, baseName + extensionFor(request.format))
-        val jsonFile = File(outputDir, baseName + ".json")
+        val job = AudiobookExportJob.open(
+            baseDir = File(context.filesDir, AudiobookExportJob.DIR_NAME),
+            request = request,
+            totalChapters = chapters.totalChapters,
+        )
+        Timber.i(
+            "AudiobookExport: %s job=%s chapters=%d format=%s recovered=%d dropped=%d",
+            if (job.status == AudiobookExportJob.Status.NEW) "NEW" else "RESUMING",
+            job.dir.name,
+            job.totalChapters,
+            job.format,
+            job.recoveredChapters,
+            job.droppedChapters,
+        )
 
-        val tempDir = File(context.cacheDir, "$TEMP_DIR_NAME/${request.jobId()}")
+        val tempDir = job.tempDir
         if (tempDir.exists()) tempDir.deleteRecursively()
         tempDir.mkdirs()
 
-        // WAV пишется сразу в outputDir — копии готового файла нет.
-        // MP4 сначала получает AAC во временной папке, а контейнер собирается
-        // уже в outputDir после выравнивания по фактической длительности.
-        val wavTarget = if (request.format == AudiobookFormat.WAV) {
-            mediaFile
-        } else {
-            File(tempDir, "unused.wav")
+        resetMergedFormat()
+        if (job.sampleRateHz > 0) {
+            mergedSampleRate = job.sampleRateHz
+            mergedChannels = job.channels
+            mergedBitsPerSample = job.bitsPerSample
         }
-        val encodedAudioTarget = File(tempDir, "audio.m4a")
-        val spool = ChapterSpool(File(tempDir, "timeline.ndjson"))
 
-        var success = false
+        val spool = ChapterSpool(job.spoolFile)
         try {
-            val outcome = synthesizeAndMerge(
-                request = request,
-                chapters = chapters,
-                tempDir = tempDir,
-                wavTarget = wavTarget,
-                encodedAudioTarget = encodedAudioTarget,
-                spool = spool,
-                onProgress = onProgress,
-            )
+            // Все главы уже синтезированы (обрыв на этапе сборки/JSON): TTS не
+            // трогаем, только завершаем носитель и пересобираем производные.
+            val outcome = if (job.recoveredChapters >= job.totalChapters) {
+                restoreCompletedIntoSpool(job, spool)
+                finalizeSynthesizedAudio(request, job)
+            } else {
+                synthesizeAndMerge(request, chapters, job, spool, onProgress)
+            }
 
             coroutineContext.ensureActive()
-
             var audioDurationMs = outcome.durationMs
 
             val visualInfo = if (request.format == AudiobookFormat.MP4) {
-                val segment = prepareVisual(request, tempDir)
-                try {
-                    onProgress(
-                        AudiobookExportProgress(
-                            stage = AudiobookStage.CREATING_MP4,
-                            currentChapter = spool.chapterCount,
-                            totalChapters = chapters.totalChapters,
-                            chapterTitle = "",
-                            currentParagraph = 0,
-                            paragraphsInChapter = 0,
-                            percent = 88,
-                            generatedAudioMs = audioDurationMs,
-                            estimatedRemainingMs = null,
-                        ),
+                val segment = visualFor(request, job)
+                onProgress(
+                    AudiobookExportProgress(
+                        stage = AudiobookStage.CREATING_MP4,
+                        currentChapter = spool.chapterCount,
+                        totalChapters = job.totalChapters,
+                        chapterTitle = "",
+                        currentParagraph = 0,
+                        paragraphsInChapter = 0,
+                        percent = 88,
+                        generatedAudioMs = audioDurationMs,
+                        estimatedRemainingMs = null,
+                    ),
+                )
+                val mp4 = VideoLoopBuilder().buildFromEncodedAudio(
+                    encodedAudioFile = job.aacFile,
+                    audioDurationMs = audioDurationMs,
+                    visualSegment = segment,
+                    target = job.mp4File,
+                )
+                if (!mp4.durationsMatch()) {
+                    Timber.w(
+                        "AudiobookExporter: mp4 durations differ: audio=%d video=%d",
+                        mp4.audioDurationMs, mp4.videoDurationMs,
                     )
-                    val mp4 = VideoLoopBuilder().buildFromEncodedAudio(
-                        encodedAudioFile = encodedAudioTarget,
-                        audioDurationMs = audioDurationMs,
-                        visualSegment = segment,
-                        target = mediaFile,
-                    )
-                    if (!mp4.durationsMatch()) {
-                        Timber.w(
-                            "AudiobookExporter: mp4 durations differ: audio=%d video=%d",
-                            mp4.audioDurationMs, mp4.videoDurationMs,
-                        )
-                    }
-                    // JSON и таймлайн обязаны совпасть с реальной дорожкой
-                    // финального контейнера, а не с расчётом по PCM.
-                    audioDurationMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
-                    segment.info
-                } finally {
-                    segment.close()
                 }
+                // JSON и таймлайн обязаны совпасть с реальной дорожкой
+                // финального контейнера, а не с расчётом по PCM.
+                audioDurationMs = mp4.audioDurationMs.takeIf { it > 0L } ?: audioDurationMs
+                job.markMp4Ready(audioDurationMs)
+                segment.info
             } else {
                 null
             }
@@ -141,7 +155,7 @@ class AudiobookExporter(
                 AudiobookExportProgress(
                     stage = AudiobookStage.WRITING_JSON,
                     currentChapter = spool.chapterCount,
-                    totalChapters = chapters.totalChapters,
+                    totalChapters = job.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -152,7 +166,7 @@ class AudiobookExporter(
             )
 
             AudiobookJsonWriter.writeDocument(
-                output = jsonFile,
+                output = job.jsonFile,
                 novelTitle = request.bookTitle,
                 novelUrl = request.bookUrl,
                 format = request.format,
@@ -168,13 +182,14 @@ class AudiobookExporter(
                 visual = visualInfo,
             )
 
+            job.setPhase(AudiobookJobPhase.FINALIZING)
             coroutineContext.ensureActive()
 
             onProgress(
                 AudiobookExportProgress(
                     stage = AudiobookStage.FINALIZING,
                     currentChapter = spool.chapterCount,
-                    totalChapters = chapters.totalChapters,
+                    totalChapters = job.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -188,7 +203,7 @@ class AudiobookExporter(
                 AudiobookExportProgress(
                     stage = AudiobookStage.COMPLETED,
                     currentChapter = spool.chapterCount,
-                    totalChapters = chapters.totalChapters,
+                    totalChapters = job.totalChapters,
                     chapterTitle = "",
                     currentParagraph = 0,
                     paragraphsInChapter = 0,
@@ -198,10 +213,9 @@ class AudiobookExporter(
                 ),
             )
 
-            success = true
             AudiobookExportResult(
-                audioFile = mediaFile,
-                jsonFile = jsonFile,
+                audioFile = if (request.format == AudiobookFormat.WAV) job.audioFile else job.mp4File,
+                jsonFile = job.jsonFile,
                 durationMs = audioDurationMs,
                 chapterCount = spool.chapterCount,
                 sampleRateHz = outcome.sampleRateHz,
@@ -210,11 +224,8 @@ class AudiobookExporter(
         } finally {
             spool.close()
             tempDir.deleteRecursively()
-            if (!success) {
-                // Неудачный экспорт не оставляет полуфайлов в папке пользователя.
-                runCatching { mediaFile.delete() }
-                runCatching { jsonFile.delete() }
-            }
+            // Durable-состояние job'а НЕ удаляется: очистка выполняется
+            // воркером только после успешной копии в SAF.
         }
     }
 
@@ -242,32 +253,36 @@ class AudiobookExporter(
     }
 
     /**
-     * Синтезирует главы по порядку и на лету складывает сегменты в приёмник.
-     *
-     * Для WAV это потоковый RIFF-writer, для MP4 — AAC-кодек. Таймлайн
-     * строится тем же проходом и сразу уходит в [spool], не накапливаясь в
-     * памяти: длительность каждого абзаца берётся из фактически записанного
-     * файла, поэтому пересчётов после экспорта не требуется.
+     * Синтезирует оставшиеся главы по порядку и на лету складывает сегменты
+     * в durable-приёмник, а по завершении каждой главы фиксирует чекпоинт.
      */
     private suspend fun synthesizeAndMerge(
         request: AudiobookExportRequest,
         chapters: AudiobookChapterSource,
-        tempDir: File,
-        wavTarget: File,
-        encodedAudioTarget: File,
+        job: AudiobookExportJob,
         spool: ChapterSpool,
         onProgress: suspend (AudiobookExportProgress) -> Unit,
     ): MergeOutcome {
         val timeline = TimelineBuilder(onChapterClosed = { spool.add(it) })
+        // Готовые главы возвращаются в таймлайн (и в spool), но TTS для них
+        // не вызывается: их аудио уже лежит в durable-накопителе.
+        timeline.restore(job.completedTimings)
+        repeat(job.recoveredChapters) {
+            if (chapters.next() == null) {
+                throw IOException(
+                    "checkpoint has ${job.recoveredChapters} chapters but the source ended early",
+                )
+            }
+        }
+
         val totalTextChars = chapters.estimatedTotalChars.coerceAtLeast(1L)
-        var processedChars = 0L
+        var processedChars = job.completed.sumOf { it.chars }
         val startedAt = System.currentTimeMillis()
 
         // Длительность считается по накопленным кадрам, а не суммой
         // независимо округлённых миллисекунд: тогда сумма таймлайна точно
         // совпадает с длительностью смёрженного WAV даже на тысячах порций.
-        var framesWritten = 0L
-        var sinkDurationMs = 0L
+        var framesWritten = job.frames
         fun advanceFrames(segment: PcmSegment): Long {
             val rate = mergedSampleRate ?: segment.sampleRateHz
             val startMs = framesWritten * 1000L / rate
@@ -285,17 +300,13 @@ class AudiobookExporter(
             cache = TtsSynthesisCache(context),
         )
 
-        // MP4 кодирует AAC прямо во время синтеза; WAV пишет RIFF-поток.
-        val segmentHandle: ChunkSink = if (request.format == AudiobookFormat.MP4) {
-            AacChunkSink(encodedAudioTarget)
-        } else {
-            WavChunkSink(wavTarget)
-        }
+        val resume = job.recoveredChapters > 0 || job.pcmBytes > 0L
+        val durable = createDurableStore(job, resume)
         try {
             synthesizer.initialize()
             val maxChunk = synthesizer.maxChunkLength()
 
-            var chapterOffset = -1
+            var chapterOffset = job.recoveredChapters - 1
             while (true) {
                 coroutineContext.ensureActive()
                 val chapter = chapters.next() ?: break
@@ -313,15 +324,21 @@ class AudiobookExporter(
                     chapterTitle = chapterTitle,
                 )
 
+                var chapterBytes = 0L
+                var chapterFrames = 0L
+                var chapterChars = 0L
+
                 // 1. Intro: название книги + название главы, произносимые в начале.
                 val introText = buildChapterIntro(request.bookTitle, chapterTitle)
                 if (introText.isNotBlank()) {
-                    val introFile = File(tempDir, "ch${chapterOffset}_intro.wav")
+                    val introFile = File(job.tempDir, "ch${chapterOffset}_intro.wav")
                     val introSegment = synthesizeChunk(
-                        synthesizer, introText, introFile, chapterOffset, chapterTitle,
+                        synthesizer, introText, introFile, chapterOffset, chapterTitle, job,
                     )
                     val introDuration = advanceFrames(introSegment)
-                    segmentHandle.append(introFile, introSegment, introDuration)
+                    durable.append(introFile, introSegment)
+                    chapterBytes += introSegment.dataLength
+                    chapterFrames += introSegment.frameCount
                     timeline.endIntro(introDuration)
                     introFile.delete()
                 } else {
@@ -329,6 +346,7 @@ class AudiobookExporter(
                     // чтобы таймлайн оставался строгим.
                     timeline.endIntro(MIN_SPAN_MS)
                 }
+                chapterChars += chapterTitle.length
                 processedChars += chapterTitle.length
 
                 // 2. Абзацы: внутренние TTS-порции складываются в один тайминг.
@@ -340,14 +358,16 @@ class AudiobookExporter(
                     plan.chunks.forEachIndexed { chunkIndex, chunk ->
                         throttle.beforeChunk()
                         val chunkFile = File(
-                            tempDir,
+                            job.tempDir,
                             "ch${chapterOffset}_p${plan.paragraphIndex}_c$chunkIndex.wav",
                         )
                         val chunkSegment = synthesizeChunk(
-                            synthesizer, chunk, chunkFile, chapterOffset, chapterTitle,
+                            synthesizer, chunk, chunkFile, chapterOffset, chapterTitle, job,
                         )
                         val chunkDuration = advanceFrames(chunkSegment)
-                        segmentHandle.append(chunkFile, chunkSegment, chunkDuration)
+                        durable.append(chunkFile, chunkSegment)
+                        chapterBytes += chunkSegment.dataLength
+                        chapterFrames += chunkSegment.frameCount
                         paragraphDurationMs += chunkDuration
                         // Сегмент удаляется сразу после присоединения.
                         runCatching { chunkFile.delete() }
@@ -359,12 +379,13 @@ class AudiobookExporter(
                         actualDurationMs = paragraphDurationMs,
                     )
                     processedChars += plan.text.length
+                    chapterChars += plan.text.length
 
                     reportProgress(
                         onProgress = onProgress,
                         stage = AudiobookStage.SYNTHESIZING,
                         chapterOffset = chapterOffset,
-                        totalChapters = chapters.totalChapters,
+                        totalChapters = job.totalChapters,
                         chapterTitle = chapterTitle,
                         paragraphOffset = paragraphOffset,
                         paragraphsInChapter = spokenParagraphs.size,
@@ -375,7 +396,22 @@ class AudiobookExporter(
                     )
                 }
 
-                timeline.endChapter()
+                val timing = timeline.endChapter()
+
+                // Аудио главы обязано оказаться на диске раньше, чем манифест
+                // назовёт главу готовой: иначе оборванный хвост считался бы валидным.
+                durable.sync()
+                job.commitChapter(
+                    CheckpointChapter(
+                        offset = chapterOffset,
+                        chapterIndex = chapterOffset + 1,
+                        title = chapterTitle,
+                        chars = chapterChars,
+                        pcmBytes = chapterBytes,
+                        frames = chapterFrames,
+                        timing = timing,
+                    ),
+                )
 
                 // Глава завершена: intro + все абзацы озвучены. Только теперь
                 // начинается следующая.
@@ -383,7 +419,7 @@ class AudiobookExporter(
                     onProgress = onProgress,
                     stage = AudiobookStage.SYNTHESIZING,
                     chapterOffset = chapterOffset,
-                    totalChapters = chapters.totalChapters,
+                    totalChapters = job.totalChapters,
                     chapterTitle = chapterTitle,
                     paragraphOffset = spokenParagraphs.size,
                     paragraphsInChapter = spokenParagraphs.size,
@@ -394,30 +430,99 @@ class AudiobookExporter(
                 )
             }
 
-            if (chapterOffset < 0) throw IOException("no chapters were synthesized")
+            if (chapterOffset + 1 != job.totalChapters) {
+                throw IOException(
+                    "synthesized ${chapterOffset + 1} of ${job.totalChapters} chapters",
+                )
+            }
 
-            sinkDurationMs = segmentHandle.finish()
+            val sinkDurationMs = durable.finish()
+            val rate = mergedSampleRate ?: job.sampleRateHz.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE
+            val channels = mergedChannels ?: job.channels.takeIf { it > 0 } ?: DEFAULT_CHANNELS
+            val bits = mergedBitsPerSample ?: job.bitsPerSample.takeIf { it > 0 } ?: DEFAULT_BITS_PER_SAMPLE
+            job.setFormat(rate, channels, bits)
+            if (request.format == AudiobookFormat.MP4) {
+                job.markAacReady(sinkDurationMs)
+            }
+
+            val computedMs = framesWritten * 1000L / rate
+            // Для MP4 источник правды — фактическая длительность AAC-дорожки
+            // (в неё входит задержка кодера), для WAV — записанные PCM-кадры.
+            val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
+            if (durationMs <= 0L) throw IOException("synthesized audio is empty")
+            return MergeOutcome(durationMs, rate, channels)
         } catch (e: CancellationException) {
-            segmentHandle.abort()
+            durable.abort()
             throw e
         } catch (e: Exception) {
-            segmentHandle.abort()
+            durable.abort()
             throw e
         } finally {
             synthesizer.close()
         }
+    }
 
-        val rate = mergedSampleRate ?: DEFAULT_SAMPLE_RATE
-        val computedMs = framesWritten * 1000L / rate
-        // Для MP4 источник правды — фактическая длительность AAC-дорожки
-        // (в неё входит задержка кодера), для WAV — записанные PCM-кадры.
-        val durationMs = sinkDurationMs.takeIf { it > 0L } ?: computedMs
-        if (durationMs <= 0L) throw IOException("synthesized audio is empty")
-        return MergeOutcome(
-            durationMs = durationMs,
-            sampleRateHz = rate,
-            channels = mergedChannels ?: DEFAULT_CHANNELS,
-        )
+    /**
+     * Завершает носитель для job'а, у которого уже синтезированы все главы
+     * (например, процесс умер на этапе сборки MP4 или записи JSON).
+     */
+    private fun finalizeSynthesizedAudio(
+        request: AudiobookExportRequest,
+        job: AudiobookExportJob,
+    ): MergeOutcome {
+        val rate = job.sampleRateHz
+        val channels = job.channels
+        val bits = job.bitsPerSample
+        if (rate <= 0 || channels <= 0) {
+            throw IOException("checkpoint has all chapters but no audio format")
+        }
+        return when (request.format) {
+            AudiobookFormat.WAV -> {
+                WavAudio.StreamingWavWriter(
+                    target = job.audioFile,
+                    sampleRateHz = rate,
+                    channels = channels,
+                    bitsPerSample = bits,
+                    resumeDataBytes = job.pcmBytes,
+                ).use { it.finish() }
+                MergeOutcome(WavAudio.durationMs(job.audioFile), rate, channels)
+            }
+            AudiobookFormat.MP4 -> {
+                val stored = job.mediaDurationMs
+                val duration = if (job.aacReady && stored > 0L &&
+                    job.aacFile.isFile && job.aacFile.length() > 0L
+                ) {
+                    stored
+                } else {
+                    encodePcmToAac(job)
+                }
+                MergeOutcome(duration, rate, channels)
+            }
+        }
+    }
+
+    /** Перекодирует durable PCM в AAC (например, при возобновлении MP4). */
+    private fun encodePcmToAac(job: AudiobookExportJob): Long {
+        val rate = job.sampleRateHz
+        val channels = job.channels
+        val bits = job.bitsPerSample
+        if (rate <= 0 || job.pcmBytes <= 0L) throw IOException("checkpoint has no PCM audio")
+        runCatching { job.aacFile.delete() }
+        val encoder = StreamingAacEncoder(job.aacFile)
+        return try {
+            encoder.append(
+                job.audioFile,
+                PcmSegment(rate, channels, bits, dataOffset = 0L, dataLength = job.pcmBytes),
+            )
+            encoder.finish()
+            if (!encoder.isUsable()) throw IOException("AAC encoder produced no output")
+            val duration = encoder.durationMs
+            job.markAacReady(duration)
+            duration
+        } catch (e: Exception) {
+            encoder.abort()
+            throw e
+        }
     }
 
     /** Синтезирует одну порцию и возвращает её разобранный PCM-сегмент. */
@@ -427,12 +532,16 @@ class AudiobookExporter(
         target: File,
         chapterOffset: Int,
         chapterTitle: String,
+        job: AudiobookExportJob,
     ): PcmSegment = try {
         val segment = synthesizer.synthesizeToFile(text, target, mergedFormat())
         if (mergedSampleRate == null) {
             mergedSampleRate = segment.sampleRateHz
             mergedChannels = segment.channels
             mergedBitsPerSample = segment.bitsPerSample
+            // Фиксируем формат сразу, чтобы чекпоинт был возобновляем и в
+            // случае обрыва до конца первой главы.
+            job.setFormat(segment.sampleRateHz, segment.channels, segment.bitsPerSample)
         }
         if (segment.frameCount <= 0L) {
             throw AudiobookChapterFailedException(
@@ -488,16 +597,84 @@ class AudiobookExporter(
         )
     }
 
-    private fun prepareVisual(request: AudiobookExportRequest, tempDir: File): NormalizedVisualSegment {
+    /**
+     * Возвращает визуальный сегмент: сохранённый в job'е или заново
+     * подготовленный и сразу сохранённый, чтобы возобновление не пересобирало
+     * визуал повторно.
+     */
+    private fun visualFor(
+        request: AudiobookExportRequest,
+        job: AudiobookExportJob,
+    ): NormalizedVisualSegment {
+        val persisted = job.visual
+        if (persisted != null && job.visualFile.isFile && job.visualFile.length() > 0L) {
+            val type = runCatching { VisualSource.valueOf(persisted.type) }.getOrNull()
+            if (type != null) {
+                return NormalizedVisualSegment(
+                    file = job.visualFile,
+                    info = VisualSegmentInfo(
+                        type = type,
+                        sourceName = persisted.sourceName,
+                        loop = persisted.loop,
+                        durationMs = persisted.durationMs,
+                        width = persisted.width,
+                        height = persisted.height,
+                    ),
+                    expectedDurationMs = persisted.expectedDurationMs,
+                    frameRate = persisted.frameRate,
+                    loopPeriodMs = persisted.loopPeriodMs,
+                    maxSampleBytes = persisted.maxSampleBytes,
+                )
+            }
+        }
+
+        val prepared = prepareVisual(request)
+        val target = job.visualFile
+        runCatching { target.delete() }
+        prepared.file.copyTo(target, overwrite = true)
+        prepared.file.delete()
+        job.setVisual(
+            CheckpointVisual.from(
+                info = prepared.info,
+                expectedDurationMs = prepared.expectedDurationMs,
+                frameRate = prepared.frameRate,
+                loopPeriodMs = prepared.loopPeriodMs,
+                maxSampleBytes = prepared.maxSampleBytes,
+            ),
+        )
+        // Файл теперь живёт в job'е: закрывать сегмент нельзя — close()
+        // удалил бы уже durable-копию.
+        return prepared.copy(file = target)
+    }
+
+    private fun prepareVisual(request: AudiobookExportRequest): NormalizedVisualSegment {
         val source = request.visualSource
-            ?: throw VisualProcessingException("MP4 export requires a visual source")
+            ?: throw PermanentAudiobookExportException("MP4 export requires a visual source")
         val uri = request.visualUri?.let(Uri::parse)
-            ?: throw VisualProcessingException("MP4 export requires a visual uri")
+            ?: throw PermanentAudiobookExportException("MP4 export requires a visual uri")
         return VisualSourceProcessor(context).prepare(
             source = source,
             uri = uri,
             sourceName = request.visualSourceName.orEmpty().ifBlank { uri.lastPathSegment.orEmpty() },
         )
+    }
+
+    private fun createDurableStore(job: AudiobookExportJob, resume: Boolean): DurableStore {
+        val known = mergedFormat()
+        return when (job.format) {
+            AudiobookFormat.WAV -> WavDurableStore(
+                job = job,
+                knownFormat = known,
+                resumeDataBytes = if (resume) job.pcmBytes else -1L,
+            )
+            AudiobookFormat.MP4 -> Mp4DurableStore(job = job, resume = resume, knownFormat = known)
+        }
+    }
+
+    /** Повторно раскладывает готовые главы из чекпоинта в spool таймлайна. */
+    private fun restoreCompletedIntoSpool(job: AudiobookExportJob, spool: ChapterSpool) {
+        val timeline = TimelineBuilder(onChapterClosed = { spool.add(it) })
+        timeline.restore(job.completedTimings)
     }
 
     /** Итог синтеза: длительность и параметры получившегося аудио. */
@@ -507,78 +684,182 @@ class AudiobookExporter(
         val channels: Int,
     )
 
-    /** Приёмник синтезированных PCM-сегментов: WAV-поток или AAC-кодек. */
-    private interface ChunkSink {
-        fun append(segmentFile: File, segment: PcmSegment, durationMs: Long)
+    /**
+     * Durable-приёмник синтезированных PCM-сегментов. Для WAV пишет прямо в
+     * `output.wav` (с резервированием заголовка), для MP4 — в `audio.pcm` и
+     * параллельно в AAC-кодек.
+     */
+    private interface DurableStore : AutoCloseable {
+        fun append(segmentFile: File, segment: PcmSegment)
+        /** Сбрасывает PCM на диск перед фиксацией главы в чекпоинте. */
+        fun sync()
         /** Финализирует поток и возвращает фактическую длительность носителя. */
         fun finish(): Long
         fun abort()
     }
 
-    /**
-     * Пишет общий WAV, создавая его по фактическому формату первого
-     * синтезированного сегмента.
-     */
-    private inner class WavChunkSink(private val target: File) : ChunkSink {
+    private inner class WavDurableStore(
+        private val job: AudiobookExportJob,
+        knownFormat: PcmFormat?,
+        private val resumeDataBytes: Long,
+    ) : DurableStore {
         private var writer: WavAudio.StreamingWavWriter? = null
 
-        override fun append(segmentFile: File, segment: PcmSegment, durationMs: Long) {
-            if (writer == null) {
-                mergedSampleRate = segment.sampleRateHz
-                mergedChannels = segment.channels
-                mergedBitsPerSample = segment.bitsPerSample
+        init {
+            if (knownFormat != null) {
                 writer = WavAudio.StreamingWavWriter(
-                    target = target,
-                    sampleRateHz = segment.sampleRateHz,
-                    channels = segment.channels,
-                    bitsPerSample = segment.bitsPerSample,
+                    target = job.audioFile,
+                    sampleRateHz = knownFormat.sampleRateHz,
+                    channels = knownFormat.channels,
+                    bitsPerSample = knownFormat.bitsPerSample,
+                    resumeDataBytes = resumeDataBytes,
                 )
             }
-            val active = writer ?: error("writer is not initialized")
-            RandomAccessFile(segmentFile, "r").use { raf -> active.append(segment, raf) }
+        }
+
+        private fun writerFor(segment: PcmSegment): WavAudio.StreamingWavWriter {
+            writer?.let { return it }
+            val created = WavAudio.StreamingWavWriter(
+                target = job.audioFile,
+                sampleRateHz = segment.sampleRateHz,
+                channels = segment.channels,
+                bitsPerSample = segment.bitsPerSample,
+                resumeDataBytes = resumeDataBytes,
+            )
+            writer = created
+            return created
+        }
+
+        override fun append(segmentFile: File, segment: PcmSegment) {
+            val active = writerFor(segment)
+            RandomAccessFile(segmentFile, "r").use { active.append(segment, it) }
+        }
+
+        override fun sync() {
+            writer?.sync()
         }
 
         override fun finish(): Long {
             val active = writer ?: throw IOException("WAV writer produced no output")
             active.finish()
-            return active.durationMs()
+            val duration = active.durationMs()
+            active.close()
+            writer = null
+            return duration
         }
 
         override fun abort() {
             runCatching { writer?.close() }
             writer = null
         }
+
+        override fun close() {
+            runCatching { writer?.close() }
+            writer = null
+        }
     }
 
     /**
-     * Кодирует PCM в AAC на лету, без промежуточного WAV: сегменты
-     * приходят по мере синтеза, кодек и счётчик кадров живут между ними.
+     * Пишет PCM в durable `audio.pcm` и параллельно кодирует AAC. При
+     * возобновлении обрезает PCM до последней зафиксированной главы и
+     * заново переигрывает её в свежий кодек — синтез при этом не повторяется.
      */
-    private inner class AacChunkSink(target: File) : ChunkSink {
-        private val encoder = StreamingAacEncoder(target)
+    private inner class Mp4DurableStore(
+        private val job: AudiobookExportJob,
+        resume: Boolean,
+        knownFormat: PcmFormat?,
+    ) : DurableStore {
+        private val pcmFile: File = job.audioFile
+        private var raf: RandomAccessFile? = null
+        private var encoder: StreamingAacEncoder? = null
 
-        override fun append(segmentFile: File, segment: PcmSegment, durationMs: Long) {
-            encoder.append(segmentFile, segment)
+        init {
+            if (resume) {
+                val format = knownFormat ?: throw IOException("resume without known PCM format")
+                RandomAccessFile(pcmFile, "rw").use { it.setLength(job.pcmBytes) }
+                if (job.pcmBytes > 0L) {
+                    val active = StreamingAacEncoder(job.aacFile)
+                    encoder = active
+                    active.append(
+                        pcmFile,
+                        PcmSegment(
+                            sampleRateHz = format.sampleRateHz,
+                            channels = format.channels,
+                            bitsPerSample = format.bitsPerSample,
+                            dataOffset = 0L,
+                            dataLength = job.pcmBytes,
+                        ),
+                    )
+                } else {
+                    runCatching { job.aacFile.delete() }
+                }
+            } else {
+                runCatching { job.aacFile.delete() }
+            }
+            raf = RandomAccessFile(pcmFile, "rw").apply { seek(length()) }
+        }
+
+        override fun append(segmentFile: File, segment: PcmSegment) {
+            val active = raf ?: error("durable store is closed")
+            RandomAccessFile(segmentFile, "r").use { source ->
+                source.seek(segment.dataOffset)
+                var remaining = segment.dataLength
+                val buffer = ByteArray(COPY_BUFFER)
+                while (remaining > 0L) {
+                    val toRead = minOf(remaining, buffer.size.toLong()).toInt()
+                    val read = source.read(buffer, 0, toRead)
+                    if (read <= 0) break
+                    active.write(buffer, 0, read)
+                    remaining -= read
+                }
+            }
+            val encoderActive = encoder ?: StreamingAacEncoder(job.aacFile).also { encoder = it }
+            encoderActive.append(segmentFile, segment)
+        }
+
+        override fun sync() {
+            raf?.fd?.sync()
         }
 
         override fun finish(): Long {
-            encoder.finish()
-            if (!encoder.isUsable()) throw IOException("AAC encoder produced no output")
-            return encoder.durationMs
+            raf?.close()
+            raf = null
+            val encoderActive = encoder ?: throw IOException("AAC encoder produced no output")
+            encoderActive.finish()
+            encoder = null
+            if (!encoderActive.isUsable()) throw IOException("AAC encoder produced no output")
+            return encoderActive.durationMs
         }
 
         override fun abort() {
-            encoder.abort()
+            runCatching { raf?.close() }
+            raf = null
+            encoder?.abort()
+            encoder = null
+        }
+
+        override fun close() {
+            abort()
         }
     }
 
     private companion object {
-        const val TEMP_DIR_NAME = "audiobook_export"
         const val DEFAULT_SAMPLE_RATE = 24000
         const val DEFAULT_CHANNELS = 1
+        const val DEFAULT_BITS_PER_SAMPLE = 16
         const val MERGING_WEIGHT = 85
         const val MIN_SPAN_MS = 1L
+        const val COPY_BUFFER = 256 * 1024
     }
+}
+
+/** Удаляет durable-состояние завершённого job'а. Вызывать только после копии в SAF. */
+fun discardAudiobookExport(context: Context, request: AudiobookExportRequest) {
+    val jobDir = File(
+        File(context.filesDir, AudiobookExportJob.DIR_NAME),
+        request.jobId(),
+    )
+    runCatching { jobDir.deleteRecursively() }
 }
 
 /** Стабильный идентификатор job'а для имени временной папки и уникальной работы. */
@@ -593,12 +874,6 @@ fun AudiobookExportRequest.jobId(): String = buildString {
     }
     append('-').append(startPosition).append('-').append(endPosition)
 }
-
-private fun extensionFor(format: AudiobookFormat): String =
-    when (format) {
-        AudiobookFormat.WAV -> ".wav"
-        AudiobookFormat.MP4 -> ".mp4"
-    }
 
 /**
  * Имя итогового файла: `Novel Name - Ch 1-100 [Original].wav`.

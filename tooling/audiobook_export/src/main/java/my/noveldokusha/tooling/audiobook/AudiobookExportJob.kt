@@ -91,8 +91,8 @@ class AudiobookExportJob private constructor(
         persist()
     }
 
-    fun markAacReady() {
-        state = state.copy(aacReady = true, mp4Ready = false)
+    fun markAacReady(durationMs: Long = 0L) {
+        state = state.copy(aacReady = true, mp4Ready = false, mediaDurationMs = durationMs)
         persist()
     }
 
@@ -304,6 +304,7 @@ class AudiobookExportJob private constructor(
             feed(request.visualUri)
             feed(request.visualSource)
             feed(request.visualSourceName)
+            feed(request.treeUri)
             val digest = MessageDigest.getInstance("SHA-256")
                 .digest(builder.toString().toByteArray(Charsets.UTF_8))
             return digest.joinToString("") { "%02x".format(it) }

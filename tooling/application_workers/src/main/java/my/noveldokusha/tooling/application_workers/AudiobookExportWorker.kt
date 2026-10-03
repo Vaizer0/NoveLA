@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
+import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -29,6 +30,7 @@ import my.noveldokusha.coreui.states.NotificationsCenter
 import my.noveldokusha.data.CoverRepository
 import my.noveldokusha.feature.local_database.AppDatabase
 import my.noveldokusha.strings.R as StringsR
+import my.noveldokusha.tooling.audiobook.AudiobookChapterFailedException
 import my.noveldokusha.tooling.audiobook.AudiobookContentMode
 import my.noveldokusha.tooling.audiobook.AudiobookExportRequest
 import my.noveldokusha.tooling.audiobook.AudiobookExporter
@@ -36,13 +38,18 @@ import my.noveldokusha.tooling.audiobook.AudiobookExportProgressBus
 import my.noveldokusha.tooling.audiobook.AudiobookFormat
 import my.noveldokusha.tooling.audiobook.AudiobookStage
 import my.noveldokusha.tooling.audiobook.ChapterContentProvider
+import my.noveldokusha.tooling.audiobook.PermanentAudiobookExportException
 import my.noveldokusha.tooling.audiobook.SafAudiobookStorage
 import my.noveldokusha.tooling.audiobook.SafDocument
 import my.noveldokusha.tooling.audiobook.ThermalExportThrottle
 import my.noveldokusha.tooling.audiobook.VisualSource
+import my.noveldokusha.tooling.audiobook.discardAudiobookExport
 import my.noveldokusha.tooling.audiobook.jobId
+import my.noveldokusha.tooling.audiobook.outputBaseName
 import timber.log.Timber
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -58,6 +65,7 @@ class AudiobookExportWorker(
 ) : CoroutineWorker(context, workerParameters) {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wakeLockAcquiredAt = 0L
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -77,6 +85,12 @@ class AudiobookExportWorker(
 
         private const val PROGRESS_INTERVAL_MS = 1_000L
         private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
+
+        /** Wakelock продлевается заранее, чтобы не истечь на долгом экспорте. */
+        private const val WAKE_LOCK_REFRESH_MS = 30L * 60L * 1000L
+
+        /** Сколько раз WorkManager может повторить транзиентный сбой. */
+        private const val MAX_RETRIES = 3
         private const val KEY_BOOK_URL = "book_url"
         private const val KEY_BOOK_TITLE = "book_title"
         private const val KEY_FORMAT = "format"
@@ -122,11 +136,16 @@ class AudiobookExportWorker(
             val work = OneTimeWorkRequestBuilder<AudiobookExportWorker>()
                 .setInputData(data)
                 .addTag(TAG)
+                // Транзиентные сбои (TTS, диск) повторяются с задержкой: durable
+                // чекпоинт позволяет продолжить с последней готовой главы.
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             // Уникальное имя по job'у: экспорт другой книги или диапазона
-            // не должен отменять уже запущенный экспорт (REPLACE иначе его убьёт).
+            // не должен отменять уже запущенный экспорт. KEEP (а не REPLACE)
+            // для идентичного запроса продолжает тот же job, а не начинает
+            // синтез с нуля.
             WorkManager.getInstance(context)
-                .enqueueUniqueWork("$TAG-${request.jobId()}", ExistingWorkPolicy.REPLACE, work)
+                .enqueueUniqueWork("$TAG-${request.jobId()}", ExistingWorkPolicy.KEEP, work)
         }
     }
 
@@ -160,7 +179,6 @@ class AudiobookExportWorker(
             .onFailure {
                 Timber.w(it, "AudiobookExport: early setForeground failed")
             }
-        acquireWakeLock()
 
         // Показываем «0%» сразу, чтобы экран не выглядел зависшим до первого абзаца.
         AudiobookExportProgressBus.publish(
@@ -230,15 +248,16 @@ class AudiobookExportWorker(
             return Result.failure()
         }
 
-        // ВАЖНО: папка не должна совпадать с tempDir экспортёра
-        // (`cacheDir/audiobook_export/<job>`), иначе экспортёр удалит
-        // готовые файлы вместе со своей временной папкой.
-        val outputDir = File(context.cacheDir, "audiobook_output/${request.jobId()}")
-        if (outputDir.exists()) outputDir.deleteRecursively()
-        outputDir.mkdirs()
-
         var lastNotifyAt = 0L
         val exporter = AudiobookExporter(context, ThermalExportThrottle(context))
+        // Wakelock берётся только перед тяжёлым синтезом, чтобы ранние
+        // выходы (нет обложки / нет глав / SAF) не подвешивали его.
+        acquireWakeLock()
+        Timber.i(
+            "AudiobookExport: worker attempt=%d job=%s",
+            runAttemptCount,
+            request.jobId(),
+        )
 
         return try {
             val result = withContext(Dispatchers.IO) {
@@ -246,9 +265,9 @@ class AudiobookExportWorker(
                     exporter.export(
                         request = request,
                         chapters = source,
-                        outputDir = outputDir,
                         onProgress = { progress ->
                             coroutineContext.ensureActive()
+                            refreshWakeLock()
                             // Живой прогресс экрана — сразу, без троттлинга, чтобы
                             // процент не «залипал» на 0%.
                             AudiobookExportProgressBus.publish(
@@ -277,25 +296,42 @@ class AudiobookExportWorker(
             val copied = withContext(Dispatchers.IO) {
                 copyResultToSaf(storage, request, result.audioFile, result.jsonFile)
             }
-            notification.showComplete(result.audioFile.name, copied.audioUri)
+            // Durable-состояние удаляется только после успешной копии в SAF:
+            // до этого оно остаётся единственным источником возобновления.
+            withContext(Dispatchers.IO) { discardAudiobookExport(context, request) }
+            notification.showComplete(copied.audioName, copied.audioUri)
+            AudiobookExportProgressBus.clear()
             Result.success()
         } catch (e: CancellationException) {
+            // Отмена пользователем: durable-состояние сохраняется, следующий
+            // запуск продолжит с последней готовой главы, а не с нуля.
             notification.close()
+            AudiobookExportProgressBus.clear()
             throw e
         } catch (e: Exception) {
             Timber.e(e, "AudiobookExport failed")
-            val reason = e.message?.takeIf { it.isNotBlank() }
-            val message = if (reason != null) {
-                "${context.getString(StringsR.string.audiobook_export_failed)}: $reason"
+            if (isTransient(e) && runAttemptCount < MAX_RETRIES) {
+                // Оставляем чекпоинт как есть и просим WorkManager повторить:
+                // синтез продолжится с последней зафиксированной главы.
+                Timber.i(
+                    "AudiobookExport: transient failure, retry %d/%d: %s",
+                    runAttemptCount + 1,
+                    MAX_RETRIES,
+                    e.message,
+                )
+                Result.retry()
             } else {
-                context.getString(StringsR.string.audiobook_export_failed)
+                val reason = e.message?.takeIf { it.isNotBlank() }
+                val message = if (reason != null) {
+                    "${context.getString(StringsR.string.audiobook_export_failed)}: $reason"
+                } else {
+                    context.getString(StringsR.string.audiobook_export_failed)
+                }
+                notification.showError(message)
+                AudiobookExportProgressBus.reportError(message)
+                Result.failure()
             }
-            notification.showError(message)
-            AudiobookExportProgressBus.reportError(message)
-            Result.failure()
         } finally {
-            outputDir.deleteRecursively()
-            AudiobookExportProgressBus.clear()
             releaseWakeLock()
         }
     }
@@ -314,9 +350,30 @@ class AudiobookExportWorker(
                     setReferenceCounted(false)
                     acquire(MAX_WAKE_LOCK_MS)
                 }
+            wakeLockAcquiredAt = SystemClock.elapsedRealtime()
         }.onFailure {
             Timber.w(it, "AudiobookExport: wake lock acquire failed")
         }
+    }
+
+    /** Продлевает wakelock, если он истёк или близок к истечению. */
+    private fun refreshWakeLock() {
+        val lock = wakeLock
+        if (lock == null || !lock.isHeld) {
+            acquireWakeLock()
+            return
+        }
+        if (SystemClock.elapsedRealtime() - wakeLockAcquiredAt >= WAKE_LOCK_REFRESH_MS) {
+            acquireWakeLock()
+        }
+    }
+
+    /** Транзиентный сбой стоит повторить; остальные — сразу failed. */
+    private fun isTransient(e: Throwable): Boolean = when (e) {
+        is PermanentAudiobookExportException -> false
+        is AudiobookChapterFailedException -> true
+        is IOException -> true
+        else -> false
     }
 
     private fun releaseWakeLock() {
@@ -339,7 +396,11 @@ class AudiobookExportWorker(
             ForegroundInfo(notification.notificationId, notification.foregroundNotification())
         }
 
-    private data class CopiedFiles(val audioUri: Uri?, val jsonUri: Uri?)
+    private data class CopiedFiles(
+        val audioName: String,
+        val audioUri: Uri?,
+        val jsonUri: Uri?,
+    )
 
     private fun copyResultToSaf(
         storage: SafAudiobookStorage,
@@ -353,11 +414,16 @@ class AudiobookExportWorker(
         } else {
             SafAudiobookStorage.WAV_MIME
         }
-        val audioDocument = storage.createDocument(folder, audioFile.name, audioMime)
+        // Durable-файлы называются служебно (`output.wav`/`output.json`),
+        // поэтому человекочитаемое имя вычисляется из запроса.
+        val baseName = outputBaseName(request)
+        val audioName = if (request.format == AudiobookFormat.MP4) "$baseName.mp4" else "$baseName.wav"
+        val jsonName = "$baseName.json"
+        val audioDocument = storage.createDocument(folder, audioName, audioMime)
         var jsonDocument: SafDocument? = null
         try {
             storage.copyToSaf(audioFile, audioDocument.uri)
-            jsonDocument = storage.createDocument(folder, jsonFile.name, SafAudiobookStorage.JSON_MIME)
+            jsonDocument = storage.createDocument(folder, jsonName, SafAudiobookStorage.JSON_MIME)
             storage.copyToSaf(jsonFile, jsonDocument.uri)
         } catch (e: Exception) {
             // Удаляем только то, что создали сами: переиспользованный документ
@@ -366,7 +432,7 @@ class AudiobookExportWorker(
             if (audioDocument.created) storage.deleteDocument(audioDocument.uri)
             throw e
         }
-        return CopiedFiles(audioDocument.uri, jsonDocument.uri)
+        return CopiedFiles(audioName, audioDocument.uri, jsonDocument.uri)
     }
 
     /**

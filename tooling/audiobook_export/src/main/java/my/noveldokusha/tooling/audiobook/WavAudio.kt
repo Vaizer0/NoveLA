@@ -128,6 +128,12 @@ object WavAudio {
         private val sampleRateHz: Int,
         private val channels: Int,
         private val bitsPerSample: Int = 16,
+        /**
+         * Сколько PCM-байт уже записано в [target] с прошлого запуска.
+         * `-1` — начать с нуля (файл обрезается); `>= 0` — продолжить
+         * существующий поток, обрезав возможный оборванный хвост.
+         */
+        resumeDataBytes: Long = -1L,
     ) : AutoCloseable {
         private val out: RandomAccessFile = RandomAccessFile(target, "rw")
         private val header = ByteArray(RIFF_HEADER_SIZE.toInt())
@@ -144,9 +150,22 @@ object WavAudio {
         fun durationMs(): Long = if (sampleRateHz <= 0) 0L else totalFrames * 1000L / sampleRateHz
 
         init {
-            out.setLength(0)
+            // Заголовок всегда держим в памяти: finish() заполняет его и в
+            // режиме возобновления, где на диске уже лежит placeholder.
             writePlaceholderHeader()
-            out.write(header)
+            if (resumeDataBytes >= 0L) {
+                out.setLength(RIFF_HEADER_SIZE + resumeDataBytes)
+                out.seek(RIFF_HEADER_SIZE + resumeDataBytes)
+                dataBytes = resumeDataBytes
+            } else {
+                out.setLength(0)
+                out.write(header)
+            }
+        }
+
+        /** Сбрасывает записанные PCM-байты на диск (не меняя заголовок). */
+        fun sync() {
+            out.fd.sync()
         }
 
         /** Дописывает PCM-данные сегмента, сверяясь с форматом потока. */
