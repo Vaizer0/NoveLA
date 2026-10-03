@@ -77,4 +77,73 @@ class TimelineBuilderTest {
         assertTrue(intro.contains("The Novel"))
         assertTrue(intro.contains("Chapter One"))
     }
+
+    @Test
+    fun restoreSeedsTimelineAndContinuesFromLastEnd() {
+        val restored = listOf(
+            AudiobookChapterTiming(
+                chapterIndex = 1,
+                title = "Chapter 1",
+                span = AudiobookSpan(0L, 1000L, 1000L),
+                intro = AudiobookIntroTiming(
+                    span = AudiobookSpan(0L, 200L, 200L),
+                    novelTitle = "Novel",
+                    chapterTitle = "Chapter 1",
+                ),
+                paragraphs = listOf(
+                    AudiobookParagraphTiming(0, AudiobookSpan(200L, 1000L, 800L), "A"),
+                ),
+            ),
+            AudiobookChapterTiming(
+                chapterIndex = 2,
+                title = "Chapter 2",
+                span = AudiobookSpan(1000L, 2000L, 1000L),
+                intro = AudiobookIntroTiming(
+                    span = AudiobookSpan(1000L, 1200L, 200L),
+                    novelTitle = "Novel",
+                    chapterTitle = "Chapter 2",
+                ),
+                paragraphs = listOf(
+                    AudiobookParagraphTiming(0, AudiobookSpan(1200L, 2000L, 800L), "B"),
+                ),
+            ),
+        )
+        val spooled = mutableListOf<AudiobookChapterTiming>()
+        val builder = TimelineBuilder(onChapterClosed = { spooled += it })
+
+        builder.restore(restored)
+
+        assertEquals(2, builder.chapterCount)
+        assertEquals(2000L, builder.totalDurationMs)
+        assertEquals(restored, spooled)
+
+        builder.beginChapter(chapterIndex = 3, title = "Chapter 3", novelTitle = "Novel", chapterTitle = "Chapter 3")
+        builder.endIntro(actualDurationMs = 300)
+        builder.addParagraph(paragraphIndex = 0, text = "C", actualDurationMs = 700)
+        val third = builder.endChapter()
+
+        assertEquals(2000L, third.span.startMs)
+        assertEquals(3000L, third.span.endMs)
+        assertEquals(3, builder.chapterCount)
+    }
+
+    @Test(expected = TimelineValidationException::class)
+    fun restoreRejectsInconsistentChapter() {
+        val builder = TimelineBuilder()
+        builder.restore(
+            listOf(
+                AudiobookChapterTiming(
+                    chapterIndex = 1,
+                    title = "Chapter 1",
+                    span = AudiobookSpan(500L, 1000L, 500L),
+                    intro = AudiobookIntroTiming(
+                        span = AudiobookSpan(500L, 700L, 200L),
+                        novelTitle = "Novel",
+                        chapterTitle = "Chapter 1",
+                    ),
+                    paragraphs = emptyList(),
+                ),
+            ),
+        )
+    }
 }

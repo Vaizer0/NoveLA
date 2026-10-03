@@ -1,6 +1,9 @@
 package my.noveldokusha.tooling.audiobook
 
+import kotlinx.serialization.Serializable
+
 /** Тайминг одного фрагмента главы (intro или абзац). */
+@Serializable
 data class AudiobookSpan(
     val startMs: Long,
     val endMs: Long,
@@ -8,6 +11,7 @@ data class AudiobookSpan(
 )
 
 /** Абзац в таймлайне. Только абзацный уровень — без пословных таймингов. */
+@Serializable
 data class AudiobookParagraphTiming(
     val paragraphIndex: Int,
     val span: AudiobookSpan,
@@ -15,6 +19,7 @@ data class AudiobookParagraphTiming(
 )
 
 /** Вступительная реплика главы: произнесённые название книги и главы. */
+@Serializable
 data class AudiobookIntroTiming(
     val span: AudiobookSpan,
     val novelTitle: String,
@@ -22,6 +27,7 @@ data class AudiobookIntroTiming(
 )
 
 /** Глава в таймлайне. */
+@Serializable
 data class AudiobookChapterTiming(
     val chapterIndex: Int,
     val title: String,
@@ -139,6 +145,33 @@ class TimelineBuilder(
         pendingParagraphs = mutableListOf()
         pendingIntroSpan = null
         return timing
+    }
+
+    /**
+     * Восстанавливает уже готовые главы из чекпоинта перед продолжением
+     * синтеза. Каждая глава проходит ту же проверку, что и [endChapter],
+     * поэтому рассинхрон с чекпоинтом падает сразу, а не портит JSON.
+     *
+     * В потоковом режиме восстановленные главы повторно отдаются в
+     * [onChapterClosed] (их нужно снова записать в spool), но TTS для них
+     * не вызывается: аудио уже лежит в durable-накопителе.
+     */
+    fun restore(completed: List<AudiobookChapterTiming>) {
+        check(openChapterIndex == null) { "cannot restore while chapter $openChapterIndex is open" }
+        if (completed.isEmpty()) return
+        var expectedStart = lastClosedEndMs
+        completed.forEach { chapter ->
+            validateChapter(chapter, expectedStartMs = expectedStart)
+            expectedStart = chapter.span.endMs
+            if (onChapterClosed != null) {
+                onChapterClosed(chapter)
+                closedCount++
+            } else {
+                chapters += chapter
+            }
+        }
+        lastClosedEndMs = expectedStart
+        currentMs = expectedStart
     }
 
     /** Все закрытые главы в порядке генерации. */
