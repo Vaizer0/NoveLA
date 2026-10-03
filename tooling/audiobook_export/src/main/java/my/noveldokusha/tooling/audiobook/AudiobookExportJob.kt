@@ -1,6 +1,7 @@
 package my.noveldokusha.tooling.audiobook
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
@@ -13,15 +14,19 @@ import java.security.MessageDigest
  * В отличие от `cacheDir`, эта папка лежит в `filesDir` и переживает смерть
  * процесса, отмену и retry воркера. Здесь хранится:
  *
- *  - [CheckpointManifest] — атомарно записанный манифест с прогрессом;
+ *  - [CheckpointManifest] — атомарно записанный манифест с метаданными
+ *    (формат, фаза, визуал); завершённые главы в него не входят;
+ *  - `checkpoint.ndjson` — append-only журнал завершённых глав: фиксация
+ *    главы стоит O(главы), а не O(всей книги), поэтому 1000+ глав не
+ *    переписывают полный текст квадратично;
  *  - готовое аудио завершённых глав (`output.wav` для WAV или `audio.pcm`
  *    для MP4 — сырой PCM, из которого MP4 перекодируется при возобновлении);
  *  - производные (`audio.m4a`, `output.mp4`, `output.json`, визуал).
  *
- * Инвариант: манифест ссылается только на те байты аудио, которые уже
+ * Инвариант: журнал ссылается только на те байты аудио, которые уже
  * сброшены на диск (`fsync` выполняется вызывающим до [commitChapter]).
  * Поэтому оборванный на середине главы хвост никогда не считается готовым:
- * при открытии файл обрезается до последней зафиксированной главы.
+ * при открытии аудио обрезается до последней зафиксированной главы.
  */
 class AudiobookExportJob private constructor(
     val dir: File,
@@ -83,12 +88,16 @@ class AudiobookExportJob private constructor(
 
     /** Фиксирует завершённую главу. Аудио главы обязано быть уже сброшено. */
     fun commitChapter(chapter: CheckpointChapter) {
+        // Глава дописывается одной строкой в append-only журнал: стоимость
+        // фиксации пропорциональна главе, а не всей книге (манифест с полным
+        // текстом рос бы квадратично). Журнал fsync-ится до обновления
+        // состояния в памяти.
+        appendChapter(dir, chapter)
         state = state.copy(
             completed = state.completed + chapter,
             pcmBytes = state.pcmBytes + chapter.pcmBytes,
             frames = state.frames + chapter.frames,
         )
-        persist()
     }
 
     fun markAacReady(durationMs: Long = 0L) {
@@ -114,7 +123,7 @@ class AudiobookExportJob private constructor(
     private fun persist() = writeManifest(dir, state)
 
     companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
 
         /**
          * Версия всего пайплайна. Меняйте при изменении правил обработки
@@ -125,6 +134,7 @@ class AudiobookExportJob private constructor(
 
         internal const val DIR_NAME = "audiobook_jobs"
         private const val MANIFEST_NAME = "manifest.json"
+        private const val CHECKPOINT_LOG_NAME = "checkpoint.ndjson"
         private const val WAV_NAME = "output.wav"
         private const val PCM_NAME = "audio.pcm"
         private const val AAC_NAME = "audio.m4a"
@@ -155,6 +165,9 @@ class AudiobookExportJob private constructor(
             val manifestFile = File(dir, MANIFEST_NAME)
 
             if (!manifestFile.isFile) {
+                // Манифест — единственный якорь job'а: без него append-only
+                // журнал мог бы «воскресить» главы чужого/устаревшего экспорта.
+                dir.deleteRecursively()
                 dir.mkdirs()
                 val fresh = freshManifest(request, fingerprint, totalChapters)
                 writeManifest(dir, fresh)
@@ -174,6 +187,7 @@ class AudiobookExportJob private constructor(
                 parsed.fingerprint != fingerprint ||
                 parsed.totalChapters != totalChapters
             ) {
+                val dropped = runCatching { readCheckpointLog(dir).chapters.size }.getOrDefault(0)
                 dir.deleteRecursively()
                 dir.mkdirs()
                 val fresh = freshManifest(request, fingerprint, totalChapters)
@@ -182,11 +196,17 @@ class AudiobookExportJob private constructor(
                     dir = dir,
                     state = fresh,
                     status = Status.NEW,
-                    droppedChapters = parsed?.completed?.size ?: 0,
+                    droppedChapters = dropped,
                 )
             }
 
-            val recovered = recoverTruncatedTail(dir, parsed)
+            val log = readCheckpointLog(dir)
+            val withLog = parsed.copy(
+                completed = log.chapters,
+                pcmBytes = log.chapters.sumOf { it.pcmBytes },
+                frames = log.chapters.sumOf { it.frames },
+            )
+            val recovered = recoverTruncatedTail(dir, withLog, logTorn = log.torn)
             return AudiobookExportJob(
                 dir = dir,
                 state = recovered.manifest,
@@ -208,11 +228,21 @@ class AudiobookExportJob private constructor(
 
         private class Recovery(val manifest: CheckpointManifest, val dropped: Int)
 
+        /** Результат чтения append-only журнала: главы и признак оборванной строки. */
+        private class CheckpointLog(val chapters: List<CheckpointChapter>, val torn: Boolean)
+
         /**
-         * Обрезает манифест и аудиофайл до последней главы, чьи байты реально
-         * записаны на диск. Всё производное от отброшенного хвоста удаляется.
+         * Обрезает манифест/журнал и аудиофайл до последней главы, чьи байты
+         * реально записаны на диск. Всё производное от отброшенного хвоста
+         * удаляется. [logTorn] заставляет перезаписать журнал, даже если
+         * количество глав не изменилось: иначе оборванная строка осталась бы
+         * и следующая глава дописалась бы после неё.
          */
-        private fun recoverTruncatedTail(dir: File, parsed: CheckpointManifest): Recovery {
+        private fun recoverTruncatedTail(
+            dir: File,
+            parsed: CheckpointManifest,
+            logTorn: Boolean,
+        ): Recovery {
             val format = runCatching { AudiobookFormat.valueOf(parsed.format) }
                 .getOrDefault(AudiobookFormat.WAV)
             val baseOffset = if (format == AudiobookFormat.WAV) WAV_HEADER_SIZE else 0L
@@ -241,30 +271,96 @@ class AudiobookExportJob private constructor(
             }
 
             val dropped = parsed.completed.size - kept.size
-            if (dropped == 0) return Recovery(parsed, 0)
+            if (dropped == 0 && !logTorn) return Recovery(parsed, 0)
 
             // Производные файлы зависят от отброшенных глав — они невалидны.
-            runCatching { File(dir, AAC_NAME).delete() }
-            runCatching { File(dir, MP4_NAME).delete() }
-            runCatching { File(dir, JSON_NAME).delete() }
+            if (dropped > 0) {
+                runCatching { File(dir, AAC_NAME).delete() }
+                runCatching { File(dir, MP4_NAME).delete() }
+                runCatching { File(dir, JSON_NAME).delete() }
+            }
 
-            val recovered = parsed.copy(
-                completed = kept,
-                pcmBytes = bytes,
-                frames = frames,
-                aacReady = false,
-                mp4Ready = false,
-                mediaDurationMs = 0L,
-                phase = AudiobookJobPhase.SYNTHESIZING.name,
-            )
+            val recovered = if (dropped > 0) {
+                parsed.copy(
+                    completed = kept,
+                    pcmBytes = bytes,
+                    frames = frames,
+                    aacReady = false,
+                    mp4Ready = false,
+                    mediaDurationMs = 0L,
+                    phase = AudiobookJobPhase.SYNTHESIZING.name,
+                )
+            } else {
+                parsed.copy(completed = kept, pcmBytes = bytes, frames = frames)
+            }
 
             if (audioFile.isFile) {
                 runCatching {
                     RandomAccessFile(audioFile, "rw").use { it.setLength(baseOffset + bytes) }
                 }
             }
+            writeCheckpointLog(dir, kept)
             writeManifest(dir, recovered)
             return Recovery(recovered, dropped)
+        }
+
+        /** Дописывает одну главу в конец журнала и сбрасывает её на диск. */
+        private fun appendChapter(dir: File, chapter: CheckpointChapter) {
+            dir.mkdirs()
+            val line = json.encodeToString(CheckpointChapter.serializer(), chapter) + "\n"
+            FileOutputStream(File(dir, CHECKPOINT_LOG_NAME), true).use { out ->
+                out.write(line.toByteArray(Charsets.UTF_8))
+                out.flush()
+                out.fd.sync()
+            }
+        }
+
+        /** Атомарно перезаписывает журнал (после обрезки оборванного хвоста). */
+        private fun writeCheckpointLog(dir: File, chapters: List<CheckpointChapter>) {
+            dir.mkdirs()
+            val target = File(dir, CHECKPOINT_LOG_NAME)
+            val tmp = File(dir, "$CHECKPOINT_LOG_NAME.tmp")
+            FileOutputStream(tmp).use { out ->
+                chapters.forEach { chapter ->
+                    out.write(
+                        json.encodeToString(CheckpointChapter.serializer(), chapter)
+                            .toByteArray(Charsets.UTF_8),
+                    )
+                    out.write('\n'.code)
+                }
+                out.flush()
+                out.fd.sync()
+            }
+            if (!tmp.renameTo(target)) {
+                target.writeBytes(tmp.readBytes())
+                tmp.delete()
+            }
+        }
+
+        /**
+         * Читает журнал построчно. Обрыв записи возможен только в последней
+         * строке, поэтому на первой нечитаемой строке чтение прекращается.
+         */
+        private fun readCheckpointLog(dir: File): CheckpointLog {
+            val file = File(dir, CHECKPOINT_LOG_NAME)
+            if (!file.isFile) return CheckpointLog(emptyList(), torn = false)
+            val chapters = mutableListOf<CheckpointChapter>()
+            var torn = false
+            file.bufferedReader(Charsets.UTF_8).use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isBlank()) continue
+                    val parsed = runCatching {
+                        json.decodeFromString(CheckpointChapter.serializer(), line)
+                    }.getOrNull()
+                    if (parsed == null) {
+                        torn = true
+                        break
+                    }
+                    chapters += parsed
+                }
+            }
+            return CheckpointLog(chapters, torn)
         }
 
         private fun writeManifest(dir: File, manifest: CheckpointManifest) {
@@ -383,6 +479,12 @@ internal data class CheckpointManifest(
     val aacReady: Boolean = false,
     val mp4Ready: Boolean = false,
     val mediaDurationMs: Long = 0L,
+    /**
+     * Завершённые главы живут в append-only журнале (`checkpoint.ndjson`),
+     * а не в манифесте: иначе манифест с полным текстом книги переписывался
+     * бы на каждой главе квадратично. Поле держим для in-memory состояния.
+     */
+    @Transient
     val completed: List<CheckpointChapter> = emptyList(),
     val visual: CheckpointVisual? = null,
 )

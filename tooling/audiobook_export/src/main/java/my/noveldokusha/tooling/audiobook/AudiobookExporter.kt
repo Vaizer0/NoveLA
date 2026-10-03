@@ -631,8 +631,14 @@ class AudiobookExporter(
         val prepared = prepareVisual(request)
         val target = job.visualFile
         runCatching { target.delete() }
-        prepared.file.copyTo(target, overwrite = true)
-        prepared.file.delete()
+        // Переносим, а не копируем: для видео это экономит полный проход
+        // чтения+записи всего файла. Если перенос невозможен (разные ФС),
+        // откатываемся на копирование.
+        val moved = runCatching { prepared.file.renameTo(target) }.getOrDefault(false)
+        if (!moved) {
+            prepared.file.copyTo(target, overwrite = true)
+            prepared.file.delete()
+        }
         job.setVisual(
             CheckpointVisual.from(
                 info = prepared.info,
@@ -773,6 +779,9 @@ class AudiobookExporter(
         private var raf: RandomAccessFile? = null
         private var encoder: StreamingAacEncoder? = null
 
+        /** Переиспользуется между сегментами: не аллоцируем 256 КБ на каждый кусок. */
+        private val copyBuffer = ByteArray(COPY_BUFFER)
+
         init {
             // Старый AAC может содержать главы, которые чекпоинт уже отбросил,
             // поэтому перед перекодированием его всегда пересоздаём.
@@ -800,20 +809,24 @@ class AudiobookExporter(
 
         override fun append(segmentFile: File, segment: PcmSegment) {
             val active = raf ?: error("durable store is closed")
+            val encoderActive = encoder ?: StreamingAacEncoder(job.aacFile).also { encoder = it }
+            // Один проход по файлу сегмента: те же байты уходят и в durable
+            // PCM-сайдкар, и в потоковый AAC-кодировщик (без второго чтения).
+            // Окно выравниваем по кадру, иначе PTS кодека «съедет».
+            val frame = segment.bytesPerFrame.coerceAtLeast(1)
             RandomAccessFile(segmentFile, "r").use { source ->
                 source.seek(segment.dataOffset)
                 var remaining = segment.dataLength
-                val buffer = ByteArray(COPY_BUFFER)
                 while (remaining > 0L) {
-                    val toRead = minOf(remaining, buffer.size.toLong()).toInt()
-                    val read = source.read(buffer, 0, toRead)
-                    if (read <= 0) break
-                    active.write(buffer, 0, read)
-                    remaining -= read
+                    val rawRead = minOf(remaining, copyBuffer.size.toLong()).toInt()
+                    val toRead = rawRead / frame * frame
+                    if (toRead <= 0) break
+                    source.readFully(copyBuffer, 0, toRead)
+                    active.write(copyBuffer, 0, toRead)
+                    encoderActive.appendPcm(segment, copyBuffer, 0, toRead)
+                    remaining -= toRead
                 }
             }
-            val encoderActive = encoder ?: StreamingAacEncoder(job.aacFile).also { encoder = it }
-            encoderActive.append(segmentFile, segment)
         }
 
         override fun sync() {

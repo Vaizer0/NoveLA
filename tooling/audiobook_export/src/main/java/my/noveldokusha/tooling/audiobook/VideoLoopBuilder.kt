@@ -405,6 +405,7 @@ internal class AacAudioEncoder {
             RandomAccessFile(wavFile, "r").use { raf ->
                 raf.seek(segment.dataOffset)
                 val bytesPerFrame = segment.bytesPerFrame.coerceAtLeast(1)
+                val scratch = ByteArray(PCM_CHUNK_FRAMES * bytesPerFrame)
                 var bytesSubmitted = 0L
                 var framesSubmitted = 0L
                 var inputDone = false
@@ -431,9 +432,8 @@ internal class AacAudioEncoder {
                                     )
                                     inputDone = true
                                 } else {
-                                    val chunk = ByteArray(toRead)
-                                    raf.readFully(chunk)
-                                    inputBuffer.put(chunk)
+                                    raf.readFully(scratch, 0, toRead)
+                                    inputBuffer.put(scratch, 0, toRead)
                                     // PTS считается по НОМЕРУ КАДРА, а не по числу
                                     // байт: для моно 16 бит байтов вдвое больше
                                     // кадров, и старая формула давала PTS вдвое
@@ -524,6 +524,9 @@ internal class StreamingAacEncoder(private val outputFile: File) {
     private var bitsPerSample = 16
     private var bytesPerFrame = 1
 
+    /** Переиспользуемый буфер чтения PCM: без аллокации на каждый кусок. */
+    private var readBuffer: ByteArray? = null
+
     /** Суммарно поданные кадры — источник длительности аудио. */
     var totalFrames: Long = 0L
         private set
@@ -556,6 +559,8 @@ internal class StreamingAacEncoder(private val outputFile: File) {
         if (!configured) configure(segment)
         requireCompatible(segment)
 
+        val buffer = readBuffer
+            ?: ByteArray(PCM_CHUNK_FRAMES * bytesPerFrame).also { readBuffer = it }
         RandomAccessFile(segmentFile, "r").use { raf ->
             raf.seek(segment.dataOffset)
             var remaining = segment.dataLength
@@ -567,13 +572,12 @@ internal class StreamingAacEncoder(private val outputFile: File) {
                 val rawRead = minOf(
                     remaining,
                     inputBuffer.remaining().toLong(),
-                    (PCM_CHUNK_FRAMES * bytesPerFrame).toLong(),
+                    buffer.size.toLong(),
                 )
                 val toRead = (rawRead / bytesPerFrame * bytesPerFrame).toInt()
                 if (toRead <= 0) break
-                val chunk = ByteArray(toRead)
-                raf.readFully(chunk)
-                inputBuffer.put(chunk)
+                raf.readFully(buffer, 0, toRead)
+                inputBuffer.put(buffer, 0, toRead)
                 val presentationTimeUs = totalFrames * 1_000_000L / sampleRate
                 codec.queueInputBuffer(inputIndex, 0, toRead, presentationTimeUs, 0)
                 totalFrames += toRead / bytesPerFrame
@@ -581,6 +585,42 @@ internal class StreamingAacEncoder(private val outputFile: File) {
             }
             drain()
         }
+    }
+
+    /**
+     * Подаёт PCM, уже прочитанный вызывающим (одним проходом с durable-копией),
+     * без повторного открытия и чтения файла сегмента.
+     *
+     * [offset] и [length] ограничивают окно в [pcm]; [length] обязан быть
+     * кратен размеру кадра, как и в [append].
+     */
+    fun appendPcm(segment: PcmSegment, pcm: ByteArray, offset: Int, length: Int) {
+        check(!released) { "encoder is already released" }
+        if (!configured) configure(segment)
+        requireCompatible(segment)
+
+        var position = offset
+        var remaining = length
+        while (remaining > 0) {
+            drain()
+            val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+            if (inputIndex < 0) continue
+            val inputBuffer = codec.getInputBuffer(inputIndex) ?: continue
+            val rawWrite = minOf(
+                remaining.toLong(),
+                inputBuffer.remaining().toLong(),
+                (PCM_CHUNK_FRAMES * bytesPerFrame).toLong(),
+            )
+            val toWrite = (rawWrite / bytesPerFrame * bytesPerFrame).toInt()
+            if (toWrite <= 0) break
+            inputBuffer.put(pcm, position, toWrite)
+            val presentationTimeUs = totalFrames * 1_000_000L / sampleRate
+            codec.queueInputBuffer(inputIndex, 0, toWrite, presentationTimeUs, 0)
+            totalFrames += toWrite / bytesPerFrame
+            position += toWrite
+            remaining -= toWrite
+        }
+        drain()
     }
 
     /** Завершает поток (EOS), дописывает хвост и закрывает кодек/муксер. */

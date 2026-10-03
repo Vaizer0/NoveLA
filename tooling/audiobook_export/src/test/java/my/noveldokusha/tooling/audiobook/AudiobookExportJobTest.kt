@@ -340,4 +340,40 @@ class AudiobookExportJobTest {
         // 44-байтовый RIFF-заголовок не считается PCM.
         assertEquals(2044L, resumed.audioFile.length())
     }
+
+    @Test
+    fun completedChaptersLiveInLogNotInManifest() {
+        val job = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+        appendBytes(job.audioFile, 1000)
+        job.commitChapter(chapter(0, pcmBytes = 1000, frames = 24000, startMs = 0, endMs = 1000))
+
+        // Манифест не должен нести полный текст книги (иначе рост O(n^2)).
+        val manifest = File(job.dir, "manifest.json").readText()
+        assertFalse(manifest.contains("\"completed\""))
+        assertFalse(manifest.contains("\"paragraphs\""))
+
+        val log = File(job.dir, "checkpoint.ndjson").readText()
+        assertTrue(log.contains("\"paragraphs\""))
+    }
+
+    @Test
+    fun tornCheckpointLogLineIsDroppedAndDoesNotBlockNextChapter() {
+        val first = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+        appendBytes(first.audioFile, 1000)
+        first.commitChapter(chapter(0, pcmBytes = 1000, frames = 24000, startMs = 0, endMs = 1000))
+        // Имитируем kill во время append: последняя строка журнала оборвана.
+        File(first.dir, "checkpoint.ndjson").appendText("{\"offset\":1,")
+
+        val resumed = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+
+        assertEquals(1, resumed.recoveredChapters)
+        assertEquals(0, resumed.droppedChapters)
+        // Оборванная строка вычищена: следующая фиксация за ней не «застревает».
+        appendBytes(resumed.audioFile, 1000)
+        resumed.commitChapter(chapter(1, pcmBytes = 1000, frames = 24000, startMs = 1000, endMs = 2000))
+
+        val finished = AudiobookExportJob.open(baseDir, request(), totalChapters = 10)
+        assertEquals(2, finished.recoveredChapters)
+        assertEquals(0, finished.droppedChapters)
+    }
 }

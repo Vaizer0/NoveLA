@@ -7,8 +7,10 @@ import android.speech.tts.UtteranceProgressListener
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import my.noveldokusha.text_to_speech.TtsSynthesisCoordinator
 import timber.log.Timber
 
@@ -268,18 +270,25 @@ class TtsAudioSynthesizer(
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                currentAttempt?.takeIf { it.matches(utteranceId) }?.done = true
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.let {
+                    it.done = true
+                    it.signalChange()
+                }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                currentAttempt?.takeIf { it.matches(utteranceId) }?.error =
-                    "TTS reported an error for $utteranceId"
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.let {
+                    it.error = "TTS reported an error for $utteranceId"
+                    it.signalChange()
+                }
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                currentAttempt?.takeIf { it.matches(utteranceId) }?.error =
-                    "TTS error $errorCode for $utteranceId"
+                currentAttempt?.takeIf { it.matches(utteranceId) }?.let {
+                    it.error = "TTS error $errorCode for $utteranceId"
+                    it.signalChange()
+                }
             }
 
             override fun onBeginSynthesis(
@@ -340,7 +349,14 @@ class TtsAudioSynthesizer(
                     return false
                 }
             }
-            delay(STABLE_POLL_MS)
+            // Просыпаемся сразу по колбэку движка (onDone/onError), а таймаут
+            // опроса оставляем только для движков без колбэка: иначе после
+            // синтеза каждый раз терялось до 120 мс впустую.
+            if (state.done || state.error != null) {
+                delay(STABLE_POLL_MS)
+            } else {
+                state.awaitChange(STABLE_POLL_MS)
+            }
         }
     }
 
@@ -373,6 +389,24 @@ class TtsAudioSynthesizer(
 
         @Volatile
         var done: Boolean = false
+
+        /**
+         * Завершается из колбэка движка, чтобы ожидание не опрашивало файл
+         * вслепую. Завершается ровно один раз: повторные [signalChange] безвредны.
+         */
+        private val signal = CompletableDeferred<Unit>()
+
+        /** Будит ожидающего после завершения синтеза или ошибки. */
+        fun signalChange() {
+            signal.complete(Unit)
+        }
+
+        /**
+         * Ждёт сигнала движка не дольше [timeoutMs]; `false` — истёк таймаут
+         * (нужно снова проверить файл: движок мог не прислать колбэк).
+         */
+        suspend fun awaitChange(timeoutMs: Long): Boolean =
+            withTimeoutOrNull(timeoutMs) { signal.await() } != null
 
         /** Относится ли колбэк к этой попытке (null-идентификатор считаем своим). */
         fun matches(other: String?): Boolean = other == null || other == utteranceId
