@@ -45,6 +45,7 @@ class SynthesisCompletionGateTest {
     fun stableFileWithoutSpeakingAndCompleteContainerCompletes() {
         val gate = gate(rounds = 2)
         assertEquals(SynthesisCompletion.WAIT, gate.eval(size = 1000))
+        assertEquals(SynthesisCompletion.WAIT, gate.eval(size = 1000))
         assertEquals(SynthesisCompletion.ACCEPT, gate.eval(size = 1000))
     }
 
