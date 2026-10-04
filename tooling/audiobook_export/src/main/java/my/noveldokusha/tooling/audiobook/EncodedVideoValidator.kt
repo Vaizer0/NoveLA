@@ -62,6 +62,29 @@ internal object EncodedVideoValidator {
             0
         }
 
+    /** Инкрементальный сбор статистики видео-потока. */
+    data class Collector(
+        var sampleCount: Int = 0,
+        var keyframeCount: Int = 0,
+        var maxBytes: Int = 0,
+    ) {
+        fun add(size: Int, sampleFlags: Int) {
+            if (size < 0) return
+            sampleCount++
+            if (size > maxBytes) maxBytes = size
+            if ((sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                keyframeCount++
+            }
+        }
+
+        fun toSummary(format: MediaFormat): Summary = Summary(
+            sampleCount = sampleCount,
+            keyframeCount = keyframeCount,
+            maxSampleBytes = maxBytes,
+            hasCsd = format.containsKey(CSD_0),
+        )
+    }
+
     /**
      * Читает дорожку целиком, считая сэмплы/ключевые кадры. Бросает
      * [IOException], если поток заведомо недекодируем (нет сэмплов,

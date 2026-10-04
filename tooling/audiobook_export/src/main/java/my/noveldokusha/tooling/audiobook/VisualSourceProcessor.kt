@@ -126,7 +126,7 @@ class VisualSourceProcessor(private val context: Context) {
         // считается провалом и уходит в аварийный транскод.
         val summary = try {
             remuxFullVideo(uri, target, meta)
-            EncodedVideoValidator.analyze(target, "prepared-remux")
+            
         } catch (e: Exception) {
             Timber.w(e, "VisualSourceProcessor: remux failed, transcoding full video")
             runCatching { target.delete() }
@@ -201,14 +201,16 @@ class VisualSourceProcessor(private val context: Context) {
      * умеет хранить этот кодек/CSD, он бросит исключение и сработает
      * аварийное перекодирование.
      */
-    private fun remuxFullVideo(uri: Uri, target: File, meta: VideoMeta) {
+    private fun remuxFullVideo(uri: Uri, target: File, meta: VideoMeta): EncodedVideoValidator.Summary {
         val extractor = android.media.MediaExtractor()
         val muxer = MediaMuxer(target.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var started = false
+        val format: android.media.MediaFormat
+        val collector = EncodedVideoValidator.Collector()
         try {
             extractor.setDataSource(context, uri, null)
             extractor.selectTrack(meta.trackIndex)
-            val format = extractor.getTrackFormat(meta.trackIndex)
+            format = extractor.getTrackFormat(meta.trackIndex)
             if (meta.rotation != 0) runCatching { muxer.setOrientationHint(meta.rotation) }
             val track = muxer.addTrack(format)
             muxer.start()
@@ -236,6 +238,7 @@ class VisualSourceProcessor(private val context: Context) {
                         EncodedVideoValidator.muxerFlags(extractor.sampleFlags),
                     )
                     muxer.writeSampleData(track, buffer, bufferInfo)
+                    collector.add(size, extractor.sampleFlags)
                 }
                 extractor.advance()
             }
@@ -245,6 +248,7 @@ class VisualSourceProcessor(private val context: Context) {
             runCatching { extractor.release() }
         }
         if (!started) throw VisualProcessingException("Unable to remux video track")
+        return collector.toSummary(format)
     }
 
     /**

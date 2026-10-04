@@ -130,7 +130,7 @@ class AudiobookExportJob private constructor(
          * текста или раскладки чекпоинта, чтобы старые job'ы не смешались
          * с новыми и не воспроизвели устаревшее аудио.
          */
-        const val EXPORT_PIPELINE_VERSION = 1
+        const val EXPORT_PIPELINE_VERSION = 2
 
         internal const val DIR_NAME = "audiobook_jobs"
         private const val MANIFEST_NAME = "manifest.json"
