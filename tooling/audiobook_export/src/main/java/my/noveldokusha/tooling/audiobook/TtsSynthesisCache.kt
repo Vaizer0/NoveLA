@@ -33,7 +33,7 @@ class TtsSynthesisCache(context: Context) {
     fun get(key: String): File? {
         val file = File(root, "$key.wav")
         if (!file.isFile || file.length() <= WAV_HEADER_BYTES) return null
-        if (!WavAudio.isCompleteWav(file)) {
+        if (!WavAudio.isRiffWav(file) || !WavAudio.isCompleteWav(file)) {
             // Оборванная/битая запись (в том числе оставшаяся от старой версии)
             // не должна попасть в мердж: удаляем её, следующий синтез перезапишет.
             val size = file.length()
@@ -57,7 +57,7 @@ class TtsSynthesisCache(context: Context) {
     fun put(key: String, source: File) {
         // В кэш попадает только целый WAV: оборванный сегмент не должен
         // «заражать» последующие экспорты того же текста.
-        if (!WavAudio.isCompleteWav(source)) return
+        if (!WavAudio.isRiffWav(source) || !WavAudio.isCompleteWav(source)) return
         if (!root.exists() && !root.mkdirs()) return
         val target = File(root, "$key.wav")
         val tmp = File(root, "$key.tmp")
@@ -87,9 +87,16 @@ class TtsSynthesisCache(context: Context) {
     /** Удаляет самые старые записи, пока суммарный размер не уложится в лимит. */
     private fun trim() {
         val files = root.listFiles { file -> file.isFile && file.name.endsWith(WAV_SUFFIX) } ?: return
-        var total = files.sumOf { it.length() }
-        files.sortedBy { it.lastModified() }.forEach { file ->
-            if (total <= maxBytes) return
+        if (files.isEmpty()) {
+            totalBytes = 0L
+            return
+        }
+        var total = 0L
+        for (f in files) total += f.length()
+        // Sort by last modified (LRU)
+        val list = files.sortedBy { it.lastModified() }
+        for (file in list) {
+            if (total <= maxBytes) break
             val size = file.length()
             if (file.delete()) total -= size
         }
@@ -108,7 +115,7 @@ class TtsSynthesisCache(context: Context) {
          */
         val maxBytes: Long = 512L * 1024L * 1024L
 
-        private const val CACHE_VERSION = "v1"
+        private const val CACHE_VERSION = "v2"
 
         /**
          * Стабильный SHA-256 по всем параметрам, влияющим на аудио.
